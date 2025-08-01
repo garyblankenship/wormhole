@@ -1,0 +1,57 @@
+run:
+  timeout: 5m
+  tests: true
+  build-tags:
+    - integration
+
+linters:
+  enable:
+    - gofmt
+    - goimports
+    - govet
+    - errcheck
+    - staticcheck
+    - ineffassign
+    - typecheck
+    - unused
+    - gosimple
+    - structcheck
+    - varcheck
+    - deadcode
+    - gosec
+    - dupl
+    - goconst
+    - gocyclo
+    - misspell
+    - unparam
+    - nakedret
+    - prealloc
+    - exportloopref
+    - bodyclose
+    - rowserrcheck
+    - stylecheck
+
+linters-settings:
+  govet:
+    check-shadowing: true
+  gocyclo:
+    min-complexity: 15
+  dupl:
+    threshold: 100
+  goconst:
+    min-len: 2
+    min-occurrences: 2
+  misspell:
+    locale: US
+  goimports:
+    local-prefixes: github.com/prism-php/prism-go
+
+issues:
+  exclude-rules:
+    - path: _test\.go
+      linters:
+        - gosec
+        - dupl
+    - linters:
+        - stylecheck
+      text: "ST1000:"

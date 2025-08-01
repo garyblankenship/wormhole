@@ -1,0 +1,35 @@
+version: 2
+
+before:
+  hooks:
+    - go mod tidy
+
+builds:
+  - skip: true
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - '^docs:'
+      - '^test:'
+      - '^chore:'
+
+release:
+  github:
+    owner: prism-php
+    name: prism-go
+  
+  header: |
+    ## Prism Go {{ .Tag }}
+    
+    A powerful Go package for integrating Large Language Models into your applications.
+  
+  footer: |
+    ## Installation
+    ```bash
+    go get github.com/prism-php/prism-go@{{ .Tag }}
+    ```
+    
+    ## Documentation
+    See the [README](https://github.com/prism-php/prism-go#readme) for usage examples.
