@@ -15,9 +15,6 @@ linters:
     - typecheck
     - unused
     - gosimple
-    - structcheck
-    - varcheck
-    - deadcode
     - gosec
     - dupl
     - goconst
@@ -26,14 +23,16 @@ linters:
     - unparam
     - nakedret
     - prealloc
-    - exportloopref
     - bodyclose
     - rowserrcheck
     - stylecheck
+    - shadow
+    - copyloopvar
 
 linters-settings:
   govet:
-    check-shadowing: true
+    enable:
+      - shadow
   gocyclo:
     min-complexity: 15
   dupl:

@@ -6,9 +6,9 @@ import (
 	"log"
 	"os"
 
-	"github.com/prism-php/prism-go/pkg/providers/gemini"
-	"github.com/prism-php/prism-go/pkg/providers/groq"
-	"github.com/prism-php/prism-go/pkg/types"
+	"github.com/garyblankenship/wormhole/pkg/providers/gemini"
+	"github.com/garyblankenship/wormhole/pkg/providers/groq"
+	"github.com/garyblankenship/wormhole/pkg/types"
 )
 
 func main() {

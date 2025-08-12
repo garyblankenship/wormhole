@@ -8,14 +8,16 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/prism-php/prism-go/internal/utils"
-	"github.com/prism-php/prism-go/pkg/providers"
-	"github.com/prism-php/prism-go/pkg/types"
+	"github.com/garyblankenship/wormhole/internal/utils"
+	"github.com/garyblankenship/wormhole/pkg/providers"
+	"github.com/garyblankenship/wormhole/pkg/types"
 )
 
 const (
 	defaultBaseURL   = "https://api.anthropic.com/v1"
 	anthropicVersion = "2023-06-01"
+	headerAPIKey     = "x-api-key"
+	headerVersion    = "anthropic-version"
 )
 
 // Provider implements the Anthropic provider
@@ -33,8 +35,8 @@ func New(config types.ProviderConfig) *Provider {
 	if config.Headers == nil {
 		config.Headers = make(map[string]string)
 	}
-	config.Headers["anthropic-version"] = anthropicVersion
-	config.Headers["x-api-key"] = config.APIKey
+	config.Headers[headerVersion] = anthropicVersion
+	config.Headers[headerAPIKey] = config.APIKey
 
 	return &Provider{
 		BaseProvider: providers.NewBaseProvider("anthropic", config),
@@ -165,11 +167,11 @@ func (p *Provider) doAnthropicRequest(ctx context.Context, method, url string, b
 
 	// Set headers
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("x-api-key", p.Config.APIKey)
+	req.Header.Set(headerAPIKey, p.Config.APIKey)
 	req.Header.Set("anthropic-version", anthropicVersion)
 
 	for k, v := range p.Config.Headers {
-		if k != "x-api-key" && k != "anthropic-version" {
+		if k != headerAPIKey && k != headerVersion {
 			req.Header.Set(k, v)
 		}
 	}
@@ -217,13 +219,13 @@ func (p *Provider) streamAnthropicRequest(ctx context.Context, method, url strin
 
 	// Set headers
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("x-api-key", p.Config.APIKey)
+	req.Header.Set(headerAPIKey, p.Config.APIKey)
 	req.Header.Set("anthropic-version", anthropicVersion)
 	req.Header.Set("Accept", "text/event-stream")
 	req.Header.Set("Cache-Control", "no-cache")
 
 	for k, v := range p.Config.Headers {
-		if k != "x-api-key" && k != "anthropic-version" {
+		if k != headerAPIKey && k != headerVersion {
 			req.Header.Set(k, v)
 		}
 	}

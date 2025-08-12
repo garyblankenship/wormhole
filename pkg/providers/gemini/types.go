@@ -1,6 +1,6 @@
 package gemini
 
-import "github.com/prism-php/prism-go/pkg/types"
+import "github.com/garyblankenship/wormhole/pkg/types"
 
 // Gemini API response types
 type geminiTextResponse struct {

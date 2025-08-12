@@ -3,7 +3,7 @@ package openai_compatible
 import (
 	"testing"
 
-	"github.com/prism-php/prism-go/pkg/types"
+	"github.com/garyblankenship/wormhole/pkg/types"
 )
 
 func TestProviderImplementsInterface(t *testing.T) {

@@ -5,13 +5,13 @@ import (
 	"fmt"
 	"log"
 
-	"github.com/prism-php/prism-go/pkg/prism"
-	"github.com/prism-php/prism-go/pkg/types"
+	"github.com/garyblankenship/wormhole/pkg/wormhole"
+	"github.com/garyblankenship/wormhole/pkg/types"
 )
 
 func main() {
 	// Create a new Prism client
-	p := prism.New(prism.Config{})
+	p := wormhole.New(wormhole.Config{})
 
 	// Example 1: LMStudio (local)
 	fmt.Println("=== Setting up LMStudio Provider ===")
@@ -92,19 +92,19 @@ func main() {
 		"type": "object",
 		"properties": map[string]interface{}{
 			"name": map[string]interface{}{
-				"type": "string",
+				"type":        "string",
 				"description": "Product name",
 			},
 			"price": map[string]interface{}{
-				"type": "number",
+				"type":        "number",
 				"description": "Product price in USD",
 			},
 			"category": map[string]interface{}{
-				"type": "string",
+				"type":        "string",
 				"description": "Product category",
 			},
 			"description": map[string]interface{}{
-				"type": "string",
+				"type":        "string",
 				"description": "Product description",
 			},
 		},
@@ -134,16 +134,16 @@ func main() {
 			"type": "object",
 			"properties": map[string]interface{}{
 				"operation": map[string]interface{}{
-					"type": "string",
-					"enum": []string{"add", "subtract", "multiply", "divide"},
+					"type":        "string",
+					"enum":        []string{"add", "subtract", "multiply", "divide"},
 					"description": "The arithmetic operation to perform",
 				},
 				"a": map[string]interface{}{
-					"type": "number",
+					"type":        "number",
 					"description": "First number",
 				},
 				"b": map[string]interface{}{
-					"type": "number",
+					"type":        "number",
 					"description": "Second number",
 				},
 			},

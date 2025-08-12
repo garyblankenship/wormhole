@@ -3,8 +3,8 @@ package openai_test
 import (
 	"testing"
 
-	"github.com/prism-php/prism-go/pkg/providers/openai"
-	"github.com/prism-php/prism-go/pkg/types"
+	"github.com/garyblankenship/wormhole/pkg/providers/openai"
+	"github.com/garyblankenship/wormhole/pkg/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -79,7 +79,7 @@ func TestTransformResponses(t *testing.T) {
 func TestStreamChunkParsing(t *testing.T) {
 	chunk := types.StreamChunk{
 		ID:    "test",
-		Model: "gpt-4",
+		Model: "gpt-5",
 		Delta: &types.ChunkDelta{
 			Content: "Hello",
 		},

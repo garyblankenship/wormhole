@@ -3,13 +3,13 @@ package main
 import (
 	"fmt"
 
-	"github.com/prism-php/prism-go/pkg/prism"
-	"github.com/prism-php/prism-go/pkg/types"
+	"github.com/garyblankenship/wormhole/pkg/wormhole"
+	"github.com/garyblankenship/wormhole/pkg/types"
 )
 
 func main() {
 	// Initialize with mock configuration
-	p := prism.New(prism.Config{
+	p := wormhole.New(wormhole.Config{
 		DefaultProvider: "openai",
 		Providers: map[string]types.ProviderConfig{
 			"openai": {
@@ -27,7 +27,7 @@ func main() {
 	// Text generation
 	fmt.Println("1. Text Generation:")
 	fmt.Println(`response, err := p.Text().
-    Model("gpt-4").
+    Model("gpt-5").
     Prompt("Hello world").
     Temperature(0.7).
     Generate(ctx)`)
@@ -35,7 +35,7 @@ func main() {
 	// Streaming
 	fmt.Println("\n2. Streaming:")
 	fmt.Println(`chunks, err := p.Text().
-    Model("gpt-4").
+    Model("gpt-5").
     Prompt("Tell me a story").
     Stream(ctx)
 
@@ -47,7 +47,7 @@ for chunk := range chunks {
 	fmt.Println("\n3. Structured Output:")
 	fmt.Println(`var result MyStruct
 err := p.Structured().
-    Model("gpt-4").
+    Model("gpt-5").
     Prompt("Extract data...").
     Schema(schema).
     GenerateAs(ctx, &result)`)
@@ -55,14 +55,14 @@ err := p.Structured().
 	// Tool calling
 	fmt.Println("\n4. Tool Calling:")
 	fmt.Println(`response, err := p.Text().
-    Model("gpt-4").
+    Model("gpt-5").
     Prompt("What's the weather?").
     Tools(weatherTool).
     Generate(ctx)`)
 
 	// Show builder pattern
 	req := p.Text().
-		Model("gpt-4").
+		Model("gpt-5").
 		SystemPrompt("You are a helpful assistant").
 		Prompt("Explain the builder pattern")
 

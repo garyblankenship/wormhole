@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/prism-php/prism-go/pkg/types"
+	"github.com/garyblankenship/wormhole/pkg/types"
 )
 
 // buildMessagePayload builds the Anthropic messages API payload

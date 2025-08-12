@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/prism-php/prism-go/pkg/types"
+	"github.com/garyblankenship/wormhole/pkg/types"
 )
 
 // buildChatPayload builds the Mistral chat completion payload

@@ -1,7 +1,5 @@
 package anthropic
 
-import ()
-
 // Anthropic API types
 
 type messageResponse struct {
@@ -38,11 +36,6 @@ type messageStartEvent struct {
 	Message messageResponse `json:"message"`
 }
 
-type contentBlockStartEvent struct {
-	Type         string      `json:"type"`
-	Index        int         `json:"index"`
-	ContentBlock contentPart `json:"content_block"`
-}
 
 type contentBlockDeltaEvent struct {
 	Type  string `json:"type"`
@@ -53,9 +46,6 @@ type contentBlockDeltaEvent struct {
 	} `json:"delta"`
 }
 
-type messageStopEvent struct {
-	Type string `json:"type"`
-}
 
 type messageDeltaEvent struct {
 	Type  string `json:"type"`

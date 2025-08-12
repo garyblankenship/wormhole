@@ -4,8 +4,8 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/prism-php/prism-go/pkg/providers/openai"
-	"github.com/prism-php/prism-go/pkg/types"
+	"github.com/garyblankenship/wormhole/pkg/providers/openai"
+	"github.com/garyblankenship/wormhole/pkg/types"
 )
 
 const (
@@ -76,13 +76,13 @@ func (p *Provider) Text(ctx context.Context, request types.TextRequest) (*types.
 	if err != nil {
 		return nil, err
 	}
-	
+
 	// Update metadata to reflect the actual provider
 	if response.Metadata == nil {
 		response.Metadata = make(map[string]interface{})
 	}
 	response.Metadata["provider"] = p.name
-	
+
 	return response, nil
 }
 
@@ -95,7 +95,7 @@ func (p *Provider) Stream(ctx context.Context, request types.TextRequest) (<-cha
 
 	// Create a new channel to modify metadata
 	ch := make(chan types.TextChunk)
-	
+
 	go func() {
 		defer close(ch)
 		for chunk := range stream {
@@ -113,13 +113,13 @@ func (p *Provider) Structured(ctx context.Context, request types.StructuredReque
 	if err != nil {
 		return nil, err
 	}
-	
+
 	// Update metadata
 	if response.Metadata == nil {
 		response.Metadata = make(map[string]interface{})
 	}
 	response.Metadata["provider"] = p.name
-	
+
 	return response, nil
 }
 
@@ -129,13 +129,13 @@ func (p *Provider) Embeddings(ctx context.Context, request types.EmbeddingsReque
 	if err != nil {
 		return nil, err
 	}
-	
+
 	// Update metadata
 	if response.Metadata == nil {
 		response.Metadata = make(map[string]interface{})
 	}
 	response.Metadata["provider"] = p.name
-	
+
 	return response, nil
 }
 
@@ -162,12 +162,12 @@ func (p *Provider) SpeechToText(ctx context.Context, request types.SpeechToTextR
 		Prompt:      request.Prompt,
 		Temperature: request.Temperature,
 	}
-	
+
 	audioResp, err := p.Provider.Audio(ctx, audioReq)
 	if err != nil {
 		return nil, err
 	}
-	
+
 	return &types.SpeechToTextResponse{
 		Text: audioResp.Text,
 	}, nil
@@ -184,12 +184,12 @@ func (p *Provider) TextToSpeech(ctx context.Context, request types.TextToSpeechR
 		Speed:          request.Speed,
 		ResponseFormat: request.ResponseFormat,
 	}
-	
+
 	audioResp, err := p.Provider.Audio(ctx, audioReq)
 	if err != nil {
 		return nil, err
 	}
-	
+
 	return &types.TextToSpeechResponse{
 		Audio:  audioResp.Audio,
 		Format: audioResp.Format,
@@ -207,37 +207,37 @@ func (p *Provider) GenerateImage(ctx context.Context, request types.ImageRequest
 // ListModels lists available models from the OpenAI-compatible API
 func (p *Provider) ListModels(ctx context.Context) (*ModelsResponse, error) {
 	var response ModelsResponse
-	
+
 	endpoint := fmt.Sprintf("%s/models", p.GetBaseURL())
 	if err := p.DoRequest(ctx, "GET", endpoint, nil, &response); err != nil {
 		return nil, fmt.Errorf("failed to list models: %w", err)
 	}
-	
+
 	return &response, nil
 }
 
 // GetModel retrieves information about a specific model
 func (p *Provider) GetModel(ctx context.Context, modelID string) (*ModelInfo, error) {
 	var response ModelInfo
-	
+
 	endpoint := fmt.Sprintf("%s/models/%s", p.GetBaseURL(), modelID)
 	if err := p.DoRequest(ctx, "GET", endpoint, nil, &response); err != nil {
 		return nil, fmt.Errorf("failed to get model info: %w", err)
 	}
-	
+
 	return &response, nil
 }
 
 // Health checks if the OpenAI-compatible API is healthy
 func (p *Provider) Health(ctx context.Context) error {
 	endpoint := fmt.Sprintf("%s/models", p.GetBaseURL())
-	
+
 	// Simple health check by trying to list models
 	var response ModelsResponse
 	if err := p.DoRequest(ctx, "GET", endpoint, nil, &response); err != nil {
 		return fmt.Errorf("health check failed: %w", err)
 	}
-	
+
 	return nil
 }
 

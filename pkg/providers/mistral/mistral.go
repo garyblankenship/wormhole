@@ -6,9 +6,9 @@ import (
 	"fmt"
 	"net/http"
 
-	"github.com/prism-php/prism-go/internal/utils"
-	"github.com/prism-php/prism-go/pkg/providers"
-	"github.com/prism-php/prism-go/pkg/types"
+	"github.com/garyblankenship/wormhole/internal/utils"
+	"github.com/garyblankenship/wormhole/pkg/providers"
+	"github.com/garyblankenship/wormhole/pkg/types"
 )
 
 const (

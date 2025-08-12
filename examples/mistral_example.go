@@ -6,8 +6,8 @@ import (
 	"log"
 	"os"
 
-	"github.com/prism-php/prism-go/pkg/providers/mistral"
-	"github.com/prism-php/prism-go/pkg/types"
+	"github.com/garyblankenship/wormhole/pkg/providers/mistral"
+	"github.com/garyblankenship/wormhole/pkg/types"
 )
 
 func main() {

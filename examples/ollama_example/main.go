@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"log"
 
-	"github.com/prism-php/prism-go/pkg/providers/ollama"
-	"github.com/prism-php/prism-go/pkg/types"
+	"github.com/garyblankenship/wormhole/pkg/providers/ollama"
+	"github.com/garyblankenship/wormhole/pkg/types"
 )
 
 func main() {
