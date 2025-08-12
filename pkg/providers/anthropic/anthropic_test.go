@@ -3,8 +3,8 @@ package anthropic_test
 import (
 	"testing"
 
-	"github.com/prism-php/prism-go/pkg/providers/anthropic"
-	"github.com/prism-php/prism-go/pkg/types"
+	"github.com/garyblankenship/wormhole/pkg/providers/anthropic"
+	"github.com/garyblankenship/wormhole/pkg/types"
 	"github.com/stretchr/testify/assert"
 )
 

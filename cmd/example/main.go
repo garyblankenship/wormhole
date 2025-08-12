@@ -6,13 +6,13 @@ import (
 	"log"
 	"os"
 
-	"github.com/prism-php/prism-go/pkg/prism"
-	"github.com/prism-php/prism-go/pkg/types"
+	"github.com/garyblankenship/wormhole/pkg/wormhole"
+	"github.com/garyblankenship/wormhole/pkg/types"
 )
 
 func main() {
 	// Initialize Prism with providers
-	p := prism.New(prism.Config{
+	p := wormhole.New(wormhole.Config{
 		DefaultProvider: "openai",
 		Providers: map[string]types.ProviderConfig{
 			"openai": {
@@ -47,9 +47,9 @@ func main() {
 	toolExample(ctx, p)
 }
 
-func simpleExample(ctx context.Context, p *prism.Prism) {
+func simpleExample(ctx context.Context, p *wormhole.Wormhole) {
 	response, err := p.Text().
-		Model("gpt-3.5-turbo").
+		Model("gpt-5").
 		Prompt("Write a haiku about Go programming").
 		Temperature(0.7).
 		Generate(ctx)
@@ -64,7 +64,7 @@ func simpleExample(ctx context.Context, p *prism.Prism) {
 	fmt.Printf("Tokens used: %d\n", response.Usage.TotalTokens)
 }
 
-func conversationExample(ctx context.Context, p *prism.Prism) {
+func conversationExample(ctx context.Context, p *wormhole.Wormhole) {
 	messages := []types.Message{
 		types.NewSystemMessage("You are a helpful assistant who speaks like a pirate"),
 		types.NewUserMessage("What is the capital of France?"),
@@ -73,7 +73,7 @@ func conversationExample(ctx context.Context, p *prism.Prism) {
 	}
 
 	response, err := p.Text().
-		Model("gpt-3.5-turbo").
+		Model("gpt-5").
 		Messages(messages...).
 		Generate(ctx)
 
@@ -85,9 +85,9 @@ func conversationExample(ctx context.Context, p *prism.Prism) {
 	fmt.Println("Assistant:", response.Text)
 }
 
-func streamingExample(ctx context.Context, p *prism.Prism) {
+func streamingExample(ctx context.Context, p *wormhole.Wormhole) {
 	chunks, err := p.Text().
-		Model("gpt-3.5-turbo").
+		Model("gpt-5").
 		Prompt("Count from 1 to 5 slowly").
 		Stream(ctx)
 
@@ -107,7 +107,7 @@ func streamingExample(ctx context.Context, p *prism.Prism) {
 	fmt.Println()
 }
 
-func structuredExample(ctx context.Context, p *prism.Prism) {
+func structuredExample(ctx context.Context, p *wormhole.Wormhole) {
 	type ProductInfo struct {
 		Name     string  `json:"name"`
 		Price    float64 `json:"price"`
@@ -128,7 +128,7 @@ func structuredExample(ctx context.Context, p *prism.Prism) {
 
 	var product ProductInfo
 	err := p.Structured().
-		Model("gpt-3.5-turbo").
+		Model("gpt-5").
 		Prompt("Extract product info: The new iPhone 15 Pro costs $999 and is currently in stock in the Electronics department").
 		Schema(schema).
 		Mode(types.StructuredModeJSON).
@@ -142,7 +142,7 @@ func structuredExample(ctx context.Context, p *prism.Prism) {
 	fmt.Printf("Extracted Product: %+v\n", product)
 }
 
-func toolExample(ctx context.Context, p *prism.Prism) {
+func toolExample(ctx context.Context, p *wormhole.Wormhole) {
 	// Define a weather tool
 	weatherTool := types.NewTool(
 		"get_current_weather",
@@ -165,7 +165,7 @@ func toolExample(ctx context.Context, p *prism.Prism) {
 	)
 
 	response, err := p.Text().
-		Model("gpt-3.5-turbo").
+		Model("gpt-5").
 		Prompt("What's the weather like in New York?").
 		Tools(*weatherTool).
 		Generate(ctx)

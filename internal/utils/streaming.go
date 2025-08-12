@@ -7,7 +7,7 @@ import (
 	"io"
 	"strings"
 
-	"github.com/prism-php/prism-go/pkg/types"
+	"github.com/garyblankenship/wormhole/pkg/types"
 )
 
 // SSEParser parses Server-Sent Events streams

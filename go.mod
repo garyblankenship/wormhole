@@ -1,4 +1,4 @@
-module github.com/prism-php/prism-go
+module github.com/garyblankenship/wormhole
 
 go 1.22
 

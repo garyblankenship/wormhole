@@ -9,8 +9,8 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/prism-php/prism-go/internal/utils"
-	"github.com/prism-php/prism-go/pkg/types"
+	"github.com/garyblankenship/wormhole/internal/utils"
+	"github.com/garyblankenship/wormhole/pkg/types"
 )
 
 // BaseProvider provides common functionality for all providers

@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/prism-php/prism-go/pkg/types"
+	"github.com/garyblankenship/wormhole/pkg/types"
 )
 
 // MockProvider is a mock implementation of the Provider interface for testing

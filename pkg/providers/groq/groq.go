@@ -5,8 +5,8 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/prism-php/prism-go/pkg/providers"
-	"github.com/prism-php/prism-go/pkg/types"
+	"github.com/garyblankenship/wormhole/pkg/providers"
+	"github.com/garyblankenship/wormhole/pkg/types"
 )
 
 const (

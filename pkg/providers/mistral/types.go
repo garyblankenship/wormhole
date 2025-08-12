@@ -1,7 +1,5 @@
 package mistral
 
-import ()
-
 // Mistral API response types
 
 type chatCompletionResponse struct {

@@ -3,7 +3,7 @@ package ollama
 import (
 	"testing"
 
-	"github.com/prism-php/prism-go/pkg/types"
+	"github.com/garyblankenship/wormhole/pkg/types"
 )
 
 func TestNew_DefaultConfig(t *testing.T) {

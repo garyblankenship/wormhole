@@ -5,13 +5,13 @@ import (
 	"fmt"
 	"log"
 
-	"github.com/prism-php/prism-go/pkg/prism"
-	"github.com/prism-php/prism-go/pkg/types"
+	"github.com/garyblankenship/wormhole/pkg/wormhole"
+	"github.com/garyblankenship/wormhole/pkg/types"
 )
 
 func main() {
 	// Create a new Prism client
-	p := prism.New(prism.Config{})
+	p := wormhole.New(wormhole.Config{})
 
 	// Add LMStudio provider (default: http://localhost:1234/v1)
 	p.WithLMStudio(types.ProviderConfig{})
@@ -58,7 +58,7 @@ func main() {
 			}
 			fmt.Print(chunk.Text)
 		}
-		fmt.Println("\n")
+		fmt.Println()
 	}
 
 	// Example 3: Function calling / Tools (if your model supports it)
@@ -105,9 +105,9 @@ func main() {
 	// Example 4: Structured output (JSON mode)
 	fmt.Println("=== Structured Output ===")
 	type Person struct {
-		Name    string `json:"name"`
-		Age     int    `json:"age"`
-		City    string `json:"city"`
+		Name    string   `json:"name"`
+		Age     int      `json:"age"`
+		City    string   `json:"city"`
 		Hobbies []string `json:"hobbies"`
 	}
 
@@ -115,15 +115,15 @@ func main() {
 		"type": "object",
 		"properties": map[string]interface{}{
 			"name": map[string]interface{}{
-				"type": "string",
+				"type":        "string",
 				"description": "Person's full name",
 			},
 			"age": map[string]interface{}{
-				"type": "integer",
+				"type":        "integer",
 				"description": "Person's age",
 			},
 			"city": map[string]interface{}{
-				"type": "string",
+				"type":        "string",
 				"description": "City where the person lives",
 			},
 			"hobbies": map[string]interface{}{

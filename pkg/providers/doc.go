@@ -5,7 +5,7 @@
 // that provider.
 //
 // Currently supported providers:
-//   - OpenAI (GPT-3.5, GPT-4, DALL-E, Whisper)
+//   - OpenAI (GPT-5, DALL-E, Whisper)
 //   - Anthropic (Claude 3 family)
 //
 // All providers share common functionality through the BaseProvider type, which

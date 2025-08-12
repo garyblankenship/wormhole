@@ -6,7 +6,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/prism-php/prism-go/pkg/types"
+	"github.com/garyblankenship/wormhole/pkg/types"
 )
 
 // buildChatPayload builds the Ollama chat completion payload

@@ -8,8 +8,8 @@ import (
 	"io"
 	"strings"
 
-	"github.com/prism-php/prism-go/internal/utils"
-	"github.com/prism-php/prism-go/pkg/types"
+	"github.com/garyblankenship/wormhole/internal/utils"
+	"github.com/garyblankenship/wormhole/pkg/types"
 )
 
 // transformMessages converts types.Message to Gemini format

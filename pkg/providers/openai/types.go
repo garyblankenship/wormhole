@@ -1,7 +1,5 @@
 package openai
 
-import ()
-
 // OpenAI API response types
 
 type chatCompletionResponse struct {

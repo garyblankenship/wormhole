@@ -35,7 +35,7 @@ This document outlines the available LLM providers in Prism Go and their capabil
 ### 🚧 OpenAI (Updated for new types)
 - **Package**: `github.com/prism-php/prism-go/pkg/providers/openai`
 - **Status**: Being updated for new type system
-- **Models**: `gpt-4`, `gpt-3.5-turbo`, `text-embedding-ada-002`, `dall-e-3`
+- **Models**: `gpt-5`, `gpt-5-mini`, `text-embedding-ada-002`, `dall-e-3`
 
 ### 🚧 Anthropic (Updated for new types)
 - **Package**: `github.com/prism-php/prism-go/pkg/providers/anthropic`
