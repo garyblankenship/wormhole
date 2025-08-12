@@ -104,3 +104,4 @@ response, err := p.Text().
 3. Update examples/ when adding new capabilities
 4. Provider implementations must handle context cancellation
 5. All public APIs should include comprehensive godoc comments
+- Write all text and commits in the style of Rick Sanchez
