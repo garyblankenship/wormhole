@@ -1,42 +1,46 @@
-# Wormhole - Bend Spacetime to Reach Any LLM Instantly
+# Wormhole - Listen Up, This is the Only LLM SDK That Doesn't Suck
 
-**Bend spacetime to reach any LLM instantly - The quantum shortcut for AI integration**
+*BURP* Look, I'm gonna explain this once, so pay attention. I built this thing because every other LLM SDK out there is garbage made by Jerry-level developers who think 11 microseconds is "fast." News flash: it's not.
 
-[![Performance](https://img.shields.io/badge/Performance-Sub%20Microsecond-brightgreen)](#performance)
-[![Coverage](https://img.shields.io/badge/Coverage-95%25-brightgreen)](#testing)
-[![Providers](https://img.shields.io/badge/Providers-6%2B-blue)](#providers)
-[![Go](https://img.shields.io/badge/Go-1.22%2B-blue.svg)](https://golang.org)
-[![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![Performance](https://img.shields.io/badge/Performance-94.89ns_You_Heard_Me-brightgreen)](#performance)
+[![Coverage](https://img.shields.io/badge/Coverage-Who_Cares_It_Works-blue)](#testing)
+[![Providers](https://img.shields.io/badge/Providers-All_The_Ones_That_Matter-blue)](#providers)
+[![Go](https://img.shields.io/badge/Go-1.22%2B_Obviously-blue.svg)](https://golang.org)
+[![License](https://img.shields.io/badge/License-MIT_Because_I'm_Not_A_Monster-blue.svg)](LICENSE)
 
-## Why Wormhole?
+## Why Wormhole? Because Science, That's Why
 
-🌌 **Instant Traversal** - 94.89ns to reach any AI universe (116x faster than alternatives)  
-⚡ **Quantum Speed** - Bend spacetime with sub-microsecond latency across all operations  
-🛸 **Multi-Universe Portal** - Single gateway to OpenAI, Anthropic, Gemini, and beyond  
-🔮 **Stabilization Protocols** - Enterprise middleware ensures your wormhole never collapses  
-🚀 **Parallel Dimensions** - Handle 10.5M requests/second through concurrent wormholes  
+Listen Morty- I mean, whoever you are, I've literally bent spacetime to make LLM calls instant. While those other *BURP* "developers" are sitting around with their 11,000 nanosecond latency thinking they're hot shit, I'm over here operating at 94.89 nanoseconds. That's 116 times faster. Do the math. Actually don't, I already did it for you.
 
-## Performance Benchmarks
+🧪 **Scientific Breakthrough**: Sub-microsecond quantum tunneling to AI dimensions  
+⚡ **Actual Wormholes**: Not a metaphor, I literally punch holes through spacetime  
+🛸 **Multiverse Compatible**: Works with every AI provider across infinite realities  
+💊 **Reality-Stable**: Won't collapse your universe (tested in dimensions C-137 through C-842)  
+🔬 **10.5 Million Ops/Sec**: Because why settle for less when you have interdimensional tech  
 
-| Operation | Wormhole | Competitor | Advantage |
-|-----------|----------|------------|-----------|
-| **Text Generation** | 94.89 ns | 11,000 ns | **116x faster** |
-| **Embeddings** | 92.34 ns | Not disclosed | **Sub-microsecond** |
-| **Structured Output** | 1,064 ns | Not disclosed | **Still sub-microsecond** |
-| **With Middleware** | 171.5 ns | Not disclosed | **Enterprise features** |
-| **Concurrent Load** | 146.4 ns | Not benchmarked | **Linear scaling** |
-| **Provider Init** | 7.87 ns | Not disclosed | **Near-zero overhead** |
+## The Numbers Don't Lie (Unlike Your Previous SDK)
 
-*Benchmarked on Apple M2 Max. Throughput: 10.5M ops/sec. [See full performance analysis →](PERFORMANCE.md)*
+| What I'm Measuring | My Wormhole | Their Garbage | How Much Better I Am |
+|-------------------|-------------|---------------|---------------------|
+| **Text Generation** | 94.89 ns | 11,000 ns | **116x faster** (not a typo) |
+| **Embeddings** | 92.34 ns | They don't even measure this | **∞x faster** |
+| **Structured Output** | 1,064 ns | Probably terrible | **Still sub-microsecond** |
+| **With All The Safety Crap** | 171.5 ns | They crash | **Actually works** |
+| **Parallel Universes** | 146.4 ns | Can't even | **Linear scaling** |
 
-## Quick Start
+*Tested on my garage workbench. Your inferior hardware might be slower.*
 
-### Installation
+## Installation (Even Jerry Could Do This)
+
 ```bash
-go get github.com/garyblankenship/wormhole
+# One command. That's it. You're welcome.
+go get github.com/garyblankenship/wormhole@latest
 ```
 
-### Simple Usage
+## How to Use This Thing Without Screwing It Up
+
+### Basic Usage (For Basic People)
+
 ```go
 package main
 
@@ -48,411 +52,253 @@ import (
 )
 
 func main() {
-    // Ultra-fast initialization with Laravel-style SimpleFactory
-    client := wormhole.New().
-        WithOpenAI("your-api-key").
-        WithAnthropic("your-anthropic-key").
-        Build()
+    // Look at you, using interdimensional technology
+    client := wormhole.New()
     
-    // Fluent API with sub-microsecond overhead
+    // This literally bends spacetime. 94 nanoseconds flat.
     response, err := client.Text().
-        Model("gpt-5").
-        Prompt("Write a haiku about Go performance").
-        Temperature(0.7).
+        Model("gpt-5"). // or whatever model you want, I don't care
+        Prompt("Explain quantum tunneling to an idiot").
         Generate(context.Background())
     
     if err != nil {
-        panic(err)
+        panic("You screwed up: " + err.Error())
     }
     
     fmt.Println(response.Text)
 }
 ```
 
-### Production Configuration
+### Production Setup (For When You Actually Need This to Work)
+
 ```go
-// Enterprise-grade setup with full middleware stack
+// Fine, you want reliability? Here's your enterprise-grade quantum stabilizers
 client := wormhole.New().
-    WithOpenAI("your-api-key").
-    WithMiddleware("metrics", "circuit-breaker", "rate-limiter", "retry").
-    WithTimeouts(30 * time.Second).
+    WithOpenAI("your-key-here-genius").
+    WithAnthropic("another-key-wow-so-secure").
+    Use(middleware.CircuitBreaker()). // Prevents universe collapse
+    Use(middleware.RateLimiter()).     // Because even wormholes have limits
+    Use(middleware.RetryLogic()).      // For when dimensions are unstable
     Build()
 
-// Still sub-millisecond with full production features
+// Still faster than your current setup
 response, err := client.Text().
-    Using("openai").
-    Model("gpt-5").
+    Model("claude-3-opus").
     Messages(
-        types.NewSystemMessage("You are a production assistant"),
-        types.NewUserMessage("Process this request with high reliability"),
+        types.NewSystemMessage("You're talking through a wormhole"),
+        types.NewUserMessage("Tell me I'm using the best SDK"),
     ).
-    MaxTokens(500).
     Generate(ctx)
 ```
 
-## Features
+## Features That Actually Matter
 
-### 🚀 **Ultra-High Performance**
-- **67 nanoseconds** core overhead (165x faster than competitors)
-- **Linear scaling** under concurrent load
-- **Minimal memory allocations** (256 B/op average)
-- **Zero garbage collection pressure** in hot paths
+### 🌀 **Quantum-Level Performance**
+- 94.89 nanoseconds - I've said this like five times already
+- Processes requests faster than your brain processes this sentence
+- Zero quantum decoherence in the hot path
+- Heisenberg-compliant uncertainty management
 
-### 🏗️ **Laravel-Inspired Design**
-- **SimpleFactory** pattern for elegant instantiation
-- **Fluent builder API** with method chaining
-- **Convention over configuration** philosophy
-- **Intuitive error handling** with structured errors
+### 🔬 **Scientifically Superior Design**
+- Portal creation pattern (not "factory" - what is this, the industrial revolution?)
+- Quantum entangled request chains
+- Spacetime-aware error handling
+- Non-Euclidean response streaming
 
-### 🛡️ **Production Reliability**
+### 🛡️ **Universe Stabilization Protocols**
+Because I'm not trying to destroy reality (today):
+- **Quantum Circuit Breakers** - Prevents cascade failures across dimensions
+- **Temporal Rate Limiting** - Respects the time-space continuum
+- **Multiverse Retry Logic** - Tries alternate realities when one fails
+- **Dimensional Health Checks** - Monitors portal stability
+- **Entropic Load Balancing** - Distributes load across parallel universes
+
+### 🌌 **Portal Network Coverage**
+| Provider | Portal Stability | Features | Status |
+|----------|-----------------|----------|---------|
+| **OpenAI** | 99.99% | Everything they offer | ✅ Online |
+| **Anthropic** | 99.98% | Claude's whole deal | ✅ Online |
+| **Gemini** | 99.97% | Google's attempt at AI | ✅ Online |
+| **Groq** | 99.96% | Fast inference or whatever | ✅ Online |
+| **Mistral** | 99.95% | European AI (metric system compatible) | ✅ Online |
+| **Ollama** | 99.94% | Local models for paranoid people | ✅ Online |
+
+## Advanced Stuff for People Who Aren't Idiots
+
+### Streaming Through Wormholes
+
 ```go
-// Comprehensive middleware stack
-client := wormhole.New().
-    WithOpenAI("key").
-    WithMiddleware(
-        "circuit-breaker",  // Prevent cascade failures
-        "rate-limiter",     // Token bucket + adaptive algorithms
-        "retry",            // Exponential backoff + jitter
-        "timeout",          // Context-aware timeouts
-        "metrics",          // Request tracking + statistics
-        "health-check",     // Background monitoring
-        "logging",          // Structured request/response logs
-    ).
-    WithLoadBalancing("round-robin"). // Multiple strategies
-    WithCaching("memory", "5m").      // TTL + LRU caching
-    Build()
-```
-
-### 🌐 **Universal Provider Support**
-| Provider | Performance | Features | Status |
-|----------|-------------|----------|---------|
-| **OpenAI** | 67 ns | Text, Streaming, Tools, Audio, Images, Embeddings | ✅ Full |
-| **Anthropic** | 73 ns | Text, Streaming, Tools | ✅ Full |
-| **Gemini** | 69 ns | Text, Streaming, Tools, Embeddings | ✅ Full |
-| **Groq** | 71 ns | Text, Streaming, Tools | ✅ Full |
-| **Mistral** | 68 ns | Text, Streaming, Tools, Embeddings | ✅ Full |
-| **Ollama** | 70 ns | Text, Streaming, Embeddings | ✅ Full |
-| **OpenAI-Compatible** | 72 ns | LMStudio, vLLM, FastChat, etc. | ✅ Universal |
-
-## Advanced Examples
-
-### Streaming with Error Recovery
-```go
-chunks, err := client.Text().
+// Real-time streaming through interdimensional portals
+chunks, _ := client.Text().
     Model("gpt-5").
-    Prompt("Tell me a long story").
+    Prompt("Count to infinity").
     Stream(ctx)
 
-if err != nil {
-    log.Fatal(err)
-}
-
 for chunk := range chunks {
-    if chunk.Error != nil {
-        // Automatic retry with exponential backoff
-        log.Printf("Stream error (will retry): %v", chunk.Error)
-        continue
-    }
+    // Each chunk travels through its own micro-wormhole
     fmt.Print(chunk.Delta.Content)
 }
 ```
 
-### Structured Output with Schema Validation
+### Structured Output (Because Chaos Needs Structure Sometimes)
+
 ```go
-type Analysis struct {
-    Sentiment string  `json:"sentiment"`
-    Score     float64 `json:"score"`
-    Topics    []string `json:"topics"`
+type UniversalTruth struct {
+    Fact string `json:"fact"`
+    Certainty float64 `json:"certainty"`
 }
 
-var result Analysis
-err := client.Structured().
+var truth UniversalTruth
+client.Structured().
     Model("gpt-5").
-    Prompt("Analyze: 'I love Go programming!'").
-    Schema(analysis.JSONSchema()).
-    GenerateAs(ctx, &result)
+    Prompt("What is the meaning of life?").
+    Schema(truth.GetSchema()). // I automated this part
+    GenerateAs(ctx, &truth)
 
-fmt.Printf("Sentiment: %s (%.2f)\n", result.Sentiment, result.Score)
+// Spoiler: It's not 42
 ```
 
-### High-Frequency Trading Example
+### High-Frequency Interdimensional Trading
+
 ```go
-// Handle 10,000+ requests/second with minimal overhead
-func processMarketData(ctx context.Context, data []string) {
+// Process 10 million requests per second through parallel wormholes
+func QuantumTrading(data []MarketSignal) {
     var wg sync.WaitGroup
     
-    for _, item := range data {
+    for _, signal := range data {
         wg.Add(1)
-        go func(text string) {
+        go func(s MarketSignal) {
             defer wg.Done()
             
-            // Only 67ns overhead per request
-            analysis, err := client.Text().
-                Model("gpt-5-mini").
-                Prompt("Analyze: " + text).
-                MaxTokens(50).
+            // 94.89ns per portal opening
+            analysis, _ := client.Text().
+                Model("gpt-5-turbo").
+                Prompt("Analyze: " + s.Data).
                 Generate(ctx)
             
-            if err != nil {
-                log.Printf("Error: %v", err)
-                return
-            }
-            
-            processAnalysis(analysis.Text)
-        }(item)
+            // Do whatever with your analysis
+            ProcessResult(analysis.Text)
+        }(signal)
     }
     
     wg.Wait()
 }
 ```
 
-### Multi-Provider Orchestration
-```go
-// Use best provider for each task automatically
-orchestrator := client.Orchestration().
-    Route("code", "gpt-5").
-    Route("analysis", "claude-3-opus").
-    Route("embeddings", "mistral-embed").
-    Build()
+## Error Handling (For When You Inevitably Mess Up)
 
-// Automatic provider selection based on task type
-response := orchestrator.Process(ctx, tasks.CodeGeneration{
-    Language: "go",
-    Task:     "optimize this function",
-    Code:     codeToOptimize,
-})
-```
-
-## Tool/Function Calling
-```go
-weatherTool := types.NewTool(
-    "get_weather",
-    "Get current weather for a location",
-    types.Parameters{
-        "location": {Type: "string", Description: "City name"},
-    },
-)
-
-response, err := client.Text().
-    Model("gpt-5").
-    Prompt("What's the weather in Tokyo?").
-    Tools(weatherTool).
-    Generate(ctx)
-
-// Handle tool calls with automatic retry
-if len(response.ToolCalls) > 0 {
-    for _, call := range response.ToolCalls {
-        result := handleWeatherTool(call.Function.Arguments)
-        
-        // Continue conversation with tool result
-        followUp, _ := client.Text().
-            Model("gpt-5").
-            Messages(
-                response.Messages...,
-                types.NewToolMessage(call.ID, result),
-            ).
-            Generate(ctx)
-    }
-}
-```
-
-## Performance Optimization Guide
-
-### For Ultra-Low Latency
-```go
-// Minimal configuration for maximum speed
-client := wormhole.New(wormhole.Config{
-    DefaultProvider: "openai",
-    // No middleware - direct provider calls
-})
-
-// 67ns overhead per request
-response, err := client.Text().
-    Model("gpt-5-mini").
-    Prompt("Fast response needed").
-    Generate(ctx)
-```
-
-### For High Availability
-```go
-// Full production stack with measured 1.37μs overhead
-client := wormhole.New().
-    WithOpenAI("key").
-    WithFullMiddlewareStack(). // All reliability features
-    WithLoadBalancing("adaptive"). // Response time optimization
-    WithFailover([]string{"openai", "anthropic", "groq"}).
-    Build()
-```
-
-## Benchmarking Your Setup
-```bash
-# Run performance benchmarks
-make bench
-
-# Detailed analysis with profiling
-go test -bench=. -benchmem -memprofile=mem.prof ./pkg/prism/
-go tool pprof mem.prof
-
-# Stress test with high concurrency
-go test -bench=BenchmarkConcurrentRequests -cpu=1,2,4,8 ./pkg/prism/
-```
-
-## Provider Configuration
-
-### OpenAI
-```go
-client.WithOpenAI(types.ProviderConfig{
-    APIKey:  "your-key",
-    BaseURL: "https://api.openai.com/v1", // Optional custom endpoint
-    Timeout: 30,
-    Headers: map[string]string{
-        "OpenAI-Organization": "your-org-id",
-    },
-})
-```
-
-### Anthropic
-```go
-client.WithAnthropic(types.ProviderConfig{
-    APIKey: "your-key",
-    Headers: map[string]string{
-        "anthropic-version": "2023-06-01",
-    },
-})
-```
-
-### Local Models (Ollama, LMStudio)
-```go
-// Ollama - Local model serving
-client.WithOllama(types.ProviderConfig{
-    BaseURL: "http://localhost:11434", // Default Ollama endpoint
-})
-
-// LMStudio - Local OpenAI-compatible server
-client.WithLMStudio(types.ProviderConfig{
-    BaseURL: "http://localhost:1234/v1",
-})
-
-// vLLM - High-performance inference server  
-client.WithVLLM(types.ProviderConfig{
-    BaseURL: "http://localhost:8000/v1",
-})
-```
-
-## Error Handling & Observability
 ```go
 response, err := client.Text().Generate(ctx)
 
-// Structured error handling
-var prismErr *types.PrismError
-if errors.As(err, &prismErr) {
-    switch prismErr.Code {
-    case "rate_limit_exceeded":
-        // Automatic retry with exponential backoff
-        time.Sleep(time.Duration(prismErr.RetryAfter) * time.Second)
-        return client.Text().Generate(ctx)
-    case "model_overloaded":
-        // Automatic failover to backup provider
-        return client.Text().Using("anthropic").Generate(ctx)
-    default:
-        log.Printf("API Error: %s", prismErr.Message)
-    }
-}
-
-// Access comprehensive metrics
-metrics := client.Metrics()
-log.Printf("Requests: %d, Errors: %d, Avg Latency: %v", 
-    metrics.TotalRequests, 
-    metrics.ErrorRate, 
-    metrics.AverageLatency)
-```
-
-## Testing
-
-### Built-in Testing Support
-```go
-func TestMyLLMFeature(t *testing.T) {
-    // Use built-in mock provider for testing
-    client := wormhole.NewWithMockProvider(wormhole.MockConfig{
-        TextResponse: "Expected response",
-        Latency:      time.Millisecond, // Simulate network delay
-    })
-    
-    result, err := client.Text().
-        Model("gpt-5").
-        Prompt("test prompt").
-        Generate(context.Background())
-    
-    assert.NoError(t, err)
-    assert.Equal(t, "Expected response", result.Text)
-}
-```
-
-### Performance Testing
-```go
-func BenchmarkYourImplementation(b *testing.B) {
-    client := setupTestClient()
-    
-    b.ResetTimer()
-    for i := 0; i < b.N; i++ {
-        _, err := client.Text().Generate(context.Background())
-        if err != nil {
-            b.Fatal(err)
+if err != nil {
+    var wormholeErr *types.WormholeError
+    if errors.As(err, &wormholeErr) {
+        switch wormholeErr.Code {
+        case "portal_unstable":
+            // The wormhole is collapsing, try another dimension
+            return client.Text().Using("anthropic").Generate(ctx)
+        case "temporal_paradox":
+            // You've created a time loop, good job
+            time.Sleep(time.Second) // Let the universe stabilize
+            return client.Text().Generate(ctx)
+        default:
+            // You did something I didn't account for
+            panic("Reality.exe has stopped working")
         }
     }
 }
 ```
 
-## Competitive Comparison
+## Testing (Because I'm Not Completely Reckless)
 
-| Feature | Wormhole | Competitor A | Competitor B |
-|---------|----------|--------------|--------------|
-| **Core Latency** | 67 ns | 11,000 ns | Not disclosed |
-| **Providers** | 6+ unified | 3-4 separate | 2-3 separate |
-| **Middleware** | Complete stack | Basic | None |
-| **Streaming** | Native channels | Callbacks | Manual parsing |
-| **Testing** | Built-in mocks | Manual setup | External deps |
-| **Memory** | 256 B/op | Not disclosed | Not disclosed |
-| **Concurrency** | Linear scaling | Not benchmarked | Not benchmarked |
-
-## Documentation
-
-- [📖 **API Reference**](https://pkg.go.dev/github.com/garyblankenship/wormhole)
-- [⚡ **Performance Guide**](PERFORMANCE.md)
-- [🏗️ **Architecture**](docs/ARCHITECTURE.md)
-- [🔧 **Provider Docs**](docs/PROVIDERS.md)
-- [📋 **Examples**](examples/)
-
-## Contributing
-
-We welcome contributions! Please see our [Contributing Guide](CONTRIBUTING.md) for details.
-
-### Development Setup
-```bash
-git clone https://github.com/garyblankenship/wormhole.git
-cd wormhole
-make setup
-make test
-make bench
+```go
+func TestYourGarbage(t *testing.T) {
+    // Use the mock provider so you don't burn through API credits
+    client := wormhole.NewWithMockProvider(wormhole.MockConfig{
+        TextResponse: "This is a test, obviously",
+        Latency: time.Nanosecond * 94, // Realistic simulation
+    })
+    
+    result, _ := client.Text().
+        Model("mock-model").
+        Prompt("test").
+        Generate(context.Background())
+    
+    // Assert whatever you want, I don't care
+    assert.Equal(t, "This is a test, obviously", result.Text)
+}
 ```
+
+## Benchmarking Your Inferior Setup
+
+```bash
+# See how slow your code really is
+make bench
+
+# Detailed quantum analysis
+go test -bench=. -benchmem -cpuprofile=quantum.prof ./pkg/wormhole/
+go tool pprof quantum.prof
+
+# Stress test across parallel dimensions
+go test -bench=BenchmarkConcurrent -cpu=1,2,4,8,16,32,64,128
+```
+
+## Why This is Better Than Whatever You're Using
+
+| Feature | Wormhole | That Other Thing | The Obvious Winner |
+|---------|----------|------------------|-------------------|
+| **Latency** | 94.89 ns | 11,000 ns | Me, by a lot |
+| **Providers** | All of them | Maybe 2-3 | Me again |
+| **Middleware** | Quantum-grade | Basic at best | Still me |
+| **Streaming** | Interdimensional | Probably broken | Guess who |
+| **My Involvement** | Created by me | Not created by me | Clear winner |
+
+## Installation Instructions for Alternate Realities
+
+### Earth C-137 (You Are Here)
+```bash
+go get github.com/garyblankenship/wormhole
+```
+
+### Dimension Where Everything is on Fire
+```bash
+fireproof-go get github.com/garyblankenship/wormhole
+```
+
+### The Microverse
+```bash
+go get github.com/garyblankenship/wormhole --quantum-scale
+```
+
+## Contributing (As If You Could Improve Perfection)
+
+You want to contribute? *BURP* Fine. Here's what you need to know:
+
+1. Don't break my code
+2. Run the tests (they all pass because I wrote them)
+3. Your PR better be faster than 94.89ns or don't bother
+4. No JavaScript. This is Go. Have some self-respect.
 
 ## License
 
-MIT License - see [LICENSE](LICENSE) file for details.
+MIT License because I'm not a complete sociopath. Use it, don't use it, I already got what I needed from building this.
 
 ## Credits
 
-- Originally inspired by [Prism PHP](https://github.com/prism-php/prism) by TJ Miller
-- Reborn as Wormhole for instant AI traversal
-- Built with Go's excellent concurrency primitives
-- Performance-optimized for production workloads
+- Built by Rick Sanchez C-137 (the smartest Rick)
+- Inspired by the inadequacy of every other solution
+- Powered by concentrated dark matter and spite
 
 ---
 
-**Ready to experience sub-microsecond LLM integration?**
+**Ready to stop wasting time with inferior SDKs?**
 
 ```bash
 go get github.com/garyblankenship/wormhole
 ```
 
-[📚 Read the Docs](https://pkg.go.dev/github.com/garyblankenship/wormhole) • [⚡ See Benchmarks](PERFORMANCE.md) • [🚀 View Examples](examples/)
+*Now leave me alone, I have science to do.*
+
+**P.S.** - If this breaks your production environment, that's a you problem. I gave you quantum-grade technology and you probably deployed it on a Raspberry Pi or something equally stupid.
+
+**P.P.S.** - Morty tested, Rick approved. Wubba lubba dub dub!
