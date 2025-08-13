@@ -42,13 +42,233 @@ This document outlines the available LLM providers in Wormhole Go and their capa
 - **Status**: Being updated for new type system
 - **Models**: `claude-3-5-sonnet-20241022`, `claude-3-opus-20240229`
 
+### ✅ OpenRouter (Multi-Provider Gateway)
+- **Package**: `github.com/garyblankenship/wormhole/pkg/providers/openai_compatible`
+- **Setup**: Use as OpenAI-compatible provider with OpenRouter base URL
+- **Models**: 200+ models from OpenAI, Anthropic, Google, Meta, Mistral, and more
+- **Features**:
+  - ✅ Text generation from 50+ providers
+  - ✅ Streaming responses
+  - ✅ Structured output (JSON mode)
+  - ✅ Function calling
+  - ✅ Embeddings (multiple providers)
+  - ✅ Cost tracking and usage analytics
+  - ✅ Fallback routing and load balancing
+  - ✅ Pay-per-use with competitive pricing
+  - ❌ Audio (varies by underlying provider)
+  - ❌ Image generation (varies by underlying provider)
+
 ### 📋 Planned Providers
 - **Mistral AI**: Text generation, embeddings
 - **Ollama**: Local model support
-- **OpenRouter**: Multi-provider routing
 - **xAI**: Grok models
 
 ## Usage Examples
+
+### OpenRouter: Multi-Provider Access
+
+OpenRouter provides access to 200+ models from different providers through a single API. Perfect for model comparison, fallback strategies, and cost optimization.
+
+#### Setup
+
+```go
+import (
+    "github.com/garyblankenship/wormhole/pkg/wormhole"
+    "github.com/garyblankenship/wormhole/pkg/types"
+)
+
+// Configure as OpenAI-compatible provider
+config := wormhole.Config{
+    DefaultProvider: "openrouter",
+    Providers: map[string]types.ProviderConfig{
+        "openrouter": {
+            APIKey:  "your-openrouter-api-key",
+            BaseURL: "https://openrouter.ai/api/v1",
+        },
+    },
+}
+
+w := wormhole.New(config)
+```
+
+#### Multi-Model Text Generation
+
+```go
+models := []string{
+    "openai/gpt-4o-mini",              // OpenAI via OpenRouter
+    "anthropic/claude-3.5-sonnet",     // Anthropic via OpenRouter  
+    "meta-llama/llama-3.1-8b-instruct", // Meta via OpenRouter
+    "google/gemini-pro",               // Google via OpenRouter
+    "mistralai/mixtral-8x7b-instruct", // Mistral via OpenRouter
+}
+
+for _, model := range models {
+    response, err := w.Text().
+        Model(model).
+        Prompt("Explain quantum computing in one sentence").
+        MaxTokens(100).
+        Generate(ctx)
+    
+    if err != nil {
+        log.Printf("Error with %s: %v", model, err)
+        continue
+    }
+    
+    fmt.Printf("Model: %s\nResponse: %s\n\n", model, response.Content)
+}
+```
+
+#### Cost-Optimized Model Selection
+
+```go
+// Use cheaper models for simple tasks
+cheapModels := []string{
+    "openai/gpt-4o-mini",
+    "anthropic/claude-3-haiku",
+    "meta-llama/llama-3.1-8b-instruct",
+}
+
+// Use powerful models for complex tasks
+premiumModels := []string{
+    "openai/gpt-4o",
+    "anthropic/claude-3.5-sonnet",
+    "google/gemini-pro-1.5",
+}
+
+func generateResponse(prompt string, complexity string) (*types.TextResponse, error) {
+    var models []string
+    if complexity == "simple" {
+        models = cheapModels
+    } else {
+        models = premiumModels
+    }
+    
+    // Try models in order of preference/cost
+    for _, model := range models {
+        response, err := w.Text().
+            Model(model).
+            Prompt(prompt).
+            Generate(ctx)
+        
+        if err == nil {
+            return response, nil
+        }
+        
+        log.Printf("Model %s failed, trying next: %v", model, err)
+    }
+    
+    return nil, errors.New("all models failed")
+}
+```
+
+#### Function Calling with Multiple Providers
+
+```go
+// Some models have better function calling than others
+functionModels := []string{
+    "openai/gpt-4o-mini",        // Excellent function calling
+    "anthropic/claude-3.5-sonnet", // Good function calling
+    "mistralai/mixtral-8x7b-instruct", // Basic function calling
+}
+
+weatherTool := types.NewTool(
+    "get_weather",
+    "Get current weather for a location",
+    map[string]interface{}{
+        "type": "object",
+        "properties": map[string]interface{}{
+            "location": map[string]interface{}{
+                "type": "string",
+                "description": "City and state/country",
+            },
+        },
+        "required": []string{"location"},
+    },
+)
+
+// Try function calling with fallback
+for _, model := range functionModels {
+    response, err := w.Text().
+        Model(model).
+        Messages(types.NewUserMessage("What's the weather in Tokyo?")).
+        Tools([]*types.Tool{weatherTool}).
+        Generate(ctx)
+    
+    if err == nil && len(response.ToolCalls) > 0 {
+        fmt.Printf("Success with %s: %d tool calls\n", model, len(response.ToolCalls))
+        break
+    }
+}
+```
+
+#### Embeddings from Multiple Providers
+
+```go
+embeddingModels := []string{
+    "openai/text-embedding-3-small",    // High quality, moderate cost
+    "openai/text-embedding-ada-002",    // Lower cost option
+    "voyage/voyage-large-2-instruct",   // Specialized for retrieval
+}
+
+text := "The universe is vast and full of possibilities"
+
+for _, model := range embeddingModels {
+    response, err := w.Embeddings().
+        Model(model).
+        Input(text).
+        Generate(ctx)
+    
+    if err != nil {
+        log.Printf("Embedding failed for %s: %v", model, err)
+        continue
+    }
+    
+    fmt.Printf("Model: %s, Dimensions: %d\n", 
+        model, len(response.Embeddings[0]))
+}
+```
+
+#### Streaming with Model Comparison
+
+```go
+func compareStreamingPerformance(prompt string) {
+    models := []string{
+        "openai/gpt-4o-mini",
+        "anthropic/claude-3.5-sonnet", 
+        "meta-llama/llama-3.1-8b-instruct",
+    }
+    
+    for _, model := range models {
+        fmt.Printf("\n--- Streaming with %s ---\n", model)
+        
+        start := time.Now()
+        stream, err := w.Text().
+            Model(model).
+            Prompt(prompt).
+            MaxTokens(200).
+            Stream(ctx)
+        
+        if err != nil {
+            fmt.Printf("Failed to start stream: %v\n", err)
+            continue
+        }
+        
+        tokenCount := 0
+        for chunk := range stream {
+            if chunk.Error != nil {
+                fmt.Printf("Stream error: %v\n", chunk.Error)
+                break
+            }
+            
+            fmt.Print(chunk.Content)
+            tokenCount++
+        }
+        
+        duration := time.Since(start)
+        fmt.Printf("\nTokens: %d, Time: %v\n", tokenCount, duration)
+    }
+}
+```
 
 ### Basic Text Generation
 
@@ -299,6 +519,7 @@ if err != nil {
 |----------|------|--------|------------|------------|-------|-------|--------|-------------|
 | Gemini   | ✅   | ✅     | ✅         | ✅         | ✅    | ❌    | ❌     | ✅          |
 | Groq     | ✅   | ✅     | ✅         | ❌         | ✅    | 🔄    | ❌     | ✅          |
+| OpenRouter | ✅   | ✅     | ✅         | ✅         | ✅    | 🔄    | 🔄     | ✅          |
 | OpenAI*  | ✅   | ✅     | ✅         | ✅         | ✅    | ✅    | ✅     | ✅          |
 | Anthropic* | ✅   | ✅     | ✅         | ❌         | ✅    | ❌    | ❌     | ✅          |
 
