@@ -46,7 +46,7 @@ func (p *Provider) Text(ctx context.Context, request types.TextRequest) (*types.
 	}
 
 	textResponse := p.transformTextResponse(&response)
-	
+
 	// Validate response has content to prevent silent failures
 	if textResponse.Text == "" && len(textResponse.ToolCalls) == 0 {
 		return nil, fmt.Errorf("received empty response from OpenAI API: no content or tool calls returned")

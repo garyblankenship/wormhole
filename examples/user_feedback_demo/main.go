@@ -17,7 +17,7 @@ func main() {
 	fmt.Println("\n1. 🚀 QuickOpenRouter() - Simplified Setup")
 	fmt.Println("Before: Complex config + WithOpenAICompatible call")
 	fmt.Println("After: One line setup!")
-	
+
 	// This is what the user wanted to work:
 	// client := wormhole.QuickOpenRouter() // Uses OPENROUTER_API_KEY env var
 	fmt.Println("   client := wormhole.QuickOpenRouter() // Just this!")
@@ -34,7 +34,7 @@ func main() {
 
 	// Let's simulate what better errors look like (without API key)
 	ctx := context.Background()
-	
+
 	// This will fail without API key, but now with better error messages
 	config := wormhole.Config{
 		DefaultProvider: "openrouter",
@@ -45,7 +45,7 @@ func main() {
 			},
 		},
 	}
-	
+
 	client := wormhole.New(config).WithOpenAICompatible("openrouter", "https://openrouter.ai/api/v1", types.ProviderConfig{
 		APIKey: "invalid-key-for-demo",
 	})

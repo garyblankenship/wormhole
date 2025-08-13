@@ -100,7 +100,7 @@ func (p *BaseProvider) DoRequest(ctx context.Context, method, url string, body i
 			fmt.Sprintf("HTTP %d: %s", resp.StatusCode, resp.Status),
 			p.isRetryableStatus(resp.StatusCode),
 		).WithDetails(fmt.Sprintf("URL: %s\nResponse: %s", url, string(respBody)))
-		
+
 		wormholeErr.StatusCode = resp.StatusCode
 		return wormholeErr
 	}
