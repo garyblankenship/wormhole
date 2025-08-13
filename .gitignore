@@ -44,4 +44,7 @@ go.work
 .ionide
 
 # End of https://www.toptal.com/developers/gitignore/api/go,visualstudiocode
+
+# Private project files - do not commit
 memory.md
+CLAUDE.md
