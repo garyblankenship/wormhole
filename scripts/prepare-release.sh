@@ -11,7 +11,7 @@ NC='\033[0m' # No Color
 # Banner
 echo -e "${BLUE}"
 echo "╔══════════════════════════════════════════════════════════════╗"
-echo "║                  🚀 Prism Go Release Preparation            ║"
+echo "║                  🚀 Wormhole Go Release Preparation            ║"
 echo "║              Ultra-Fast LLM SDK for Go                      ║"
 echo "╚══════════════════════════════════════════════════════════════╝"
 echo -e "${NC}"
@@ -117,7 +117,7 @@ fi
 # Create annotated tag with release notes
 RELEASE_NOTES=$(mktemp)
 cat > $RELEASE_NOTES << EOF
-Prism Go $VERSION
+Wormhole Go $VERSION
 
 Ultra-Fast LLM SDK for Go with sub-microsecond performance
 
@@ -169,9 +169,9 @@ echo "2. Create GitHub release: ${YELLOW}goreleaser release --clean${NC}"
 echo "   Or push the tag and let GitHub Actions handle the release"
 echo
 echo -e "${BLUE}Manual GitHub release creation:${NC}"
-echo "• Go to: https://github.com/prism-php/prism-go/releases/new"
+echo "• Go to: https://github.com/garyblankenship/wormhole/releases/new"
 echo "• Tag: $VERSION"
-echo "• Title: 🚀 Prism Go $VERSION - Ultra-Fast LLM SDK"
+echo "• Title: 🚀 Wormhole Go $VERSION - Ultra-Fast LLM SDK"
 echo "• Copy release notes from CHANGELOG.md"
 echo
 echo -e "${GREEN}🚀 Ready to release the fastest Go LLM SDK!${NC}"

@@ -16,7 +16,7 @@ func NewSimpleFactory() *SimpleFactory {
 	return &SimpleFactory{}
 }
 
-// OpenAI creates a Prism client configured for OpenAI
+// OpenAI creates a Wormhole client configured for OpenAI
 func (f *SimpleFactory) OpenAI(apiKey ...string) *Wormhole {
 	key := f.getAPIKey(apiKey, "OPENAI_API_KEY")
 
@@ -32,7 +32,7 @@ func (f *SimpleFactory) OpenAI(apiKey ...string) *Wormhole {
 	return New(config)
 }
 
-// Anthropic creates a Prism client configured for Anthropic
+// Anthropic creates a Wormhole client configured for Anthropic
 func (f *SimpleFactory) Anthropic(apiKey ...string) *Wormhole {
 	key := f.getAPIKey(apiKey, "ANTHROPIC_API_KEY")
 
@@ -48,7 +48,7 @@ func (f *SimpleFactory) Anthropic(apiKey ...string) *Wormhole {
 	return New(config)
 }
 
-// Gemini creates a Prism client configured for Google Gemini
+// Gemini creates a Wormhole client configured for Google Gemini
 func (f *SimpleFactory) Gemini(apiKey ...string) *Wormhole {
 	key := f.getAPIKey(apiKey, "GEMINI_API_KEY", "GOOGLE_API_KEY")
 
@@ -64,7 +64,7 @@ func (f *SimpleFactory) Gemini(apiKey ...string) *Wormhole {
 	return New(config)
 }
 
-// Groq creates a Prism client configured for Groq
+// Groq creates a Wormhole client configured for Groq
 func (f *SimpleFactory) Groq(apiKey ...string) *Wormhole {
 	key := f.getAPIKey(apiKey, "GROQ_API_KEY")
 
@@ -80,7 +80,7 @@ func (f *SimpleFactory) Groq(apiKey ...string) *Wormhole {
 	return New(config)
 }
 
-// Mistral creates a Prism client configured for Mistral
+// Mistral creates a Wormhole client configured for Mistral
 func (f *SimpleFactory) Mistral(apiKey ...string) *Wormhole {
 	key := f.getAPIKey(apiKey, "MISTRAL_API_KEY")
 
@@ -96,13 +96,15 @@ func (f *SimpleFactory) Mistral(apiKey ...string) *Wormhole {
 	return New(config)
 }
 
-// Ollama creates a Prism client configured for Ollama
+// Ollama creates a Wormhole client configured for Ollama
 func (f *SimpleFactory) Ollama(baseURL ...string) *Wormhole {
-	url := "http://localhost:11434"
+	var url string
 	if len(baseURL) > 0 && baseURL[0] != "" {
 		url = baseURL[0]
 	} else if envURL := os.Getenv("OLLAMA_BASE_URL"); envURL != "" {
 		url = envURL
+	} else {
+		panic("Ollama base URL is required: provide via parameter or OLLAMA_BASE_URL environment variable")
 	}
 
 	config := Config{
@@ -117,13 +119,15 @@ func (f *SimpleFactory) Ollama(baseURL ...string) *Wormhole {
 	return New(config)
 }
 
-// LMStudio creates a Prism client configured for LMStudio
+// LMStudio creates a Wormhole client configured for LMStudio
 func (f *SimpleFactory) LMStudio(baseURL ...string) *Wormhole {
-	url := "http://localhost:1234/v1"
+	var url string
 	if len(baseURL) > 0 && baseURL[0] != "" {
 		url = baseURL[0]
 	} else if envURL := os.Getenv("LMSTUDIO_BASE_URL"); envURL != "" {
 		url = envURL
+	} else {
+		panic("LMStudio base URL is required: provide via parameter or LMSTUDIO_BASE_URL environment variable")
 	}
 
 	config := Config{
@@ -140,12 +144,12 @@ func (f *SimpleFactory) LMStudio(baseURL ...string) *Wormhole {
 }
 
 // WithRateLimit adds rate limiting middleware
-func (f *SimpleFactory) WithRateLimit(prism *Wormhole, requestsPerSecond int) *Wormhole {
-	return prism.Use(middleware.RateLimitMiddleware(requestsPerSecond))
+func (f *SimpleFactory) WithRateLimit(wormhole *Wormhole, requestsPerSecond int) *Wormhole {
+	return wormhole.Use(middleware.RateLimitMiddleware(requestsPerSecond))
 }
 
 // WithRetry adds retry middleware with exponential backoff
-func (f *SimpleFactory) WithRetry(prism *Wormhole, maxRetries int) *Wormhole {
+func (f *SimpleFactory) WithRetry(wormhole *Wormhole, maxRetries int) *Wormhole {
 	config := middleware.RetryConfig{
 		MaxRetries:   maxRetries,
 		InitialDelay: 1 * time.Second,
@@ -153,38 +157,49 @@ func (f *SimpleFactory) WithRetry(prism *Wormhole, maxRetries int) *Wormhole {
 		Multiplier:   2.0,
 		Jitter:       true,
 	}
-	return prism.Use(middleware.RetryMiddleware(config))
+	return wormhole.Use(middleware.RetryMiddleware(config))
 }
 
 // WithCircuitBreaker adds circuit breaker middleware
-func (f *SimpleFactory) WithCircuitBreaker(prism *Wormhole, threshold int, timeout time.Duration) *Wormhole {
-	return prism.Use(middleware.CircuitBreakerMiddleware(threshold, timeout))
+func (f *SimpleFactory) WithCircuitBreaker(wormhole *Wormhole, threshold int, timeout time.Duration) *Wormhole {
+	return wormhole.Use(middleware.CircuitBreakerMiddleware(threshold, timeout))
 }
 
 // WithCache adds caching middleware
-func (f *SimpleFactory) WithCache(prism *Wormhole, ttl time.Duration) *Wormhole {
+func (f *SimpleFactory) WithCache(wormhole *Wormhole, ttl time.Duration) *Wormhole {
 	cache := middleware.NewMemoryCache(1000)
 	config := middleware.CacheConfig{
 		Cache: cache,
 		TTL:   ttl,
 	}
-	return prism.Use(middleware.CacheMiddleware(config))
+	return wormhole.Use(middleware.CacheMiddleware(config))
 }
 
 // WithTimeout adds timeout middleware
-func (f *SimpleFactory) WithTimeout(prism *Wormhole, timeout time.Duration) *Wormhole {
-	return prism.Use(middleware.TimeoutMiddleware(timeout))
+func (f *SimpleFactory) WithTimeout(wormhole *Wormhole, timeout time.Duration) *Wormhole {
+	return wormhole.Use(middleware.TimeoutMiddleware(timeout))
 }
 
 // WithMetrics adds metrics tracking middleware
-func (f *SimpleFactory) WithMetrics(prism *Wormhole) (*Wormhole, *middleware.Metrics) {
+func (f *SimpleFactory) WithMetrics(wormhole *Wormhole) (*Wormhole, *middleware.Metrics) {
 	metrics := middleware.NewMetrics()
-	return prism.Use(middleware.MetricsMiddleware(metrics)), metrics
+	return wormhole.Use(middleware.MetricsMiddleware(metrics)), metrics
 }
 
-// WithLogging adds logging middleware
-func (f *SimpleFactory) WithLogging(prism *Wormhole, logger types.Logger) *Wormhole {
-	return prism.Use(middleware.LoggingMiddleware(logger))
+// WithLogging adds basic logging middleware
+func (f *SimpleFactory) WithLogging(wormhole *Wormhole, logger types.Logger) *Wormhole {
+	return wormhole.Use(middleware.LoggingMiddleware(logger))
+}
+
+// WithDetailedLogging adds detailed logging middleware with configuration
+func (f *SimpleFactory) WithDetailedLogging(wormhole *Wormhole, logger types.Logger) *Wormhole {
+	config := middleware.DefaultLoggingConfig(logger)
+	return wormhole.Use(middleware.DetailedLoggingMiddleware(config))
+}
+
+// WithDebugLogging adds debug logging middleware
+func (f *SimpleFactory) WithDebugLogging(wormhole *Wormhole, logger types.Logger) *Wormhole {
+	return wormhole.Use(middleware.DebugLoggingMiddleware(logger))
 }
 
 // getAPIKey retrieves API key from provided value or environment variables

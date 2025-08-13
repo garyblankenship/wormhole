@@ -25,7 +25,9 @@ func TestProviderImplementsInterface(t *testing.T) {
 }
 
 func TestLMStudioProvider(t *testing.T) {
-	config := types.ProviderConfig{}
+	config := types.ProviderConfig{
+		BaseURL: "http://localhost:1234/v1",
+	}
 	provider := NewLMStudio(config)
 
 	if provider.Name() != "lmstudio" {
@@ -38,7 +40,9 @@ func TestLMStudioProvider(t *testing.T) {
 }
 
 func TestVLLMProvider(t *testing.T) {
-	config := types.ProviderConfig{}
+	config := types.ProviderConfig{
+		BaseURL: "http://localhost:8000/v1",
+	}
 	provider := NewVLLM(config)
 
 	if provider.Name() != "vllm" {
@@ -51,7 +55,9 @@ func TestVLLMProvider(t *testing.T) {
 }
 
 func TestOllamaOpenAIProvider(t *testing.T) {
-	config := types.ProviderConfig{}
+	config := types.ProviderConfig{
+		BaseURL: "http://localhost:11434/v1",
+	}
 	provider := NewOllamaOpenAI(config)
 
 	if provider.Name() != "ollama-openai" {

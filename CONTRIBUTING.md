@@ -1,6 +1,6 @@
-# Contributing to Prism Go
+# Contributing to Wormhole Go
 
-Thank you for your interest in contributing to Prism Go! This document provides guidelines and instructions for contributing.
+Thank you for your interest in contributing to Wormhole Go! This document provides guidelines and instructions for contributing.
 
 ## Code of Conduct
 
@@ -31,8 +31,8 @@ By participating in this project, you agree to abide by our Code of Conduct: be 
 
 ```bash
 # Clone your fork
-git clone https://github.com/your-username/prism-go.git
-cd prism-go
+git clone https://github.com/your-username/wormhole.git
+cd wormhole
 
 # Install dependencies
 go mod download

@@ -7,8 +7,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/garyblankenship/wormhole/pkg/wormhole"
 	"github.com/garyblankenship/wormhole/pkg/types"
+	"github.com/garyblankenship/wormhole/pkg/wormhole"
 )
 
 func main() {
@@ -90,7 +90,7 @@ func main() {
 		if chunk.Delta.Content != "" {
 			fmt.Print(chunk.Delta.Content)
 			tokenCount++
-			
+
 			// Add a subtle streaming effect (optional dramatic pause)
 			if tokenCount%10 == 0 {
 				time.Sleep(10 * time.Millisecond) // For dramatic effect
@@ -111,24 +111,24 @@ func main() {
 	fmt.Println("\n" + strings.Repeat("━", 50))
 	fmt.Println("📊 QUANTUM STREAMING METRICS:")
 	fmt.Println(strings.Repeat("━", 50))
-	
+
 	fmt.Printf("⚡ Time to First Token (TTFT): %v\n", ttft)
 	fmt.Printf("🌀 Total streaming duration: %v\n", streamDuration)
 	fmt.Printf("📦 Tokens streamed: %d\n", tokenCount)
-	
+
 	if tokenCount > 0 && streamDuration > 0 {
 		tokensPerSecond := float64(tokenCount) / streamDuration.Seconds()
 		fmt.Printf("💫 Streaming rate: %.2f tokens/second\n", tokensPerSecond)
-		
+
 		// Calculate theoretical vs actual performance
 		theoreticalOps := 10_500_000 // Our 10.5M ops/sec capability
 		actualOps := int(tokensPerSecond)
 		efficiency := (float64(actualOps) / float64(theoreticalOps)) * 100
-		
+
 		fmt.Printf("🔬 Wormhole efficiency: %.6f%%\n", efficiency)
 		fmt.Printf("   (Limited by the provider's dimension, not our portal)\n")
 	}
-	
+
 	fmt.Println("\n*BURP* See that? Real-time streaming through quantum tunnels.")
 	fmt.Println("Each token traveled through its own micro-wormhole.")
 	fmt.Println("That's the difference between science and whatever you were using before.")

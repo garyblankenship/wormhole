@@ -76,8 +76,14 @@ type ToolResult struct {
 // NewTool creates a new tool definition
 func NewTool(name, description string, inputSchema map[string]interface{}) *Tool {
 	return &Tool{
+		Type:        "function", // OpenAI compatibility
 		Name:        name,
 		Description: description,
 		InputSchema: inputSchema,
+		Function: &ToolFunction{
+			Name:        name,
+			Description: description,
+			Parameters:  inputSchema,
+		},
 	}
 }

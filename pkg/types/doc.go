@@ -1,4 +1,4 @@
-// Package types defines the core types and interfaces used throughout the Prism library.
+// Package types defines the core types and interfaces used throughout the Wormhole library.
 //
 // This package contains:
 //   - Provider interface definitions

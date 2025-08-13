@@ -8,10 +8,6 @@ import (
 	"github.com/garyblankenship/wormhole/pkg/types"
 )
 
-const (
-	defaultBaseURL = "http://localhost:1234/v1" // LMStudio default
-)
-
 // Provider implements an OpenAI-compatible API provider
 // This works with LMStudio, vLLM, Ollama's OpenAI API, and other compatible services
 type Provider struct {
@@ -22,7 +18,7 @@ type Provider struct {
 // New creates a new OpenAI-compatible provider
 func New(name string, config types.ProviderConfig) *Provider {
 	if config.BaseURL == "" {
-		config.BaseURL = defaultBaseURL
+		panic(fmt.Sprintf("BaseURL is required for %s provider", name))
 	}
 
 	// Use the OpenAI provider as the base since the API is compatible
@@ -35,26 +31,26 @@ func New(name string, config types.ProviderConfig) *Provider {
 	}
 }
 
-// NewLMStudio creates a new LMStudio provider with default configuration
+// NewLMStudio creates a new LMStudio provider - BaseURL is required
 func NewLMStudio(config types.ProviderConfig) *Provider {
 	if config.BaseURL == "" {
-		config.BaseURL = "http://localhost:1234/v1"
+		panic("LMStudio BaseURL is required: provide via config.BaseURL")
 	}
 	return New("lmstudio", config)
 }
 
-// NewVLLM creates a new vLLM provider
+// NewVLLM creates a new vLLM provider - BaseURL is required
 func NewVLLM(config types.ProviderConfig) *Provider {
 	if config.BaseURL == "" {
-		config.BaseURL = "http://localhost:8000/v1"
+		panic("vLLM BaseURL is required: provide via config.BaseURL")
 	}
 	return New("vllm", config)
 }
 
-// NewOllamaOpenAI creates a new Ollama OpenAI-compatible provider
+// NewOllamaOpenAI creates a new Ollama OpenAI-compatible provider - BaseURL is required
 func NewOllamaOpenAI(config types.ProviderConfig) *Provider {
 	if config.BaseURL == "" {
-		config.BaseURL = "http://localhost:11434/v1"
+		panic("Ollama OpenAI BaseURL is required: provide via config.BaseURL")
 	}
 	return New("ollama-openai", config)
 }

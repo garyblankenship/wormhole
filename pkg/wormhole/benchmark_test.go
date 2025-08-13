@@ -18,7 +18,7 @@ func BenchmarkTextGeneration(b *testing.B) {
 		Usage: &types.Usage{TotalTokens: 10},
 	})
 
-	// Create Prism client with mock provider
+	// Create Wormhole client with mock provider
 	client := &Wormhole{
 		providers: map[string]types.Provider{"mock": mockProvider},
 		config:    Config{DefaultProvider: "mock"},

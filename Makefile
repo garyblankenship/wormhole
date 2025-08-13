@@ -60,12 +60,12 @@ update-deps:
 # Run performance benchmarks
 bench:
 	@echo "Running performance benchmarks..."
-	@go test -bench=. -benchmem ./pkg/prism/ -run="^$$"
+	@go test -bench=. -benchmem ./pkg/wormhole/ -run="^$$"
 
 # Run comprehensive benchmarks with profiling
 bench-profile:
 	@echo "Running benchmarks with CPU and memory profiling..."
-	@go test -bench=. -benchmem -cpuprofile=cpu.prof -memprofile=mem.prof ./pkg/prism/ -run="^$$"
+	@go test -bench=. -benchmem -cpuprofile=cpu.prof -memprofile=mem.prof ./pkg/wormhole/ -run="^$$"
 	@echo "Profiles generated: cpu.prof, mem.prof"
 	@echo "Analyze with: go tool pprof cpu.prof"
 
@@ -127,12 +127,12 @@ security:
 # Performance regression test
 perf-test:
 	@echo "Running performance regression tests..."
-	@go test -bench=BenchmarkTextRequestBuilder -count=5 ./pkg/prism/ | tee bench.txt
+	@go test -bench=BenchmarkTextRequestBuilder -count=5 ./pkg/wormhole/ | tee bench.txt
 	@echo "Performance results saved to bench.txt"
 
 # Help
 help:
-	@echo "🚀 Prism Go - Ultra-Fast LLM SDK"
+	@echo "🚀 Wormhole Go - Ultra-Fast LLM SDK"
 	@echo ""
 	@echo "Available targets:"
 	@echo "  📦 Build & Test"
