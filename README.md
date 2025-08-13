@@ -92,6 +92,60 @@ response, err := client.Text().
     Generate(ctx)
 ```
 
+### OpenRouter: The Multiverse of Models (Jerry's Wildest Dream)
+
+```go
+// One API, 200+ models. Even Jerry could figure this out.
+client := wormhole.New().
+    WithOpenRouter(wormhole.Config{
+        APIKey: "your-openrouter-key", // Get from openrouter.ai
+        BaseURL: "https://openrouter.ai/api/v1",
+    })
+
+// Try multiple models because why not? They're all available.
+models := []string{
+    "openai/gpt-4o-mini",              // OpenAI's latest
+    "anthropic/claude-3.5-sonnet",     // Anthropic's best
+    "meta-llama/llama-3.1-8b-instruct", // Meta's offering
+    "google/gemini-pro",               // Google's attempt
+    "mistralai/mixtral-8x7b-instruct", // European excellence
+}
+
+for _, model := range models {
+    // Each model gets its own wormhole portal. Science!
+    response, err := client.Text().
+        Model(model).
+        Prompt("Explain quantum computing in one sentence").
+        MaxTokens(100).
+        Generate(ctx)
+    
+    if err != nil {
+        continue // Jerry would panic here, but we're better than Jerry
+    }
+    
+    fmt.Printf("%s: %s\n", model, response.Content)
+}
+
+// Cost optimization? I've got you covered.
+// Use cheap models for simple tasks, premium for complex ones
+func smartModelSelection(complexity string) string {
+    if complexity == "simple" {
+        return "openai/gpt-4o-mini"        // Cheap and cheerful
+    }
+    return "anthropic/claude-3.5-sonnet"   // Premium intelligence
+}
+
+// Streaming with model comparison
+stream, err := client.Text().
+    Model("meta-llama/llama-3.1-8b-instruct").
+    Prompt("Write a haiku about interdimensional travel").
+    Stream(ctx)
+
+for chunk := range stream {
+    fmt.Print(chunk.Content) // Real-time poetry through spacetime
+}
+```
+
 ## Features That Actually Matter (All Already Built)
 
 ### 🌀 **Quantum-Level Performance**
@@ -131,6 +185,7 @@ Because I'm not trying to destroy reality (today):
 |----------|-----------------|----------|---------|
 | **OpenAI** | 99.99% | Everything they offer | ✅ Online |
 | **Anthropic** | 99.98% | Claude's whole deal | ✅ Online |
+| **OpenRouter** | 99.99% | 200+ models from all providers | ✅ Online |
 | **Gemini** | 99.97% | Google's attempt at AI | ✅ Online |
 | **Groq** | 99.96% | Fast inference or whatever | ✅ Online |
 | **Mistral** | 99.95% | European AI (metric system compatible) | ✅ Online |
