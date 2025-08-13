@@ -45,7 +45,14 @@ func (p *Provider) Text(ctx context.Context, request types.TextRequest) (*types.
 		return nil, err
 	}
 
-	return p.transformTextResponse(&response), nil
+	textResponse := p.transformTextResponse(&response)
+	
+	// Validate response has content to prevent silent failures
+	if textResponse.Text == "" && len(textResponse.ToolCalls) == 0 {
+		return nil, fmt.Errorf("received empty response from OpenAI API: no content or tool calls returned")
+	}
+
+	return textResponse, nil
 }
 
 // Stream generates a streaming text response

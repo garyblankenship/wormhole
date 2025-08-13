@@ -18,7 +18,10 @@ func main() {
 		log.Fatal("OPENROUTER_API_KEY environment variable is required")
 	}
 
-	// Create wormhole instance with OpenRouter as OpenAI-compatible provider
+	// OPTION 1: Quick setup (recommended)
+	// w := wormhole.QuickOpenRouter(apiKey)
+
+	// OPTION 2: Manual setup with debug logging (used here for demonstration)
 	config := wormhole.Config{
 		DefaultProvider: "openrouter",
 		Providers: map[string]types.ProviderConfig{
@@ -30,7 +33,9 @@ func main() {
 		DebugLogging: true,
 	}
 
-	w := wormhole.New(config)
+	w := wormhole.New(config).WithOpenAICompatible("openrouter", "https://openrouter.ai/api/v1", types.ProviderConfig{
+		APIKey: apiKey,
+	})
 
 	ctx := context.Background()
 
