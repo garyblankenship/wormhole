@@ -17,10 +17,11 @@ import (
 
 // Wormhole is the main client for interacting with LLM providers
 type Wormhole struct {
-	providers       map[string]types.Provider
-	providersMutex  sync.RWMutex
-	config          Config
-	middlewareChain *middleware.Chain
+	providerFactories map[string]types.ProviderFactory // Factory functions for creating providers
+	providers         map[string]types.Provider        // Cached provider instances
+	providersMutex    sync.RWMutex
+	config            Config
+	middlewareChain   *middleware.Chain
 }
 
 // Config holds the configuration for Wormhole
@@ -35,9 +36,13 @@ type Config struct {
 // New creates a new Wormhole instance
 func New(config Config) *Wormhole {
 	p := &Wormhole{
-		providers: make(map[string]types.Provider),
-		config:    config,
+		providerFactories: make(map[string]types.ProviderFactory),
+		providers:         make(map[string]types.Provider),
+		config:            config,
 	}
+
+	// Pre-register all built-in providers
+	p.registerBuiltinProviders()
 
 	// Initialize middleware chain
 	var middlewares []middleware.Middleware
@@ -66,6 +71,36 @@ func (p *Wormhole) Use(mw ...middleware.Middleware) *Wormhole {
 		p.middlewareChain.Add(m)
 	}
 	return p
+}
+
+// RegisterProvider allows registering a custom provider factory.
+// This enables extending Wormhole with new providers without modifying core code.
+func (p *Wormhole) RegisterProvider(name string, factory types.ProviderFactory) {
+	p.providersMutex.Lock()
+	defer p.providersMutex.Unlock()
+	p.providerFactories[name] = factory
+}
+
+// registerBuiltinProviders pre-registers all built-in provider factories
+func (p *Wormhole) registerBuiltinProviders() {
+	p.providerFactories["openai"] = func(c types.ProviderConfig) (types.Provider, error) {
+		return openai.New(c), nil
+	}
+	p.providerFactories["anthropic"] = func(c types.ProviderConfig) (types.Provider, error) {
+		return anthropic.New(c), nil
+	}
+	p.providerFactories["gemini"] = func(c types.ProviderConfig) (types.Provider, error) {
+		return gemini.New(c.APIKey, c), nil
+	}
+	p.providerFactories["groq"] = func(c types.ProviderConfig) (types.Provider, error) {
+		return groq.New(c.APIKey, c), nil
+	}
+	p.providerFactories["mistral"] = func(c types.ProviderConfig) (types.Provider, error) {
+		return mistral.New(c), nil
+	}
+	p.providerFactories["ollama"] = func(c types.ProviderConfig) (types.Provider, error) {
+		return ollama.New(c), nil
+	}
 }
 
 // Text creates a new text generation request builder
@@ -132,35 +167,30 @@ func (p *Wormhole) Provider(name string) (types.Provider, error) {
 		return provider, nil
 	}
 
+	// Get the factory for the requested provider
+	factory, exists := p.providerFactories[name]
+	if !exists {
+		// Check if it's an openai_compatible provider added via With... methods
+		if _, configExists := p.config.Providers[name]; configExists {
+			// Assume it's an openai_compatible provider for backward compatibility
+			factory = func(c types.ProviderConfig) (types.Provider, error) {
+				return openai_compatible.New(name, c), nil
+			}
+		} else {
+			return nil, fmt.Errorf("unknown or unregistered provider: %s", name)
+		}
+	}
+
 	// Get provider config
 	config, exists := p.config.Providers[name]
 	if !exists {
 		return nil, fmt.Errorf("provider %s not configured", name)
 	}
 
-	// Create provider instance
-	var provider types.Provider
-	var err error
-
-	switch name {
-	case "openai":
-		provider = openai.New(config)
-	case "anthropic":
-		provider = anthropic.New(config)
-	case "gemini":
-		provider = gemini.New(config.APIKey, config)
-	case "groq":
-		provider = groq.New(config.APIKey, config)
-	case "mistral":
-		provider = mistral.New(config)
-	case "ollama":
-		provider = ollama.New(config)
-	default:
-		return nil, fmt.Errorf("unknown provider: %s", name)
-	}
-
+	// Use the factory to create the provider instance
+	provider, err := factory(config)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to create provider %s: %w", name, err)
 	}
 
 	// Cache the provider
@@ -170,37 +200,82 @@ func (p *Wormhole) Provider(name string) (types.Provider, error) {
 
 // WithLMStudio adds LMStudio provider support
 func (p *Wormhole) WithLMStudio(config types.ProviderConfig) *Wormhole {
-	provider := openai_compatible.NewLMStudio(config)
 	p.providersMutex.Lock()
-	p.providers["lmstudio"] = provider
-	p.providersMutex.Unlock()
+	defer p.providersMutex.Unlock()
+
+	// Register factory for LMStudio
+	p.providerFactories["lmstudio"] = func(c types.ProviderConfig) (types.Provider, error) {
+		return openai_compatible.NewLMStudio(c), nil
+	}
+
+	// Ensure config is stored
+	if p.config.Providers == nil {
+		p.config.Providers = make(map[string]types.ProviderConfig)
+	}
+	p.config.Providers["lmstudio"] = config
+
 	return p
 }
 
 // WithVLLM adds vLLM provider support
 func (p *Wormhole) WithVLLM(config types.ProviderConfig) *Wormhole {
-	provider := openai_compatible.NewVLLM(config)
 	p.providersMutex.Lock()
-	p.providers["vllm"] = provider
-	p.providersMutex.Unlock()
+	defer p.providersMutex.Unlock()
+
+	// Register factory for vLLM
+	p.providerFactories["vllm"] = func(c types.ProviderConfig) (types.Provider, error) {
+		return openai_compatible.NewVLLM(c), nil
+	}
+
+	// Ensure config is stored
+	if p.config.Providers == nil {
+		p.config.Providers = make(map[string]types.ProviderConfig)
+	}
+	p.config.Providers["vllm"] = config
+
 	return p
 }
 
 // WithOllamaOpenAI adds Ollama OpenAI-compatible API support
 func (p *Wormhole) WithOllamaOpenAI(config types.ProviderConfig) *Wormhole {
-	provider := openai_compatible.NewOllamaOpenAI(config)
 	p.providersMutex.Lock()
-	p.providers["ollama-openai"] = provider
-	p.providersMutex.Unlock()
+	defer p.providersMutex.Unlock()
+
+	// Register factory for Ollama OpenAI
+	p.providerFactories["ollama-openai"] = func(c types.ProviderConfig) (types.Provider, error) {
+		return openai_compatible.NewOllamaOpenAI(c), nil
+	}
+
+	// Ensure config is stored
+	if p.config.Providers == nil {
+		p.config.Providers = make(map[string]types.ProviderConfig)
+	}
+	p.config.Providers["ollama-openai"] = config
+
 	return p
 }
 
 // WithOpenAICompatible adds a generic OpenAI-compatible provider
 func (p *Wormhole) WithOpenAICompatible(name string, baseURL string, config types.ProviderConfig) *Wormhole {
-	provider := openai_compatible.NewGeneric(name, baseURL, config)
 	p.providersMutex.Lock()
-	p.providers[name] = provider
-	p.providersMutex.Unlock()
+	defer p.providersMutex.Unlock()
+
+	// Set the baseURL in config if provided
+	if baseURL != "" {
+		config.BaseURL = baseURL
+	}
+
+	// Register factory for the generic provider
+	p.providerFactories[name] = func(c types.ProviderConfig) (types.Provider, error) {
+		return openai_compatible.NewGeneric(name, c.BaseURL, c), nil
+	}
+
+	// Ensure config is stored
+	if p.config.Providers == nil {
+		p.config.Providers = make(map[string]types.ProviderConfig)
+	}
+	p.config.Providers[name] = config
+
 	return p
 }
 
@@ -210,10 +285,17 @@ func (p *Wormhole) WithGemini(apiKey string, config ...types.ProviderConfig) *Wo
 	if len(config) > 0 {
 		cfg = config[0]
 	}
-	provider := gemini.New(apiKey, cfg)
+	cfg.APIKey = apiKey
+
 	p.providersMutex.Lock()
-	p.providers["gemini"] = provider
-	p.providersMutex.Unlock()
+	defer p.providersMutex.Unlock()
+
+	// Ensure config is stored
+	if p.config.Providers == nil {
+		p.config.Providers = make(map[string]types.ProviderConfig)
+	}
+	p.config.Providers["gemini"] = cfg
+
 	return p
 }
 
@@ -223,28 +305,45 @@ func (p *Wormhole) WithGroq(apiKey string, config ...types.ProviderConfig) *Worm
 	if len(config) > 0 {
 		cfg = config[0]
 	}
-	provider := groq.New(apiKey, cfg)
+	cfg.APIKey = apiKey
+
 	p.providersMutex.Lock()
-	p.providers["groq"] = provider
-	p.providersMutex.Unlock()
+	defer p.providersMutex.Unlock()
+
+	// Ensure config is stored
+	if p.config.Providers == nil {
+		p.config.Providers = make(map[string]types.ProviderConfig)
+	}
+	p.config.Providers["groq"] = cfg
+
 	return p
 }
 
 // WithMistral adds Mistral provider support
 func (p *Wormhole) WithMistral(config types.ProviderConfig) *Wormhole {
-	provider := mistral.New(config)
 	p.providersMutex.Lock()
-	p.providers["mistral"] = provider
-	p.providersMutex.Unlock()
+	defer p.providersMutex.Unlock()
+
+	// Ensure config is stored
+	if p.config.Providers == nil {
+		p.config.Providers = make(map[string]types.ProviderConfig)
+	}
+	p.config.Providers["mistral"] = config
+
 	return p
 }
 
 // WithOllama adds Ollama provider support
 func (p *Wormhole) WithOllama(config types.ProviderConfig) *Wormhole {
-	provider := ollama.New(config)
 	p.providersMutex.Lock()
-	p.providers["ollama"] = provider
-	p.providersMutex.Unlock()
+	defer p.providersMutex.Unlock()
+
+	// Ensure config is stored
+	if p.config.Providers == nil {
+		p.config.Providers = make(map[string]types.ProviderConfig)
+	}
+	p.config.Providers["ollama"] = config
+
 	return p
 }
 
