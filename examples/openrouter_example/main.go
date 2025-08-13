@@ -45,16 +45,16 @@ func main() {
 	// Example 1: Basic text generation with different models
 	fmt.Println("\n1. 🚀 Basic Text Generation (Multiple Models)")
 	models := []string{
-		"openai/gpt-4o-mini",           // OpenAI via OpenRouter
-		"anthropic/claude-3.5-sonnet",  // Anthropic via OpenRouter
+		"openai/gpt-4o-mini",               // OpenAI via OpenRouter
+		"anthropic/claude-3.5-sonnet",      // Anthropic via OpenRouter
 		"meta-llama/llama-3.1-8b-instruct", // Meta via OpenRouter
-		"google/gemini-pro",            // Google via OpenRouter
-		"mistralai/mixtral-8x7b-instruct", // Mistral via OpenRouter
+		"google/gemini-pro",                // Google via OpenRouter
+		"mistralai/mixtral-8x7b-instruct",  // Mistral via OpenRouter
 	}
 
 	for _, model := range models {
 		fmt.Printf("\n🧠 Testing model: %s\n", model)
-		
+
 		response, err := w.Text().
 			Model(model).
 			Prompt("Explain quantum computing in one sentence.").
@@ -73,7 +73,7 @@ func main() {
 	// Example 2: Streaming with OpenRouter
 	fmt.Println("\n\n2. 📡 Streaming Response")
 	fmt.Printf("🧠 Model: openai/gpt-4o-mini (streaming)\n")
-	
+
 	stream, err := w.Text().
 		Model("openai/gpt-4o-mini").
 		Prompt("Write a haiku about dimensional travel").
@@ -97,7 +97,7 @@ func main() {
 
 	// Example 3: Function calling with OpenRouter
 	fmt.Println("\n\n3. 🔧 Function Calling")
-	
+
 	// Define a tool for getting weather
 	weatherTool := types.NewTool(
 		"get_weather",
@@ -135,7 +135,7 @@ func main() {
 	} else {
 		fmt.Printf("🧠 Model: openai/gpt-4o-mini\n")
 		fmt.Printf("✅ Response: %s\n", response.Text)
-		
+
 		if len(response.ToolCalls) > 0 {
 			fmt.Printf("🔧 Tool calls: %d\n", len(response.ToolCalls))
 			for i, tool := range response.ToolCalls {
@@ -146,12 +146,12 @@ func main() {
 
 	// Example 4: Structured output (JSON mode)
 	fmt.Println("\n\n4. 📊 Structured Output (JSON)")
-	
+
 	jsonSchema := map[string]interface{}{
 		"type": "object",
 		"properties": map[string]interface{}{
 			"summary": map[string]interface{}{
-				"type": "string",
+				"type":        "string",
 				"description": "Brief summary of the concept",
 			},
 			"key_points": map[string]interface{}{
@@ -185,7 +185,7 @@ func main() {
 
 	// Example 5: Embeddings
 	fmt.Println("\n\n5. 🧮 Text Embeddings")
-	
+
 	embeddingResponse, err := w.Embeddings().
 		Model("openai/text-embedding-3-small").
 		Input("The universe is vast and full of possibilities").
@@ -201,7 +201,7 @@ func main() {
 
 	// Example 6: Cost and usage tracking
 	fmt.Println("\n\n6. 💰 Cost Tracking (OpenRouter)")
-	
+
 	// OpenRouter provides detailed usage info in response headers
 	costResponse, err := w.Text().
 		Model("anthropic/claude-3.5-sonnet").
@@ -219,7 +219,7 @@ func main() {
 
 	// Example 7: Model comparison
 	fmt.Println("\n\n7. ⚖️ Model Comparison")
-	
+
 	prompt := "Explain the concept of emergence in complex systems"
 	comparisonModels := []string{
 		"openai/gpt-4o-mini",
@@ -229,7 +229,7 @@ func main() {
 
 	for i, model := range comparisonModels {
 		fmt.Printf("\n--- Model %d: %s ---\n", i+1, model)
-		
+
 		start := time.Now()
 		response, err := w.Text().
 			Model(model).
@@ -237,7 +237,7 @@ func main() {
 			MaxTokens(150).
 			Temperature(0.3). // Low temperature for consistent comparison
 			Generate(ctx)
-		
+
 		duration := time.Since(start)
 
 		if err != nil {

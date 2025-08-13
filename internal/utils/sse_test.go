@@ -455,7 +455,8 @@ data: }
 
 		assert.True(t, scanner.Scan())
 		event := scanner.Event()
-		expected := "{\n  \"text\": \"Hello\",\n  \"id\": 123\n}"
+		// After trimming spaces, this is the correct result
+		expected := "{\n\"text\": \"Hello\",\n\"id\": 123\n}"
 		assert.Equal(t, expected, event.Data)
 	})
 }

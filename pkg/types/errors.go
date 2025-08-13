@@ -159,16 +159,34 @@ func HTTPStatusToError(statusCode int, body string) *WormholeError {
 	}
 }
 
-// IsWormholeError checks if an error is a WormholeError
+// IsWormholeError checks if an error is a WormholeError or contains one
 func IsWormholeError(err error) bool {
-	_, ok := err.(*WormholeError)
-	return ok
+	// Direct WormholeError
+	if _, ok := err.(*WormholeError); ok {
+		return true
+	}
+	
+	// ModelConstraintError embeds WormholeError
+	if _, ok := err.(*ModelConstraintError); ok {
+		return true
+	}
+	
+	return false
 }
 
 // AsWormholeError extracts a WormholeError from an error
 func AsWormholeError(err error) (*WormholeError, bool) {
-	wormholeErr, ok := err.(*WormholeError)
-	return wormholeErr, ok
+	// Direct WormholeError
+	if wormholeErr, ok := err.(*WormholeError); ok {
+		return wormholeErr, ok
+	}
+	
+	// ModelConstraintError embeds WormholeError
+	if constraintErr, ok := err.(*ModelConstraintError); ok {
+		return constraintErr.WormholeError, true
+	}
+	
+	return nil, false
 }
 
 // IsRetryableError checks if an error is retryable

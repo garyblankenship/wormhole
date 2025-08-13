@@ -30,13 +30,16 @@ func NewSSEScanner(r io.Reader) *SSEScanner {
 // Scan reads the next SSE event
 func (s *SSEScanner) Scan() bool {
 	event := &SSEEvent{}
+	hasDataOrEvent := false
 
 	for s.scanner.Scan() {
 		line := strings.TrimSpace(s.scanner.Text())
 
 		// Empty line signals end of event
 		if line == "" {
-			if event.Data != "" || event.Event != "" {
+			// An event is valid if it has data or event fields (even if empty)
+			// This allows empty data/event fields but excludes ID-only events
+			if hasDataOrEvent {
 				s.event = event
 				return true
 			}
@@ -56,19 +59,22 @@ func (s *SSEScanner) Scan() bool {
 			switch field {
 			case "event":
 				event.Event = value
+				hasDataOrEvent = true
 			case "data":
 				if event.Data != "" {
 					event.Data += "\n"
 				}
 				event.Data += value
+				hasDataOrEvent = true
 			case "id":
 				event.ID = value
+				// ID field doesn't make an event valid by itself
 			}
 		}
 	}
 
 	// Check for final event without trailing newline
-	if event.Data != "" || event.Event != "" {
+	if hasDataOrEvent {
 		s.event = event
 		return true
 	}
