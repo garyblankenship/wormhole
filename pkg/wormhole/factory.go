@@ -143,6 +143,29 @@ func (f *SimpleFactory) LMStudio(baseURL ...string) *Wormhole {
 	return p.WithLMStudio(config.Providers["lmstudio"])
 }
 
+// OpenRouter creates a Wormhole client configured for OpenRouter (multi-provider gateway)
+func (f *SimpleFactory) OpenRouter(apiKey ...string) *Wormhole {
+	key := f.getAPIKey(apiKey, "OPENROUTER_API_KEY")
+	if key == "" {
+		panic("OpenRouter API key is required: provide via parameter or OPENROUTER_API_KEY environment variable")
+	}
+
+	config := Config{
+		DefaultProvider: "openrouter",
+		Providers: map[string]types.ProviderConfig{
+			"openrouter": {
+				APIKey:  key,
+				BaseURL: "https://openrouter.ai/api/v1",
+			},
+		},
+	}
+
+	p := New(config)
+	return p.WithOpenAICompatible("openrouter", "https://openrouter.ai/api/v1", types.ProviderConfig{
+		APIKey: key,
+	})
+}
+
 // WithRateLimit adds rate limiting middleware
 func (f *SimpleFactory) WithRateLimit(wormhole *Wormhole, requestsPerSecond int) *Wormhole {
 	return wormhole.Use(middleware.RateLimitMiddleware(requestsPerSecond))
@@ -255,4 +278,10 @@ func QuickOllama(baseURL ...string) *Wormhole {
 // QuickLMStudio creates an LMStudio client with minimal configuration
 func QuickLMStudio(baseURL ...string) *Wormhole {
 	return Quick.LMStudio(baseURL...)
+}
+
+// QuickOpenRouter creates an OpenRouter client with minimal configuration
+// This provides access to 200+ models from multiple providers through a single API
+func QuickOpenRouter(apiKey ...string) *Wormhole {
+	return Quick.OpenRouter(apiKey...)
 }

@@ -93,11 +93,16 @@ func (p *BaseProvider) DoRequest(ctx context.Context, method, url string, body i
 	}
 
 	if resp.StatusCode >= 400 {
-		var apiError types.WormholeProviderError
-		if err := json.Unmarshal(respBody, &apiError); err != nil {
-			return fmt.Errorf("HTTP %d: %s", resp.StatusCode, string(respBody))
-		}
-		return apiError
+		// Enhanced error reporting with HTTP details as requested by user
+		errorCode := p.mapHTTPStatusToErrorCode(resp.StatusCode)
+		wormholeErr := types.NewWormholeError(
+			errorCode,
+			fmt.Sprintf("HTTP %d: %s", resp.StatusCode, resp.Status),
+			p.isRetryableStatus(resp.StatusCode),
+		).WithDetails(fmt.Sprintf("URL: %s\nResponse: %s", url, string(respBody)))
+		
+		wormholeErr.StatusCode = resp.StatusCode
+		return wormholeErr
 	}
 
 	if result != nil && len(respBody) > 0 {
@@ -107,6 +112,36 @@ func (p *BaseProvider) DoRequest(ctx context.Context, method, url string, body i
 	}
 
 	return nil
+}
+
+// mapHTTPStatusToErrorCode maps HTTP status codes to Wormhole error codes
+func (p *BaseProvider) mapHTTPStatusToErrorCode(statusCode int) types.ErrorCode {
+	switch statusCode {
+	case 401, 403:
+		return types.ErrorCodeAuth
+	case 404:
+		return types.ErrorCodeModel
+	case 429:
+		return types.ErrorCodeRateLimit
+	case 400, 422:
+		return types.ErrorCodeRequest
+	case 408, 504:
+		return types.ErrorCodeTimeout
+	case 500, 502, 503:
+		return types.ErrorCodeProvider
+	default:
+		return types.ErrorCodeNetwork
+	}
+}
+
+// isRetryableStatus determines if an HTTP status code indicates a retryable error
+func (p *BaseProvider) isRetryableStatus(statusCode int) bool {
+	switch statusCode {
+	case 429, 500, 502, 503, 504, 408:
+		return true
+	default:
+		return false
+	}
 }
 
 // StreamRequest performs a streaming HTTP request

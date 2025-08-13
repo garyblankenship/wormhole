@@ -95,12 +95,24 @@ response, err := client.Text().
 ### OpenRouter: The Multiverse of Models (Jerry's Wildest Dream)
 
 ```go
-// One API, 200+ models. Even Jerry could figure this out.
-client := wormhole.New().
-    WithOpenRouter(wormhole.Config{
-        APIKey: "your-openrouter-key", // Get from openrouter.ai
-        BaseURL: "https://openrouter.ai/api/v1",
-    })
+// OPTION 1: Quick setup (recommended for most users)
+client := wormhole.QuickOpenRouter() // Uses OPENROUTER_API_KEY environment variable
+// OR with explicit key:
+// client := wormhole.QuickOpenRouter("your-openrouter-key")
+
+// OPTION 2: Manual setup (for advanced configuration)
+config := wormhole.Config{
+    DefaultProvider: "openrouter",
+    Providers: map[string]types.ProviderConfig{
+        "openrouter": {
+            APIKey:  "your-openrouter-key", // Get from openrouter.ai
+            BaseURL: "https://openrouter.ai/api/v1",
+        },
+    },
+}
+client := wormhole.New(config).WithOpenAICompatible("openrouter", "https://openrouter.ai/api/v1", types.ProviderConfig{
+    APIKey: "your-openrouter-key",
+})
 
 // Try multiple models because why not? They're all available.
 models := []string{
