@@ -9,7 +9,7 @@ import (
 
 // EmbeddingsRequestBuilder builds embeddings requests
 type EmbeddingsRequestBuilder struct {
-	prism    *Wormhole
+	wormhole *Wormhole
 	request  *types.EmbeddingsRequest
 	provider string
 }
@@ -46,7 +46,7 @@ func (b *EmbeddingsRequestBuilder) Dimensions(dims int) *EmbeddingsRequestBuilde
 
 // Generate executes the request and returns embeddings
 func (b *EmbeddingsRequestBuilder) Generate(ctx context.Context) (*types.EmbeddingsResponse, error) {
-	provider, err := b.prism.getProvider(b.provider)
+	provider, err := b.wormhole.getProvider(b.provider)
 	if err != nil {
 		return nil, err
 	}
@@ -66,8 +66,8 @@ func (b *EmbeddingsRequestBuilder) Generate(ctx context.Context) (*types.Embeddi
 	}
 
 	// Apply middleware chain if configured
-	if b.prism.middlewareChain != nil {
-		handler := b.prism.middlewareChain.Apply(func(ctx context.Context, req interface{}) (interface{}, error) {
+	if b.wormhole.middlewareChain != nil {
+		handler := b.wormhole.middlewareChain.Apply(func(ctx context.Context, req interface{}) (interface{}, error) {
 			embeddingsReq := req.(*types.EmbeddingsRequest)
 			return embeddingsProvider.Embeddings(ctx, *embeddingsReq)
 		})

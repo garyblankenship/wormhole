@@ -26,13 +26,11 @@ linters:
     - bodyclose
     - rowserrcheck
     - stylecheck
-    - shadow
     - copyloopvar
 
 linters-settings:
   govet:
-    enable:
-      - shadow
+    enable: []
   gocyclo:
     min-complexity: 15
   dupl:

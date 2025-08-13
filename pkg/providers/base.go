@@ -93,7 +93,7 @@ func (p *BaseProvider) DoRequest(ctx context.Context, method, url string, body i
 	}
 
 	if resp.StatusCode >= 400 {
-		var apiError types.PrismError
+		var apiError types.WormholeProviderError
 		if err := json.Unmarshal(respBody, &apiError); err != nil {
 			return fmt.Errorf("HTTP %d: %s", resp.StatusCode, string(respBody))
 		}
@@ -144,7 +144,7 @@ func (p *BaseProvider) StreamRequest(ctx context.Context, method, url string, bo
 	if resp.StatusCode >= 400 {
 		defer resp.Body.Close()
 		respBody, _ := io.ReadAll(resp.Body)
-		var apiError types.PrismError
+		var apiError types.WormholeProviderError
 		if err := json.Unmarshal(respBody, &apiError); err != nil {
 			return nil, fmt.Errorf("HTTP %d: %s", resp.StatusCode, string(respBody))
 		}

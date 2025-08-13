@@ -1,11 +1,11 @@
-# Prism Go Providers
+# Wormhole Go Providers
 
-This document outlines the available LLM providers in Prism Go and their capabilities.
+This document outlines the available LLM providers in Wormhole Go and their capabilities.
 
 ## Available Providers
 
 ### ✅ Gemini (Google)
-- **Package**: `github.com/prism-php/prism-go/pkg/providers/gemini`
+- **Package**: `github.com/garyblankenship/wormhole/pkg/providers/gemini`
 - **Models**: `gemini-1.5-pro`, `gemini-1.5-flash`, `text-embedding-004`
 - **Features**:
   - ✅ Text generation with system prompts
@@ -19,7 +19,7 @@ This document outlines the available LLM providers in Prism Go and their capabil
   - ❌ Image generation
 
 ### ✅ Groq
-- **Package**: `github.com/prism-php/prism-go/pkg/providers/groq`
+- **Package**: `github.com/garyblankenship/wormhole/pkg/providers/groq`
 - **Models**: `llama3-8b-8192`, `llama3-70b-8192`, `mixtral-8x7b-32768`
 - **Features**:
   - ✅ Text generation
@@ -33,12 +33,12 @@ This document outlines the available LLM providers in Prism Go and their capabil
   - ❌ Image generation
 
 ### 🚧 OpenAI (Updated for new types)
-- **Package**: `github.com/prism-php/prism-go/pkg/providers/openai`
+- **Package**: `github.com/garyblankenship/wormhole/pkg/providers/openai`
 - **Status**: Being updated for new type system
 - **Models**: `gpt-5`, `gpt-5-mini`, `text-embedding-ada-002`, `dall-e-3`
 
 ### 🚧 Anthropic (Updated for new types)
-- **Package**: `github.com/prism-php/prism-go/pkg/providers/anthropic`
+- **Package**: `github.com/garyblankenship/wormhole/pkg/providers/anthropic`
 - **Status**: Being updated for new type system
 - **Models**: `claude-3-5-sonnet-20241022`, `claude-3-opus-20240229`
 
@@ -60,8 +60,8 @@ import (
     "fmt"
     "log"
     
-    "github.com/prism-php/prism-go/pkg/providers/gemini"
-    "github.com/prism-php/prism-go/pkg/types"
+    "github.com/garyblankenship/wormhole/pkg/providers/gemini"
+    "github.com/garyblankenship/wormhole/pkg/types"
 )
 
 func main() {
@@ -117,7 +117,7 @@ for chunk := range stream {
 ### Structured Output
 
 ```go
-import "github.com/prism-php/prism-go/pkg/types"
+import "github.com/garyblankenship/wormhole/pkg/types"
 
 // Define schema
 schema := &types.ObjectSchema{
@@ -284,8 +284,8 @@ All providers return structured errors:
 ```go
 response, err := provider.Text(ctx, request)
 if err != nil {
-    if prismErr, ok := err.(types.PrismError); ok {
-        fmt.Printf("Provider error: %s (code: %s)\\n", prismErr.Message, prismErr.Code)
+    if wormholeErr, ok := err.(types.WormholeProviderError); ok {
+        fmt.Printf("Provider error: %s (code: %s)\\n", wormholeErr.Message, wormholeErr.Code)
     } else {
         fmt.Printf("Generic error: %v\\n", err)
     }

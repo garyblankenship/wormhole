@@ -3,9 +3,9 @@ package wormhole_test
 import (
 	"testing"
 
-	"github.com/garyblankenship/wormhole/pkg/wormhole"
 	mocktesting "github.com/garyblankenship/wormhole/pkg/testing"
 	"github.com/garyblankenship/wormhole/pkg/types"
+	"github.com/garyblankenship/wormhole/pkg/wormhole"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -19,9 +19,9 @@ func TestTextGeneration(t *testing.T) {
 			Text:         "Hello from mock",
 			FinishReason: types.FinishReasonStop,
 		})
-	_ = mockProvider // TODO: inject into prism for actual testing
+	_ = mockProvider // TODO: inject into wormhole for actual testing
 
-	// Create Prism instance
+	// Create Wormhole instance
 	p := wormhole.New(wormhole.Config{
 		DefaultProvider: "openai",
 		Providers: map[string]types.ProviderConfig{

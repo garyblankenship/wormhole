@@ -16,18 +16,18 @@ All commands are defined in the Makefile:
 - `make clean` - Clean artifacts and go clean
 
 For individual tests:
-- `go test ./pkg/prism/...` - Test core prism package
+- `go test ./pkg/wormhole/...` - Test core wormhole package
 - `go test ./pkg/providers/openai/...` - Test specific provider
 - `go test -run TestSpecificFunction ./...` - Run specific test
 
 ## Architecture Overview
 
-Prism Go is a unified LLM provider SDK with a Laravel-inspired builder pattern architecture:
+Wormhole Go is a unified LLM provider SDK with a Laravel-inspired builder pattern architecture:
 
 ### Core Components
 
-**Main Client (`pkg/prism/prism.go`)**
-- `Prism` struct: Main client with provider registry and configuration
+**Main Client (`pkg/wormhole/wormhole.go`)**
+- `Wormhole` struct: Main client with provider registry and configuration
 - Builder factories: `.Text()`, `.Structured()`, `.Embeddings()`, `.Image()`, `.Audio()`
 - Provider management with lazy initialization and caching
 
@@ -35,7 +35,7 @@ Prism Go is a unified LLM provider SDK with a Laravel-inspired builder pattern a
 - All providers implement the unified `types.Provider` interface
 - Each provider has its own package: `openai/`, `anthropic/`, `gemini/`, `groq/`, `mistral/`, `ollama/`
 - OpenAI-compatible providers in `openai_compatible/` support LMStudio, vLLM, generic APIs
-- Transform layer converts between Prism types and provider-specific APIs
+- Transform layer converts between Wormhole types and provider-specific APIs
 
 **Type System (`pkg/types/`)**
 - Unified request/response types across all providers
@@ -52,7 +52,7 @@ Prism Go is a unified LLM provider SDK with a Laravel-inspired builder pattern a
 **Provider Registration**
 ```go
 // Via config
-p := prism.New(prism.Config{
+p := wormhole.New(wormhole.Config{
     DefaultProvider: "openai",
     Providers: map[string]types.ProviderConfig{...}
 })
@@ -105,3 +105,4 @@ response, err := p.Text().
 4. Provider implementations must handle context cancellation
 5. All public APIs should include comprehensive godoc comments
 - Write all text and commits in the style of Rick Sanchez
+- You MUST REMOVE any hardcoded values in .go code! You MUST NOT use fallback logic unless specifically requested!

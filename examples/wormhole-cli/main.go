@@ -9,9 +9,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/garyblankenship/wormhole/pkg/wormhole"
 	"github.com/garyblankenship/wormhole/pkg/middleware"
 	"github.com/garyblankenship/wormhole/pkg/types"
+	"github.com/garyblankenship/wormhole/pkg/wormhole"
 )
 
 // CLI Commands - Because even interdimensional travel needs structure
@@ -295,13 +295,13 @@ func executeEmbedding(ctx context.Context, client *wormhole.Wormhole, config CLI
 
 	if len(response.Embeddings) > 0 {
 		embedding := response.Embeddings[0]
-		
+
 		// Show first few dimensions
 		fmt.Printf("📊 Vector representation (first 10 dimensions):\n")
 		for i := 0; i < 10 && i < len(embedding.Embedding); i++ {
 			fmt.Printf("  Dimension %d: %.6f\n", i, embedding.Embedding[i])
 		}
-		
+
 		if config.Verbose {
 			fmt.Printf("\n🌌 Total dimensions: %d\n", len(embedding.Embedding))
 			fmt.Println("💡 This vector represents your text in AI space")
@@ -375,14 +375,14 @@ func executeBenchmark(ctx context.Context, client *wormhole.Wormhole, config CLI
 
 	for i := 0; i < iterations; i++ {
 		start := time.Now()
-		
+
 		_, err := client.Text().
 			Model(getDefaultModel(config.Provider)).
 			Messages(types.NewUserMessage("Say 'test' and nothing else")).
 			MaxTokens(5).
 			Temperature(0).
 			Generate(ctx)
-		
+
 		elapsed := time.Since(start)
 		totalLatency += elapsed
 
@@ -396,20 +396,20 @@ func executeBenchmark(ctx context.Context, client *wormhole.Wormhole, config CLI
 
 	fmt.Println(strings.Repeat("━", 50))
 	fmt.Printf("\n📈 BENCHMARK RESULTS:\n")
-	fmt.Printf("  Success rate: %d/%d (%.1f%%)\n", 
+	fmt.Printf("  Success rate: %d/%d (%.1f%%)\n",
 		successful, iterations, float64(successful)/float64(iterations)*100)
-	
+
 	if successful > 0 {
 		avgLatency := totalLatency / time.Duration(successful)
 		fmt.Printf("  Average latency: %v\n", avgLatency)
 		fmt.Printf("  Total time: %v\n", totalLatency)
-		
+
 		// Compare to inferior solutions
 		competitorLatency := 11 * time.Microsecond
 		advantage := float64(competitorLatency) / float64(avgLatency)
 		fmt.Printf("  Performance advantage: %.1fx faster than Jerry-level SDKs\n", advantage)
 	}
-	
+
 	fmt.Println("\n*BURP* Science complete. You're welcome.")
 }
 

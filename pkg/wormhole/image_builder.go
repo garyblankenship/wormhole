@@ -9,7 +9,7 @@ import (
 
 // ImageRequestBuilder builds image generation requests
 type ImageRequestBuilder struct {
-	prism    *Wormhole
+	wormhole *Wormhole
 	request  *types.ImageRequest
 	provider string
 }
@@ -64,7 +64,7 @@ func (b *ImageRequestBuilder) ResponseFormat(format string) *ImageRequestBuilder
 
 // Generate executes the request and returns generated images
 func (b *ImageRequestBuilder) Generate(ctx context.Context) (*types.ImageResponse, error) {
-	provider, err := b.prism.getProvider(b.provider)
+	provider, err := b.wormhole.getProvider(b.provider)
 	if err != nil {
 		return nil, err
 	}
@@ -89,8 +89,8 @@ func (b *ImageRequestBuilder) Generate(ctx context.Context) (*types.ImageRespons
 	}
 
 	// Apply middleware chain if configured
-	if b.prism.middlewareChain != nil {
-		handler := b.prism.middlewareChain.Apply(func(ctx context.Context, req interface{}) (interface{}, error) {
+	if b.wormhole.middlewareChain != nil {
+		handler := b.wormhole.middlewareChain.Apply(func(ctx context.Context, req interface{}) (interface{}, error) {
 			imageReq := req.(*types.ImageRequest)
 			return imageProvider.GenerateImage(ctx, *imageReq)
 		})

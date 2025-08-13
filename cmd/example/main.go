@@ -6,12 +6,12 @@ import (
 	"log"
 	"os"
 
-	"github.com/garyblankenship/wormhole/pkg/wormhole"
 	"github.com/garyblankenship/wormhole/pkg/types"
+	"github.com/garyblankenship/wormhole/pkg/wormhole"
 )
 
 func main() {
-	// Initialize Prism with providers
+	// Initialize Wormhole with providers
 	p := wormhole.New(wormhole.Config{
 		DefaultProvider: "openai",
 		Providers: map[string]types.ProviderConfig{

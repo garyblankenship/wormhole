@@ -38,16 +38,16 @@ type OrchestrationCompletionResponse struct {
 // OrchestrationStreamCallback for handling streaming responses
 type OrchestrationStreamCallback func(chunk string, done bool) error
 
-// PrismToOrchestrationAdapter adapts a Prism provider to work with orchestration package
-type PrismToOrchestrationAdapter struct {
+// WormholeToOrchestrationAdapter adapts a Wormhole provider to work with orchestration package
+type WormholeToOrchestrationAdapter struct {
 	provider types.Provider
 	name     string
 	model    string
 }
 
-// NewPrismToOrchestrationAdapter creates a new adapter
-func NewPrismToOrchestrationAdapter(provider types.Provider, name string, defaultModel string) *PrismToOrchestrationAdapter {
-	return &PrismToOrchestrationAdapter{
+// NewWormholeToOrchestrationAdapter creates a new adapter
+func NewWormholeToOrchestrationAdapter(provider types.Provider, name string, defaultModel string) *WormholeToOrchestrationAdapter {
+	return &WormholeToOrchestrationAdapter{
 		provider: provider,
 		name:     name,
 		model:    defaultModel,
@@ -55,17 +55,17 @@ func NewPrismToOrchestrationAdapter(provider types.Provider, name string, defaul
 }
 
 // Name returns the provider name
-func (a *PrismToOrchestrationAdapter) Name() string {
+func (a *WormholeToOrchestrationAdapter) Name() string {
 	return a.name
 }
 
-// CreateCompletion creates a completion using the Prism provider
-func (a *PrismToOrchestrationAdapter) CreateCompletion(ctx context.Context, req OrchestrationCompletionRequest) (*OrchestrationCompletionResponse, error) {
+// CreateCompletion creates a completion using the Wormhole provider
+func (a *WormholeToOrchestrationAdapter) CreateCompletion(ctx context.Context, req OrchestrationCompletionRequest) (*OrchestrationCompletionResponse, error) {
 	start := time.Now()
 
-	// Convert orchestration request to Prism request
+	// Convert orchestration request to Wormhole request
 	temp := float32(req.Temperature)
-	prismReq := types.TextRequest{
+	wormholeReq := types.TextRequest{
 		BaseRequest: types.BaseRequest{
 			Model:       req.Model,
 			MaxTokens:   &req.MaxTokens,
@@ -75,12 +75,12 @@ func (a *PrismToOrchestrationAdapter) CreateCompletion(ctx context.Context, req 
 	}
 
 	// If no model specified, use default
-	if prismReq.BaseRequest.Model == "" {
-		prismReq.BaseRequest.Model = a.model
+	if wormholeReq.BaseRequest.Model == "" {
+		wormholeReq.BaseRequest.Model = a.model
 	}
 
-	// Call Prism provider
-	resp, err := a.provider.Text(ctx, prismReq)
+	// Call Wormhole provider
+	resp, err := a.provider.Text(ctx, wormholeReq)
 	if err != nil {
 		return nil, err
 	}
@@ -91,18 +91,18 @@ func (a *PrismToOrchestrationAdapter) CreateCompletion(ctx context.Context, req 
 		TokensUsed: resp.Usage.TotalTokens,
 		Cost:       a.estimateCostFromUsage(*resp.Usage),
 		Provider:   a.name,
-		Model:      prismReq.BaseRequest.Model,
+		Model:      wormholeReq.BaseRequest.Model,
 		Duration:   time.Since(start),
 	}, nil
 }
 
-// CreateStreamingCompletion creates a streaming completion using the Prism provider
-func (a *PrismToOrchestrationAdapter) CreateStreamingCompletion(ctx context.Context, req OrchestrationCompletionRequest, callback OrchestrationStreamCallback) (*OrchestrationCompletionResponse, error) {
+// CreateStreamingCompletion creates a streaming completion using the Wormhole provider
+func (a *WormholeToOrchestrationAdapter) CreateStreamingCompletion(ctx context.Context, req OrchestrationCompletionRequest, callback OrchestrationStreamCallback) (*OrchestrationCompletionResponse, error) {
 	start := time.Now()
 
-	// Convert orchestration request to Prism request
+	// Convert orchestration request to Wormhole request
 	temp := float32(req.Temperature)
-	prismReq := types.TextRequest{
+	wormholeReq := types.TextRequest{
 		BaseRequest: types.BaseRequest{
 			Model:       req.Model,
 			MaxTokens:   &req.MaxTokens,
@@ -112,12 +112,12 @@ func (a *PrismToOrchestrationAdapter) CreateStreamingCompletion(ctx context.Cont
 	}
 
 	// If no model specified, use default
-	if prismReq.BaseRequest.Model == "" {
-		prismReq.BaseRequest.Model = a.model
+	if wormholeReq.BaseRequest.Model == "" {
+		wormholeReq.BaseRequest.Model = a.model
 	}
 
-	// Call Prism provider streaming
-	stream, err := a.provider.Stream(ctx, prismReq)
+	// Call Wormhole provider streaming
+	stream, err := a.provider.Stream(ctx, wormholeReq)
 	if err != nil {
 		return nil, err
 	}
@@ -154,13 +154,13 @@ func (a *PrismToOrchestrationAdapter) CreateStreamingCompletion(ctx context.Cont
 		TokensUsed: totalTokens,
 		Cost:       a.EstimateCost(req),
 		Provider:   a.name,
-		Model:      prismReq.BaseRequest.Model,
+		Model:      wormholeReq.BaseRequest.Model,
 		Duration:   time.Since(start),
 	}, nil
 }
 
 // EstimateCost estimates the cost of a request
-func (a *PrismToOrchestrationAdapter) EstimateCost(req OrchestrationCompletionRequest) float64 {
+func (a *WormholeToOrchestrationAdapter) EstimateCost(req OrchestrationCompletionRequest) float64 {
 	// Basic cost estimation - can be enhanced with actual pricing data
 	model := req.Model
 	if model == "" {
@@ -204,7 +204,7 @@ func (a *PrismToOrchestrationAdapter) EstimateCost(req OrchestrationCompletionRe
 }
 
 // HealthCheck performs a health check on the provider
-func (a *PrismToOrchestrationAdapter) HealthCheck(ctx context.Context) error {
+func (a *WormholeToOrchestrationAdapter) HealthCheck(ctx context.Context) error {
 	// Simple health check - try a minimal request
 	maxTokens := 1
 	req := types.TextRequest{
@@ -220,7 +220,7 @@ func (a *PrismToOrchestrationAdapter) HealthCheck(ctx context.Context) error {
 }
 
 // estimateCostFromUsage calculates cost from usage stats
-func (a *PrismToOrchestrationAdapter) estimateCostFromUsage(usage types.Usage) float64 {
+func (a *WormholeToOrchestrationAdapter) estimateCostFromUsage(usage types.Usage) float64 {
 	// This would ideally use actual pricing data
 	// For now, use rough estimates
 	var costPer1kTokens float64

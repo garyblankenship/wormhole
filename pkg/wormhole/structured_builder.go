@@ -10,7 +10,7 @@ import (
 
 // StructuredRequestBuilder builds structured output requests
 type StructuredRequestBuilder struct {
-	prism    *Wormhole
+	wormhole *Wormhole
 	request  *types.StructuredRequest
 	provider string
 }
@@ -91,7 +91,7 @@ func (b *StructuredRequestBuilder) MaxTokens(tokens int) *StructuredRequestBuild
 
 // Generate executes the request and returns a structured response
 func (b *StructuredRequestBuilder) Generate(ctx context.Context) (*types.StructuredResponse, error) {
-	provider, err := b.prism.getProvider(b.provider)
+	provider, err := b.wormhole.getProvider(b.provider)
 	if err != nil {
 		return nil, err
 	}
@@ -121,8 +121,8 @@ func (b *StructuredRequestBuilder) Generate(ctx context.Context) (*types.Structu
 	}
 
 	// Apply middleware chain if configured
-	if b.prism.middlewareChain != nil {
-		handler := b.prism.middlewareChain.Apply(func(ctx context.Context, req interface{}) (interface{}, error) {
+	if b.wormhole.middlewareChain != nil {
+		handler := b.wormhole.middlewareChain.Apply(func(ctx context.Context, req interface{}) (interface{}, error) {
 			structuredReq := req.(*types.StructuredRequest)
 			return structuredProvider.Structured(ctx, *structuredReq)
 		})

@@ -3,8 +3,8 @@ package main
 import (
 	"fmt"
 
-	"github.com/garyblankenship/wormhole/pkg/wormhole"
 	"github.com/garyblankenship/wormhole/pkg/types"
+	"github.com/garyblankenship/wormhole/pkg/wormhole"
 )
 
 func main() {
@@ -20,7 +20,7 @@ func main() {
 	})
 
 	// Show API structure
-	fmt.Println("Prism Go - API Examples")
+	fmt.Println("Wormhole Go - API Examples")
 	fmt.Println("======================")
 	fmt.Println()
 

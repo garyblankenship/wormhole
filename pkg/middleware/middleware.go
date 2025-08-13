@@ -56,18 +56,18 @@ func MetricsMiddleware(metrics *Metrics) Middleware {
 	}
 }
 
-// LoggingMiddleware logs all requests and responses
+// LoggingMiddleware creates basic logging middleware
 func LoggingMiddleware(logger types.Logger) Middleware {
 	return func(next Handler) Handler {
 		return func(ctx context.Context, req interface{}) (interface{}, error) {
-			logger.Debug("Prism request", "request", req)
+			logger.Debug("Wormhole request", "request", req)
 
 			resp, err := next(ctx, req)
 
 			if err != nil {
-				logger.Error("Prism request failed", "error", err)
+				logger.Error("Wormhole request failed", "error", err)
 			} else {
-				logger.Debug("Prism response", "response", resp)
+				logger.Debug("Wormhole response", "response", resp)
 			}
 
 			return resp, err

@@ -6,21 +6,16 @@ import (
 	"github.com/garyblankenship/wormhole/pkg/types"
 )
 
-func TestNew_DefaultConfig(t *testing.T) {
+func TestNew_RequiresBaseURL(t *testing.T) {
 	config := types.ProviderConfig{}
-	provider := New(config)
 
-	if provider == nil {
-		t.Fatal("Expected provider to be created")
-	}
+	defer func() {
+		if r := recover(); r == nil {
+			t.Error("Expected panic when BaseURL is not provided")
+		}
+	}()
 
-	if provider.Name() != "ollama" {
-		t.Errorf("Expected provider name to be 'ollama', got %s", provider.Name())
-	}
-
-	if provider.GetBaseURL() != defaultBaseURL {
-		t.Errorf("Expected base URL to be %s, got %s", defaultBaseURL, provider.GetBaseURL())
-	}
+	New(config)
 }
 
 func TestNew_CustomConfig(t *testing.T) {
@@ -40,7 +35,9 @@ func TestNew_CustomConfig(t *testing.T) {
 }
 
 func TestBuildChatPayload(t *testing.T) {
-	provider := New(types.ProviderConfig{})
+	provider := New(types.ProviderConfig{
+		BaseURL: "http://localhost:11434",
+	})
 
 	request := &types.TextRequest{
 		BaseRequest: types.BaseRequest{

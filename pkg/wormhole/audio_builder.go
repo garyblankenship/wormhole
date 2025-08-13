@@ -9,7 +9,7 @@ import (
 
 // AudioRequestBuilder builds audio requests (TTS and STT)
 type AudioRequestBuilder struct {
-	prism    *Wormhole
+	wormhole *Wormhole
 	provider string
 }
 
@@ -22,7 +22,7 @@ func (b *AudioRequestBuilder) Using(provider string) *AudioRequestBuilder {
 // SpeechToText creates a speech-to-text request builder
 func (b *AudioRequestBuilder) SpeechToText() *SpeechToTextBuilder {
 	return &SpeechToTextBuilder{
-		prism:    b.prism,
+		wormhole: b.wormhole,
 		provider: b.provider,
 		request:  &types.SpeechToTextRequest{},
 	}
@@ -31,7 +31,7 @@ func (b *AudioRequestBuilder) SpeechToText() *SpeechToTextBuilder {
 // TextToSpeech creates a text-to-speech request builder
 func (b *AudioRequestBuilder) TextToSpeech() *TextToSpeechBuilder {
 	return &TextToSpeechBuilder{
-		prism:    b.prism,
+		wormhole: b.wormhole,
 		provider: b.provider,
 		request:  &types.TextToSpeechRequest{},
 	}
@@ -39,7 +39,7 @@ func (b *AudioRequestBuilder) TextToSpeech() *TextToSpeechBuilder {
 
 // SpeechToTextBuilder builds speech-to-text requests
 type SpeechToTextBuilder struct {
-	prism    *Wormhole
+	wormhole *Wormhole
 	provider string
 	request  *types.SpeechToTextRequest
 }
@@ -77,7 +77,7 @@ func (b *SpeechToTextBuilder) Temperature(temp float32) *SpeechToTextBuilder {
 
 // Transcribe executes the request and returns transcribed text
 func (b *SpeechToTextBuilder) Transcribe(ctx context.Context) (*types.SpeechToTextResponse, error) {
-	provider, err := b.prism.getProvider(b.provider)
+	provider, err := b.wormhole.getProvider(b.provider)
 	if err != nil {
 		return nil, err
 	}
@@ -97,8 +97,8 @@ func (b *SpeechToTextBuilder) Transcribe(ctx context.Context) (*types.SpeechToTe
 	}
 
 	// Apply middleware chain if configured
-	if b.prism.middlewareChain != nil {
-		handler := b.prism.middlewareChain.Apply(func(ctx context.Context, req interface{}) (interface{}, error) {
+	if b.wormhole.middlewareChain != nil {
+		handler := b.wormhole.middlewareChain.Apply(func(ctx context.Context, req interface{}) (interface{}, error) {
 			sttReq := req.(*types.SpeechToTextRequest)
 			return audioProvider.SpeechToText(ctx, *sttReq)
 		})
@@ -114,7 +114,7 @@ func (b *SpeechToTextBuilder) Transcribe(ctx context.Context) (*types.SpeechToTe
 
 // TextToSpeechBuilder builds text-to-speech requests
 type TextToSpeechBuilder struct {
-	prism    *Wormhole
+	wormhole *Wormhole
 	provider string
 	request  *types.TextToSpeechRequest
 }
@@ -151,7 +151,7 @@ func (b *TextToSpeechBuilder) ResponseFormat(format string) *TextToSpeechBuilder
 
 // Generate executes the request and returns audio
 func (b *TextToSpeechBuilder) Generate(ctx context.Context) (*types.TextToSpeechResponse, error) {
-	provider, err := b.prism.getProvider(b.provider)
+	provider, err := b.wormhole.getProvider(b.provider)
 	if err != nil {
 		return nil, err
 	}
@@ -174,8 +174,8 @@ func (b *TextToSpeechBuilder) Generate(ctx context.Context) (*types.TextToSpeech
 	}
 
 	// Apply middleware chain if configured
-	if b.prism.middlewareChain != nil {
-		handler := b.prism.middlewareChain.Apply(func(ctx context.Context, req interface{}) (interface{}, error) {
+	if b.wormhole.middlewareChain != nil {
+		handler := b.wormhole.middlewareChain.Apply(func(ctx context.Context, req interface{}) (interface{}, error) {
 			ttsReq := req.(*types.TextToSpeechRequest)
 			return audioProvider.TextToSpeech(ctx, *ttsReq)
 		})

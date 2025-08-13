@@ -14,9 +14,7 @@ import (
 	"github.com/garyblankenship/wormhole/pkg/types"
 )
 
-const (
-	defaultBaseURL = "http://localhost:11434"
-)
+// No default base URLs - Ollama must be configured with explicit URL
 
 // Provider implements the Ollama provider
 type Provider struct {
@@ -26,7 +24,7 @@ type Provider struct {
 // New creates a new Ollama provider
 func New(config types.ProviderConfig) *Provider {
 	if config.BaseURL == "" {
-		config.BaseURL = defaultBaseURL
+		panic("Ollama BaseURL is required: provide via config.BaseURL or environment variable")
 	}
 
 	return &Provider{

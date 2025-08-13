@@ -10,7 +10,7 @@ import (
 
 // TextRequestBuilder builds text generation requests
 type TextRequestBuilder struct {
-	prism    *Wormhole
+	wormhole *Wormhole
 	request  *types.TextRequest
 	provider string
 }
@@ -107,7 +107,7 @@ func (b *TextRequestBuilder) ProviderOptions(options map[string]interface{}) *Te
 
 // Generate executes the request and returns a response
 func (b *TextRequestBuilder) Generate(ctx context.Context) (*types.TextResponse, error) {
-	provider, err := b.prism.getProvider(b.provider)
+	provider, err := b.wormhole.getProvider(b.provider)
 	if err != nil {
 		return nil, err
 	}
@@ -121,15 +121,27 @@ func (b *TextRequestBuilder) Generate(ctx context.Context) (*types.TextResponse,
 
 	// Validate request
 	if len(b.request.Messages) == 0 {
-		return nil, fmt.Errorf("no messages provided")
+		return nil, types.ErrInvalidRequest.WithDetails("no messages provided")
 	}
 	if b.request.Model == "" {
-		return nil, fmt.Errorf("no model specified")
+		return nil, types.ErrInvalidRequest.WithDetails("no model specified")
+	}
+
+	// Validate model capabilities
+	err = types.ValidateModelForCapability(b.request.Model, types.CapabilityText)
+	if err != nil {
+		return nil, err
+	}
+
+	// Apply model-specific constraints
+	err = b.applyModelConstraints()
+	if err != nil {
+		return nil, err
 	}
 
 	// Apply middleware chain if configured
-	if b.prism.middlewareChain != nil {
-		handler := b.prism.middlewareChain.Apply(func(ctx context.Context, req interface{}) (interface{}, error) {
+	if b.wormhole.middlewareChain != nil {
+		handler := b.wormhole.middlewareChain.Apply(func(ctx context.Context, req interface{}) (interface{}, error) {
 			textReq := req.(*types.TextRequest)
 			return provider.Text(ctx, *textReq)
 		})
@@ -145,7 +157,7 @@ func (b *TextRequestBuilder) Generate(ctx context.Context) (*types.TextResponse,
 
 // Stream executes the request and returns a streaming response
 func (b *TextRequestBuilder) Stream(ctx context.Context) (<-chan types.StreamChunk, error) {
-	provider, err := b.prism.getProvider(b.provider)
+	provider, err := b.wormhole.getProvider(b.provider)
 	if err != nil {
 		return nil, err
 	}
@@ -159,15 +171,27 @@ func (b *TextRequestBuilder) Stream(ctx context.Context) (<-chan types.StreamChu
 
 	// Validate request
 	if len(b.request.Messages) == 0 {
-		return nil, fmt.Errorf("no messages provided")
+		return nil, types.ErrInvalidRequest.WithDetails("no messages provided")
 	}
 	if b.request.Model == "" {
-		return nil, fmt.Errorf("no model specified")
+		return nil, types.ErrInvalidRequest.WithDetails("no model specified")
+	}
+
+	// Validate model capabilities
+	err = types.ValidateModelForCapability(b.request.Model, types.CapabilityStream)
+	if err != nil {
+		return nil, err
+	}
+
+	// Apply model-specific constraints
+	err = b.applyModelConstraints()
+	if err != nil {
+		return nil, err
 	}
 
 	// Apply middleware chain if configured
-	if b.prism.middlewareChain != nil {
-		handler := b.prism.middlewareChain.Apply(func(ctx context.Context, req interface{}) (interface{}, error) {
+	if b.wormhole.middlewareChain != nil {
+		handler := b.wormhole.middlewareChain.Apply(func(ctx context.Context, req interface{}) (interface{}, error) {
 			textReq := req.(*types.TextRequest)
 			return provider.Stream(ctx, *textReq)
 		})
@@ -188,4 +212,39 @@ func (b *TextRequestBuilder) ToJSON() (string, error) {
 		return "", err
 	}
 	return string(jsonBytes), nil
+}
+
+// applyModelConstraints applies model-specific constraints like GPT-5 temperature requirements
+func (b *TextRequestBuilder) applyModelConstraints() error {
+	constraints, err := types.GetModelConstraints(b.request.Model)
+	if err != nil {
+		return err
+	}
+
+	// Apply temperature constraint if specified
+	if requiredTemp, exists := constraints["temperature"]; exists {
+		tempValue, ok := requiredTemp.(float64)
+		if !ok {
+			return fmt.Errorf("invalid temperature constraint type")
+		}
+
+		// If user hasn't set temperature, apply the constraint
+		if b.request.Temperature == nil {
+			temp := float32(tempValue)
+			b.request.Temperature = &temp
+		} else {
+			// Validate user-provided temperature matches constraint
+			userTemp := float64(*b.request.Temperature)
+			if userTemp != tempValue {
+				return types.NewModelConstraintError(
+					b.request.Model,
+					"temperature",
+					tempValue,
+					userTemp,
+				)
+			}
+		}
+	}
+
+	return nil
 }

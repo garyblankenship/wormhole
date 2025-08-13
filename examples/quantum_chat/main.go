@@ -7,8 +7,8 @@ import (
 	"os"
 	"strings"
 
-	"github.com/garyblankenship/wormhole/pkg/wormhole"
 	"github.com/garyblankenship/wormhole/pkg/types"
+	"github.com/garyblankenship/wormhole/pkg/wormhole"
 )
 
 func main() {
@@ -39,7 +39,7 @@ func main() {
 
 	// Current dimension we're talking through
 	currentDimension := "openai"
-	
+
 	// Conversation history maintained across dimensions
 	var messages []types.Message
 	messages = append(messages, types.NewSystemMessage(
@@ -71,7 +71,7 @@ func main() {
 
 		// Open a wormhole and send the message
 		startTime := nanoTime()
-		
+
 		response, err := client.Text().
 			Using(currentDimension).
 			Model(getModelForDimension(currentDimension)).
@@ -93,13 +93,13 @@ func main() {
 		messages = append(messages, types.NewAssistantMessage(response.Text))
 
 		// Display response with quantum metrics
-		fmt.Printf("\nAI [via %s wormhole, %dns]: %s\n", 
+		fmt.Printf("\nAI [via %s wormhole, %dns]: %s\n",
 			currentDimension, elapsed, response.Text)
-		
+
 		if response.Usage != nil {
 			fmt.Printf("  [Quantum particles used: %d]\n", response.Usage.TotalTokens)
 		}
-		
+
 		fmt.Print("\nYou: ")
 	}
 
@@ -108,7 +108,7 @@ func main() {
 
 func handleCommand(cmd string, currentDimension *string) {
 	parts := strings.Fields(cmd)
-	
+
 	switch parts[0] {
 	case "/switch":
 		if len(parts) < 2 {
@@ -124,17 +124,17 @@ func handleCommand(cmd string, currentDimension *string) {
 		} else {
 			fmt.Printf("*BURP* '%s' isn't a valid dimension. Try harder.\n", dimension)
 		}
-		
+
 	case "/speed":
 		fmt.Println("\n=== QUANTUM SPEED METRICS ===")
 		fmt.Println("Core wormhole latency: 94.89 nanoseconds")
 		fmt.Println("That's 116x faster than those other garbage SDKs")
 		fmt.Println("We're literally bending spacetime here")
 		fmt.Println("You're welcome.")
-		
+
 	case "/exit":
 		// Handled in main loop
-		
+
 	default:
 		fmt.Printf("*BURP* '%s' isn't a command I programmed. Because I didn't need to.\n", parts[0])
 	}

@@ -8,8 +8,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/garyblankenship/wormhole/pkg/wormhole"
 	"github.com/garyblankenship/wormhole/pkg/types"
+	"github.com/garyblankenship/wormhole/pkg/wormhole"
 )
 
 // QuantumResult holds response from each dimension
@@ -70,14 +70,14 @@ func main() {
 
 	// Open wormholes to all dimensions simultaneously
 	startTime := time.Now()
-	
+
 	for _, dim := range dimensions {
 		wg.Add(1)
 		go func(dimension string, model string) {
 			defer wg.Done()
-			
+
 			portalStart := time.Now()
-			
+
 			// Quantum tunnel to this specific dimension
 			response, err := client.Text().
 				Using(dimension).
@@ -89,14 +89,14 @@ func main() {
 				MaxTokens(200).
 				Temperature(0.7).
 				Generate(context.Background())
-			
+
 			latency := time.Since(portalStart)
-			
+
 			result := QuantumResult{
 				Dimension: dimension,
 				Latency:   latency,
 			}
-			
+
 			if err != nil {
 				result.Error = err
 			} else {
@@ -105,7 +105,7 @@ func main() {
 					result.Tokens = response.Usage.TotalTokens
 				}
 			}
-			
+
 			results <- result
 		}(dim.Name, dim.Model)
 	}
@@ -117,21 +117,21 @@ func main() {
 	}()
 
 	// Collect and display results from the multiverse
-	fmt.Println("\n🌌 RESPONSES FROM THE MULTIVERSE:\n")
-	
+	fmt.Println("\n🌌 RESPONSES FROM THE MULTIVERSE:")
+
 	var successCount int
 	var totalLatency time.Duration
-	
+
 	for result := range results {
 		fmt.Printf("━━━ DIMENSION: %s ━━━\n", strings.ToUpper(result.Dimension))
-		
+
 		if result.Error != nil {
 			fmt.Printf("❌ WORMHOLE COLLAPSED: %v\n", result.Error)
 			fmt.Println("   (Probably that dimension's fault, not mine)")
 		} else {
 			successCount++
 			totalLatency += result.Latency
-			
+
 			fmt.Printf("✅ Response: %s\n", result.Response)
 			fmt.Printf("⚡ Portal latency: %v\n", result.Latency)
 			fmt.Printf("🔬 Quantum particles used: %d tokens\n", result.Tokens)
@@ -141,22 +141,22 @@ func main() {
 
 	// Quantum analysis complete
 	totalTime := time.Since(startTime)
-	
+
 	fmt.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
 	fmt.Println("\n📊 MULTIVERSE ANALYSIS COMPLETE")
 	fmt.Printf("⏱️  Total time (parallel): %v\n", totalTime)
 	fmt.Printf("🌀 Dimensions accessed: %d/%d\n", successCount, len(dimensions))
-	
+
 	if successCount > 0 {
 		avgLatency := totalLatency / time.Duration(successCount)
 		fmt.Printf("⚡ Average portal latency: %v\n", avgLatency)
-		
+
 		// Calculate how much better we are than sequential calls
 		sequentialTime := totalLatency
 		speedup := float64(sequentialTime) / float64(totalTime)
 		fmt.Printf("🚀 Speedup vs sequential: %.2fx faster\n", speedup)
 	}
-	
+
 	fmt.Println("\n*BURP* See that? We just consulted multiple realities in parallel.")
 	fmt.Println("While those Jerry-level developers are still waiting for one API call,")
 	fmt.Println("we've already gotten answers from across the multiverse.")

@@ -36,7 +36,6 @@ type messageStartEvent struct {
 	Message messageResponse `json:"message"`
 }
 
-
 type contentBlockDeltaEvent struct {
 	Type  string `json:"type"`
 	Index int    `json:"index"`
@@ -45,7 +44,6 @@ type contentBlockDeltaEvent struct {
 		Text string `json:"text"`
 	} `json:"delta"`
 }
-
 
 type messageDeltaEvent struct {
 	Type  string `json:"type"`
