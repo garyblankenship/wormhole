@@ -22,7 +22,7 @@ func New(name string, config types.ProviderConfig) *Provider {
 	}
 
 	// Use the OpenAI provider as the base since the API is compatible
-	config.APIKey = "" // Most local services don't need API keys
+	// Keep the API key if provided - cloud services like OpenRouter need it
 	openaiProvider := openai.New(config)
 
 	return &Provider{
@@ -36,6 +36,8 @@ func NewLMStudio(config types.ProviderConfig) *Provider {
 	if config.BaseURL == "" {
 		panic("LMStudio BaseURL is required: provide via config.BaseURL")
 	}
+	// LMStudio doesn't need API keys - clear it for local service
+	config.APIKey = ""
 	return New("lmstudio", config)
 }
 
@@ -44,6 +46,8 @@ func NewVLLM(config types.ProviderConfig) *Provider {
 	if config.BaseURL == "" {
 		panic("vLLM BaseURL is required: provide via config.BaseURL")
 	}
+	// vLLM typically doesn't need API keys - clear it for local service
+	config.APIKey = ""
 	return New("vllm", config)
 }
 
@@ -52,6 +56,8 @@ func NewOllamaOpenAI(config types.ProviderConfig) *Provider {
 	if config.BaseURL == "" {
 		panic("Ollama OpenAI BaseURL is required: provide via config.BaseURL")
 	}
+	// Ollama doesn't need API keys - clear it for local service
+	config.APIKey = ""
 	return New("ollama-openai", config)
 }
 

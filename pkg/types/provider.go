@@ -66,3 +66,7 @@ type ProviderConfig struct {
 	MaxRetries int               `json:"max_retries,omitempty"`
 	RetryDelay int               `json:"retry_delay,omitempty"`
 }
+
+// ProviderFactory defines the function signature for creating a new provider instance.
+// This enables dynamic provider registration without modifying core code.
+type ProviderFactory func(config ProviderConfig) (Provider, error)

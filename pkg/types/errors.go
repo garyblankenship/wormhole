@@ -165,12 +165,12 @@ func IsWormholeError(err error) bool {
 	if _, ok := err.(*WormholeError); ok {
 		return true
 	}
-	
+
 	// ModelConstraintError embeds WormholeError
 	if _, ok := err.(*ModelConstraintError); ok {
 		return true
 	}
-	
+
 	return false
 }
 
@@ -180,12 +180,12 @@ func AsWormholeError(err error) (*WormholeError, bool) {
 	if wormholeErr, ok := err.(*WormholeError); ok {
 		return wormholeErr, ok
 	}
-	
+
 	// ModelConstraintError embeds WormholeError
 	if constraintErr, ok := err.(*ModelConstraintError); ok {
 		return constraintErr.WormholeError, true
 	}
-	
+
 	return nil, false
 }
 
