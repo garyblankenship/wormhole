@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/garyblankenship/wormhole/pkg/middleware"
+	"github.com/garyblankenship/wormhole/pkg/types"
 	"github.com/garyblankenship/wormhole/pkg/wormhole"
 )
 
@@ -117,5 +118,100 @@ func main() {
 	fmt.Printf("Metrics - Requests: %d, Errors: %d, Avg Duration: %v\n",
 		requests, errors, avgDuration)
 
-	fmt.Println("\nMiddleware examples completed!")
+	// NEW: Debug logging middleware demo
+	fmt.Println("\nDebug logging middleware...")
+	debugClient := wormhole.QuickOpenAI().
+		Use(middleware.DebugLoggingMiddleware(nil)) // Uses default logger
+
+	_, err := debugClient.Text().
+		Model("gpt-3.5-turbo").
+		Prompt("Test debug logging").
+		MaxTokens(5).
+		Generate(ctx)
+
+	if err != nil {
+		fmt.Printf("Debug request completed (may have failed): %v\n", err)
+	}
+
+	// NEW: Structured error handling with middleware
+	fmt.Println("\nStructured error handling...")
+	errorClient := wormhole.QuickOpenAI().
+		Use(middleware.RetryMiddleware(middleware.DefaultRetryConfig()))
+
+	_, err = errorClient.Text().
+		Model("invalid-model-name").
+		Prompt("This will fail").
+		Generate(ctx)
+
+	if err != nil {
+		if wormholeErr, ok := types.AsWormholeError(err); ok {
+			fmt.Printf("Structured error - Code: %s, Retryable: %v, Message: %s\n",
+				wormholeErr.Code, wormholeErr.IsRetryable(), wormholeErr.Message)
+		} else {
+			fmt.Printf("Non-wormhole error: %v\n", err)
+		}
+	}
+
+	// NEW: Custom provider with middleware demo
+	fmt.Println("\nCustom provider with middleware...")
+	customClient := wormhole.New(wormhole.Config{
+		Providers: map[string]types.ProviderConfig{
+			"mock": {APIKey: "test", BaseURL: "http://localhost"},
+		},
+	})
+
+	// Register mock provider
+	customClient.RegisterProvider("mock", func(config types.ProviderConfig) (types.Provider, error) {
+		return &MockProvider{}, nil
+	})
+
+	// Add middleware to custom provider
+	customClient = customClient.
+		Use(middleware.MetricsMiddleware(middleware.NewMetrics())).
+		Use(middleware.TimeoutMiddleware(5 * time.Second))
+
+	fmt.Println("Custom provider configured with middleware stack")
+
+	// NEW: Multi-provider fallback demo
+	fmt.Println("\nMulti-provider fallback with middleware...")
+	
+	// This would require OpenRouter configuration, so just show the pattern
+	fmt.Println("Example pattern for provider fallback:")
+	fmt.Println("1. Try primary provider (OpenAI)")
+	fmt.Println("2. Circuit breaker triggers on failures") 
+	fmt.Println("3. Fallback to secondary provider (OpenRouter)")
+	fmt.Println("4. Metrics track provider performance")
+	fmt.Println("5. Health checker monitors all providers")
+
+	fmt.Println("\n🎯 ALL MIDDLEWARE FEATURES DEMONSTRATED!")
+	fmt.Println("✅ Rate limiting, retries, circuit breaker, caching")
+	fmt.Println("✅ Load balancing, health checking, metrics") 
+	fmt.Println("✅ Debug logging, structured errors")
+	fmt.Println("✅ Custom provider integration")
+	fmt.Println("✅ Multi-provider fallback patterns")
+}
+
+// MockProvider for demonstration
+type MockProvider struct{}
+
+func (p *MockProvider) Name() string { return "mock" }
+func (p *MockProvider) Text(ctx context.Context, req types.TextRequest) (*types.TextResponse, error) {
+	return &types.TextResponse{Text: "Mock response", Model: req.Model}, nil
+}
+func (p *MockProvider) Stream(ctx context.Context, req types.TextRequest) (<-chan types.TextChunk, error) {
+	ch := make(chan types.TextChunk)
+	close(ch)
+	return ch, nil
+}
+func (p *MockProvider) Structured(ctx context.Context, req types.StructuredRequest) (*types.StructuredResponse, error) {
+	return &types.StructuredResponse{Data: map[string]interface{}{"mock": true}}, nil
+}
+func (p *MockProvider) Embeddings(ctx context.Context, req types.EmbeddingsRequest) (*types.EmbeddingsResponse, error) {
+	return &types.EmbeddingsResponse{}, nil
+}
+func (p *MockProvider) Audio(ctx context.Context, req types.AudioRequest) (*types.AudioResponse, error) {
+	return &types.AudioResponse{}, nil
+}
+func (p *MockProvider) Images(ctx context.Context, req types.ImagesRequest) (*types.ImagesResponse, error) {
+	return &types.ImagesResponse{}, nil
 }
