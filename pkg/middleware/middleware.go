@@ -144,3 +144,71 @@ func (m *Metrics) GetStats() (requests int64, errors int64, avgDuration time.Dur
 
 	return
 }
+
+// MiddlewareInfo describes available middleware
+type MiddlewareInfo struct {
+	Name        string
+	Purpose     string
+	Example     string
+	ConfigType  string
+}
+
+// AvailableMiddleware returns information about all available middleware
+func AvailableMiddleware() []MiddlewareInfo {
+	return []MiddlewareInfo{
+		{
+			Name:       "RetryMiddleware",
+			Purpose:    "Exponential backoff retry with jitter",
+			Example:    "middleware.RetryMiddleware(middleware.DefaultRetryConfig())",
+			ConfigType: "RetryConfig",
+		},
+		{
+			Name:       "CacheMiddleware", 
+			Purpose:    "Response caching with TTL support",
+			Example:    "middleware.CacheMiddleware(middleware.CacheConfig{Cache: cache, TTL: 5*time.Minute})",
+			ConfigType: "CacheConfig",
+		},
+		{
+			Name:       "CircuitBreakerMiddleware",
+			Purpose:    "Circuit breaking for failing providers",
+			Example:    "middleware.CircuitBreakerMiddleware(5, 30*time.Second)",
+			ConfigType: "threshold int, timeout time.Duration",
+		},
+		{
+			Name:       "RateLimitMiddleware",
+			Purpose:    "Request rate limiting",
+			Example:    "middleware.RateLimitMiddleware(100)",
+			ConfigType: "requestsPerSecond int",
+		},
+		{
+			Name:       "LoadBalancerMiddleware",
+			Purpose:    "Load balancing across multiple providers",
+			Example:    "middleware.LoadBalancerMiddleware(providers, strategy)",
+			ConfigType: "providers []string, strategy LoadBalanceStrategy",
+		},
+		{
+			Name:       "HealthMiddleware",
+			Purpose:    "Provider health checking",
+			Example:    "middleware.HealthMiddleware(config)",
+			ConfigType: "HealthConfig",
+		},
+		{
+			Name:       "LoggingMiddleware",
+			Purpose:    "Request/response logging",
+			Example:    "middleware.LoggingMiddleware(logger)",
+			ConfigType: "logger types.Logger",
+		},
+		{
+			Name:       "MetricsMiddleware",
+			Purpose:    "Request metrics collection",
+			Example:    "middleware.MetricsMiddleware(metrics)",
+			ConfigType: "metrics *Metrics",
+		},
+		{
+			Name:       "TimeoutMiddleware",
+			Purpose:    "Request timeout enforcement",
+			Example:    "middleware.TimeoutMiddleware(30*time.Second)",
+			ConfigType: "timeout time.Duration",
+		},
+	}
+}

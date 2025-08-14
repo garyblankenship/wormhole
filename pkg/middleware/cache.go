@@ -145,7 +145,19 @@ type CacheConfig struct {
 	CacheableFunc func(req interface{}) bool
 }
 
-// CacheMiddleware implements response caching
+// CacheMiddleware implements response caching.
+// 
+// Example usage:
+//   cache := middleware.NewMemoryCache(100)
+//   config := middleware.CacheConfig{
+//       Cache: cache,
+//       TTL: 5 * time.Minute,
+//   }
+//   middleware.CacheMiddleware(config)
+//
+// For simple TTL caching:
+//   cache := middleware.NewTTLCache(100, 5 * time.Minute)
+//   config := middleware.CacheConfig{Cache: cache, TTL: config.DefaultTTL}
 func CacheMiddleware(config CacheConfig) Middleware {
 	if config.KeyGenerator == nil {
 		config.KeyGenerator = DefaultCacheKeyGenerator
