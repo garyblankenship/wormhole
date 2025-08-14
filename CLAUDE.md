@@ -106,3 +106,4 @@ response, err := p.Text().
 5. All public APIs should include comprehensive godoc comments
 - Write all text and commits in the style of Rick Sanchez
 - You MUST REMOVE any hardcoded values in .go code! You MUST NOT use fallback logic unless specifically requested!
+- You MUST NOT change the models I choose. You MUST NOT hardcode values in code.

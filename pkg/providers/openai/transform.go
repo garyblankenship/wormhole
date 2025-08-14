@@ -3,6 +3,7 @@ package openai
 import (
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/garyblankenship/wormhole/pkg/types"
@@ -23,7 +24,12 @@ func (p *Provider) buildChatPayload(request *types.TextRequest) map[string]inter
 		payload["top_p"] = *request.TopP
 	}
 	if request.MaxTokens != nil && *request.MaxTokens > 0 {
-		payload["max_tokens"] = *request.MaxTokens
+		// GPT-5 models require max_completion_tokens instead of deprecated max_tokens
+		if isGPT5Model(request.Model) {
+			payload["max_completion_tokens"] = *request.MaxTokens
+		} else {
+			payload["max_tokens"] = *request.MaxTokens
+		}
 	}
 	if len(request.Stop) > 0 {
 		payload["stop"] = request.Stop
@@ -341,4 +347,12 @@ func (p *Provider) schemaToTool(schema types.Schema, name string) (*types.Tool, 
 			Parameters:  params,
 		},
 	}, nil
+}
+
+// isGPT5Model determines if a model requires GPT-5 API parameters
+func isGPT5Model(model string) bool {
+	// Check if model contains "gpt-5" anywhere in the name (case-insensitive)
+	// Handles: gpt-5, gpt-5-mini, openai/gpt-5-mini, etc.
+	model = strings.ToLower(model)
+	return strings.Contains(model, "gpt-5")
 }
