@@ -126,7 +126,7 @@ func (g *Groq) buildMessageContent(text string, media []types.Media) interface{}
 
 // transformTools converts tools to Groq/OpenAI format
 func (g *Groq) transformTools(tools []types.Tool) []map[string]interface{} {
-	var transformed []map[string]interface{}
+	transformed := make([]map[string]interface{}, 0, len(tools))
 
 	for _, tool := range tools {
 		transformed = append(transformed, map[string]interface{}{
@@ -142,17 +142,22 @@ func (g *Groq) transformTools(tools []types.Tool) []map[string]interface{} {
 	return transformed
 }
 
+const (
+	toolChoiceAuto = "auto"
+	toolChoiceNone = "none"
+)
+
 // transformToolChoice converts tool choice to Groq/OpenAI format
 func (g *Groq) transformToolChoice(choice *types.ToolChoice) interface{} {
 	if choice == nil {
-		return "auto"
+		return toolChoiceAuto
 	}
 
 	switch choice.Type {
 	case types.ToolChoiceTypeNone:
-		return "none"
+		return toolChoiceNone
 	case types.ToolChoiceTypeAuto:
-		return "auto"
+		return toolChoiceAuto
 	case types.ToolChoiceTypeAny:
 		return "required"
 	case types.ToolChoiceTypeSpecific:
@@ -180,7 +185,7 @@ func (g *Groq) transformTextResponse(response *groqTextResponse) (*types.TextRes
 	choice := response.Choices[0]
 
 	// Convert tool calls
-	var toolCalls []types.ToolCall
+	toolCalls := make([]types.ToolCall, 0, len(choice.Message.ToolCalls))
 	for _, tc := range choice.Message.ToolCalls {
 		var args map[string]interface{}
 		if err := json.Unmarshal([]byte(tc.Function.Arguments), &args); err != nil {
