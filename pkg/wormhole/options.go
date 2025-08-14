@@ -412,6 +412,82 @@ func registerOpenRouterModels() {
 			},
 		},
 
+		// REQUESTED MODELS FOR TESTING
+
+		// GPT-OSS-120B (User requested test model)
+		{
+			ID:       "openai/gpt-oss-120b",
+			Name:     "GPT-OSS-120B",
+			Provider: "openrouter",
+			Capabilities: []types.ModelCapability{
+				types.CapabilityText,
+				types.CapabilityChat,
+				types.CapabilityFunctions,
+				types.CapabilityStream,
+			},
+		},
+
+		// GPT-4.1 Series
+		{
+			ID:       "openai/gpt-4.1",
+			Name:     "GPT-4.1",
+			Provider: "openrouter",
+			Capabilities: []types.ModelCapability{
+				types.CapabilityText,
+				types.CapabilityChat,
+				types.CapabilityFunctions,
+				types.CapabilityStream,
+				types.CapabilityVision,
+			},
+		},
+		{
+			ID:       "openai/gpt-4.1-mini",
+			Name:     "GPT-4.1 Mini",
+			Provider: "openrouter",
+			Capabilities: []types.ModelCapability{
+				types.CapabilityText,
+				types.CapabilityChat,
+				types.CapabilityFunctions,
+				types.CapabilityStream,
+			},
+		},
+
+		// O Series Models
+		{
+			ID:       "openai/o3",
+			Name:     "O3",
+			Provider: "openrouter",
+			Capabilities: []types.ModelCapability{
+				types.CapabilityText,
+				types.CapabilityChat,
+				types.CapabilityFunctions,
+				types.CapabilityStream,
+			},
+		},
+		{
+			ID:       "openai/o1-mini",
+			Name:     "O1 Mini",
+			Provider: "openrouter",
+			Capabilities: []types.ModelCapability{
+				types.CapabilityText,
+				types.CapabilityChat,
+				types.CapabilityStream,
+			},
+		},
+
+		// GPT-3.5 for OpenRouter
+		{
+			ID:       "openai/gpt-3.5-turbo",
+			Name:     "GPT-3.5 Turbo",
+			Provider: "openrouter",
+			Capabilities: []types.ModelCapability{
+				types.CapabilityText,
+				types.CapabilityChat,
+				types.CapabilityFunctions,
+				types.CapabilityStream,
+			},
+		},
+
 		// EXISTING MODELS (CONFIRMED WORKING)
 
 		// Claude 4.1 - Already confirmed by user
