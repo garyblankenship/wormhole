@@ -8,16 +8,14 @@ import (
 )
 
 func main() {
-	// Initialize with mock configuration
-	p := wormhole.New(wormhole.Config{
-		DefaultProvider: "openai",
-		Providers: map[string]types.ProviderConfig{
-			"openai": {
-				APIKey:  "test-key",
-				BaseURL: "https://api.openai.com/v1",
-			},
-		},
-	})
+	// Initialize with mock configuration using functional options
+	p := wormhole.New(
+		wormhole.WithDefaultProvider("openai"),
+		wormhole.WithProviderConfig("openai", types.ProviderConfig{
+			APIKey:  "test-key",
+			BaseURL: "https://api.openai.com/v1",
+		}),
+	)
 
 	// Show API structure
 	fmt.Println("Wormhole Go - API Examples")

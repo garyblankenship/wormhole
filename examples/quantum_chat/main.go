@@ -21,21 +21,13 @@ func main() {
 	fmt.Println("  /speed - Show how fast we're bending spacetime")
 	fmt.Println()
 
-	// Initialize the quantum tunnel network
-	client := wormhole.New(wormhole.Config{
-		DefaultProvider: "openai",
-		Providers: map[string]types.ProviderConfig{
-			"openai": {
-				APIKey: os.Getenv("OPENAI_API_KEY"),
-			},
-			"anthropic": {
-				APIKey: os.Getenv("ANTHROPIC_API_KEY"),
-			},
-			"gemini": {
-				APIKey: os.Getenv("GEMINI_API_KEY"),
-			},
-		},
-	})
+	// Initialize the quantum tunnel network using functional options
+	client := wormhole.New(
+		wormhole.WithDefaultProvider("openai"),
+		wormhole.WithOpenAI(os.Getenv("OPENAI_API_KEY")),
+		wormhole.WithAnthropic(os.Getenv("ANTHROPIC_API_KEY")),
+		wormhole.WithGemini(os.Getenv("GEMINI_API_KEY")),
+	)
 
 	// Current dimension we're talking through
 	currentDimension := "openai"

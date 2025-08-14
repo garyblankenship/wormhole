@@ -32,7 +32,7 @@ func (p *ExampleProvider) Name() string {
 func (p *ExampleProvider) Text(ctx context.Context, request types.TextRequest) (*types.TextResponse, error) {
 	// Simple example implementation - in real usage you'd make HTTP requests to your provider
 	fmt.Printf("ExampleProvider received request for model: %s\n", request.Model)
-	
+
 	// Get the last message content
 	var prompt string
 	if len(request.Messages) > 0 {
@@ -128,22 +128,16 @@ func (p *ExampleProvider) Images(ctx context.Context, request types.ImagesReques
 }
 
 func main() {
-	// Step 1: Configure Wormhole with your custom provider
-	config := wormhole.Config{
-		Providers: map[string]types.ProviderConfig{
-			"example": {
-				APIKey:  "example-api-key-12345",
-				BaseURL: "https://api.example.com/v1",
-			},
-		},
-	}
+	// Step 1: Configure Wormhole with your custom provider using functional options
+	client := wormhole.New(
+		wormhole.WithProviderConfig("example", types.ProviderConfig{
+			APIKey:  "example-api-key-12345",
+			BaseURL: "https://api.example.com/v1",
+		}),
+		wormhole.WithCustomProvider("example", NewExampleProvider),
+	)
 
-	client := wormhole.New(config)
-
-	// Step 2: Register your custom provider
-	client.RegisterProvider("example", NewExampleProvider)
-
-	// Step 2.5: Register custom models to avoid validation errors
+	// Step 2: Register custom models to avoid validation errors
 	types.DefaultModelRegistry.Register(&types.ModelInfo{
 		ID:           "example-model-v1",
 		Provider:     "example",
@@ -151,23 +145,23 @@ func main() {
 		MaxTokens:    4096,
 		Description:  "Custom example model for text generation",
 	})
-	
+
 	types.DefaultModelRegistry.Register(&types.ModelInfo{
-		ID:           "example-streaming-model", 
+		ID:           "example-streaming-model",
 		Provider:     "example",
 		Capabilities: []types.ModelCapability{types.CapabilityStream},
 		MaxTokens:    4096,
 		Description:  "Custom example model for streaming",
 	})
-	
+
 	types.DefaultModelRegistry.Register(&types.ModelInfo{
 		ID:           "example-structured-model",
-		Provider:     "example", 
+		Provider:     "example",
 		Capabilities: []types.ModelCapability{types.CapabilityStructured},
 		MaxTokens:    4096,
 		Description:  "Custom example model for structured output",
 	})
-	
+
 	types.DefaultModelRegistry.Register(&types.ModelInfo{
 		ID:           "example-embedding-model",
 		Provider:     "example",
@@ -254,7 +248,7 @@ func main() {
 		log.Fatalf("Embeddings generation failed: %v", err)
 	}
 
-	fmt.Printf("Generated %d embeddings with %d dimensions\n", 
+	fmt.Printf("Generated %d embeddings with %d dimensions\n",
 		len(embeddings.Embeddings), len(embeddings.Embeddings[0].Embedding))
 
 	fmt.Println("\n=== Custom Provider Registration Complete! ===")
