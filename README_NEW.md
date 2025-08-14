@@ -15,7 +15,7 @@
 go get github.com/garyblankenship/wormhole@latest
 
 # Use
-client := wormhole.New(config)
+client := wormhole.New(wormhole.WithDefaultProvider("openai"), wormhole.WithOpenAI("key"))
 response, err := client.Text().Model("gpt-4o").Prompt("Hello!").Generate(ctx)
 ```
 
@@ -112,12 +112,17 @@ err := client.Structured().
 
 ### Middleware Stack
 ```go
-client := wormhole.New(config).
-    Use(middleware.RateLimitMiddleware(100)).                         // Rate limiting
-    Use(middleware.RetryMiddleware(middleware.DefaultRetryConfig())). // Auto-retry
-    Use(middleware.CircuitBreakerMiddleware(5, 30*time.Second)).      // Failover
-    Use(middleware.CacheMiddleware(cacheConfig)).                     // Response caching
-    Use(middleware.MetricsMiddleware(metrics))                        // Observability
+client := wormhole.New(
+    wormhole.WithDefaultProvider("openai"),
+    wormhole.WithOpenAI("your-api-key"),
+    wormhole.WithMiddleware(
+        middleware.RateLimitMiddleware(100),                         // Rate limiting
+        middleware.RetryMiddleware(middleware.DefaultRetryConfig()), // Auto-retry
+        middleware.CircuitBreakerMiddleware(5, 30*time.Second),      // Failover
+        middleware.CacheMiddleware(cacheConfig),                     // Response caching
+        middleware.MetricsMiddleware(metrics),                       // Observability
+    ),
+)
 ```
 
 ### Error Handling
@@ -138,8 +143,13 @@ if err != nil {
 
 ### Custom Providers
 ```go
-// Register custom provider
-client.RegisterProvider("custom", NewCustomProvider)
+// Register custom provider with functional options
+client := wormhole.New(
+    wormhole.WithCustomProvider("custom", NewCustomProvider),
+    wormhole.WithProviderConfig("custom", types.ProviderConfig{
+        APIKey: "custom-key",
+    }),
+)
 
 // Use immediately
 response, err := client.Text().
@@ -195,13 +205,11 @@ export GEMINI_API_KEY="your-gemini-key"
 
 ### Basic Configuration
 ```go
-client := wormhole.New(wormhole.Config{
-    DefaultProvider: "openai",
-    Providers: map[string]types.ProviderConfig{
-        "openai":    {APIKey: os.Getenv("OPENAI_API_KEY")},
-        "anthropic": {APIKey: os.Getenv("ANTHROPIC_API_KEY")},
-    },
-})
+client := wormhole.New(
+    wormhole.WithDefaultProvider("openai"),
+    wormhole.WithOpenAI(os.Getenv("OPENAI_API_KEY")),
+    wormhole.WithAnthropic(os.Getenv("ANTHROPIC_API_KEY")),
+)
 ```
 
 ## 🏭 Production Deployment
@@ -241,9 +249,11 @@ spec:
 
 ### Monitoring
 ```go
-// Prometheus metrics
+// Prometheus metrics with functional options
 metrics := middleware.NewMetrics()
-client.Use(middleware.MetricsMiddleware(metrics))
+client := wormhole.New(
+    wormhole.WithMiddleware(middleware.MetricsMiddleware(metrics)),
+)
 
 // Health checks
 checker := middleware.NewHealthChecker(30 * time.Second)
@@ -276,7 +286,7 @@ make fmt               # Format code
 ## 📋 API Reference
 
 ### Core Client
-- `wormhole.New(config)` - Create client
+- `wormhole.New(opts...)` - Create client with functional options
 - `client.Text()` - Text generation builder
 - `client.Structured()` - Structured output builder
 - `client.Embeddings()` - Embeddings builder
