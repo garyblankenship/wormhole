@@ -22,13 +22,11 @@ import (
 )
 
 func main() {
-    // Create client
-    client := wormhole.New(wormhole.Config{
-        DefaultProvider: "openai",
-        Providers: map[string]types.ProviderConfig{
-            "openai": {APIKey: "your-api-key"},
-        },
-    })
+    // Create client with functional options
+    client := wormhole.New(
+        wormhole.WithDefaultProvider("openai"),
+        wormhole.WithOpenAI("your-api-key"),
+    )
 
     // Generate text
     response, err := client.Text().

@@ -77,18 +77,13 @@ import (
     "github.com/garyblankenship/wormhole/pkg/types"
 )
 
-// Configure as OpenAI-compatible provider
-config := wormhole.Config{
-    DefaultProvider: "openrouter",
-    Providers: map[string]types.ProviderConfig{
-        "openrouter": {
-            APIKey:  "your-openrouter-api-key",
-            BaseURL: "https://openrouter.ai/api/v1",
-        },
-    },
-}
-
-w := wormhole.New(config)
+// Configure as OpenAI-compatible provider with functional options
+w := wormhole.New(
+    wormhole.WithDefaultProvider("openrouter"),
+    wormhole.WithOpenAICompatible("openrouter", "https://openrouter.ai/api/v1", types.ProviderConfig{
+        APIKey: "your-openrouter-api-key",
+    }),
+)
 ```
 
 #### Multi-Model Text Generation
