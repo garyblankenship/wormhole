@@ -10,17 +10,18 @@ import (
 )
 
 func main() {
-	// Create a new Wormhole client
-	p := wormhole.New(wormhole.Config{})
+	// Create a new Wormhole client with LMStudio provider
+	p := wormhole.New(
+		wormhole.WithLMStudio(types.ProviderConfig{}), // default: http://localhost:1234/v1
+	)
 
-	// Add LMStudio provider (default: http://localhost:1234/v1)
-	p.WithLMStudio(types.ProviderConfig{})
-
-	// You can also use a custom configuration
-	// p.WithLMStudio(types.ProviderConfig{
-	//     BaseURL: "http://192.168.1.100:1234/v1", // Custom LMStudio server
-	//     Timeout: 60, // 60 seconds timeout
-	// })
+	// You can also use a custom configuration:
+	// p := wormhole.New(
+	//     wormhole.WithLMStudio(types.ProviderConfig{
+	//         BaseURL: "http://192.168.1.100:1234/v1", // Custom LMStudio server
+	//         Timeout: 60, // 60 seconds timeout
+	//     }),
+	// )
 
 	// Example 1: Simple text generation
 	fmt.Println("=== Simple Text Generation ===")

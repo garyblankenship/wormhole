@@ -127,10 +127,12 @@ func (b *TextRequestBuilder) Generate(ctx context.Context) (*types.TextResponse,
 		return nil, types.ErrInvalidRequest.WithDetails("no model specified")
 	}
 
-	// Validate model capabilities
-	err = types.ValidateModelForCapability(b.request.Model, types.CapabilityText)
-	if err != nil {
-		return nil, err
+	// Validate model capabilities (if enabled)
+	if b.wormhole.config.ModelValidation {
+		err = types.ValidateModelForCapability(b.request.Model, types.CapabilityText)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	// Apply model-specific constraints
@@ -177,10 +179,12 @@ func (b *TextRequestBuilder) Stream(ctx context.Context) (<-chan types.StreamChu
 		return nil, types.ErrInvalidRequest.WithDetails("no model specified")
 	}
 
-	// Validate model capabilities
-	err = types.ValidateModelForCapability(b.request.Model, types.CapabilityStream)
-	if err != nil {
-		return nil, err
+	// Validate model capabilities (if enabled)
+	if b.wormhole.config.ModelValidation {
+		err = types.ValidateModelForCapability(b.request.Model, types.CapabilityStream)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	// Apply model-specific constraints

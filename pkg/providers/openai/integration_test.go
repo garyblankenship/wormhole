@@ -20,10 +20,10 @@ import (
 // TestOpenAIProvider_IntegrationTextGeneration tests the complete text generation flow
 func TestOpenAIProvider_IntegrationTextGeneration(t *testing.T) {
 	testCases := []struct {
-		name         string
-		model        string
-		maxTokens    int
-		expectedAPI  string // "max_tokens" or "max_completion_tokens"
+		name        string
+		model       string
+		maxTokens   int
+		expectedAPI string // "max_tokens" or "max_completion_tokens"
 	}{
 		{
 			name:        "GPT-4 uses deprecated max_tokens",
@@ -65,7 +65,7 @@ func TestOpenAIProvider_IntegrationTextGeneration(t *testing.T) {
 
 				// Verify model and max tokens parameter
 				assert.Equal(t, tc.model, reqBody["model"])
-				
+
 				if tc.expectedAPI == "max_completion_tokens" {
 					assert.Contains(t, reqBody, "max_completion_tokens")
 					assert.NotContains(t, reqBody, "max_tokens")
@@ -134,7 +134,7 @@ func TestOpenAIProvider_IntegrationTextGeneration(t *testing.T) {
 			assert.Equal(t, tc.model, response.Model)
 			assert.Equal(t, "Hello! This is a test response.", response.Text)
 			assert.Equal(t, types.FinishReasonStop, response.FinishReason)
-			
+
 			// Verify usage
 			require.NotNil(t, response.Usage)
 			assert.Equal(t, 10, response.Usage.PromptTokens)
@@ -210,7 +210,7 @@ func TestOpenAIProvider_IntegrationStreaming(t *testing.T) {
 
 	// Verify streaming results
 	require.GreaterOrEqual(t, len(chunks), 3, "Should receive multiple chunks")
-	
+
 	// Verify first chunk
 	assert.Equal(t, "chatcmpl-stream123", chunks[0].ID)
 	assert.Equal(t, "gpt-4", chunks[0].Model)
@@ -233,10 +233,10 @@ func TestOpenAIProvider_IntegrationStreaming(t *testing.T) {
 // TestOpenAIProvider_ErrorHandling tests various error scenarios
 func TestOpenAIProvider_ErrorHandling(t *testing.T) {
 	testCases := []struct {
-		name           string
-		statusCode     int
-		responseBody   string
-		expectedError  types.ErrorCode
+		name          string
+		statusCode    int
+		responseBody  string
+		expectedError types.ErrorCode
 	}{
 		{
 			name:       "401 Unauthorized",
@@ -260,7 +260,7 @@ func TestOpenAIProvider_ErrorHandling(t *testing.T) {
 					"code": "rate_limit_exceeded"
 				}
 			}`,
-			expectedError: types.ErrorCodeTimeout, // Will timeout due to retries
+			expectedError: types.ErrorCodeRateLimit,
 		},
 		{
 			name:       "404 Model Not Found",
@@ -283,7 +283,7 @@ func TestOpenAIProvider_ErrorHandling(t *testing.T) {
 					"type": "server_error"
 				}
 			}`,
-			expectedError: types.ErrorCodeTimeout, // Will timeout due to retries
+			expectedError: types.ErrorCodeProvider,
 		},
 	}
 
@@ -299,7 +299,7 @@ func TestOpenAIProvider_ErrorHandling(t *testing.T) {
 
 			// Create provider
 			provider := openai.New(types.ProviderConfig{
-				APIKey:  "test-api-key", 
+				APIKey:  "test-api-key",
 				BaseURL: server.URL + "/v1",
 			})
 
@@ -317,9 +317,9 @@ func TestOpenAIProvider_ErrorHandling(t *testing.T) {
 			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 			defer cancel()
 			_, err := provider.Text(ctx, *request)
-			
+
 			require.Error(t, err)
-			
+
 			// Check if it's a WormholeError and verify the error code
 			var wormholeErr *types.WormholeError
 			if errors.As(err, &wormholeErr) {
@@ -356,7 +356,7 @@ func TestOpenAIProvider_Authentication(t *testing.T) {
 
 		ctx := context.Background()
 		_, err := provider.Text(ctx, *request)
-		
+
 		require.Error(t, err)
 		assert.Contains(t, strings.ToLower(err.Error()), "api key")
 	})
@@ -364,10 +364,10 @@ func TestOpenAIProvider_Authentication(t *testing.T) {
 	t.Run("API key in headers", func(t *testing.T) {
 		// Track authorization header
 		var authHeader string
-		
+
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			authHeader = r.Header.Get("Authorization")
-			
+
 			response := map[string]interface{}{
 				"id":      "test",
 				"object":  "chat.completion",
@@ -384,7 +384,7 @@ func TestOpenAIProvider_Authentication(t *testing.T) {
 					},
 				},
 			}
-			
+
 			w.Header().Set("Content-Type", "application/json")
 			json.NewEncoder(w).Encode(response)
 		}))
@@ -406,7 +406,7 @@ func TestOpenAIProvider_Authentication(t *testing.T) {
 
 		ctx := context.Background()
 		_, err := provider.Text(ctx, *request)
-		
+
 		require.NoError(t, err)
 		assert.Equal(t, "Bearer sk-test-key-123", authHeader)
 	})
@@ -419,7 +419,7 @@ func TestOpenAIProvider_ToolCalling(t *testing.T) {
 		// Verify tools in request
 		var reqBody map[string]interface{}
 		json.NewDecoder(r.Body).Decode(&reqBody)
-		
+
 		tools, ok := reqBody["tools"].([]interface{})
 		require.True(t, ok, "Request should include tools")
 		require.Len(t, tools, 1)
@@ -427,7 +427,7 @@ func TestOpenAIProvider_ToolCalling(t *testing.T) {
 		// Return tool call response
 		response := map[string]interface{}{
 			"id":      "chatcmpl-tool123",
-			"object":  "chat.completion", 
+			"object":  "chat.completion",
 			"created": time.Now().Unix(),
 			"model":   "gpt-4",
 			"choices": []map[string]interface{}{
@@ -489,11 +489,11 @@ func TestOpenAIProvider_ToolCalling(t *testing.T) {
 	// Execute request
 	ctx := context.Background()
 	response, err := provider.Text(ctx, *request)
-	
+
 	require.NoError(t, err)
 	assert.Equal(t, types.FinishReasonToolCalls, response.FinishReason)
 	require.Len(t, response.ToolCalls, 1)
-	
+
 	toolCall := response.ToolCalls[0]
 	assert.Equal(t, "call_123", toolCall.ID)
 	assert.Equal(t, "function", toolCall.Type)

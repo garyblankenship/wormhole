@@ -108,31 +108,36 @@ func BenchmarkWithMiddleware(b *testing.B) {
 		Usage: &types.Usage{TotalTokens: 12},
 	})
 
-	client := &Wormhole{
-		providers: map[string]types.Provider{"mock": mockProvider},
-		config:    Config{DefaultProvider: "mock"},
+	// Create middleware stack
+	rateLimitMiddleware := func(next middleware.Handler) middleware.Handler {
+		return func(ctx context.Context, req interface{}) (interface{}, error) {
+			// Simulate rate limiting check
+			return next(ctx, req)
+		}
 	}
 
-	// Add comprehensive middleware stack
-	client = client.
-		Use(func(next middleware.Handler) middleware.Handler {
-			return func(ctx context.Context, req interface{}) (interface{}, error) {
-				// Simulate rate limiting check
-				return next(ctx, req)
-			}
-		}).
-		Use(func(next middleware.Handler) middleware.Handler {
-			return func(ctx context.Context, req interface{}) (interface{}, error) {
-				// Simulate metrics collection
-				return next(ctx, req)
-			}
-		}).
-		Use(func(next middleware.Handler) middleware.Handler {
-			return func(ctx context.Context, req interface{}) (interface{}, error) {
-				// Simulate circuit breaker check
-				return next(ctx, req)
-			}
-		})
+	metricsMiddleware := func(next middleware.Handler) middleware.Handler {
+		return func(ctx context.Context, req interface{}) (interface{}, error) {
+			// Simulate metrics collection
+			return next(ctx, req)
+		}
+	}
+
+	circuitBreakerMiddleware := func(next middleware.Handler) middleware.Handler {
+		return func(ctx context.Context, req interface{}) (interface{}, error) {
+			// Simulate circuit breaker check
+			return next(ctx, req)
+		}
+	}
+
+	// Create client with custom provider and middleware stack using functional options
+	client := New(
+		WithDefaultProvider("mock"),
+		WithCustomProvider("mock", func(config types.ProviderConfig) (types.Provider, error) {
+			return mockProvider, nil
+		}),
+		WithMiddleware(rateLimitMiddleware, metricsMiddleware, circuitBreakerMiddleware),
+	)
 
 	ctx := context.Background()
 
@@ -183,18 +188,18 @@ func BenchmarkConcurrent(b *testing.B) {
 
 // BenchmarkProviderInitialization measures provider creation overhead
 func BenchmarkProviderInitialization(b *testing.B) {
-	config := Config{
-		DefaultProvider: "mock",
-		Providers: map[string]types.ProviderConfig{
-			"mock": {},
-		},
-	}
+	mockProvider := testing_pkg.NewMockProvider("mock")
 
 	b.ResetTimer()
 	b.ReportAllocs()
 
 	for i := 0; i < b.N; i++ {
-		client := New(config)
+		client := New(
+			WithDefaultProvider("mock"),
+			WithCustomProvider("mock", func(config types.ProviderConfig) (types.Provider, error) {
+				return mockProvider, nil
+			}),
+		)
 		_ = client
 	}
 }

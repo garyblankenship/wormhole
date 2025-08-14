@@ -13,22 +13,18 @@ import (
 
 // Example demonstrating all the user feedback improvements
 func main() {
-	// Create client with middleware for production reliability
-	client := wormhole.New(wormhole.Config{
-		DefaultProvider: "openai",
-		Providers: map[string]types.ProviderConfig{
-			"openai": {
-				APIKey: "your-openai-key",
-			},
-			"anthropic": {
-				APIKey: "your-anthropic-key",
-			},
-		},
-	}).
+	// Create client with middleware for production reliability using functional options
+	client := wormhole.New(
+		wormhole.WithDefaultProvider("openai"),
+		wormhole.WithOpenAI("your-openai-key"),
+		wormhole.WithAnthropic("your-anthropic-key"),
 		// Production-grade middleware stack
-		Use(middleware.RetryMiddleware(middleware.DefaultRetryConfig())). // Exponential backoff
-		Use(middleware.CircuitBreakerMiddleware(5, 30*time.Second)).      // Circuit breaking
-		Use(middleware.RateLimitMiddleware(100))                          // Rate limiting
+		wormhole.WithMiddleware(
+			middleware.RetryMiddleware(middleware.DefaultRetryConfig()), // Exponential backoff
+			middleware.CircuitBreakerMiddleware(5, 30*time.Second),      // Circuit breaking
+			middleware.RateLimitMiddleware(100),                         // Rate limiting
+		),
+	)
 
 	ctx := context.Background()
 

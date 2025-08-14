@@ -4,9 +4,13 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
+	"net/url"
+	"strings"
 	"time"
 
 	"github.com/garyblankenship/wormhole/internal/utils"
@@ -32,16 +36,21 @@ func NewBaseProvider(name string, config types.ProviderConfig) *BaseProvider {
 		Timeout: timeout,
 	}
 
-	// Configure retry logic
-	retryConfig := utils.DefaultRetryConfig()
-	if config.MaxRetries > 0 {
-		retryConfig.MaxRetries = config.MaxRetries
+	// Configure retry logic - skip retry client if MaxRetries is 0
+	var retryClient *utils.RetryableHTTPClient
+	if config.MaxRetries == 0 {
+		// No retries - use plain HTTP client
+		retryClient = utils.NewRetryableHTTPClient(httpClient, utils.RetryConfig{MaxRetries: 0})
+	} else {
+		retryConfig := utils.DefaultRetryConfig()
+		if config.MaxRetries > 0 {
+			retryConfig.MaxRetries = config.MaxRetries
+		}
+		if config.RetryDelay > 0 {
+			retryConfig.InitialDelay = time.Duration(config.RetryDelay) * time.Millisecond
+		}
+		retryClient = utils.NewRetryableHTTPClient(httpClient, retryConfig)
 	}
-	if config.RetryDelay > 0 {
-		retryConfig.InitialDelay = time.Duration(config.RetryDelay) * time.Millisecond
-	}
-
-	retryClient := utils.NewRetryableHTTPClient(httpClient, retryConfig)
 
 	return &BaseProvider{
 		name:        name,
@@ -83,6 +92,18 @@ func (p *BaseProvider) DoRequest(ctx context.Context, method, url string, body i
 
 	resp, err := p.retryClient.Do(req)
 	if err != nil {
+		// Check for context cancellation/timeout first - return as-is for proper error type checking
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
+
+		// Check for timeout errors and convert to WormholeError
+		if p.isTimeoutError(err) {
+			wormholeErr := types.NewWormholeError(types.ErrorCodeTimeout, "request timeout", true)
+			wormholeErr.Provider = p.name
+			return wormholeErr
+		}
+
 		return fmt.Errorf("request failed: %w", err)
 	}
 	defer resp.Body.Close()
@@ -95,13 +116,28 @@ func (p *BaseProvider) DoRequest(ctx context.Context, method, url string, body i
 	if resp.StatusCode >= 400 {
 		// Enhanced error reporting with HTTP details as requested by user
 		errorCode := p.mapHTTPStatusToErrorCode(resp.StatusCode)
+
+		// Try to parse provider-specific error message
+		errorMessage := fmt.Sprintf("HTTP %d: %s", resp.StatusCode, resp.Status)
+		if len(respBody) > 0 {
+			var errorResp map[string]interface{}
+			if err := json.Unmarshal(respBody, &errorResp); err == nil {
+				if errorObj, ok := errorResp["error"].(map[string]interface{}); ok {
+					if msg, ok := errorObj["message"].(string); ok && msg != "" {
+						errorMessage = msg
+					}
+				}
+			}
+		}
+
 		wormholeErr := types.NewWormholeError(
 			errorCode,
-			fmt.Sprintf("HTTP %d: %s", resp.StatusCode, resp.Status),
+			errorMessage,
 			p.isRetryableStatus(resp.StatusCode),
 		).WithDetails(fmt.Sprintf("URL: %s\nResponse: %s", url, string(respBody)))
 
 		wormholeErr.StatusCode = resp.StatusCode
+		wormholeErr.Provider = p.name
 		return wormholeErr
 	}
 
@@ -201,4 +237,25 @@ func (p *BaseProvider) GetBaseURL() string {
 // NotImplementedError returns a standard not implemented error
 func (p *BaseProvider) NotImplementedError(method string) error {
 	return fmt.Errorf("%s provider does not support %s", p.name, method)
+}
+
+// isTimeoutError checks if an error is a timeout error
+func (p *BaseProvider) isTimeoutError(err error) bool {
+	// Check for net.Error with Timeout() method
+	var netErr net.Error
+	if errors.As(err, &netErr) && netErr.Timeout() {
+		return true
+	}
+
+	// Check for url.Error with timeout in message
+	var urlErr *url.Error
+	if errors.As(err, &urlErr) && urlErr.Timeout() {
+		return true
+	}
+
+	// Check for common timeout error messages
+	errMsg := strings.ToLower(err.Error())
+	return strings.Contains(errMsg, "timeout") ||
+		strings.Contains(errMsg, "deadline exceeded") ||
+		strings.Contains(errMsg, "context deadline exceeded")
 }

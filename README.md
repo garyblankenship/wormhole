@@ -48,12 +48,15 @@ import (
     "context"
     "fmt"
     
-    "github.com/garyblankenship/wormhole"
+    "github.com/garyblankenship/wormhole/pkg/wormhole"
 )
 
 func main() {
-    // Look at you, using interdimensional technology
-    client := wormhole.New()
+    // Look at you, using interdimensional technology with functional options
+    client := wormhole.New(
+        wormhole.WithDefaultProvider("openai"),
+        wormhole.WithOpenAI("your-openai-key-here"),
+    )
     
     // This literally bends spacetime. 94 nanoseconds flat.
     response, err := client.Text().
@@ -72,15 +75,27 @@ func main() {
 ### Production Setup (For When You Actually Need This to Work)
 
 ```go
+import (
+    "time"
+    "github.com/garyblankenship/wormhole/pkg/middleware"
+    "github.com/garyblankenship/wormhole/pkg/types"
+    "github.com/garyblankenship/wormhole/pkg/wormhole"
+)
+
 // Fine, you want reliability? Here's your enterprise-grade quantum stabilizers
 // ALL OF THIS IS ALREADY IMPLEMENTED AND WORKING
-client := wormhole.New().
-    WithOpenAI("your-key-here-genius").
-    WithAnthropic("another-key-wow-so-secure").
-    Use(middleware.CircuitBreakerMiddleware(5, 30*time.Second)). // Prevents universe collapse  
-    Use(middleware.RateLimitMiddleware(100)).                    // 100 requests/second limit
-    Use(middleware.RetryMiddleware(middleware.DefaultRetryConfig())). // Exponential backoff included
-    Build()
+client := wormhole.New(
+    wormhole.WithDefaultProvider("anthropic"),
+    wormhole.WithOpenAI("your-key-here-genius"),
+    wormhole.WithAnthropic("another-key-wow-so-secure"),
+    wormhole.WithTimeout(30*time.Second),                           // Prevents universe collapse
+    wormhole.WithRetries(3, 2*time.Second),                         // Exponential backoff included
+    wormhole.WithMiddleware(
+        middleware.CircuitBreakerMiddleware(5, 30*time.Second),      // Circuit breaker
+        middleware.RateLimitMiddleware(100),                         // Rate limiting  
+        middleware.RetryMiddleware(middleware.DefaultRetryConfig()), // Extra retry layer
+    ),
+)
 
 // Still faster than your current setup
 response, err := client.Text().
@@ -95,32 +110,33 @@ response, err := client.Text().
 ### OpenRouter: The Multiverse of Models (Jerry's Wildest Dream)
 
 ```go
+import (
+    "time"
+    "github.com/garyblankenship/wormhole/pkg/types"
+    "github.com/garyblankenship/wormhole/pkg/wormhole"
+)
+
 // OPTION 1: Quick setup (recommended for most users)
 client := wormhole.QuickOpenRouter() // Uses OPENROUTER_API_KEY environment variable
 // OR with explicit key:
 // client := wormhole.QuickOpenRouter("your-openrouter-key")
 
 // OPTION 2: Manual setup (for advanced configuration)
-config := wormhole.Config{
-    DefaultProvider: "openrouter",
-    Providers: map[string]types.ProviderConfig{
-        "openrouter": {
-            APIKey:  "your-openrouter-key", // Get from openrouter.ai
-            BaseURL: "https://openrouter.ai/api/v1",
-        },
-    },
-}
-client := wormhole.New(config).WithOpenAICompatible("openrouter", "https://openrouter.ai/api/v1", types.ProviderConfig{
-    APIKey: "your-openrouter-key",
-})
+client := wormhole.New(
+    wormhole.WithDefaultProvider("openrouter"),
+    wormhole.WithOpenAICompatible("openrouter", "https://openrouter.ai/api/v1", types.ProviderConfig{
+        APIKey: "your-openrouter-key", // Get from openrouter.ai
+    }),
+    wormhole.WithTimeout(2*time.Minute), // OpenRouter can be slower for heavy models
+)
 
-// Try multiple models because why not? They're all available.
+// Try multiple models because why not? They're all auto-registered.
 models := []string{
-    "openai/gpt-4o-mini",              // OpenAI's latest
-    "anthropic/claude-3.5-sonnet",     // Anthropic's best
-    "meta-llama/llama-3.1-8b-instruct", // Meta's offering
-    "google/gemini-pro",               // Google's attempt
-    "mistralai/mixtral-8x7b-instruct", // European excellence
+    "openai/gpt-5-mini",               // Latest GPT-5 variant (auto-registered!)
+    "anthropic/claude-opus-4",         // Top coding model (auto-registered!)
+    "google/gemini-2.5-pro",           // Google's advanced reasoning (auto-registered!)
+    "mistralai/mistral-medium-3.1",    // Enterprise-grade (auto-registered!)
+    "meta-llama/llama-3.3-70b-instruct", // Meta's offering (auto-registered!)
 }
 
 for _, model := range models {
@@ -135,7 +151,7 @@ for _, model := range models {
         continue // Jerry would panic here, but we're better than Jerry
     }
     
-    fmt.Printf("%s: %s\n", model, response.Content)
+    fmt.Printf("%s: %s\n", model, response.Text)
 }
 
 // Cost optimization? I've got you covered.
@@ -154,7 +170,7 @@ stream, err := client.Text().
     Stream(ctx)
 
 for chunk := range stream {
-    fmt.Print(chunk.Content) // Real-time poetry through spacetime
+    fmt.Print(chunk.Text) // Real-time poetry through spacetime
 }
 ```
 

@@ -236,6 +236,7 @@ func (p *Provider) parseStreamChunk(data []byte) (*types.TextChunk, error) {
 	chunk := &types.StreamChunk{
 		ID:    response.ID,
 		Model: response.Model,
+		Text:  choice.Delta.Content, // Set Text field for backward compatibility
 		Delta: &types.ChunkDelta{
 			Content: choice.Delta.Content,
 		},

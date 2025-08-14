@@ -163,7 +163,7 @@ func (g *Groq) buildTextPayload(request types.TextRequest) map[string]interface{
 }
 
 // handleSpeechToText handles speech-to-text requests
-func (g *Groq) handleSpeechToText(ctx context.Context, request types.AudioRequest) (*types.AudioResponse, error) {
+func (g *Groq) handleSpeechToText(_ context.Context, request types.AudioRequest) (*types.AudioResponse, error) {
 	if request.Input == nil {
 		return nil, errors.New("audio input is required for speech-to-text")
 	}
