@@ -27,12 +27,14 @@ func NewSSEParser(r io.Reader) *SSEParser {
 // Parse reads and parses the next SSE event
 func (p *SSEParser) Parse() (*SSEEvent, error) {
 	event := &SSEEvent{}
+	isEOF := false
 
 	for {
 		line, err := p.reader.ReadString('\n')
 		if err != nil {
 			if err == io.EOF && line != "" {
 				// Process the last line if it doesn't end with newline
+				isEOF = true
 			} else {
 				return nil, err
 			}
@@ -45,17 +47,32 @@ func (p *SSEParser) Parse() (*SSEEvent, error) {
 			if event.Data != "" || event.Event != "" {
 				return event, nil
 			}
+			// If we hit EOF, return what we have (even if empty)
+			if isEOF {
+				if event.Data != "" || event.Event != "" || event.ID != "" {
+					return event, nil
+				}
+				return nil, io.EOF
+			}
 			continue
 		}
 
 		// Skip comments
 		if strings.HasPrefix(line, ":") {
+			// If EOF and we have data, return the event
+			if isEOF && (event.Data != "" || event.Event != "" || event.ID != "") {
+				return event, nil
+			}
 			continue
 		}
 
 		// Parse field
 		parts := strings.SplitN(line, ":", 2)
 		if len(parts) < 2 {
+			// If EOF and we have data, return the event
+			if isEOF && (event.Data != "" || event.Event != "" || event.ID != "") {
+				return event, nil
+			}
 			continue
 		}
 
@@ -73,6 +90,11 @@ func (p *SSEParser) Parse() (*SSEEvent, error) {
 		case "id":
 			event.ID = value
 			// Retry field is not used in SSEEvent
+		}
+
+		// If we reached EOF after processing this line, return the event
+		if isEOF {
+			return event, nil
 		}
 	}
 }
