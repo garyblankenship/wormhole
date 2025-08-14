@@ -260,7 +260,7 @@ func TestOpenAIProvider_ErrorHandling(t *testing.T) {
 					"code": "rate_limit_exceeded"
 				}
 			}`,
-			expectedError: types.ErrorCodeTimeout, // Will timeout due to retries
+			expectedError: types.ErrorCodeRateLimit,
 		},
 		{
 			name:       "404 Model Not Found",
@@ -283,7 +283,7 @@ func TestOpenAIProvider_ErrorHandling(t *testing.T) {
 					"type": "server_error"
 				}
 			}`,
-			expectedError: types.ErrorCodeTimeout, // Will timeout due to retries
+			expectedError: types.ErrorCodeProvider,
 		},
 	}
 
