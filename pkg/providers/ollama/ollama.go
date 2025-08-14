@@ -182,7 +182,7 @@ func (p *Provider) Audio(ctx context.Context, request types.AudioRequest) (*type
 }
 
 // handleSpeechToText handles speech-to-text requests
-func (p *Provider) handleSpeechToText(ctx context.Context, request types.AudioRequest) (*types.AudioResponse, error) {
+func (p *Provider) handleSpeechToText(_ context.Context, request types.AudioRequest) (*types.AudioResponse, error) {
 	// Ollama doesn't support speech-to-text directly
 	return nil, p.NotImplementedError("SpeechToText - Ollama does not support speech-to-text")
 }

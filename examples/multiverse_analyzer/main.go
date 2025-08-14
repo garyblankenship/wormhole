@@ -37,21 +37,13 @@ func main() {
 	fmt.Printf("📡 Broadcasting across dimensions: \"%s\"\n", question)
 	fmt.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
 
-	// Initialize the interdimensional portal array
-	client := wormhole.New(wormhole.Config{
-		DefaultProvider: "openai",
-		Providers: map[string]types.ProviderConfig{
-			"openai": {
-				APIKey: os.Getenv("OPENAI_API_KEY"),
-			},
-			"anthropic": {
-				APIKey: os.Getenv("ANTHROPIC_API_KEY"),
-			},
-			"gemini": {
-				APIKey: os.Getenv("GEMINI_API_KEY"),
-			},
-		},
-	})
+	// Initialize the interdimensional portal array using functional options
+	client := wormhole.New(
+		wormhole.WithDefaultProvider("openai"),
+		wormhole.WithOpenAI(os.Getenv("OPENAI_API_KEY")),
+		wormhole.WithAnthropic(os.Getenv("ANTHROPIC_API_KEY")),
+		wormhole.WithGemini(os.Getenv("GEMINI_API_KEY")),
+	)
 
 	// Dimensions to query (provider configurations)
 	dimensions := []struct {

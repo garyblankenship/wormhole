@@ -146,27 +146,19 @@ func initializeWormhole(config CLIConfig) *wormhole.Wormhole {
 		fmt.Printf("📡 Primary dimension: %s\n", config.Provider)
 	}
 
-	// Create the interdimensional gateway
-	client := wormhole.New(wormhole.Config{
-		DefaultProvider: config.Provider,
-		Providers: map[string]types.ProviderConfig{
-			"openai": {
-				APIKey: os.Getenv("OPENAI_API_KEY"),
-			},
-			"anthropic": {
-				APIKey: os.Getenv("ANTHROPIC_API_KEY"),
-			},
-			"gemini": {
-				APIKey: os.Getenv("GEMINI_API_KEY"),
-			},
-		},
-	})
-
-	// Add production-grade quantum stabilizers
-	client = client.
-		Use(middleware.RetryMiddleware(middleware.DefaultRetryConfig())).
-		Use(middleware.TimeoutMiddleware(30 * time.Second)).
-		Use(middleware.RateLimitMiddleware(100)) // 100 requests per second
+	// Create the interdimensional gateway using functional options
+	client := wormhole.New(
+		wormhole.WithDefaultProvider(config.Provider),
+		wormhole.WithOpenAI(os.Getenv("OPENAI_API_KEY")),
+		wormhole.WithAnthropic(os.Getenv("ANTHROPIC_API_KEY")),
+		wormhole.WithGemini(os.Getenv("GEMINI_API_KEY")),
+		// Add production-grade quantum stabilizers
+		wormhole.WithMiddleware(
+			middleware.RetryMiddleware(middleware.DefaultRetryConfig()),
+			middleware.TimeoutMiddleware(30*time.Second),
+			middleware.RateLimitMiddleware(100), // 100 requests per second
+		),
+	)
 
 	if config.Verbose {
 		fmt.Println("✅ Wormhole network online")

@@ -145,11 +145,11 @@ func TestIsGPT5Model(t *testing.T) {
 
 func TestGPT5MaxTokensParameter(t *testing.T) {
 	testCases := []struct {
-		name                   string
-		model                  string
-		maxTokens              int
-		expectedParam          string
-		expectedUsesNewParam   bool
+		name                 string
+		model                string
+		maxTokens            int
+		expectedParam        string
+		expectedUsesNewParam bool
 	}{
 		{
 			name:                 "GPT-5 uses max_completion_tokens",
@@ -208,15 +208,15 @@ func TestGPT5MaxTokensParameter(t *testing.T) {
 			assert.NotNil(t, provider)
 			assert.Equal(t, "openai", provider.Name())
 			assert.NotNil(t, request) // Ensure request is properly constructed
-			
+
 			// Note: In a more comprehensive test, we would test the actual payload building
 			// by making the buildChatPayload method public or adding a test helper
 			// For now, we verify the model detection logic would work correctly
 			if tc.expectedUsesNewParam {
-				assert.True(t, len(tc.model) >= 5 && tc.model[:5] == "gpt-5", 
+				assert.True(t, len(tc.model) >= 5 && tc.model[:5] == "gpt-5",
 					"Model should be detected as GPT-5 variant")
 			} else {
-				assert.False(t, len(tc.model) >= 5 && tc.model[:5] == "gpt-5", 
+				assert.False(t, len(tc.model) >= 5 && tc.model[:5] == "gpt-5",
 					"Model should not be detected as GPT-5 variant")
 			}
 		})

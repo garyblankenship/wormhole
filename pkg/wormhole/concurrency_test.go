@@ -12,15 +12,10 @@ import (
 // access the Provider method simultaneously without causing data races
 func TestConcurrentProviderAccess(t *testing.T) {
 	// Create wormhole with OpenAI provider configured
-	config := Config{
-		DefaultProvider: "openai",
-		Providers: map[string]types.ProviderConfig{
-			"openai": {
-				APIKey: "test-key",
-			},
-		},
-	}
-	w := New(config)
+	w := New(
+		WithDefaultProvider("openai"),
+		WithOpenAI("test-key"),
+	)
 
 	const numGoroutines = 100
 	const numIterations = 10
@@ -63,18 +58,11 @@ func TestConcurrentProviderAccess(t *testing.T) {
 // use builder methods simultaneously without causing data races
 func TestConcurrentProviderBuilders(t *testing.T) {
 	// Create wormhole with multiple providers
-	config := Config{
-		DefaultProvider: "openai",
-		Providers: map[string]types.ProviderConfig{
-			"openai": {
-				APIKey: "test-key-openai",
-			},
-			"anthropic": {
-				APIKey: "test-key-anthropic",
-			},
-		},
-	}
-	w := New(config)
+	w := New(
+		WithDefaultProvider("openai"),
+		WithOpenAI("test-key-openai"),
+		WithAnthropic("test-key-anthropic"),
+	)
 
 	const numGoroutines = 50
 	var wg sync.WaitGroup
@@ -120,46 +108,50 @@ func TestConcurrentProviderBuilders(t *testing.T) {
 	}
 }
 
-// TestConcurrentWithMethods tests that the With* methods are thread-safe
-func TestConcurrentWithMethods(t *testing.T) {
-	config := Config{
-		DefaultProvider: "openai",
-		Providers: map[string]types.ProviderConfig{
-			"openai": {
-				APIKey: "test-key",
-			},
-		},
-	}
-	w := New(config)
-
+// TestConcurrentOptionCreation tests that multiple clients can be created concurrently
+// using functional options pattern (testing that our new immutable design is thread-safe)
+func TestConcurrentOptionCreation(t *testing.T) {
 	const numGoroutines = 50
 	var wg sync.WaitGroup
 	errChan := make(chan error, numGoroutines)
 
-	// Launch multiple goroutines that call With* methods
+	// Launch multiple goroutines that create Wormhole instances concurrently
 	for i := 0; i < numGoroutines; i++ {
 		wg.Add(1)
 		go func(routineID int) {
 			defer wg.Done()
 
-			providerConfig := types.ProviderConfig{
-				APIKey: "test-key-concurrent",
-			}
-
-			// Each goroutine adds a uniquely named provider
+			// Each goroutine creates a uniquely configured client
+			var w *Wormhole
 			switch routineID % 4 {
 			case 0:
-				w.WithGemini("test-key", providerConfig)
+				w = New(
+					WithDefaultProvider("gemini"),
+					WithGemini("test-key"),
+				)
 			case 1:
-				w.WithGroq("test-key", providerConfig)
+				w = New(
+					WithDefaultProvider("groq"),
+					WithGroq("test-key"),
+				)
 			case 2:
-				w.WithMistral(providerConfig)
+				w = New(
+					WithDefaultProvider("mistral"),
+					WithMistral(types.ProviderConfig{APIKey: "test-key"}),
+				)
 			case 3:
-				ollamaConfig := types.ProviderConfig{
-					APIKey:  "test-key-concurrent",
-					BaseURL: "http://localhost:11434",
-				}
-				w.WithOllama(ollamaConfig)
+				w = New(
+					WithDefaultProvider("ollama"),
+					WithOllama(types.ProviderConfig{
+						APIKey:  "test-key",
+						BaseURL: "http://localhost:11434",
+					}),
+				)
+			}
+
+			if w == nil {
+				errChan <- errors.New("failed to create Wormhole instance")
+				return
 			}
 		}(i)
 	}
@@ -171,7 +163,7 @@ func TestConcurrentWithMethods(t *testing.T) {
 	// Check for any errors
 	for err := range errChan {
 		if err != nil {
-			t.Fatalf("Concurrent With* method calls failed: %v", err)
+			t.Fatalf("Concurrent option-based client creation failed: %v", err)
 		}
 	}
 }
@@ -179,15 +171,10 @@ func TestConcurrentWithMethods(t *testing.T) {
 // TestRaceConditionScenario simulates the exact scenario from the bug report:
 // Multiple goroutines making concurrent requests to the same provider
 func TestRaceConditionScenario(t *testing.T) {
-	config := Config{
-		DefaultProvider: "openai",
-		Providers: map[string]types.ProviderConfig{
-			"openai": {
-				APIKey: "test-key",
-			},
-		},
-	}
-	w := New(config)
+	w := New(
+		WithDefaultProvider("openai"),
+		WithOpenAI("test-key"),
+	)
 
 	const numGoroutines = 100
 	var wg sync.WaitGroup
@@ -234,15 +221,10 @@ func TestRaceConditionScenario(t *testing.T) {
 // TestHighContentionProviderAccess creates maximum contention by having
 // all goroutines access the same provider at exactly the same time
 func TestHighContentionProviderAccess(t *testing.T) {
-	config := Config{
-		DefaultProvider: "openai",
-		Providers: map[string]types.ProviderConfig{
-			"openai": {
-				APIKey: "test-key",
-			},
-		},
-	}
-	w := New(config)
+	w := New(
+		WithDefaultProvider("openai"),
+		WithOpenAI("test-key"),
+	)
 
 	const numGoroutines = 200
 	var wg sync.WaitGroup
@@ -290,24 +272,16 @@ func TestHighContentionProviderAccess(t *testing.T) {
 
 // TestConcurrentProviderInitialization tests the double-checked locking pattern
 func TestConcurrentProviderInitialization(t *testing.T) {
-	// Create a fresh wormhole for each test to ensure clean state
-	config := Config{
-		DefaultProvider: "openai",
-		Providers: map[string]types.ProviderConfig{
-			"openai": {
-				APIKey: "test-key",
-			},
-			"anthropic": {
-				APIKey: "test-key-anthropic",
-			},
-		},
-	}
-
 	const numTests = 10
 
 	// Run the test multiple times to increase chance of catching race conditions
 	for testRun := 0; testRun < numTests; testRun++ {
-		w := New(config)
+		// Create a fresh wormhole for each test to ensure clean state
+		w := New(
+			WithDefaultProvider("openai"),
+			WithOpenAI("test-key"),
+			WithAnthropic("test-key-anthropic"),
+		)
 
 		const numGoroutines = 50
 		var wg sync.WaitGroup

@@ -10,39 +10,33 @@ import (
 )
 
 func main() {
-	// Create a new Wormhole client
-	p := wormhole.New(wormhole.Config{})
-
-	// Example 1: LMStudio (local)
-	fmt.Println("=== Setting up LMStudio Provider ===")
-	p.WithLMStudio(types.ProviderConfig{
-		BaseURL: "http://localhost:1234/v1", // Default LMStudio port
-		Timeout: 30,
-	})
-
-	// Example 2: vLLM (local or remote)
-	fmt.Println("=== Setting up vLLM Provider ===")
-	p.WithVLLM(types.ProviderConfig{
-		BaseURL: "http://localhost:8000/v1", // Default vLLM port
-		Timeout: 60,
-	})
-
-	// Example 3: Ollama OpenAI-compatible API
-	fmt.Println("=== Setting up Ollama OpenAI API Provider ===")
-	p.WithOllamaOpenAI(types.ProviderConfig{
-		BaseURL: "http://localhost:11434/v1", // Ollama OpenAI-compatible endpoint
-		Timeout: 30,
-	})
-
-	// Example 4: Generic OpenAI-compatible provider (e.g., hosted service)
-	fmt.Println("=== Setting up Generic OpenAI-Compatible Provider ===")
-	p.WithOpenAICompatible("my-custom-llm", "https://api.my-llm-service.com/v1", types.ProviderConfig{
-		APIKey:  "your-api-key-if-needed",
-		Timeout: 30,
-		Headers: map[string]string{
-			"X-Custom-Header": "custom-value",
-		},
-	})
+	// Create a new Wormhole client with multiple OpenAI-compatible providers
+	fmt.Println("=== Setting up Multiple OpenAI-Compatible Providers ===")
+	p := wormhole.New(
+		// Example 1: LMStudio (local)
+		wormhole.WithLMStudio(types.ProviderConfig{
+			BaseURL: "http://localhost:1234/v1", // Default LMStudio port
+			Timeout: 30,
+		}),
+		// Example 2: vLLM (local or remote)
+		wormhole.WithVLLM(types.ProviderConfig{
+			BaseURL: "http://localhost:8000/v1", // Default vLLM port
+			Timeout: 60,
+		}),
+		// Example 3: Ollama OpenAI-compatible API
+		wormhole.WithOllamaOpenAI(types.ProviderConfig{
+			BaseURL: "http://localhost:11434/v1", // Ollama OpenAI-compatible endpoint
+			Timeout: 30,
+		}),
+		// Example 4: Generic OpenAI-compatible provider (e.g., hosted service)
+		wormhole.WithOpenAICompatible("my-custom-llm", "https://api.my-llm-service.com/v1", types.ProviderConfig{
+			APIKey:  "your-api-key-if-needed",
+			Timeout: 30,
+			Headers: map[string]string{
+				"X-Custom-Header": "custom-value",
+			},
+		}),
+	)
 
 	// Example 5: Multiple providers with different use cases
 	fmt.Println("\n=== Using Different Providers for Different Tasks ===")

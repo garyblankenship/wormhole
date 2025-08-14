@@ -18,10 +18,10 @@ import (
 // TestAnthropicProvider_IntegrationTextGeneration tests the complete text generation flow
 func TestAnthropicProvider_IntegrationTextGeneration(t *testing.T) {
 	testCases := []struct {
-		name       string
-		model      string
-		maxTokens  int
-		systemMsg  string
+		name         string
+		model        string
+		maxTokens    int
+		systemMsg    string
 		checkHeaders bool
 	}{
 		{
@@ -271,7 +271,7 @@ func TestAnthropicProvider_IntegrationStreaming(t *testing.T) {
 			break
 		}
 	}
-	
+
 	if finalChunk != nil {
 		assert.Equal(t, types.FinishReasonStop, *finalChunk.FinishReason)
 	}
@@ -307,9 +307,9 @@ func TestAnthropicProvider_IntegrationStructuredOutput(t *testing.T) {
 					"text": "I'll extract the structured data for you.",
 				},
 				{
-					"type":  "tool_use",
-					"id":    "tool_call_123",
-					"name":  "extract_user_info",
+					"type": "tool_use",
+					"id":   "tool_call_123",
+					"name": "extract_user_info",
 					"input": map[string]interface{}{
 						"name": "John Doe",
 						"age":  30,
@@ -567,7 +567,7 @@ func TestAnthropicProvider_ToolCalling(t *testing.T) {
 		// Return tool call response
 		response := map[string]interface{}{
 			"id":          "msg_tool123",
-			"type":        "message", 
+			"type":        "message",
 			"role":        "assistant",
 			"model":       "claude-3-sonnet-20240229",
 			"stop_reason": "tool_use",
@@ -577,9 +577,9 @@ func TestAnthropicProvider_ToolCalling(t *testing.T) {
 					"text": "I'll get the weather for you.",
 				},
 				{
-					"type":  "tool_use",
-					"id":    "tool_call_123",
-					"name":  "get_weather",
+					"type": "tool_use",
+					"id":   "tool_call_123",
+					"name": "get_weather",
 					"input": map[string]interface{}{
 						"location": "San Francisco",
 						"unit":     "celsius",
@@ -648,7 +648,7 @@ func TestAnthropicProvider_ToolCalling(t *testing.T) {
 	assert.Equal(t, "celsius", args["unit"])
 }
 
-// TestAnthropicProvider_MultimodalMessages tests image input functionality  
+// TestAnthropicProvider_MultimodalMessages tests image input functionality
 func TestAnthropicProvider_MultimodalMessages(t *testing.T) {
 	// Create mock server that handles image messages
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -676,7 +676,7 @@ func TestAnthropicProvider_MultimodalMessages(t *testing.T) {
 		response := map[string]interface{}{
 			"id":          "msg_vision123",
 			"type":        "message",
-			"role":        "assistant", 
+			"role":        "assistant",
 			"model":       "claude-3-sonnet-20240229",
 			"stop_reason": "end_turn",
 			"content": []map[string]interface{}{

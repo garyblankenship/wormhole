@@ -11,18 +11,12 @@ import (
 )
 
 func main() {
-	// Initialize Wormhole with providers
-	p := wormhole.New(wormhole.Config{
-		DefaultProvider: "openai",
-		Providers: map[string]types.ProviderConfig{
-			"openai": {
-				APIKey: os.Getenv("OPENAI_API_KEY"),
-			},
-			"anthropic": {
-				APIKey: os.Getenv("ANTHROPIC_API_KEY"),
-			},
-		},
-	})
+	// Initialize Wormhole with providers using functional options
+	p := wormhole.New(
+		wormhole.WithDefaultProvider("openai"),
+		wormhole.WithOpenAI(os.Getenv("OPENAI_API_KEY")),
+		wormhole.WithAnthropic(os.Getenv("ANTHROPIC_API_KEY")),
+	)
 
 	ctx := context.Background()
 

@@ -24,18 +24,12 @@ func main() {
 		prompt = strings.Join(os.Args[1:], " ")
 	}
 
-	// Initialize the quantum streaming apparatus
-	client := wormhole.New(wormhole.Config{
-		DefaultProvider: "openai",
-		Providers: map[string]types.ProviderConfig{
-			"openai": {
-				APIKey: os.Getenv("OPENAI_API_KEY"),
-			},
-			"anthropic": {
-				APIKey: os.Getenv("ANTHROPIC_API_KEY"),
-			},
-		},
-	})
+	// Initialize the quantum streaming apparatus using functional options
+	client := wormhole.New(
+		wormhole.WithDefaultProvider("openai"),
+		wormhole.WithOpenAI(os.Getenv("OPENAI_API_KEY")),
+		wormhole.WithAnthropic(os.Getenv("ANTHROPIC_API_KEY")),
+	)
 
 	// Choose streaming provider (some are better at streaming than others)
 	provider := "openai"

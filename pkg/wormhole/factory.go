@@ -20,80 +20,50 @@ func NewSimpleFactory() *SimpleFactory {
 func (f *SimpleFactory) OpenAI(apiKey ...string) *Wormhole {
 	key := f.getAPIKey(apiKey, "OPENAI_API_KEY")
 
-	config := Config{
-		DefaultProvider: "openai",
-		Providers: map[string]types.ProviderConfig{
-			"openai": {
-				APIKey: key,
-			},
-		},
-	}
-
-	return New(config)
+	return New(
+		WithDefaultProvider("openai"),
+		WithOpenAI(key),
+	)
 }
 
 // Anthropic creates a Wormhole client configured for Anthropic
 func (f *SimpleFactory) Anthropic(apiKey ...string) *Wormhole {
 	key := f.getAPIKey(apiKey, "ANTHROPIC_API_KEY")
 
-	config := Config{
-		DefaultProvider: "anthropic",
-		Providers: map[string]types.ProviderConfig{
-			"anthropic": {
-				APIKey: key,
-			},
-		},
-	}
-
-	return New(config)
+	return New(
+		WithDefaultProvider("anthropic"),
+		WithAnthropic(key),
+	)
 }
 
 // Gemini creates a Wormhole client configured for Google Gemini
 func (f *SimpleFactory) Gemini(apiKey ...string) *Wormhole {
 	key := f.getAPIKey(apiKey, "GEMINI_API_KEY", "GOOGLE_API_KEY")
 
-	config := Config{
-		DefaultProvider: "gemini",
-		Providers: map[string]types.ProviderConfig{
-			"gemini": {
-				APIKey: key,
-			},
-		},
-	}
-
-	return New(config)
+	return New(
+		WithDefaultProvider("gemini"),
+		WithGemini(key),
+	)
 }
 
 // Groq creates a Wormhole client configured for Groq
 func (f *SimpleFactory) Groq(apiKey ...string) *Wormhole {
 	key := f.getAPIKey(apiKey, "GROQ_API_KEY")
 
-	config := Config{
-		DefaultProvider: "groq",
-		Providers: map[string]types.ProviderConfig{
-			"groq": {
-				APIKey: key,
-			},
-		},
-	}
-
-	return New(config)
+	return New(
+		WithDefaultProvider("groq"),
+		WithGroq(key),
+	)
 }
 
 // Mistral creates a Wormhole client configured for Mistral
 func (f *SimpleFactory) Mistral(apiKey ...string) *Wormhole {
 	key := f.getAPIKey(apiKey, "MISTRAL_API_KEY")
 
-	config := Config{
-		DefaultProvider: "mistral",
-		Providers: map[string]types.ProviderConfig{
-			"mistral": {
-				APIKey: key,
-			},
-		},
-	}
-
-	return New(config)
+	return New(
+		WithDefaultProvider("mistral"),
+		WithMistral(types.ProviderConfig{APIKey: key}),
+	)
 }
 
 // Ollama creates a Wormhole client configured for Ollama
@@ -107,16 +77,10 @@ func (f *SimpleFactory) Ollama(baseURL ...string) *Wormhole {
 		panic("Ollama base URL is required: provide via parameter or OLLAMA_BASE_URL environment variable")
 	}
 
-	config := Config{
-		DefaultProvider: "ollama",
-		Providers: map[string]types.ProviderConfig{
-			"ollama": {
-				BaseURL: url,
-			},
-		},
-	}
-
-	return New(config)
+	return New(
+		WithDefaultProvider("ollama"),
+		WithOllama(types.ProviderConfig{BaseURL: url}),
+	)
 }
 
 // LMStudio creates a Wormhole client configured for LMStudio
@@ -130,17 +94,10 @@ func (f *SimpleFactory) LMStudio(baseURL ...string) *Wormhole {
 		panic("LMStudio base URL is required: provide via parameter or LMSTUDIO_BASE_URL environment variable")
 	}
 
-	config := Config{
-		DefaultProvider: "lmstudio",
-		Providers: map[string]types.ProviderConfig{
-			"lmstudio": {
-				BaseURL: url,
-			},
-		},
-	}
-
-	p := New(config)
-	return p.WithLMStudio(config.Providers["lmstudio"])
+	return New(
+		WithDefaultProvider("lmstudio"),
+		WithLMStudio(types.ProviderConfig{BaseURL: url}),
+	)
 }
 
 // OpenRouter creates a Wormhole client configured for OpenRouter (multi-provider gateway)
@@ -150,29 +107,19 @@ func (f *SimpleFactory) OpenRouter(apiKey ...string) *Wormhole {
 		panic("OpenRouter API key is required: provide via parameter or OPENROUTER_API_KEY environment variable")
 	}
 
-	config := Config{
-		DefaultProvider: "openrouter",
-		Providers: map[string]types.ProviderConfig{
-			"openrouter": {
-				APIKey:  key,
-				BaseURL: "https://openrouter.ai/api/v1",
-			},
-		},
-	}
-
-	p := New(config)
-	return p.WithOpenAICompatible("openrouter", "https://openrouter.ai/api/v1", types.ProviderConfig{
-		APIKey: key,
-	})
+	return New(
+		WithDefaultProvider("openrouter"),
+		WithOpenAICompatible("openrouter", "https://openrouter.ai/api/v1", types.ProviderConfig{APIKey: key}),
+	)
 }
 
-// WithRateLimit adds rate limiting middleware
-func (f *SimpleFactory) WithRateLimit(wormhole *Wormhole, requestsPerSecond int) *Wormhole {
-	return wormhole.Use(middleware.RateLimitMiddleware(requestsPerSecond))
+// WithRateLimit returns an option to add rate limiting middleware
+func (f *SimpleFactory) WithRateLimit(requestsPerSecond int) Option {
+	return WithMiddleware(middleware.RateLimitMiddleware(requestsPerSecond))
 }
 
-// WithRetry adds retry middleware with exponential backoff
-func (f *SimpleFactory) WithRetry(wormhole *Wormhole, maxRetries int) *Wormhole {
+// WithRetry returns an option to add retry middleware with exponential backoff
+func (f *SimpleFactory) WithRetry(maxRetries int) Option {
 	config := middleware.RetryConfig{
 		MaxRetries:   maxRetries,
 		InitialDelay: 1 * time.Second,
@@ -180,49 +127,49 @@ func (f *SimpleFactory) WithRetry(wormhole *Wormhole, maxRetries int) *Wormhole 
 		Multiplier:   2.0,
 		Jitter:       true,
 	}
-	return wormhole.Use(middleware.RetryMiddleware(config))
+	return WithMiddleware(middleware.RetryMiddleware(config))
 }
 
-// WithCircuitBreaker adds circuit breaker middleware
-func (f *SimpleFactory) WithCircuitBreaker(wormhole *Wormhole, threshold int, timeout time.Duration) *Wormhole {
-	return wormhole.Use(middleware.CircuitBreakerMiddleware(threshold, timeout))
+// WithCircuitBreaker returns an option to add circuit breaker middleware
+func (f *SimpleFactory) WithCircuitBreaker(threshold int, timeout time.Duration) Option {
+	return WithMiddleware(middleware.CircuitBreakerMiddleware(threshold, timeout))
 }
 
-// WithCache adds caching middleware
-func (f *SimpleFactory) WithCache(wormhole *Wormhole, ttl time.Duration) *Wormhole {
+// WithCache returns an option to add caching middleware
+func (f *SimpleFactory) WithCache(ttl time.Duration) Option {
 	cache := middleware.NewMemoryCache(1000)
 	config := middleware.CacheConfig{
 		Cache: cache,
 		TTL:   ttl,
 	}
-	return wormhole.Use(middleware.CacheMiddleware(config))
+	return WithMiddleware(middleware.CacheMiddleware(config))
 }
 
-// WithTimeout adds timeout middleware
-func (f *SimpleFactory) WithTimeout(wormhole *Wormhole, timeout time.Duration) *Wormhole {
-	return wormhole.Use(middleware.TimeoutMiddleware(timeout))
+// WithTimeout returns an option to add timeout middleware
+func (f *SimpleFactory) WithTimeout(timeout time.Duration) Option {
+	return WithMiddleware(middleware.TimeoutMiddleware(timeout))
 }
 
-// WithMetrics adds metrics tracking middleware
-func (f *SimpleFactory) WithMetrics(wormhole *Wormhole) (*Wormhole, *middleware.Metrics) {
+// WithMetrics returns an option to add metrics tracking middleware and the metrics instance
+func (f *SimpleFactory) WithMetrics() (Option, *middleware.Metrics) {
 	metrics := middleware.NewMetrics()
-	return wormhole.Use(middleware.MetricsMiddleware(metrics)), metrics
+	return WithMiddleware(middleware.MetricsMiddleware(metrics)), metrics
 }
 
-// WithLogging adds basic logging middleware
-func (f *SimpleFactory) WithLogging(wormhole *Wormhole, logger types.Logger) *Wormhole {
-	return wormhole.Use(middleware.LoggingMiddleware(logger))
+// WithLogging returns an option to add basic logging middleware
+func (f *SimpleFactory) WithLogging(logger types.Logger) Option {
+	return WithMiddleware(middleware.LoggingMiddleware(logger))
 }
 
-// WithDetailedLogging adds detailed logging middleware with configuration
-func (f *SimpleFactory) WithDetailedLogging(wormhole *Wormhole, logger types.Logger) *Wormhole {
+// WithDetailedLogging returns an option to add detailed logging middleware with configuration
+func (f *SimpleFactory) WithDetailedLogging(logger types.Logger) Option {
 	config := middleware.DefaultLoggingConfig(logger)
-	return wormhole.Use(middleware.DetailedLoggingMiddleware(config))
+	return WithMiddleware(middleware.DetailedLoggingMiddleware(config))
 }
 
-// WithDebugLogging adds debug logging middleware
-func (f *SimpleFactory) WithDebugLogging(wormhole *Wormhole, logger types.Logger) *Wormhole {
-	return wormhole.Use(middleware.DebugLoggingMiddleware(logger))
+// WithDebugLogging returns an option to add debug logging middleware
+func (f *SimpleFactory) WithDebugLogging(logger types.Logger) Option {
+	return WithMiddleware(middleware.DebugLoggingMiddleware(logger))
 }
 
 // getAPIKey retrieves API key from provided value or environment variables

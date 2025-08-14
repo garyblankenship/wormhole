@@ -47,11 +47,7 @@ func (m *mockProvider) Name() string {
 
 func TestProviderRegistration(t *testing.T) {
 	t.Run("built-in providers are registered", func(t *testing.T) {
-		wormhole := New(Config{
-			Providers: map[string]types.ProviderConfig{
-				"openai": {APIKey: "test-key"},
-			},
-		})
+		wormhole := New(WithOpenAI("test-key"))
 
 		// Verify that built-in providers are registered
 		assert.Contains(t, wormhole.providerFactories, "openai")
@@ -63,17 +59,15 @@ func TestProviderRegistration(t *testing.T) {
 	})
 
 	t.Run("custom provider registration", func(t *testing.T) {
-		wormhole := New(Config{
-			Providers: map[string]types.ProviderConfig{
-				"custom": {APIKey: "test-key"},
-			},
-		})
-
-		// Register a custom provider
+		// Register a custom provider via functional options
 		customFactory := func(config types.ProviderConfig) (types.Provider, error) {
 			return &mockProvider{name: "custom"}, nil
 		}
-		wormhole.RegisterProvider("custom", customFactory)
+
+		wormhole := New(
+			WithCustomProvider("custom", customFactory),
+			WithProviderConfig("custom", types.ProviderConfig{APIKey: "test-key"}),
+		)
 
 		// Verify the custom provider is registered
 		assert.Contains(t, wormhole.providerFactories, "custom")
@@ -85,19 +79,17 @@ func TestProviderRegistration(t *testing.T) {
 	})
 
 	t.Run("provider factory creates instances", func(t *testing.T) {
-		wormhole := New(Config{
-			Providers: map[string]types.ProviderConfig{
-				"test": {APIKey: "test-key"},
-			},
-		})
-
-		// Register a test provider factory
+		// Register a test provider factory with call counting
 		callCount := 0
 		testFactory := func(config types.ProviderConfig) (types.Provider, error) {
 			callCount++
 			return &mockProvider{name: "test"}, nil
 		}
-		wormhole.RegisterProvider("test", testFactory)
+
+		wormhole := New(
+			WithCustomProvider("test", testFactory),
+			WithProviderConfig("test", types.ProviderConfig{APIKey: "test-key"}),
+		)
 
 		// First call should create the provider
 		provider1, err := wormhole.Provider("test")
@@ -113,35 +105,37 @@ func TestProviderRegistration(t *testing.T) {
 	})
 
 	t.Run("unregistered provider returns error", func(t *testing.T) {
-		wormhole := New(Config{})
+		wormhole := New() // Empty client with no providers
 
 		_, err := wormhole.Provider("nonexistent")
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "unknown or unregistered provider")
 	})
 
-	t.Run("unconfigured provider returns error", func(t *testing.T) {
-		wormhole := New(Config{})
-		
-		// Register provider but don't configure it
-		wormhole.RegisterProvider("unconfigured", func(config types.ProviderConfig) (types.Provider, error) {
-			return &mockProvider{name: "unconfigured"}, nil
-		})
+	t.Run("custom provider with auto-config works", func(t *testing.T) {
+		// WithCustomProvider automatically creates a config placeholder
+		wormhole := New(
+			WithCustomProvider("autoconfigured", func(config types.ProviderConfig) (types.Provider, error) {
+				return &mockProvider{name: "autoconfigured"}, nil
+			}),
+			// Note: WithCustomProvider auto-creates empty config
+		)
 
-		_, err := wormhole.Provider("unconfigured")
-		assert.Error(t, err)
-		assert.Contains(t, err.Error(), "not configured")
+		provider, err := wormhole.Provider("autoconfigured")
+		assert.NoError(t, err)
+		assert.NotNil(t, provider)
+		assert.Equal(t, "autoconfigured", provider.(*mockProvider).name)
 	})
 }
 
-func TestWithMethodsUseRegistration(t *testing.T) {
-	t.Run("WithOpenAICompatible registers provider", func(t *testing.T) {
-		wormhole := New(Config{})
-
-		// Use WithOpenAICompatible to add a provider
-		wormhole.WithOpenAICompatible("custom-openai", "https://api.example.com", types.ProviderConfig{
-			APIKey: "test-key",
-		})
+func TestWithOpenAICompatibleOption(t *testing.T) {
+	t.Run("WithOpenAICompatible option registers provider", func(t *testing.T) {
+		// Use WithOpenAICompatible option to add a provider during initialization
+		wormhole := New(
+			WithOpenAICompatible("custom-openai", "https://api.example.com", types.ProviderConfig{
+				APIKey: "test-key",
+			}),
+		)
 
 		// Verify the provider is registered and configured
 		assert.Contains(t, wormhole.providerFactories, "custom-openai")
@@ -149,13 +143,13 @@ func TestWithMethodsUseRegistration(t *testing.T) {
 		assert.Equal(t, "https://api.example.com", wormhole.config.Providers["custom-openai"].BaseURL)
 	})
 
-	t.Run("WithGemini stores config correctly", func(t *testing.T) {
-		wormhole := New(Config{})
-
-		// Use WithGemini to add provider
-		wormhole.WithGemini("test-api-key", types.ProviderConfig{
-			BaseURL: "custom-base-url",
-		})
+	t.Run("WithGemini option stores config correctly", func(t *testing.T) {
+		// Use WithGemini option to add provider during initialization
+		wormhole := New(
+			WithGemini("test-api-key", types.ProviderConfig{
+				BaseURL: "custom-base-url",
+			}),
+		)
 
 		// Verify config is stored with API key
 		assert.Contains(t, wormhole.config.Providers, "gemini")
