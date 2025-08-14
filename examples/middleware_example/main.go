@@ -12,19 +12,21 @@ import (
 )
 
 func main() {
-	// Create client with simple factory
-	client := wormhole.QuickOpenAI()
-
-	// Add comprehensive middleware stack
-	client = client.
-		Use(middleware.RateLimitMiddleware(10)).                          // 10 requests per second
-		Use(middleware.RetryMiddleware(middleware.DefaultRetryConfig())). // Auto-retry on failures
-		Use(middleware.CircuitBreakerMiddleware(5, 30*time.Second)).      // Circuit breaker protection
-		Use(middleware.TimeoutMiddleware(30 * time.Second)).              // Request timeout
-		Use(middleware.CacheMiddleware(middleware.CacheConfig{
-			Cache: middleware.NewMemoryCache(100),
-			TTL:   5 * time.Minute,
-		}))
+	// Create client with comprehensive middleware stack using functional options
+	client := wormhole.New(
+		wormhole.WithOpenAI(""), // Will use env var OPENAI_API_KEY
+		wormhole.WithDefaultProvider("openai"),
+		wormhole.WithMiddleware(
+			middleware.RateLimitMiddleware(10),                          // 10 requests per second
+			middleware.RetryMiddleware(middleware.DefaultRetryConfig()), // Auto-retry on failures
+			middleware.CircuitBreakerMiddleware(5, 30*time.Second),      // Circuit breaker protection
+			middleware.TimeoutMiddleware(30*time.Second),                // Request timeout
+			middleware.CacheMiddleware(middleware.CacheConfig{
+				Cache: middleware.NewMemoryCache(100),
+				TTL:   5 * time.Minute,
+			}),
+		),
+	)
 
 	// Example: Rate limiting in action
 	fmt.Println("Testing rate limiting...")
@@ -78,13 +80,18 @@ func main() {
 
 	// Example: Adaptive rate limiting
 	fmt.Println("\nAdaptive rate limiting...")
-	_ = wormhole.QuickOpenAI().
-		Use(middleware.AdaptiveRateLimitMiddleware(
-			5,                    // Initial rate
-			2,                    // Min rate
-			20,                   // Max rate
-			100*time.Millisecond, // Target latency
-		))
+	_ = wormhole.New(
+		wormhole.WithOpenAI(""),
+		wormhole.WithDefaultProvider("openai"),
+		wormhole.WithMiddleware(
+			middleware.AdaptiveRateLimitMiddleware(
+				5,                    // Initial rate
+				2,                    // Min rate
+				20,                   // Max rate
+				100*time.Millisecond, // Target latency
+			),
+		),
+	)
 
 	fmt.Println("Client configured with adaptive rate limiting based on latency")
 
@@ -103,8 +110,11 @@ func main() {
 	// Example: Metrics collection
 	fmt.Println("\nMetrics collection...")
 	metrics := middleware.NewMetrics()
-	metricsClient := wormhole.QuickOpenAI().
-		Use(middleware.MetricsMiddleware(metrics))
+	metricsClient := wormhole.New(
+		wormhole.WithOpenAI(""),
+		wormhole.WithDefaultProvider("openai"),
+		wormhole.WithMiddleware(middleware.MetricsMiddleware(metrics)),
+	)
 
 	// Make a request to collect metrics
 	ctx := context.Background()
@@ -120,8 +130,11 @@ func main() {
 
 	// NEW: Debug logging middleware demo
 	fmt.Println("\nDebug logging middleware...")
-	debugClient := wormhole.QuickOpenAI().
-		Use(middleware.DebugLoggingMiddleware(nil)) // Uses default logger
+	debugClient := wormhole.New(
+		wormhole.WithOpenAI(""),
+		wormhole.WithDefaultProvider("openai"),
+		wormhole.WithMiddleware(middleware.DebugLoggingMiddleware(nil)), // Uses default logger
+	)
 
 	_, err := debugClient.Text().
 		Model("gpt-3.5-turbo").
@@ -135,8 +148,11 @@ func main() {
 
 	// NEW: Structured error handling with middleware
 	fmt.Println("\nStructured error handling...")
-	errorClient := wormhole.QuickOpenAI().
-		Use(middleware.RetryMiddleware(middleware.DefaultRetryConfig()))
+	errorClient := wormhole.New(
+		wormhole.WithOpenAI(""),
+		wormhole.WithDefaultProvider("openai"),
+		wormhole.WithMiddleware(middleware.RetryMiddleware(middleware.DefaultRetryConfig())),
+	)
 
 	_, err = errorClient.Text().
 		Model("invalid-model-name").
@@ -154,38 +170,36 @@ func main() {
 
 	// NEW: Custom provider with middleware demo
 	fmt.Println("\nCustom provider with middleware...")
-	customClient := wormhole.New(wormhole.Config{
-		Providers: map[string]types.ProviderConfig{
-			"mock": {APIKey: "test", BaseURL: "http://localhost"},
-		},
-	})
+	customClient := wormhole.New(
+		wormhole.WithProviderConfig("mock", types.ProviderConfig{
+			APIKey:  "test",
+			BaseURL: "http://localhost",
+		}),
+		wormhole.WithCustomProvider("mock", func(config types.ProviderConfig) (types.Provider, error) {
+			return &MockProvider{}, nil
+		}),
+		wormhole.WithMiddleware(
+			middleware.MetricsMiddleware(middleware.NewMetrics()),
+			middleware.TimeoutMiddleware(5*time.Second),
+		),
+	)
 
-	// Register mock provider
-	customClient.RegisterProvider("mock", func(config types.ProviderConfig) (types.Provider, error) {
-		return &MockProvider{}, nil
-	})
-
-	// Add middleware to custom provider
-	customClient = customClient.
-		Use(middleware.MetricsMiddleware(middleware.NewMetrics())).
-		Use(middleware.TimeoutMiddleware(5 * time.Second))
-
-	fmt.Println("Custom provider configured with middleware stack")
+	fmt.Printf("Custom provider configured with middleware stack (provider: %v)\n", customClient != nil)
 
 	// NEW: Multi-provider fallback demo
 	fmt.Println("\nMulti-provider fallback with middleware...")
-	
+
 	// This would require OpenRouter configuration, so just show the pattern
 	fmt.Println("Example pattern for provider fallback:")
 	fmt.Println("1. Try primary provider (OpenAI)")
-	fmt.Println("2. Circuit breaker triggers on failures") 
+	fmt.Println("2. Circuit breaker triggers on failures")
 	fmt.Println("3. Fallback to secondary provider (OpenRouter)")
 	fmt.Println("4. Metrics track provider performance")
 	fmt.Println("5. Health checker monitors all providers")
 
 	fmt.Println("\n🎯 ALL MIDDLEWARE FEATURES DEMONSTRATED!")
 	fmt.Println("✅ Rate limiting, retries, circuit breaker, caching")
-	fmt.Println("✅ Load balancing, health checking, metrics") 
+	fmt.Println("✅ Load balancing, health checking, metrics")
 	fmt.Println("✅ Debug logging, structured errors")
 	fmt.Println("✅ Custom provider integration")
 	fmt.Println("✅ Multi-provider fallback patterns")

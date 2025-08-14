@@ -5,14 +5,10 @@
 //
 // Basic usage:
 //
-//	client := wormhole.New(wormhole.Config{
-//	    DefaultProvider: "openai",
-//	    Providers: map[string]types.ProviderConfig{
-//	        "openai": {
-//	            APIKey: os.Getenv("OPENAI_API_KEY"),
-//	        },
-//	    },
-//	})
+//	client := wormhole.New(
+//	    wormhole.WithDefaultProvider("openai"),
+//	    wormhole.WithOpenAI(os.Getenv("OPENAI_API_KEY")),
+//	)
 //
 //	response, err := client.Text().
 //	    Model("gpt-5").

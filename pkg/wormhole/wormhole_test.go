@@ -22,14 +22,10 @@ func TestTextGeneration(t *testing.T) {
 	_ = mockProvider // TODO: inject into wormhole for actual testing
 
 	// Create Wormhole instance
-	p := wormhole.New(wormhole.Config{
-		DefaultProvider: "openai",
-		Providers: map[string]types.ProviderConfig{
-			"openai": {
-				APIKey: "test-key",
-			},
-		},
-	})
+	p := wormhole.New(
+		wormhole.WithDefaultProvider("openai"),
+		wormhole.WithOpenAI("test-key"),
+	)
 
 	t.Run("simple prompt", func(t *testing.T) {
 		// For now, test the builder pattern
@@ -103,9 +99,9 @@ func TestTextGeneration(t *testing.T) {
 }
 
 func TestStructuredGeneration(t *testing.T) {
-	p := wormhole.New(wormhole.Config{
-		DefaultProvider: "mock",
-	})
+	p := wormhole.New(
+		wormhole.WithDefaultProvider("mock"),
+	)
 
 	schema := map[string]interface{}{
 		"type": "object",
@@ -127,9 +123,9 @@ func TestStructuredGeneration(t *testing.T) {
 }
 
 func TestEmbeddings(t *testing.T) {
-	p := wormhole.New(wormhole.Config{
-		DefaultProvider: "mock",
-	})
+	p := wormhole.New(
+		wormhole.WithDefaultProvider("mock"),
+	)
 
 	req := p.Embeddings().
 		Model("text-embedding-3-small").

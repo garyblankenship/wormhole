@@ -36,19 +36,12 @@ func main() {
 	ctx := context.Background()
 
 	// This will fail without API key, but now with better error messages
-	config := wormhole.Config{
-		DefaultProvider: "openrouter",
-		Providers: map[string]types.ProviderConfig{
-			"openrouter": {
-				APIKey:  "invalid-key-for-demo",
-				BaseURL: "https://openrouter.ai/api/v1",
-			},
-		},
-	}
-
-	client := wormhole.New(config).WithOpenAICompatible("openrouter", "https://openrouter.ai/api/v1", types.ProviderConfig{
-		APIKey: "invalid-key-for-demo",
-	})
+	client := wormhole.New(
+		wormhole.WithDefaultProvider("openrouter"),
+		wormhole.WithOpenAICompatible("openrouter", "https://openrouter.ai/api/v1", types.ProviderConfig{
+			APIKey: "invalid-key-for-demo",
+		}),
+	)
 
 	fmt.Println("\n   Testing with invalid API key to show error improvements...")
 	response, err := client.Text().
