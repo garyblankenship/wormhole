@@ -33,20 +33,24 @@ var (
 	// Network errors
 	ErrNetworkError       = NewWormholeError(ErrorCodeNetwork, "network connection failed", true)
 	ErrServiceUnavailable = NewWormholeError(ErrorCodeNetwork, "service temporarily unavailable", true)
+
+	// Validation errors
+	ErrValidation = NewWormholeError(ErrorCodeValidation, "validation failed", false)
 )
 
 // ErrorCode represents different types of errors
 type ErrorCode string
 
 const (
-	ErrorCodeAuth      ErrorCode = "AUTH_ERROR"
-	ErrorCodeModel     ErrorCode = "MODEL_ERROR"
-	ErrorCodeRateLimit ErrorCode = "RATE_LIMIT_ERROR"
-	ErrorCodeRequest   ErrorCode = "REQUEST_ERROR"
-	ErrorCodeTimeout   ErrorCode = "TIMEOUT_ERROR"
-	ErrorCodeProvider  ErrorCode = "PROVIDER_ERROR"
-	ErrorCodeNetwork   ErrorCode = "NETWORK_ERROR"
-	ErrorCodeUnknown   ErrorCode = "UNKNOWN_ERROR"
+	ErrorCodeAuth       ErrorCode = "AUTH_ERROR"
+	ErrorCodeModel      ErrorCode = "MODEL_ERROR"
+	ErrorCodeRateLimit  ErrorCode = "RATE_LIMIT_ERROR"
+	ErrorCodeRequest    ErrorCode = "REQUEST_ERROR"
+	ErrorCodeTimeout    ErrorCode = "TIMEOUT_ERROR"
+	ErrorCodeProvider   ErrorCode = "PROVIDER_ERROR"
+	ErrorCodeNetwork    ErrorCode = "NETWORK_ERROR"
+	ErrorCodeValidation ErrorCode = "VALIDATION_ERROR"
+	ErrorCodeUnknown    ErrorCode = "UNKNOWN_ERROR"
 )
 
 // WormholeError provides structured error information
