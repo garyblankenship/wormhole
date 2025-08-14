@@ -27,6 +27,7 @@ func main() {
 		wormhole.WithOpenAICompatible("openrouter", "https://openrouter.ai/api/v1", types.ProviderConfig{
 			APIKey: apiKey,
 		}),
+		wormhole.WithTimeout(2*time.Minute), // Generous timeout for heavy models like Claude Opus
 		wormhole.WithDebugLogging(),
 	)
 

@@ -1042,14 +1042,14 @@ func TestIntegration_OpenRouter(t *testing.T) {
 			json.NewEncoder(w).Encode(response)
 		})
 
-		t.Run("with default timeout should succeed", func(t *testing.T) {
-			// OpenRouter auto-configures 2min timeout for heavy models like Opus 4.1
+		t.Run("with explicit timeout should succeed", func(t *testing.T) {
+			// User should configure appropriate timeout for their use case
 			client := wormhole.New(
 				wormhole.WithDefaultProvider("openrouter"),
 				wormhole.WithOpenAICompatible("openrouter", server.URL, types.ProviderConfig{
 					APIKey: "test-key",
 				}),
-				// No explicit timeout - should auto-configure to 2 minutes
+				wormhole.WithTimeout(1*time.Second), // User-configured timeout
 			)
 
 			response, err := client.Text().
