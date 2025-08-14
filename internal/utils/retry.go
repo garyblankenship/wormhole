@@ -88,6 +88,12 @@ func (r *RetryableHTTPClient) Do(req *http.Request) (*http.Response, error) {
 			return resp, nil
 		}
 
+		// If MaxRetries is 0, return immediately regardless of status
+		// This allows the caller to handle HTTP error responses directly
+		if r.Config.MaxRetries == 0 {
+			return resp, err
+		}
+
 		// Handle different error scenarios
 		if err != nil {
 			lastErr = &RetryableError{

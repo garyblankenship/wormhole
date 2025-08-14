@@ -16,6 +16,11 @@ import (
 	"github.com/garyblankenship/wormhole/pkg/types"
 )
 
+// Global sync.Once for thread-safe model registration
+var (
+	modelsRegisteredOnce sync.Once
+)
+
 // Wormhole is the main client for interacting with LLM providers
 type Wormhole struct {
 	providerFactories map[string]types.ProviderFactory // Factory functions for creating providers
@@ -41,6 +46,14 @@ type Config struct {
 
 // New creates a new Wormhole instance using functional options
 func New(opts ...Option) *Wormhole {
+	// CRITICAL: Register built-in models FIRST before any model validation
+	// This fixes timing issue where model validation happens before models are registered
+	// Use sync.Once to ensure thread-safety and prevent duplicate registrations
+	modelsRegisteredOnce.Do(func() {
+		registerOpenAIModels()
+		registerOpenRouterModels()
+	})
+
 	// Start with a default config
 	config := Config{
 		Providers:       make(map[string]types.ProviderConfig),

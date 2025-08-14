@@ -25,6 +25,8 @@ func WithOpenAI(apiKey string) Option {
 			c.Providers = make(map[string]types.ProviderConfig)
 		}
 		c.Providers["openai"] = types.ProviderConfig{APIKey: apiKey}
+
+		// Models are now auto-registered globally in New() - no need to register here
 	}
 }
 
@@ -160,10 +162,8 @@ func WithOpenAICompatible(name, baseURL string, config types.ProviderConfig) Opt
 			return openai_compatible.NewGeneric(name, cfg.BaseURL, cfg), nil
 		}
 
-		// Auto-register common models for OpenRouter
-		if name == "openrouter" {
-			registerOpenRouterModels()
-		}
+		// Models are now auto-registered globally in New() - no need to register here
+		// OpenRouter models are automatically available
 	}
 }
 
@@ -239,6 +239,43 @@ func WithLogger(logger types.Logger) Option {
 func WithModelValidation(enabled bool) Option {
 	return func(c *Config) {
 		c.ModelValidation = enabled
+	}
+}
+
+// registerOpenAIModels registers OpenAI models for validation and discovery
+func registerOpenAIModels() {
+	openAIModels := []*types.ModelInfo{
+		// GPT-5 Series
+		{ID: "gpt-5", Name: "GPT-5", Provider: "openai", Capabilities: []types.ModelCapability{types.CapabilityText, types.CapabilityStructured, types.CapabilityFunctions}, MaxTokens: 128000, Cost: &types.ModelCost{InputTokens: 0.0050, OutputTokens: 0.0150, Currency: "USD"}},
+		{ID: "gpt-5-mini", Name: "GPT-5 Mini", Provider: "openai", Capabilities: []types.ModelCapability{types.CapabilityText, types.CapabilityStructured, types.CapabilityFunctions}, MaxTokens: 128000, Cost: &types.ModelCost{InputTokens: 0.0015, OutputTokens: 0.0060, Currency: "USD"}},
+		{ID: "gpt-5-turbo", Name: "GPT-5 Turbo", Provider: "openai", Capabilities: []types.ModelCapability{types.CapabilityText, types.CapabilityStructured, types.CapabilityFunctions}, MaxTokens: 128000, Cost: &types.ModelCost{InputTokens: 0.0100, OutputTokens: 0.0300, Currency: "USD"}},
+
+		// GPT-4 Series
+		{ID: "gpt-4o", Name: "GPT-4o", Provider: "openai", Capabilities: []types.ModelCapability{types.CapabilityText, types.CapabilityStructured, types.CapabilityFunctions}, MaxTokens: 128000, Cost: &types.ModelCost{InputTokens: 0.0025, OutputTokens: 0.0100, Currency: "USD"}},
+		{ID: "gpt-4o-mini", Name: "GPT-4o Mini", Provider: "openai", Capabilities: []types.ModelCapability{types.CapabilityText, types.CapabilityStructured, types.CapabilityFunctions}, MaxTokens: 128000, Cost: &types.ModelCost{InputTokens: 0.0001, OutputTokens: 0.0006, Currency: "USD"}},
+		{ID: "gpt-4", Name: "GPT-4", Provider: "openai", Capabilities: []types.ModelCapability{types.CapabilityText, types.CapabilityStructured, types.CapabilityFunctions}, MaxTokens: 8192, Cost: &types.ModelCost{InputTokens: 0.0300, OutputTokens: 0.0600, Currency: "USD"}},
+		{ID: "gpt-4-turbo", Name: "GPT-4 Turbo", Provider: "openai", Capabilities: []types.ModelCapability{types.CapabilityText, types.CapabilityStructured, types.CapabilityFunctions}, MaxTokens: 128000, Cost: &types.ModelCost{InputTokens: 0.0100, OutputTokens: 0.0300, Currency: "USD"}},
+
+		// GPT-3.5 Series
+		{ID: "gpt-3.5-turbo", Name: "GPT-3.5 Turbo", Provider: "openai", Capabilities: []types.ModelCapability{types.CapabilityText, types.CapabilityStructured, types.CapabilityFunctions}, MaxTokens: 16384, Cost: &types.ModelCost{InputTokens: 0.0005, OutputTokens: 0.0015, Currency: "USD"}},
+
+		// Embeddings
+		{ID: "text-embedding-3-large", Name: "Text Embedding 3 Large", Provider: "openai", Capabilities: []types.ModelCapability{types.CapabilityEmbeddings}, MaxTokens: 8191, Cost: &types.ModelCost{InputTokens: 0.0001, OutputTokens: 0.0000, Currency: "USD"}},
+		{ID: "text-embedding-3-small", Name: "Text Embedding 3 Small", Provider: "openai", Capabilities: []types.ModelCapability{types.CapabilityEmbeddings}, MaxTokens: 8191, Cost: &types.ModelCost{InputTokens: 0.00002, OutputTokens: 0.0000, Currency: "USD"}},
+		{ID: "text-embedding-ada-002", Name: "Text Embedding Ada 002", Provider: "openai", Capabilities: []types.ModelCapability{types.CapabilityEmbeddings}, MaxTokens: 8191, Cost: &types.ModelCost{InputTokens: 0.0001, OutputTokens: 0.0000, Currency: "USD"}},
+
+		// Audio Models
+		{ID: "whisper-1", Name: "Whisper 1", Provider: "openai", Capabilities: []types.ModelCapability{types.CapabilityAudio}, MaxTokens: 0, Cost: &types.ModelCost{InputTokens: 0.0060, OutputTokens: 0.0000, Currency: "USD"}},
+		{ID: "tts-1", Name: "TTS 1", Provider: "openai", Capabilities: []types.ModelCapability{types.CapabilityAudio}, MaxTokens: 4096, Cost: &types.ModelCost{InputTokens: 0.0150, OutputTokens: 0.0000, Currency: "USD"}},
+		{ID: "tts-1-hd", Name: "TTS 1 HD", Provider: "openai", Capabilities: []types.ModelCapability{types.CapabilityAudio}, MaxTokens: 4096, Cost: &types.ModelCost{InputTokens: 0.0300, OutputTokens: 0.0000, Currency: "USD"}},
+
+		// Image Models
+		{ID: "dall-e-3", Name: "DALL-E 3", Provider: "openai", Capabilities: []types.ModelCapability{types.CapabilityImages}, MaxTokens: 0, Cost: &types.ModelCost{InputTokens: 0.0400, OutputTokens: 0.0800, Currency: "USD"}},
+		{ID: "dall-e-2", Name: "DALL-E 2", Provider: "openai", Capabilities: []types.ModelCapability{types.CapabilityImages}, MaxTokens: 0, Cost: &types.ModelCost{InputTokens: 0.0200, OutputTokens: 0.0000, Currency: "USD"}},
+	}
+
+	for _, model := range openAIModels {
+		types.DefaultModelRegistry.Register(model)
 	}
 }
 

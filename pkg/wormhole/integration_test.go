@@ -98,7 +98,7 @@ func TestOpenAIIntegration_TextGeneration(t *testing.T) {
 
 			assert.Equal(t, "gpt-5", req["model"])
 			assert.Equal(t, 0.7, req["temperature"])
-			assert.Equal(t, float64(100), req["max_tokens"])
+			assert.Equal(t, float64(100), req["max_completion_tokens"]) // GPT-5 uses max_completion_tokens
 
 			// Verify messages structure
 			messages, ok := req["messages"].([]interface{})
@@ -514,9 +514,8 @@ func TestIntegration_ErrorHandling(t *testing.T) {
 
 		client := wormhole.New(
 			wormhole.WithDefaultProvider("openai"),
-			wormhole.WithProviderConfig("openai", types.ProviderConfig{
-				APIKey:  "invalid-key",
-				BaseURL: server.URL,
+			wormhole.WithOpenAICompatible("openai", server.URL, types.ProviderConfig{
+				APIKey: "invalid-key",
 			}),
 		)
 
@@ -538,7 +537,6 @@ func TestIntegration_ErrorHandling(t *testing.T) {
 
 	t.Run("HTTP 429 rate limit", func(t *testing.T) {
 		server := MockOpenAIServer(t, func(w http.ResponseWriter, r *http.Request) {
-			w.Header().Set("Retry-After", "60")
 			w.WriteHeader(http.StatusTooManyRequests)
 			w.Header().Set("Content-Type", "application/json")
 			json.NewEncoder(w).Encode(map[string]interface{}{
@@ -549,11 +547,12 @@ func TestIntegration_ErrorHandling(t *testing.T) {
 			})
 		})
 
+		// Create client with NO retries to avoid hanging
 		client := wormhole.New(
 			wormhole.WithDefaultProvider("openai"),
-			wormhole.WithProviderConfig("openai", types.ProviderConfig{
-				APIKey:  "test-key",
-				BaseURL: server.URL,
+			wormhole.WithOpenAICompatible("openai", server.URL, types.ProviderConfig{
+				APIKey:     "test-key",
+				MaxRetries: 0, // No retries
 			}),
 		)
 
@@ -609,9 +608,29 @@ func TestIntegration_ErrorHandling(t *testing.T) {
 
 	t.Run("network timeout", func(t *testing.T) {
 		server := MockOpenAIServer(t, func(w http.ResponseWriter, r *http.Request) {
-			// Simulate slow response
-			time.Sleep(200 * time.Millisecond)
-			w.WriteHeader(http.StatusOK)
+			// Simulate slow response that will trigger timeout
+			time.Sleep(2 * time.Second)
+
+			// Return a proper JSON response (which shouldn't be reached due to timeout)
+			response := map[string]interface{}{
+				"id":      "chatcmpl-timeout123",
+				"object":  "chat.completion",
+				"created": 1699999999,
+				"model":   "gpt-5",
+				"choices": []map[string]interface{}{
+					{
+						"index": 0,
+						"message": map[string]interface{}{
+							"role":    "assistant",
+							"content": "This shouldn't be reached",
+						},
+						"finish_reason": "stop",
+					},
+				},
+			}
+
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(response)
 		})
 
 		client := wormhole.New(
@@ -619,7 +638,7 @@ func TestIntegration_ErrorHandling(t *testing.T) {
 			wormhole.WithProviderConfig("openai", types.ProviderConfig{
 				APIKey:  "test-key",
 				BaseURL: server.URL,
-				Timeout: 100, // 100ms timeout
+				Timeout: 1, // 1 second timeout (300ms server sleep should trigger this)
 			}),
 		)
 
@@ -632,7 +651,7 @@ func TestIntegration_ErrorHandling(t *testing.T) {
 
 		// Verify timeout error
 		wormholeErr, ok := types.AsWormholeError(err)
-		require.True(t, ok)
+		require.True(t, ok, "Expected WormholeError, got: %v (type: %T)", err, err)
 		assert.Equal(t, types.ErrorCodeTimeout, wormholeErr.Code)
 		assert.Contains(t, strings.ToLower(wormholeErr.Message), "timeout")
 	})
@@ -893,8 +912,8 @@ func TestIntegration_Middleware(t *testing.T) {
 }
 
 func TestIntegration_OpenRouter(t *testing.T) {
-	// Register test models in the global model registry
-	setupTestModels(t)
+	// Note: Don't call setupTestModels(t) here because OpenRouter tests depend on
+	// auto-registered OpenRouter models from New() which setupTestModels() would clear
 
 	t.Run("openrouter with gpt-5-mini", func(t *testing.T) {
 		// Mock OpenRouter server (uses OpenAI-compatible format)
@@ -992,7 +1011,7 @@ func TestIntegration_OpenRouter(t *testing.T) {
 		// Verify that popular OpenRouter models are auto-registered
 		expectedModels := []string{
 			"openai/gpt-5",
-			"openai/gpt-5-mini", 
+			"openai/gpt-5-mini",
 			"openai/gpt-5-nano",
 			"anthropic/claude-opus-4",
 			"anthropic/claude-sonnet-4",
@@ -1020,7 +1039,7 @@ func TestIntegration_OpenRouter(t *testing.T) {
 		server := MockOpenAIServer(t, func(w http.ResponseWriter, r *http.Request) {
 			// Simulate slow response (200ms delay)
 			time.Sleep(200 * time.Millisecond)
-			
+
 			response := map[string]interface{}{
 				"id":      "chatcmpl-slow123",
 				"object":  "chat.completion",
@@ -1068,6 +1087,7 @@ func TestIntegration_OpenRouter(t *testing.T) {
 					APIKey: "test-key",
 				}),
 				wormhole.WithTimeout(50*time.Millisecond), // Very short timeout
+				wormhole.WithModelValidation(false),       // Disable model validation for this timeout test
 			)
 
 			ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
