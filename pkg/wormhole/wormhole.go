@@ -205,6 +205,11 @@ func (p *Wormhole) Provider(name string) (types.Provider, error) {
 		return nil, fmt.Errorf("provider %s not configured", name)
 	}
 
+	// Apply DefaultTimeout if provider config doesn't have explicit timeout
+	if config.Timeout == 0 && p.config.DefaultTimeout > 0 {
+		config.Timeout = int(p.config.DefaultTimeout.Seconds())
+	}
+
 	// Use the factory to create the provider instance
 	provider, err := factory(config)
 	if err != nil {

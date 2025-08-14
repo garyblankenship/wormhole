@@ -63,7 +63,8 @@ type RetryableHTTPClient struct {
 // NewRetryableHTTPClient creates a new retryable HTTP client
 func NewRetryableHTTPClient(client *http.Client, config RetryConfig) *RetryableHTTPClient {
 	if client == nil {
-		client = &http.Client{Timeout: 30 * time.Second}
+		// Default to no timeout - let context timeouts handle this
+		client = &http.Client{}
 	}
 
 	return &RetryableHTTPClient{
