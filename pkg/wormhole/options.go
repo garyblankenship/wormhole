@@ -164,9 +164,12 @@ func WithOpenAICompatible(name, baseURL string, config types.ProviderConfig) Opt
 		if name == "openrouter" {
 			registerOpenRouterModels()
 			
-			// OpenRouter can be slower due to routing overhead, ensure adequate timeout
+			// OpenRouter can be much slower due to:
+			// 1. Routing overhead through their infrastructure  
+			// 2. Heavy models like Claude Opus 4.1 can take 60-120s for complex responses
+			// 3. Model cold starts and queue times during peak usage
 			if c.DefaultTimeout == 0 {
-				c.DefaultTimeout = 45 * time.Second // More generous for OpenRouter
+				c.DefaultTimeout = 2 * time.Minute // Realistic for heavy models like Opus 4.1
 			}
 		}
 	}
