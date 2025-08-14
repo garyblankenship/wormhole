@@ -105,6 +105,7 @@ BenchmarkProviderInitialization-12    	155873229	         7.873 ns/op	       0 B
 - ✅ **Production Monitoring** - Observability features tested at scale
 
 ### 🔮 Future Roadmap
+- **Universal OpenRouter Support** - Support all OpenRouter models without requiring manual registration
 - **Additional Providers** - Cohere, Amazon Bedrock, Azure OpenAI expansion
 - **Enhanced Observability** - OpenTelemetry integration and distributed tracing
 - **Advanced Caching** - Redis and distributed cache support
