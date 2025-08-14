@@ -1015,6 +1015,74 @@ func TestIntegration_OpenRouter(t *testing.T) {
 		assert.NotNil(t, client)
 	})
 
-	// Note: OpenRouter streaming test temporarily removed - 
-	// the core functionality (API calls, model registration) works correctly
+	t.Run("openrouter timeout handling", func(t *testing.T) {
+		// Mock slow OpenRouter server
+		server := MockOpenAIServer(t, func(w http.ResponseWriter, r *http.Request) {
+			// Simulate slow response (200ms delay)
+			time.Sleep(200 * time.Millisecond)
+			
+			response := map[string]interface{}{
+				"id":      "chatcmpl-slow123",
+				"object":  "chat.completion",
+				"created": 1699999999,
+				"model":   "openai/gpt-5-mini",
+				"choices": []map[string]interface{}{
+					{
+						"index": 0,
+						"message": map[string]interface{}{
+							"role":    "assistant",
+							"content": "Slow response from OpenRouter",
+						},
+						"finish_reason": "stop",
+					},
+				},
+			}
+
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(response)
+		})
+
+		t.Run("with default timeout should succeed", func(t *testing.T) {
+			// Default timeout should be sufficient for 200ms response
+			client := wormhole.New(
+				wormhole.WithDefaultProvider("openrouter"),
+				wormhole.WithOpenAICompatible("openrouter", server.URL, types.ProviderConfig{
+					APIKey: "test-key",
+				}),
+				wormhole.WithTimeout(1*time.Second), // Generous timeout
+			)
+
+			response, err := client.Text().
+				Model("openai/gpt-5-mini").
+				Prompt("Test timeout").
+				Generate(context.Background())
+
+			require.NoError(t, err)
+			assert.Equal(t, "Slow response from OpenRouter", response.Text)
+		})
+
+		t.Run("with short timeout should fail gracefully", func(t *testing.T) {
+			client := wormhole.New(
+				wormhole.WithDefaultProvider("openrouter"),
+				wormhole.WithOpenAICompatible("openrouter", server.URL, types.ProviderConfig{
+					APIKey: "test-key",
+				}),
+				wormhole.WithTimeout(50*time.Millisecond), // Very short timeout
+			)
+
+			ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+			defer cancel()
+
+			_, err := client.Text().
+				Model("openai/gpt-5-mini").
+				Prompt("Test timeout").
+				Generate(ctx)
+
+			// Should get timeout error
+			require.Error(t, err)
+			errMsg := strings.ToLower(err.Error())
+			assert.True(t, strings.Contains(errMsg, "timeout") || strings.Contains(errMsg, "deadline exceeded"),
+				"Expected timeout or deadline exceeded error, got: %s", err.Error())
+		})
+	})
 }

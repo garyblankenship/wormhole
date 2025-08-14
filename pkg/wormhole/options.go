@@ -163,6 +163,11 @@ func WithOpenAICompatible(name, baseURL string, config types.ProviderConfig) Opt
 		// Auto-register common models for OpenRouter
 		if name == "openrouter" {
 			registerOpenRouterModels()
+			
+			// OpenRouter can be slower due to routing overhead, ensure adequate timeout
+			if c.DefaultTimeout == 0 {
+				c.DefaultTimeout = 45 * time.Second // More generous for OpenRouter
+			}
 		}
 	}
 }
