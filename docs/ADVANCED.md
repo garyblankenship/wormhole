@@ -36,14 +36,14 @@ func NewMyProvider(config types.ProviderConfig) (types.Provider, error) {
     return &MyProvider{config: config}, nil
 }
 
-// 3. Register and use
-client := wormhole.New(wormhole.Config{
-    Providers: map[string]types.ProviderConfig{
-        "custom": {APIKey: "key", BaseURL: "https://api.custom.com"},
-    },
-})
-
-client.RegisterProvider("custom", NewMyProvider)
+// 3. Register and use with functional options
+client := wormhole.New(
+    wormhole.WithCustomProvider("custom", NewMyProvider),
+    wormhole.WithProviderConfig("custom", types.ProviderConfig{
+        APIKey: "key", 
+        BaseURL: "https://api.custom.com",
+    }),
+)
 
 // Register custom models
 types.DefaultModelRegistry.Register(&types.ModelInfo{
@@ -66,12 +66,16 @@ For providers using OpenAI's API format:
 
 ```go
 // Cloud services (preserve API key)
-client.WithOpenAICompatible("openrouter", "https://openrouter.ai/api/v1", types.ProviderConfig{
-    APIKey: "your-openrouter-key",
-})
+client := wormhole.New(
+    wormhole.WithOpenAICompatible("openrouter", "https://openrouter.ai/api/v1", types.ProviderConfig{
+        APIKey: "your-openrouter-key",
+    }),
+)
 
 // Local services (no API key needed)  
-client.WithOpenAICompatible("ollama", "http://localhost:11434", types.ProviderConfig{})
+client := wormhole.New(
+    wormhole.WithOpenAICompatible("ollama", "http://localhost:11434", types.ProviderConfig{}),
+)
 ```
 
 ## Middleware System
@@ -81,17 +85,24 @@ Enterprise-grade reliability and observability.
 ### Production Middleware Stack
 
 ```go
-client := wormhole.New(config).
-    Use(middleware.RateLimitMiddleware(100)).                         // 100 req/sec
-    Use(middleware.RetryMiddleware(middleware.DefaultRetryConfig())). // Auto-retry
-    Use(middleware.CircuitBreakerMiddleware(5, 30*time.Second)).      // Failover
-    Use(middleware.TimeoutMiddleware(30 * time.Second)).              // Timeouts
-    Use(middleware.CacheMiddleware(middleware.CacheConfig{
-        Cache: middleware.NewMemoryCache(1000),
-        TTL:   10 * time.Minute,
-    })).
-    Use(middleware.MetricsMiddleware(middleware.NewMetrics())).       // Observability
-    Use(middleware.DebugLoggingMiddleware(nil))                       // Request tracing
+client := wormhole.New(
+    wormhole.WithDefaultProvider("openai"),
+    wormhole.WithOpenAI("your-api-key"),
+    wormhole.WithTimeout(30*time.Second),              // Global timeouts
+    wormhole.WithRetries(3, 2*time.Second),            // Auto-retry with backoff
+    wormhole.WithMiddleware(
+        middleware.RateLimitMiddleware(100),                         // 100 req/sec
+        middleware.RetryMiddleware(middleware.DefaultRetryConfig()), // Auto-retry
+        middleware.CircuitBreakerMiddleware(5, 30*time.Second),      // Failover
+        middleware.TimeoutMiddleware(30 * time.Second),              // Request timeouts
+        middleware.CacheMiddleware(middleware.CacheConfig{
+            Cache: middleware.NewMemoryCache(1000),
+            TTL:   10 * time.Minute,
+        }),
+        middleware.MetricsMiddleware(middleware.NewMetrics()),       // Observability
+        middleware.DebugLoggingMiddleware(nil),                      // Request tracing
+    ),
+)
 ```
 
 ### Custom Middleware
