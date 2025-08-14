@@ -74,15 +74,12 @@ for chunk := range stream {
 
 ### 3. Multiple Providers
 ```go
-config := wormhole.Config{
-    DefaultProvider: "openai",
-    Providers: map[string]types.ProviderConfig{
-        "openai":    {APIKey: "your-openai-key"},
-        "anthropic": {APIKey: "your-anthropic-key"},
-    },
-}
-
-client := wormhole.New(config)
+// Create client with multiple providers using functional options
+client := wormhole.New(
+    wormhole.WithDefaultProvider("openai"),
+    wormhole.WithOpenAI("your-openai-key"),
+    wormhole.WithAnthropic("your-anthropic-key"),
+)
 
 // Use specific provider
 response, err := client.Text().

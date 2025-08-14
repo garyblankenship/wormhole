@@ -126,7 +126,12 @@ func CustomMiddleware() middleware.Middleware {
     }
 }
 
-client.Use(CustomMiddleware())
+// Use custom middleware with functional options
+client := wormhole.New(
+    wormhole.WithDefaultProvider("openai"),
+    wormhole.WithOpenAI("your-api-key"),
+    wormhole.WithMiddleware(CustomMiddleware()),
+)
 ```
 
 ### Load Balancing
