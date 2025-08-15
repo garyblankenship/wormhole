@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/garyblankenship/wormhole/internal/utils"
 	"github.com/garyblankenship/wormhole/pkg/types"
 )
 
@@ -124,7 +125,7 @@ func (p *Provider) buildContent(msg types.Message) []map[string]interface{} {
 	if assistantMsg, ok := msg.(*types.AssistantMessage); ok && len(assistantMsg.ToolCalls) > 0 {
 		for _, toolCall := range assistantMsg.ToolCalls {
 			var input map[string]interface{}
-			json.Unmarshal([]byte(toolCall.Function.Arguments), &input)
+			utils.UnmarshalAnthropicToolArgs(toolCall.Function.Arguments, &input)
 			contentParts = append(contentParts, map[string]interface{}{
 				"type":  "tool_use",
 				"id":    toolCall.ID,
