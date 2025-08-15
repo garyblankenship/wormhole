@@ -157,6 +157,36 @@ func (p *Provider) transformToolCalls(toolCalls []types.ToolCall) []map[string]i
 	return result
 }
 
+// cleanJSONResponse removes markdown code blocks from JSON responses
+func cleanJSONResponse(content string) string {
+	if !strings.Contains(content, "```") {
+		return content
+	}
+	
+	if strings.Contains(content, "```json") {
+		// Extract JSON from markdown code blocks
+		start := strings.Index(content, "```json") + 7
+		end := strings.LastIndex(content, "```")
+		if start < end {
+			return strings.TrimSpace(content[start:end])
+		}
+	} else if strings.Contains(content, "```") {
+		// Extract JSON from generic code blocks  
+		start := strings.Index(content, "```") + 3
+		end := strings.LastIndex(content, "```")
+		if start < end {
+			cleaned := strings.TrimSpace(content[start:end])
+			// Only return cleaned version if it looks like JSON
+			if (strings.HasPrefix(cleaned, "{") && strings.HasSuffix(cleaned, "}")) ||
+			   (strings.HasPrefix(cleaned, "[") && strings.HasSuffix(cleaned, "]")) {
+				return cleaned
+			}
+		}
+	}
+	
+	return content
+}
+
 // transformTextResponse converts OpenAI response to internal format
 func (p *Provider) transformTextResponse(response *chatCompletionResponse) *types.TextResponse {
 	if len(response.Choices) == 0 {
@@ -168,11 +198,20 @@ func (p *Provider) transformTextResponse(response *chatCompletionResponse) *type
 	}
 
 	choice := response.Choices[0]
+	content := choice.Message.Content
+	
+	// Clean JSON responses that may be wrapped in markdown code blocks
+	// This is particularly needed for Anthropic models via OpenRouter that return JSON in code blocks
+	if strings.Contains(content, "```") && 
+	   (strings.Contains(strings.ToLower(response.Model), "claude") || 
+	    strings.Contains(strings.ToLower(response.Model), "anthropic")) {
+		content = cleanJSONResponse(content)
+	}
 
 	return &types.TextResponse{
 		ID:           response.ID,
 		Model:        response.Model,
-		Text:         choice.Message.Content,
+		Text:         content,
 		ToolCalls:    p.convertToolCalls(choice.Message.ToolCalls),
 		FinishReason: p.mapFinishReason(choice.FinishReason),
 		Usage:        p.convertUsage(response.Usage),
