@@ -2,7 +2,7 @@ package middleware
 
 import (
 	"context"
-	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/garyblankenship/wormhole/pkg/types"
@@ -104,12 +104,11 @@ func TimeoutMiddleware(timeout time.Duration) Middleware {
 	}
 }
 
-// Metrics tracks provider metrics
+// Metrics tracks provider metrics using atomic operations for better performance
 type Metrics struct {
-	mu            sync.RWMutex
-	totalRequests int64
-	totalErrors   int64
-	totalDuration time.Duration
+	totalRequests int64        // atomic counter
+	totalErrors   int64        // atomic counter  
+	totalDuration int64        // atomic counter (nanoseconds)
 }
 
 // NewMetrics creates a new metrics instance
@@ -117,29 +116,24 @@ func NewMetrics() *Metrics {
 	return &Metrics{}
 }
 
-// RecordRequest records a request metric
+// RecordRequest records a request metric using atomic operations
 func (m *Metrics) RecordRequest(duration time.Duration, err error) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-
-	m.totalRequests++
-	m.totalDuration += duration
+	atomic.AddInt64(&m.totalRequests, 1)
+	atomic.AddInt64(&m.totalDuration, int64(duration))
 
 	if err != nil {
-		m.totalErrors++
+		atomic.AddInt64(&m.totalErrors, 1)
 	}
 }
 
-// GetStats returns current metrics
+// GetStats returns current metrics using atomic loads
 func (m *Metrics) GetStats() (requests int64, errors int64, avgDuration time.Duration) {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
-
-	requests = m.totalRequests
-	errors = m.totalErrors
+	requests = atomic.LoadInt64(&m.totalRequests)
+	errors = atomic.LoadInt64(&m.totalErrors)
+	totalDurationNs := atomic.LoadInt64(&m.totalDuration)
 
 	if requests > 0 {
-		avgDuration = m.totalDuration / time.Duration(requests)
+		avgDuration = time.Duration(totalDurationNs / requests)
 	}
 
 	return

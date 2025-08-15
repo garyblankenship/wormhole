@@ -10,27 +10,25 @@ import (
 
 // StructuredRequestBuilder builds structured output requests
 type StructuredRequestBuilder struct {
-	wormhole *Wormhole
-	request  *types.StructuredRequest
-	provider string
-	baseURL  string
+	CommonBuilder
+	request *types.StructuredRequest
 }
 
 // Using sets the provider to use
 func (b *StructuredRequestBuilder) Using(provider string) *StructuredRequestBuilder {
-	b.provider = provider
+	b.setProvider(provider)
 	return b
 }
 
 // Provider sets the provider to use (alias for Using)
 func (b *StructuredRequestBuilder) Provider(provider string) *StructuredRequestBuilder {
-	b.provider = provider
+	b.setProvider(provider)
 	return b
 }
 
 // BaseURL sets a custom base URL for OpenAI-compatible APIs
 func (b *StructuredRequestBuilder) BaseURL(url string) *StructuredRequestBuilder {
-	b.baseURL = url
+	b.setBaseURL(url)
 	return b
 }
 
@@ -134,8 +132,8 @@ func (b *StructuredRequestBuilder) Generate(ctx context.Context) (*types.Structu
 	}
 
 	// Apply middleware chain if configured
-	if b.wormhole.middlewareChain != nil {
-		handler := b.wormhole.middlewareChain.Apply(func(ctx context.Context, req interface{}) (interface{}, error) {
+	if b.getWormhole().middlewareChain != nil {
+		handler := b.getWormhole().middlewareChain.Apply(func(ctx context.Context, req interface{}) (interface{}, error) {
 			structuredReq := req.(*types.StructuredRequest)
 			return structuredProvider.Structured(ctx, *structuredReq)
 		})
@@ -172,27 +170,27 @@ func (b *StructuredRequestBuilder) GenerateAs(ctx context.Context, result interf
 // getProviderWithBaseURL gets the provider, creating a temporary one with custom baseURL if specified
 func (b *StructuredRequestBuilder) getProviderWithBaseURL() (types.Provider, error) {
 	// If no custom baseURL, use normal provider
-	if b.baseURL == "" {
-		return b.wormhole.getProvider(b.provider)
+	if b.getBaseURL() == "" {
+		return b.getWormhole().getProvider(b.getProvider())
 	}
 	
 	// Create a temporary OpenAI-compatible provider with custom baseURL
-	providerName := b.provider
+	providerName := b.getProvider()
 	if providerName == "" {
-		providerName = b.wormhole.config.DefaultProvider
+		providerName = b.getWormhole().config.DefaultProvider
 	}
 	
 	// Get existing provider config for API key
 	var apiKey string
-	if providerConfig, exists := b.wormhole.config.Providers[providerName]; exists {
+	if providerConfig, exists := b.getWormhole().config.Providers[providerName]; exists {
 		apiKey = providerConfig.APIKey
 	}
 	
 	// Create temporary provider with custom baseURL
 	tempConfig := types.ProviderConfig{
 		APIKey:  apiKey,
-		BaseURL: b.baseURL,
+		BaseURL: b.getBaseURL(),
 	}
 	
-	return b.wormhole.createOpenAICompatibleProvider(tempConfig)
+	return b.getWormhole().createOpenAICompatibleProvider(tempConfig)
 }
