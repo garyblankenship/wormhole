@@ -118,38 +118,32 @@ func (p *Wormhole) registerBuiltinProviders() {
 // Text creates a new text generation request builder
 func (p *Wormhole) Text() *TextRequestBuilder {
 	return &TextRequestBuilder{
-		wormhole: p,
-		request: &types.TextRequest{
-			Messages: []types.Message{},
-		},
+		CommonBuilder: newCommonBuilder(p),
+		request:       getTextRequest(),
 	}
 }
 
 // Structured creates a new structured output request builder
 func (p *Wormhole) Structured() *StructuredRequestBuilder {
 	return &StructuredRequestBuilder{
-		wormhole: p,
-		request: &types.StructuredRequest{
-			Messages: []types.Message{},
-		},
+		CommonBuilder: newCommonBuilder(p),
+		request:       getStructuredRequest(),
 	}
 }
 
 // Embeddings creates a new embeddings request builder
 func (p *Wormhole) Embeddings() *EmbeddingsRequestBuilder {
 	return &EmbeddingsRequestBuilder{
-		wormhole: p,
-		request: &types.EmbeddingsRequest{
-			Input: []string{},
-		},
+		CommonBuilder: newCommonBuilder(p),
+		request:       getEmbeddingsRequest(),
 	}
 }
 
 // Image creates a new image generation request builder
 func (p *Wormhole) Image() *ImageRequestBuilder {
 	return &ImageRequestBuilder{
-		wormhole: p,
-		request:  &types.ImageRequest{},
+		CommonBuilder: newCommonBuilder(p),
+		request:       getImageRequest(),
 	}
 }
 

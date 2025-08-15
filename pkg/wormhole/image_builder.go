@@ -9,20 +9,25 @@ import (
 
 // ImageRequestBuilder builds image generation requests
 type ImageRequestBuilder struct {
-	wormhole *Wormhole
-	request  *types.ImageRequest
-	provider string
+	CommonBuilder
+	request *types.ImageRequest
 }
 
 // Using sets the provider to use
 func (b *ImageRequestBuilder) Using(provider string) *ImageRequestBuilder {
-	b.provider = provider
+	b.setProvider(provider)
 	return b
 }
 
 // Provider sets the provider to use (alias for Using)
 func (b *ImageRequestBuilder) Provider(provider string) *ImageRequestBuilder {
-	b.provider = provider
+	b.setProvider(provider)
+	return b
+}
+
+// BaseURL sets a custom base URL for OpenAI-compatible APIs
+func (b *ImageRequestBuilder) BaseURL(url string) *ImageRequestBuilder {
+	b.setBaseURL(url)
 	return b
 }
 
@@ -70,7 +75,7 @@ func (b *ImageRequestBuilder) ResponseFormat(format string) *ImageRequestBuilder
 
 // Generate executes the request and returns generated images
 func (b *ImageRequestBuilder) Generate(ctx context.Context) (*types.ImageResponse, error) {
-	provider, err := b.wormhole.getProvider(b.provider)
+	provider, err := b.getProviderWithBaseURL()
 	if err != nil {
 		return nil, err
 	}
@@ -95,8 +100,8 @@ func (b *ImageRequestBuilder) Generate(ctx context.Context) (*types.ImageRespons
 	}
 
 	// Apply middleware chain if configured
-	if b.wormhole.middlewareChain != nil {
-		handler := b.wormhole.middlewareChain.Apply(func(ctx context.Context, req interface{}) (interface{}, error) {
+	if b.getWormhole().middlewareChain != nil {
+		handler := b.getWormhole().middlewareChain.Apply(func(ctx context.Context, req interface{}) (interface{}, error) {
 			imageReq := req.(*types.ImageRequest)
 			return imageProvider.GenerateImage(ctx, *imageReq)
 		})
@@ -108,4 +113,32 @@ func (b *ImageRequestBuilder) Generate(ctx context.Context) (*types.ImageRespons
 	}
 
 	return imageProvider.GenerateImage(ctx, *b.request)
+}
+
+// getProviderWithBaseURL gets the provider, creating a temporary one with custom baseURL if specified
+func (b *ImageRequestBuilder) getProviderWithBaseURL() (types.Provider, error) {
+	// If no custom baseURL, use normal provider
+	if b.getBaseURL() == "" {
+		return b.getWormhole().getProvider(b.getProvider())
+	}
+	
+	// Create a temporary OpenAI-compatible provider with custom baseURL
+	providerName := b.getProvider()
+	if providerName == "" {
+		providerName = b.getWormhole().config.DefaultProvider
+	}
+	
+	// Get existing provider config for API key
+	var apiKey string
+	if providerConfig, exists := b.getWormhole().config.Providers[providerName]; exists {
+		apiKey = providerConfig.APIKey
+	}
+	
+	// Create temporary provider with custom baseURL
+	tempConfig := types.ProviderConfig{
+		APIKey:  apiKey,
+		BaseURL: b.getBaseURL(),
+	}
+	
+	return b.getWormhole().createOpenAICompatibleProvider(tempConfig)
 }
