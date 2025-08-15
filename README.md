@@ -201,7 +201,7 @@ response, err := client.Text().
     Generate(ctx)
 ```
 
-### 🌌 OpenRouter: Access to 200+ Models (Jerry's Wettest Dream)
+### 🌌 OpenRouter: INSTANT Access to ALL 200+ Models (No Registration Required!)
 
 ```go
 import (
@@ -224,9 +224,10 @@ client := wormhole.New(
     wormhole.WithTimeout(2*time.Minute), // OpenRouter can be slower for heavy models
 )
 
-// Try multiple models because why not? They're all auto-registered.
+// ANY OpenRouter model works instantly - no manual registration needed!
+// Dynamic model support bypasses registry validation for true 200+ model access
 models := []string{
-    "openai/gpt-5-mini",               // Latest GPT-5 variant (auto-registered!)
+    "openai/gpt-5-mini",               // Latest GPT-5 variant
     "anthropic/claude-opus-4",         // Top coding model (auto-registered!)
     "google/gemini-2.5-pro",           // Google's advanced reasoning (auto-registered!)
     "mistralai/mistral-medium-3.1",    // Enterprise-grade (auto-registered!)
@@ -267,6 +268,28 @@ for chunk := range stream {
     fmt.Print(chunk.Text) // Real-time poetry through spacetime
 }
 ```
+
+### 🎯 BREAKTHROUGH: True Dynamic Model Support
+
+*BURP* Finally! No more maintaining endless model registries like some primitive civilization. I've engineered **provider-aware validation** that actually understands how different AI providers work:
+
+```go
+// Before: Registry bottleneck (manual registration required)
+❌ "gpt-unknown-model" → BLOCKED by local registry
+
+// After: Provider-aware validation (intelligent routing)  
+✅ "any-openrouter-model" → Reaches OpenRouter API
+✅ "user-loaded-ollama-model" → Reaches Ollama
+✅ "gpt-4o" → Registry validated for type safety
+
+// This means you can literally use ANY model name with OpenRouter:
+client.Text().Model("totally/made-up-model-name").Generate(ctx)
+// ^ Reaches OpenRouter, gets proper "model not available" error (not blocked by us)
+```
+
+**The Science**: Different providers need different validation strategies. OpenRouter has 200+ dynamic models, Ollama supports user-loaded models, but OpenAI has a fixed catalog where registry validation actually helps.
+
+**The Result**: We genuinely support 200+ OpenRouter models because we don't block them with unnecessary validation.
 
 ## 🔥 Features That Actually Matter (Unlike Your Current Stack)
 
