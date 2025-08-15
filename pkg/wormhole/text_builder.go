@@ -129,9 +129,21 @@ func (b *TextRequestBuilder) Generate(ctx context.Context) (*types.TextResponse,
 
 	// Validate model capabilities (if enabled)
 	if b.wormhole.config.ModelValidation {
-		err = types.ValidateModelForCapability(b.request.Model, types.CapabilityText)
-		if err != nil {
-			return nil, err
+		// Check if provider supports dynamic models (skip registry validation)
+		providerName := b.provider
+		if providerName == "" {
+			providerName = b.wormhole.config.DefaultProvider
+		}
+		
+		if providerConfig, exists := b.wormhole.config.Providers[providerName]; exists && providerConfig.DynamicModels {
+			// Provider supports dynamic models - skip local registry validation
+			// Let the provider handle model validation at request time
+		} else {
+			// Use registry validation for traditional providers
+			err = types.ValidateModelForCapability(b.request.Model, types.CapabilityText)
+			if err != nil {
+				return nil, err
+			}
 		}
 	}
 
@@ -181,9 +193,21 @@ func (b *TextRequestBuilder) Stream(ctx context.Context) (<-chan types.StreamChu
 
 	// Validate model capabilities (if enabled)
 	if b.wormhole.config.ModelValidation {
-		err = types.ValidateModelForCapability(b.request.Model, types.CapabilityStream)
-		if err != nil {
-			return nil, err
+		// Check if provider supports dynamic models (skip registry validation)
+		providerName := b.provider
+		if providerName == "" {
+			providerName = b.wormhole.config.DefaultProvider
+		}
+		
+		if providerConfig, exists := b.wormhole.config.Providers[providerName]; exists && providerConfig.DynamicModels {
+			// Provider supports dynamic models - skip local registry validation
+			// Let the provider handle model validation at request time
+		} else {
+			// Use registry validation for traditional providers
+			err = types.ValidateModelForCapability(b.request.Model, types.CapabilityStream)
+			if err != nil {
+				return nil, err
+			}
 		}
 	}
 
