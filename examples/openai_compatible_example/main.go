@@ -3,187 +3,110 @@ package main
 import (
 	"context"
 	"fmt"
-	"log"
 
-	"github.com/garyblankenship/wormhole/pkg/types"
 	"github.com/garyblankenship/wormhole/pkg/wormhole"
 )
 
 func main() {
-	// Create a new Wormhole client with multiple OpenAI-compatible providers
-	fmt.Println("=== Setting up Multiple OpenAI-Compatible Providers ===")
-	p := wormhole.New(
-		// Example 1: LMStudio (local)
-		wormhole.WithLMStudio(types.ProviderConfig{
-			BaseURL: "http://localhost:1234/v1", // Default LMStudio port
-			Timeout: 30,
-		}),
-		// Example 2: vLLM (local or remote)
-		wormhole.WithVLLM(types.ProviderConfig{
-			BaseURL: "http://localhost:8000/v1", // Default vLLM port
-			Timeout: 60,
-		}),
-		// Example 3: Ollama OpenAI-compatible API
-		wormhole.WithOllamaOpenAI(types.ProviderConfig{
-			BaseURL: "http://localhost:11434/v1", // Ollama OpenAI-compatible endpoint
-			Timeout: 30,
-		}),
-		// Example 4: Generic OpenAI-compatible provider (e.g., hosted service)
-		wormhole.WithOpenAICompatible("my-custom-llm", "https://api.my-llm-service.com/v1", types.ProviderConfig{
-			APIKey:  "your-api-key-if-needed",
-			Timeout: 30,
-			Headers: map[string]string{
-				"X-Custom-Header": "custom-value",
-			},
-		}),
+	fmt.Println("=== OpenAI-Compatible APIs with BaseURL ===")
+	fmt.Println("🚀 NEW: Zero configuration needed - just change the BaseURL!")
+	
+	// Simple setup - one client can access ANY OpenAI-compatible API
+	client := wormhole.New(
+		wormhole.WithOpenAI("your-api-key-if-needed"), // Default config
 	)
 
-	// Example 5: Multiple providers with different use cases
-	fmt.Println("\n=== Using Different Providers for Different Tasks ===")
+	ctx := context.Background()
 
-	// Use LMStudio for creative writing
-	fmt.Println("--- Creative Writing with LMStudio ---")
-	creativeResponse, err := p.Text().
-		Using("lmstudio").
-		Model("creative-model"). // Whatever model you have loaded
-		Prompt("Write a creative story about time travel").
+	// Example 1: LMStudio (local) - just change BaseURL!
+	fmt.Println("--- Example 1: LMStudio (local) ---")
+	_, err := client.Text().
+		BaseURL("http://localhost:1234/v1").  // ✨ That's it!
+		Model("llama-3.2-8b").
+		Prompt("Write a short story about time travel").
 		Temperature(0.9).
 		MaxTokens(150).
-		Generate(context.Background())
+		Generate(ctx)
 
 	if err != nil {
-		log.Printf("LMStudio error: %v", err)
+		fmt.Printf("LMStudio: %v (expected if not running locally)\n", err)
 	} else {
-		fmt.Printf("Creative story: %s\n\n", creativeResponse.Text)
+		fmt.Println("✅ LMStudio: Success!")
 	}
 
-	// Use vLLM for code generation
-	fmt.Println("--- Code Generation with vLLM ---")
-	codeResponse, err := p.Text().
-		Using("vllm").
-		Model("code-model").
+	// Example 2: vLLM (local/remote) - just change BaseURL!
+	fmt.Println("--- Example 2: vLLM (local/remote) ---")
+	_, err = client.Text().
+		BaseURL("http://localhost:8000/v1").  // ✨ That's it!
+		Model("codellama-13b").
 		Prompt("Write a Python function to calculate fibonacci numbers").
-		Temperature(0.2). // Lower temperature for more deterministic code
+		Temperature(0.2).
 		MaxTokens(200).
-		Generate(context.Background())
+		Generate(ctx)
 
 	if err != nil {
-		log.Printf("vLLM error: %v", err)
+		fmt.Printf("vLLM: %v (expected if not running locally)\n", err)
 	} else {
-		fmt.Printf("Generated code: %s\n\n", codeResponse.Text)
+		fmt.Println("✅ vLLM: Success!")
 	}
 
-	// Use Ollama OpenAI API for structured data
-	fmt.Println("--- Structured Data with Ollama OpenAI API ---")
-	type Product struct {
-		Name        string  `json:"name"`
-		Price       float64 `json:"price"`
-		Category    string  `json:"category"`
-		Description string  `json:"description"`
-	}
-
-	schema := map[string]interface{}{
-		"type": "object",
-		"properties": map[string]interface{}{
-			"name": map[string]interface{}{
-				"type":        "string",
-				"description": "Product name",
-			},
-			"price": map[string]interface{}{
-				"type":        "number",
-				"description": "Product price in USD",
-			},
-			"category": map[string]interface{}{
-				"type":        "string",
-				"description": "Product category",
-			},
-			"description": map[string]interface{}{
-				"type":        "string",
-				"description": "Product description",
-			},
-		},
-		"required": []string{"name", "price", "category"},
-	}
-
-	var product Product
-	err = p.Structured().
-		Using("ollama-openai").
-		Model("llama2"). // Or whatever model you have in Ollama
-		Prompt("Generate a product for an electronics store").
-		Schema(schema).
-		GenerateAs(context.Background(), &product)
-
-	if err != nil {
-		log.Printf("Ollama structured generation error: %v", err)
-	} else {
-		fmt.Printf("Generated product: %+v\n\n", product)
-	}
-
-	// Example 6: Function calling with tools
-	fmt.Println("--- Function Calling Example ---")
-	calculatorTool := types.NewTool(
-		"calculate",
-		"Perform basic arithmetic operations",
-		map[string]interface{}{
-			"type": "object",
-			"properties": map[string]interface{}{
-				"operation": map[string]interface{}{
-					"type":        "string",
-					"enum":        []string{"add", "subtract", "multiply", "divide"},
-					"description": "The arithmetic operation to perform",
-				},
-				"a": map[string]interface{}{
-					"type":        "number",
-					"description": "First number",
-				},
-				"b": map[string]interface{}{
-					"type":        "number",
-					"description": "Second number",
-				},
-			},
-			"required": []string{"operation", "a", "b"},
-		},
-	)
-
-	toolResponse, err := p.Text().
-		Using("lmstudio"). // Use whichever provider supports function calling
-		Model("function-calling-model").
-		Prompt("What is 15 multiplied by 7?").
-		Tools(*calculatorTool).
-		Generate(context.Background())
-
-	if err != nil {
-		log.Printf("Function calling error: %v", err)
-	} else {
-		fmt.Printf("Response: %s\n", toolResponse.Text)
-		for _, toolCall := range toolResponse.ToolCalls {
-			fmt.Printf("Function called: %s with args: %+v\n", toolCall.Name, toolCall.Arguments)
-		}
-	}
-
-	// Example 7: Streaming with different providers
-	fmt.Println("\n--- Streaming Example ---")
-	stream, err := p.Text().
-		Using("lmstudio").
-		Model("streaming-model").
+	// Example 3: Ollama (local) - just change BaseURL!
+	fmt.Println("--- Example 3: Ollama (local) ---")
+	_, err = client.Text().
+		BaseURL("http://localhost:11434/v1"). // ✨ That's it!
+		Model("llama3.2").
 		Prompt("Explain quantum computing in simple terms").
 		Temperature(0.5).
-		Stream(context.Background())
+		MaxTokens(100).
+		Generate(ctx)
 
 	if err != nil {
-		log.Printf("Streaming error: %v", err)
+		fmt.Printf("Ollama: %v (expected if not running locally)\n", err)
 	} else {
-		fmt.Print("Streaming explanation: ")
-		for chunk := range stream {
-			if chunk.Error != nil {
-				log.Printf("Stream error: %v", chunk.Error)
-				break
-			}
-			fmt.Print(chunk.Text)
-		}
-		fmt.Println()
+		fmt.Println("✅ Ollama: Success!")
 	}
 
-	fmt.Println("\n=== OpenAI-Compatible Providers Example Complete ===")
-	fmt.Println("Supported providers: LMStudio, vLLM, Ollama OpenAI API, and any other OpenAI-compatible service")
+	// Example 4: OpenRouter - just change BaseURL!
+	fmt.Println("--- Example 4: OpenRouter (cloud) ---")
+	_, err = client.Text().
+		BaseURL("https://openrouter.ai/api/v1"). // ✨ That's it!
+		Model("anthropic/claude-3.5-sonnet").
+		Prompt("Hello from OpenRouter!").
+		MaxTokens(50).
+		Generate(ctx)
+
+	if err != nil {
+		fmt.Printf("OpenRouter: %v (expected without API key)\n", err)
+	} else {
+		fmt.Println("✅ OpenRouter: Success!")
+	}
+
+	// Example 5: Any custom OpenAI-compatible API
+	fmt.Println("--- Example 5: Custom API ---")
+	_, err = client.Text().
+		BaseURL("https://api.your-custom-service.com/v1"). // ✨ Just change URL!
+		Model("your-custom-model").
+		Prompt("Hello from custom API!").
+		MaxTokens(50).
+		Generate(ctx)
+
+	if err != nil {
+		fmt.Printf("Custom API: %v (expected - not a real endpoint)\n", err)
+	} else {
+		fmt.Println("✅ Custom API: Success!")
+	}
+
+	fmt.Println("\n🎉 NEW ARCHITECTURE BENEFITS:")
+	fmt.Println("✅ Zero configuration - just change BaseURL")
+	fmt.Println("✅ No more separate provider packages")
+	fmt.Println("✅ Works with ANY OpenAI-compatible API")
+	fmt.Println("✅ Consistent API across all providers")
+	fmt.Println("✅ Simple and maintainable")
+	
+	fmt.Println("\n📋 SUPPORTED APIs:")
+	fmt.Println("• LMStudio: http://localhost:1234/v1")
+	fmt.Println("• vLLM: http://localhost:8000/v1") 
+	fmt.Println("• Ollama: http://localhost:11434/v1")
+	fmt.Println("• OpenRouter: https://openrouter.ai/api/v1")
+	fmt.Println("• Any custom OpenAI-compatible API")
 }

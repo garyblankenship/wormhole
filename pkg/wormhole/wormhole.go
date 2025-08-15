@@ -12,7 +12,6 @@ import (
 	"github.com/garyblankenship/wormhole/pkg/providers/mistral"
 	"github.com/garyblankenship/wormhole/pkg/providers/ollama"
 	"github.com/garyblankenship/wormhole/pkg/providers/openai"
-	"github.com/garyblankenship/wormhole/pkg/providers/openai_compatible"
 	"github.com/garyblankenship/wormhole/pkg/types"
 )
 
@@ -47,12 +46,7 @@ type Config struct {
 // New creates a new Wormhole instance using functional options
 func New(opts ...Option) *Wormhole {
 	// CRITICAL: Register built-in models FIRST before any model validation
-	// This fixes timing issue where model validation happens before models are registered
-	// Use sync.Once to ensure thread-safety and prevent duplicate registrations
-	modelsRegisteredOnce.Do(func() {
-		registerOpenAIModels()
-		registerOpenRouterModels()
-	})
+	// No model pre-registration - providers handle model validation at request time
 
 	// Start with a default config
 	config := Config{
@@ -188,11 +182,11 @@ func (p *Wormhole) Provider(name string) (types.Provider, error) {
 	// Get the factory for the requested provider
 	factory, exists := p.providerFactories[name]
 	if !exists {
-		// Check if it's an openai_compatible provider added via With... methods
+		// Check if it's a custom provider added via With... methods
 		if _, configExists := p.config.Providers[name]; configExists {
-			// Assume it's an openai_compatible provider for backward compatibility
+			// Assume it's an OpenAI-compatible provider for backward compatibility
 			factory = func(c types.ProviderConfig) (types.Provider, error) {
-				return openai_compatible.New(name, c), nil
+				return openai.New(c), nil
 			}
 		} else {
 			return nil, fmt.Errorf("unknown or unregistered provider: %s", name)
@@ -231,4 +225,11 @@ func (p *Wormhole) getProvider(override string) (types.Provider, error) {
 		return nil, fmt.Errorf("no provider specified and no default provider configured")
 	}
 	return p.Provider(providerName)
+}
+
+// createOpenAICompatibleProvider creates a temporary OpenAI provider with custom config
+func (p *Wormhole) createOpenAICompatibleProvider(config types.ProviderConfig) (types.Provider, error) {
+	// Create temporary OpenAI provider with custom BaseURL
+	openAIProvider := openai.New(config)
+	return openAIProvider, nil
 }

@@ -20,6 +20,12 @@ func (b *ImageRequestBuilder) Using(provider string) *ImageRequestBuilder {
 	return b
 }
 
+// Provider sets the provider to use (alias for Using)
+func (b *ImageRequestBuilder) Provider(provider string) *ImageRequestBuilder {
+	b.provider = provider
+	return b
+}
+
 // Model sets the model to use
 func (b *ImageRequestBuilder) Model(model string) *ImageRequestBuilder {
 	b.request.Model = model

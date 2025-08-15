@@ -13,11 +13,24 @@ type StructuredRequestBuilder struct {
 	wormhole *Wormhole
 	request  *types.StructuredRequest
 	provider string
+	baseURL  string
 }
 
 // Using sets the provider to use
 func (b *StructuredRequestBuilder) Using(provider string) *StructuredRequestBuilder {
 	b.provider = provider
+	return b
+}
+
+// Provider sets the provider to use (alias for Using)
+func (b *StructuredRequestBuilder) Provider(provider string) *StructuredRequestBuilder {
+	b.provider = provider
+	return b
+}
+
+// BaseURL sets a custom base URL for OpenAI-compatible APIs
+func (b *StructuredRequestBuilder) BaseURL(url string) *StructuredRequestBuilder {
+	b.baseURL = url
 	return b
 }
 
@@ -91,7 +104,7 @@ func (b *StructuredRequestBuilder) MaxTokens(tokens int) *StructuredRequestBuild
 
 // Generate executes the request and returns a structured response
 func (b *StructuredRequestBuilder) Generate(ctx context.Context) (*types.StructuredResponse, error) {
-	provider, err := b.wormhole.getProvider(b.provider)
+	provider, err := b.getProviderWithBaseURL()
 	if err != nil {
 		return nil, err
 	}
@@ -154,4 +167,32 @@ func (b *StructuredRequestBuilder) GenerateAs(ctx context.Context, result interf
 	}
 
 	return nil
+}
+
+// getProviderWithBaseURL gets the provider, creating a temporary one with custom baseURL if specified
+func (b *StructuredRequestBuilder) getProviderWithBaseURL() (types.Provider, error) {
+	// If no custom baseURL, use normal provider
+	if b.baseURL == "" {
+		return b.wormhole.getProvider(b.provider)
+	}
+	
+	// Create a temporary OpenAI-compatible provider with custom baseURL
+	providerName := b.provider
+	if providerName == "" {
+		providerName = b.wormhole.config.DefaultProvider
+	}
+	
+	// Get existing provider config for API key
+	var apiKey string
+	if providerConfig, exists := b.wormhole.config.Providers[providerName]; exists {
+		apiKey = providerConfig.APIKey
+	}
+	
+	// Create temporary provider with custom baseURL
+	tempConfig := types.ProviderConfig{
+		APIKey:  apiKey,
+		BaseURL: b.baseURL,
+	}
+	
+	return b.wormhole.createOpenAICompatibleProvider(tempConfig)
 }
