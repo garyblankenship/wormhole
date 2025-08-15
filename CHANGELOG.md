@@ -5,6 +5,26 @@ All notable changes to Wormhole will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.1] - 2025-08-15
+
+### 🔧 Bug Fixes
+- **JSON Response Cleaning** - Fixed malformed JSON responses from Claude models via OpenRouter
+- **Documentation Updates** - Reflect true 200+ OpenRouter model support in documentation
+- **Provider-Aware Model Support** - Enhanced dynamic model support with provider-aware validation
+
+### 🚀 Improvements
+- **Intelligent Memory Management** - Implemented comprehensive memory management system for Claude Code integration
+- **JSON Schema Validation** - Added comprehensive JSON schema validation system
+- **Timeout Configuration** - Critical fix for DefaultTimeout not being applied to provider configs
+- **Concurrency Fixes** - Resolved critical timing and concurrency issues in functional options refactoring
+
+### 📚 Documentation
+- **README Enhancements** - More engaging developer content with Rick Sanchez personality
+- **Code Quality** - Comprehensive code quality improvements and test fixes
+- **Example Updates** - Fixed broken documentation examples using old Config API
+
+---
+
 ## [1.3.0] - 2025-08-14
 
 ### 🚀 Universal OpenRouter Model Support

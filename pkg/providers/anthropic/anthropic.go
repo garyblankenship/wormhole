@@ -118,11 +118,11 @@ func (p *Provider) Structured(ctx context.Context, request types.StructuredReque
 
 	var data interface{}
 	if response.ToolCalls[0].Function != nil {
-		err = json.Unmarshal([]byte(response.ToolCalls[0].Function.Arguments), &data)
+		err = utils.UnmarshalAnthropicToolArgs(response.ToolCalls[0].Function.Arguments, &data)
 	} else {
 		// Fallback to Arguments field
 		jsonBytes, _ := json.Marshal(response.ToolCalls[0].Arguments)
-		err = json.Unmarshal(jsonBytes, &data)
+		err = utils.LenientUnmarshal(jsonBytes, &data)
 	}
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse structured response: %w", err)
