@@ -59,12 +59,13 @@ type ImageProvider interface {
 
 // ProviderConfig holds provider configuration
 type ProviderConfig struct {
-	APIKey     string            `json:"api_key"`
-	BaseURL    string            `json:"base_url,omitempty"`
-	Headers    map[string]string `json:"headers,omitempty"`
-	Timeout    int               `json:"timeout,omitempty"`
-	MaxRetries int               `json:"max_retries,omitempty"`
-	RetryDelay int               `json:"retry_delay,omitempty"`
+	APIKey        string            `json:"api_key"`
+	BaseURL       string            `json:"base_url,omitempty"`
+	Headers       map[string]string `json:"headers,omitempty"`
+	Timeout       int               `json:"timeout,omitempty"`
+	MaxRetries    int               `json:"max_retries,omitempty"`
+	RetryDelay    int               `json:"retry_delay,omitempty"`
+	DynamicModels bool              `json:"dynamic_models,omitempty"` // Skip local registry validation for providers with dynamic model catalogs
 }
 
 // ProviderFactory defines the function signature for creating a new provider instance.
