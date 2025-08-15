@@ -18,18 +18,26 @@ func main() {
 		log.Fatal("OPENROUTER_API_KEY environment variable is required")
 	}
 
-	// OPTION 1: Quick setup (recommended)
-	// w := wormhole.QuickOpenRouter(apiKey)
+	// 🚀 NEW APPROACH: Super simple BaseURL method (recommended)
+	fmt.Println("🆕 NEW: Using BaseURL approach (simplest)")
+	client := wormhole.New(
+		wormhole.WithOpenAI(apiKey), // Just use OpenAI provider with your OpenRouter key
+		wormhole.WithTimeout(2*time.Minute),
+		wormhole.WithDebugLogging(),
+	)
 
-	// OPTION 2: Manual setup with debug logging (used here for demonstration)
-	w := wormhole.New(
+	// 🔄 LEGACY: Still works with WithOpenAICompatible (uses openai provider under hood)
+	fmt.Println("🔄 LEGACY: WithOpenAICompatible still works")
+	legacyClient := wormhole.New(
 		wormhole.WithDefaultProvider("openrouter"),
 		wormhole.WithOpenAICompatible("openrouter", "https://openrouter.ai/api/v1", types.ProviderConfig{
 			APIKey: apiKey,
 		}),
-		wormhole.WithTimeout(2*time.Minute), // Generous timeout for heavy models like Claude Opus
-		wormhole.WithDebugLogging(),
+		wormhole.WithTimeout(2*time.Minute),
 	)
+	
+	// Use legacyClient for the rest of examples to show it still works
+	_ = client // Both approaches work
 
 	ctx := context.Background()
 
@@ -49,7 +57,9 @@ func main() {
 	for _, model := range models {
 		fmt.Printf("\n🧠 Testing model: %s\n", model)
 
-		response, err := w.Text().
+		// NEW: Using BaseURL approach 
+		response, err := client.Text().
+			BaseURL("https://openrouter.ai/api/v1"). // ✨ Just add this line!
 			Model(model).
 			Prompt("Explain quantum computing in one sentence.").
 			MaxTokens(100).
@@ -68,7 +78,7 @@ func main() {
 	fmt.Println("\n\n2. 📡 Streaming Response")
 	fmt.Printf("🧠 Model: openai/gpt-4o-mini (streaming)\n")
 
-	stream, err := w.Text().
+	stream, err := legacyClient.Text().
 		Model("openai/gpt-4o-mini").
 		Prompt("Write a haiku about dimensional travel").
 		MaxTokens(100).
@@ -117,7 +127,7 @@ func main() {
 		types.NewUserMessage("What's the weather like in Tokyo?"),
 	}
 
-	response, err := w.Text().
+	response, err := legacyClient.Text().
 		Model("openai/gpt-4o-mini"). // Use model that supports function calling
 		Messages(messages...).
 		Tools(*weatherTool).
@@ -163,7 +173,7 @@ func main() {
 		"required": []string{"summary", "key_points", "difficulty"},
 	}
 
-	structuredResponse, err := w.Structured().
+	structuredResponse, err := legacyClient.Structured().
 		Model("openai/gpt-4o-mini").
 		Prompt("Explain machine learning").
 		Schema(jsonSchema).
@@ -180,7 +190,7 @@ func main() {
 	// Example 5: Embeddings
 	fmt.Println("\n\n5. 🧮 Text Embeddings")
 
-	embeddingResponse, err := w.Embeddings().
+	embeddingResponse, err := legacyClient.Embeddings().
 		Model("openai/text-embedding-3-small").
 		Input("The universe is vast and full of possibilities").
 		Generate(ctx)
@@ -197,7 +207,7 @@ func main() {
 	fmt.Println("\n\n6. 💰 Cost Tracking (OpenRouter)")
 
 	// OpenRouter provides detailed usage info in response headers
-	costResponse, err := w.Text().
+	costResponse, err := legacyClient.Text().
 		Model("anthropic/claude-3.5-sonnet").
 		Prompt("Write a short story about parallel universes").
 		MaxTokens(200).
@@ -225,7 +235,7 @@ func main() {
 		fmt.Printf("\n--- Model %d: %s ---\n", i+1, model)
 
 		start := time.Now()
-		response, err := w.Text().
+		response, err := legacyClient.Text().
 			Model(model).
 			Prompt(prompt).
 			MaxTokens(150).

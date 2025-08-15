@@ -19,6 +19,12 @@ func (b *AudioRequestBuilder) Using(provider string) *AudioRequestBuilder {
 	return b
 }
 
+// Provider sets the provider to use (alias for Using)
+func (b *AudioRequestBuilder) Provider(provider string) *AudioRequestBuilder {
+	b.provider = provider
+	return b
+}
+
 // SpeechToText creates a speech-to-text request builder
 func (b *AudioRequestBuilder) SpeechToText() *SpeechToTextBuilder {
 	return &SpeechToTextBuilder{

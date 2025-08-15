@@ -3,7 +3,6 @@ package wormhole
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 
 	"github.com/garyblankenship/wormhole/pkg/types"
 )
@@ -13,11 +12,24 @@ type TextRequestBuilder struct {
 	wormhole *Wormhole
 	request  *types.TextRequest
 	provider string
+	baseURL  string
 }
 
 // Using sets the provider to use
 func (b *TextRequestBuilder) Using(provider string) *TextRequestBuilder {
 	b.provider = provider
+	return b
+}
+
+// Provider sets the provider to use (alias for Using)
+func (b *TextRequestBuilder) Provider(provider string) *TextRequestBuilder {
+	b.provider = provider
+	return b
+}
+
+// BaseURL sets a custom base URL for OpenAI-compatible APIs
+func (b *TextRequestBuilder) BaseURL(url string) *TextRequestBuilder {
+	b.baseURL = url
 	return b
 }
 
@@ -107,7 +119,7 @@ func (b *TextRequestBuilder) ProviderOptions(options map[string]interface{}) *Te
 
 // Generate executes the request and returns a response
 func (b *TextRequestBuilder) Generate(ctx context.Context) (*types.TextResponse, error) {
-	provider, err := b.wormhole.getProvider(b.provider)
+	provider, err := b.getProviderWithBaseURL()
 	if err != nil {
 		return nil, err
 	}
@@ -127,31 +139,9 @@ func (b *TextRequestBuilder) Generate(ctx context.Context) (*types.TextResponse,
 		return nil, types.ErrInvalidRequest.WithDetails("no model specified")
 	}
 
-	// Validate model capabilities (if enabled)
-	if b.wormhole.config.ModelValidation {
-		// Check if provider supports dynamic models (skip registry validation)
-		providerName := b.provider
-		if providerName == "" {
-			providerName = b.wormhole.config.DefaultProvider
-		}
-		
-		if providerConfig, exists := b.wormhole.config.Providers[providerName]; exists && providerConfig.DynamicModels {
-			// Provider supports dynamic models - skip local registry validation
-			// Let the provider handle model validation at request time
-		} else {
-			// Use registry validation for traditional providers
-			err = types.ValidateModelForCapability(b.request.Model, types.CapabilityText)
-			if err != nil {
-				return nil, err
-			}
-		}
-	}
+	// Let the provider handle model validation at request time
 
-	// Apply model-specific constraints
-	err = b.applyModelConstraints()
-	if err != nil {
-		return nil, err
-	}
+	// Provider handles all model validation and constraints
 
 	// Apply middleware chain if configured
 	if b.wormhole.middlewareChain != nil {
@@ -171,7 +161,7 @@ func (b *TextRequestBuilder) Generate(ctx context.Context) (*types.TextResponse,
 
 // Stream executes the request and returns a streaming response
 func (b *TextRequestBuilder) Stream(ctx context.Context) (<-chan types.StreamChunk, error) {
-	provider, err := b.wormhole.getProvider(b.provider)
+	provider, err := b.getProviderWithBaseURL()
 	if err != nil {
 		return nil, err
 	}
@@ -191,31 +181,9 @@ func (b *TextRequestBuilder) Stream(ctx context.Context) (<-chan types.StreamChu
 		return nil, types.ErrInvalidRequest.WithDetails("no model specified")
 	}
 
-	// Validate model capabilities (if enabled)
-	if b.wormhole.config.ModelValidation {
-		// Check if provider supports dynamic models (skip registry validation)
-		providerName := b.provider
-		if providerName == "" {
-			providerName = b.wormhole.config.DefaultProvider
-		}
-		
-		if providerConfig, exists := b.wormhole.config.Providers[providerName]; exists && providerConfig.DynamicModels {
-			// Provider supports dynamic models - skip local registry validation
-			// Let the provider handle model validation at request time
-		} else {
-			// Use registry validation for traditional providers
-			err = types.ValidateModelForCapability(b.request.Model, types.CapabilityStream)
-			if err != nil {
-				return nil, err
-			}
-		}
-	}
+	// Let the provider handle model validation at request time
 
-	// Apply model-specific constraints
-	err = b.applyModelConstraints()
-	if err != nil {
-		return nil, err
-	}
+	// Provider handles all model validation and constraints
 
 	// Apply middleware chain if configured
 	if b.wormhole.middlewareChain != nil {
@@ -242,37 +210,31 @@ func (b *TextRequestBuilder) ToJSON() (string, error) {
 	return string(jsonBytes), nil
 }
 
-// applyModelConstraints applies model-specific constraints like GPT-5 temperature requirements
-func (b *TextRequestBuilder) applyModelConstraints() error {
-	constraints, err := types.GetModelConstraints(b.request.Model)
-	if err != nil {
-		return err
+// getProviderWithBaseURL gets the provider, creating a temporary one with custom baseURL if specified
+func (b *TextRequestBuilder) getProviderWithBaseURL() (types.Provider, error) {
+	// If no custom baseURL, use normal provider
+	if b.baseURL == "" {
+		return b.wormhole.getProvider(b.provider)
 	}
-
-	// Apply temperature constraint if specified
-	if requiredTemp, exists := constraints["temperature"]; exists {
-		tempValue, ok := requiredTemp.(float64)
-		if !ok {
-			return fmt.Errorf("invalid temperature constraint type")
-		}
-
-		// If user hasn't set temperature, apply the constraint
-		if b.request.Temperature == nil {
-			temp := float32(tempValue)
-			b.request.Temperature = &temp
-		} else {
-			// Validate user-provided temperature matches constraint
-			userTemp := float64(*b.request.Temperature)
-			if userTemp != tempValue {
-				return types.NewModelConstraintError(
-					b.request.Model,
-					"temperature",
-					tempValue,
-					userTemp,
-				)
-			}
-		}
+	
+	// Create a temporary OpenAI-compatible provider with custom baseURL
+	providerName := b.provider
+	if providerName == "" {
+		providerName = b.wormhole.config.DefaultProvider
 	}
-
-	return nil
+	
+	// Get existing provider config for API key
+	var apiKey string
+	if providerConfig, exists := b.wormhole.config.Providers[providerName]; exists {
+		apiKey = providerConfig.APIKey
+	}
+	
+	// Create temporary provider with custom baseURL
+	tempConfig := types.ProviderConfig{
+		APIKey:  apiKey,
+		BaseURL: b.baseURL,
+	}
+	
+	return b.wormhole.createOpenAICompatibleProvider(tempConfig)
 }
+

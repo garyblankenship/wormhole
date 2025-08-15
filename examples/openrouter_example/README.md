@@ -53,3 +53,9 @@ The example demonstrates practical patterns for production use:
 7. **Model comparison** for different tasks
 
 Perfect for understanding how to build robust AI applications that aren't locked into a single provider!
+
+## 📚 Additional Resources
+
+- **[JSON Schema with Claude Guide](../../docs/OPENROUTER_CLAUDE_JSON_SCHEMA.md)** - Complete guide for structured output with Claude models
+- **[Structured Output Comparison](../openrouter_structured_comparison.go)** - Side-by-side comparison of different approaches
+- **[OpenRouter Features](https://openrouter.ai/docs/features)** - Official OpenRouter documentation

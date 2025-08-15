@@ -1000,38 +1000,34 @@ func TestIntegration_OpenRouter(t *testing.T) {
 		assert.Equal(t, 20, response.Usage.TotalTokens)
 	})
 
-	t.Run("openrouter model auto-registration", func(t *testing.T) {
-		// Create client with OpenRouter - should auto-register models
+	t.Run("openrouter provider handles any model", func(t *testing.T) {
+		// Create client with OpenRouter
 		client := wormhole.New(
 			wormhole.WithOpenAICompatible("openrouter", "https://openrouter.ai/api/v1", types.ProviderConfig{
 				APIKey: "test-key",
 			}),
 		)
 
-		// Verify that popular OpenRouter models are auto-registered
-		expectedModels := []string{
-			"openai/gpt-5",
-			"openai/gpt-5-mini",
-			"openai/gpt-5-nano",
-			"anthropic/claude-opus-4",
-			"anthropic/claude-sonnet-4",
-			"google/gemini-2.5-pro",
-			"google/gemini-2.5-flash",
-			"mistralai/mistral-medium-3.1",
-			"mistralai/codestral-2508",
-		}
-
-		for _, modelID := range expectedModels {
-			modelInfo, exists := types.DefaultModelRegistry.Get(modelID)
-			assert.True(t, exists, "Model %s should be auto-registered", modelID)
-			if exists {
-				assert.Equal(t, "openrouter", modelInfo.Provider)
-				assert.Contains(t, modelInfo.Capabilities, types.CapabilityText)
-			}
-		}
-
-		// Verify client was created successfully
+		// NEW APPROACH: No model pre-registration needed
+		// The provider handles model validation at request time
+		// This test just verifies the client was created successfully
 		assert.NotNil(t, client)
+		
+		// The beauty of the new architecture: any model name can be passed
+		// and the provider will validate it when the request is made
+		ctx := context.Background()
+		
+		// This will fail due to auth, but proves the model isn't pre-validated
+		_, err := client.Text().
+			Provider("openrouter").
+			Model("any-model-name-works").  // No pre-registration needed!
+			Prompt("test").
+			MaxTokens(5).
+			Generate(ctx)
+		
+		// Should get auth error, not model validation error
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "auth", "Should get auth error, not model validation error")
 	})
 
 	t.Run("openrouter timeout handling", func(t *testing.T) {

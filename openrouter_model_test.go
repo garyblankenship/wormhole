@@ -8,7 +8,6 @@ import (
 
 	"github.com/garyblankenship/wormhole/pkg/wormhole"
 	"github.com/garyblankenship/wormhole/pkg/types"
-	"github.com/garyblankenship/wormhole/pkg/providers/openai_compatible"
 )
 
 func TestOpenRouterModels(t *testing.T) {

@@ -119,6 +119,45 @@ func main() {
 }
 ```
 
+### 🚀 NEW: Super Simple BaseURL Approach
+
+*BURP* Got tired of maintaining separate provider packages, so I did what any genius would do - **eliminated the complexity**:
+
+```go
+// ONE client, ANY OpenAI-compatible API - just change the URL!
+client := wormhole.New(wormhole.WithOpenAI("your-api-key"))
+
+// OpenRouter - just add BaseURL
+response, _ := client.Text().
+    BaseURL("https://openrouter.ai/api/v1").
+    Model("anthropic/claude-3.5-sonnet").
+    Generate(ctx)
+
+// LM Studio - just add BaseURL  
+response, _ := client.Text().
+    BaseURL("http://localhost:1234/v1").
+    Model("llama-3.2-8b").
+    Generate(ctx)
+
+// Ollama - just add BaseURL
+response, _ := client.Text().
+    BaseURL("http://localhost:11434/v1").
+    Model("llama3.2").
+    Generate(ctx)
+
+// ANY custom API - just add BaseURL
+response, _ := client.Text().
+    BaseURL("https://your-api.com/v1").
+    Model("your-model").
+    Generate(ctx)
+```
+
+**Benefits:**
+✅ Zero configuration overhead  
+✅ Works with ANY OpenAI-compatible API  
+✅ No more separate provider packages  
+✅ Consistent API across all providers  
+
 **Pro Tips:**
 - Set your API keys as environment variables: `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, etc.
 - Use `wormhole.QuickOpenRouter()` for instant access to 200+ models

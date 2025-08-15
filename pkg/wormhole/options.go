@@ -4,7 +4,7 @@ import (
 	"time"
 
 	"github.com/garyblankenship/wormhole/pkg/middleware"
-	"github.com/garyblankenship/wormhole/pkg/providers/openai_compatible"
+	"github.com/garyblankenship/wormhole/pkg/providers/openai"
 	"github.com/garyblankenship/wormhole/pkg/types"
 )
 
@@ -104,7 +104,7 @@ func WithLMStudio(config types.ProviderConfig) Option {
 
 		c.Providers["lmstudio"] = config
 		c.CustomFactories["lmstudio"] = func(cfg types.ProviderConfig) (types.Provider, error) {
-			return openai_compatible.NewLMStudio(cfg), nil
+			return openai.New(cfg), nil
 		}
 	}
 }
@@ -121,7 +121,7 @@ func WithVLLM(config types.ProviderConfig) Option {
 
 		c.Providers["vllm"] = config
 		c.CustomFactories["vllm"] = func(cfg types.ProviderConfig) (types.Provider, error) {
-			return openai_compatible.NewVLLM(cfg), nil
+			return openai.New(cfg), nil
 		}
 	}
 }
@@ -138,7 +138,7 @@ func WithOllamaOpenAI(config types.ProviderConfig) Option {
 
 		c.Providers["ollama-openai"] = config
 		c.CustomFactories["ollama-openai"] = func(cfg types.ProviderConfig) (types.Provider, error) {
-			return openai_compatible.NewOllamaOpenAI(cfg), nil
+			return openai.New(cfg), nil
 		}
 	}
 }
@@ -159,7 +159,7 @@ func WithOpenAICompatible(name, baseURL string, config types.ProviderConfig) Opt
 
 		// Register the factory for this custom provider
 		c.CustomFactories[name] = func(cfg types.ProviderConfig) (types.Provider, error) {
-			return openai_compatible.NewGeneric(name, cfg.BaseURL, cfg), nil
+			return openai.New(cfg), nil
 		}
 
 		// Models are now auto-registered globally in New() - no need to register here
@@ -253,6 +253,8 @@ func registerOpenAIModels() {
 		// GPT-4 Series
 		{ID: "gpt-4o", Name: "GPT-4o", Provider: "openai", Capabilities: []types.ModelCapability{types.CapabilityText, types.CapabilityStructured, types.CapabilityFunctions}, MaxTokens: 128000, Cost: &types.ModelCost{InputTokens: 0.0025, OutputTokens: 0.0100, Currency: "USD"}},
 		{ID: "gpt-4o-mini", Name: "GPT-4o Mini", Provider: "openai", Capabilities: []types.ModelCapability{types.CapabilityText, types.CapabilityStructured, types.CapabilityFunctions}, MaxTokens: 128000, Cost: &types.ModelCost{InputTokens: 0.0001, OutputTokens: 0.0006, Currency: "USD"}},
+		{ID: "gpt-4.1", Name: "GPT-4.1", Provider: "openai", Capabilities: []types.ModelCapability{types.CapabilityText, types.CapabilityChat, types.CapabilityFunctions, types.CapabilityStructured}, MaxTokens: 128000, Cost: &types.ModelCost{InputTokens: 0.0025, OutputTokens: 0.0100, Currency: "USD"}},
+		{ID: "gpt-4.1-mini", Name: "GPT-4.1 Mini", Provider: "openai", Capabilities: []types.ModelCapability{types.CapabilityText, types.CapabilityChat, types.CapabilityFunctions, types.CapabilityStructured}, MaxTokens: 128000, Cost: &types.ModelCost{InputTokens: 0.0001, OutputTokens: 0.0006, Currency: "USD"}},
 		{ID: "gpt-4", Name: "GPT-4", Provider: "openai", Capabilities: []types.ModelCapability{types.CapabilityText, types.CapabilityStructured, types.CapabilityFunctions}, MaxTokens: 8192, Cost: &types.ModelCost{InputTokens: 0.0300, OutputTokens: 0.0600, Currency: "USD"}},
 		{ID: "gpt-4-turbo", Name: "GPT-4 Turbo", Provider: "openai", Capabilities: []types.ModelCapability{types.CapabilityText, types.CapabilityStructured, types.CapabilityFunctions}, MaxTokens: 128000, Cost: &types.ModelCost{InputTokens: 0.0100, OutputTokens: 0.0300, Currency: "USD"}},
 
@@ -544,4 +546,5 @@ func registerOpenRouterModels() {
 	for _, model := range openRouterModels {
 		types.DefaultModelRegistry.Register(model)
 	}
+	
 }
