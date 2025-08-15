@@ -237,7 +237,8 @@ func QuickLMStudio(baseURL ...string) *Wormhole {
 }
 
 // QuickOpenRouter creates an OpenRouter client with minimal configuration
-// This provides access to 200+ models from multiple providers through a single API
+// This provides INSTANT access to ALL 200+ OpenRouter models through dynamic model support
+// No manual registration required - any model name works immediately
 func QuickOpenRouter(apiKey ...string) *Wormhole {
 	return Quick.OpenRouter(apiKey...)
 }
