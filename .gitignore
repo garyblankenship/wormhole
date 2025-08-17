@@ -2,9 +2,6 @@
 # Edit at https://www.toptal.com/developers/gitignore?templates=go,visualstudiocode
 
 ### Go ###
-# If you prefer the allow list template instead of the deny list, see community template:
-# https://github.com/github/gitignore/blob/main/community/Golang/Go.AllowList.gitignore
-#
 # Binaries for programs and plugins
 *.exe
 *.exe~
@@ -15,40 +12,92 @@
 # Test binary, built with `go test -c`
 *.test
 
-# Output of the go coverage tool, specifically when used with LiteIDE
+# Output of the go coverage tool
 *.out
+*_coverage.out
+coverage.html
 
-# Dependency directories (remove the comment below to include it)
-# vendor/
+# Dependency directories
+vendor/
 
 # Go workspace file
 go.work
+go.work.sum
 
-### VisualStudioCode ###
+# Go module download cache
+go.sum.backup
+
+# Air live reload tool
+tmp/
+
+### IDE & Editor ###
+# Visual Studio Code
 .vscode/*
 !.vscode/settings.json
 !.vscode/tasks.json
 !.vscode/launch.json
 !.vscode/extensions.json
 !.vscode/*.code-snippets
-
-# Local History for Visual Studio Code
 .history/
-
-# Built Visual Studio Code Extensions
 *.vsix
 
-### VisualStudioCode Patch ###
-# Ignore all local history of files
-.history
-.ionide
+# GoLand/IntelliJ
+.idea/
+*.iml
+*.iws
 
-# End of https://www.toptal.com/developers/gitignore/api/go,visualstudiocode
+# Vim
+*.swp
+*.swo
+*~
 
-# Private project files - do not commit
-memory.md
-CLAUDE.md
+# Emacs
+*~
+\#*\#
+/.emacs.desktop
+/.emacs.desktop.lock
+*.elc
 
+### macOS ###
+.DS_Store
+.AppleDouble
+.LSOverride
+Icon?
+._*
+.Spotlight-V100
+.Trashes
+
+### Linux ###
+*~
+.fuse_hidden*
+.directory
+.Trash-*
+
+### Windows ###
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+### Development ###
+# Debug files
+debug
+*.log
+*.prof
+*.pprof
+*.trace
+
+# Build artifacts
+dist/
+build/
+bin/
+
+# Temporary files
+*.tmp
+*.temp
+.tmp/
+
+### Project Specific ###
 # Example binaries - users should build these themselves
 examples/*/wormhole-cli
 examples/*/quantum_chat
@@ -58,9 +107,20 @@ examples/*/feedback_improvements
 examples/*/custom_provider_example
 examples/basic/basic
 examples/comprehensive/comprehensive
+examples/*/main
+examples/*/*_example
 
-# Build artifacts
-*_test
-*.test
-coverage.out
-*.prof
+# Project memory (keep local)
+memory.md
+
+# API keys and secrets
+.env
+.env.local
+.env.*.local
+*.key
+secrets/
+config/local.yaml
+
+# Documentation artifacts
+docs/build/
+site/
