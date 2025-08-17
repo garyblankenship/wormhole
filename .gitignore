@@ -50,12 +50,17 @@ memory.md
 CLAUDE.md
 
 # Example binaries - users should build these themselves
-examples/wormhole-cli/wormhole-cli
-examples/quantum_chat/quantum_chat
-examples/portal_stream/portal_stream
-examples/multiverse_analyzer/multiverse_analyzer
-examples/feedback_improvements/feedback_improvements
-examples/custom_provider_example/custom_provider_example
-CLAUDE.md
-global-intelligent-memory-system-v2.zip
-openrouter_structured_comparison
+examples/*/wormhole-cli
+examples/*/quantum_chat
+examples/*/portal_stream
+examples/*/multiverse_analyzer
+examples/*/feedback_improvements
+examples/*/custom_provider_example
+examples/basic/basic
+examples/comprehensive/comprehensive
+
+# Build artifacts
+*_test
+*.test
+coverage.out
+*.prof
