@@ -106,9 +106,9 @@ func TimeoutMiddleware(timeout time.Duration) Middleware {
 
 // Metrics tracks provider metrics using atomic operations for better performance
 type Metrics struct {
-	totalRequests int64        // atomic counter
-	totalErrors   int64        // atomic counter  
-	totalDuration int64        // atomic counter (nanoseconds)
+	totalRequests int64 // atomic counter
+	totalErrors   int64 // atomic counter
+	totalDuration int64 // atomic counter (nanoseconds)
 }
 
 // NewMetrics creates a new metrics instance
@@ -141,10 +141,10 @@ func (m *Metrics) GetStats() (requests int64, errors int64, avgDuration time.Dur
 
 // MiddlewareInfo describes available middleware
 type MiddlewareInfo struct {
-	Name        string
-	Purpose     string
-	Example     string
-	ConfigType  string
+	Name       string
+	Purpose    string
+	Example    string
+	ConfigType string
 }
 
 // AvailableMiddleware returns information about all available middleware
@@ -157,7 +157,7 @@ func AvailableMiddleware() []MiddlewareInfo {
 			ConfigType: "RetryConfig",
 		},
 		{
-			Name:       "CacheMiddleware", 
+			Name:       "CacheMiddleware",
 			Purpose:    "Response caching with TTL support",
 			Example:    "middleware.CacheMiddleware(middleware.CacheConfig{Cache: cache, TTL: 5*time.Minute})",
 			ConfigType: "CacheConfig",

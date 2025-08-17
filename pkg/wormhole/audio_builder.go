@@ -97,8 +97,25 @@ func (b *SpeechToTextBuilder) Transcribe(ctx context.Context) (*types.SpeechToTe
 	}
 
 	// Ensure we have an AudioProvider
-	audioProvider, ok := provider.(types.AudioProvider)
+	// Check if provider supports speech-to-text capability
+	sttProvider, ok := types.AsCapability[types.SpeechToTextProvider](provider)
 	if !ok {
+		// Fall back to legacy interface
+		if legacyProvider, ok := types.AsCapability[types.LegacyProvider](provider); ok {
+			// Apply middleware chain if configured
+			if b.wormhole.middlewareChain != nil {
+				handler := b.wormhole.middlewareChain.Apply(func(ctx context.Context, req interface{}) (interface{}, error) {
+					sttReq := req.(*types.SpeechToTextRequest)
+					return legacyProvider.SpeechToText(ctx, *sttReq)
+				})
+				resp, err := handler(ctx, b.request)
+				if err != nil {
+					return nil, err
+				}
+				return resp.(*types.SpeechToTextResponse), nil
+			}
+			return legacyProvider.SpeechToText(ctx, *b.request)
+		}
 		return nil, fmt.Errorf("provider %s does not support speech-to-text", provider.Name())
 	}
 
@@ -106,7 +123,7 @@ func (b *SpeechToTextBuilder) Transcribe(ctx context.Context) (*types.SpeechToTe
 	if b.wormhole.middlewareChain != nil {
 		handler := b.wormhole.middlewareChain.Apply(func(ctx context.Context, req interface{}) (interface{}, error) {
 			sttReq := req.(*types.SpeechToTextRequest)
-			return audioProvider.SpeechToText(ctx, *sttReq)
+			return sttProvider.SpeechToText(ctx, *sttReq)
 		})
 		resp, err := handler(ctx, b.request)
 		if err != nil {
@@ -115,7 +132,7 @@ func (b *SpeechToTextBuilder) Transcribe(ctx context.Context) (*types.SpeechToTe
 		return resp.(*types.SpeechToTextResponse), nil
 	}
 
-	return audioProvider.SpeechToText(ctx, *b.request)
+	return sttProvider.SpeechToText(ctx, *b.request)
 }
 
 // TextToSpeechBuilder builds text-to-speech requests
@@ -173,9 +190,25 @@ func (b *TextToSpeechBuilder) Generate(ctx context.Context) (*types.TextToSpeech
 		return nil, fmt.Errorf("no voice specified")
 	}
 
-	// Ensure we have an AudioProvider
-	audioProvider, ok := provider.(types.AudioProvider)
+	// Check if provider supports text-to-speech capability
+	ttsProvider, ok := types.AsCapability[types.TextToSpeechProvider](provider)
 	if !ok {
+		// Fall back to legacy interface
+		if legacyProvider, ok := types.AsCapability[types.LegacyProvider](provider); ok {
+			// Apply middleware chain if configured
+			if b.wormhole.middlewareChain != nil {
+				handler := b.wormhole.middlewareChain.Apply(func(ctx context.Context, req interface{}) (interface{}, error) {
+					ttsReq := req.(*types.TextToSpeechRequest)
+					return legacyProvider.TextToSpeech(ctx, *ttsReq)
+				})
+				resp, err := handler(ctx, b.request)
+				if err != nil {
+					return nil, err
+				}
+				return resp.(*types.TextToSpeechResponse), nil
+			}
+			return legacyProvider.TextToSpeech(ctx, *b.request)
+		}
 		return nil, fmt.Errorf("provider %s does not support text-to-speech", provider.Name())
 	}
 
@@ -183,7 +216,7 @@ func (b *TextToSpeechBuilder) Generate(ctx context.Context) (*types.TextToSpeech
 	if b.wormhole.middlewareChain != nil {
 		handler := b.wormhole.middlewareChain.Apply(func(ctx context.Context, req interface{}) (interface{}, error) {
 			ttsReq := req.(*types.TextToSpeechRequest)
-			return audioProvider.TextToSpeech(ctx, *ttsReq)
+			return ttsProvider.TextToSpeech(ctx, *ttsReq)
 		})
 		resp, err := handler(ctx, b.request)
 		if err != nil {
@@ -192,5 +225,5 @@ func (b *TextToSpeechBuilder) Generate(ctx context.Context) (*types.TextToSpeech
 		return resp.(*types.TextToSpeechResponse), nil
 	}
 
-	return audioProvider.TextToSpeech(ctx, *b.request)
+	return ttsProvider.TextToSpeech(ctx, *b.request)
 }

@@ -42,15 +42,15 @@ changelog:
 
 release:
   github:
-    owner: prism-php
-    name: prism-go
+    owner: garyblankenship
+    name: wormhole
   
   draft: false
   prerelease: auto
   mode: append
   
   header: |
-    # 🚀 Prism Go {{ .Tag }} - Ultra-Fast LLM SDK
+    # 🚀 Wormhole {{ .Tag }} - Ultra-Fast LLM SDK
     
     **The fastest Go SDK for LLM integration with sub-microsecond performance**
     
@@ -74,31 +74,31 @@ release:
   footer: |
     ## 📦 Installation
     ```bash
-    go get github.com/prism-php/prism-go@{{ .Tag }}
+    go get github.com/garyblankenship/wormhole@{{ .Tag }}
     ```
     
     ## 🚀 Quick Start
     ```go
-    client := prism.SimpleFactory().
+    client := wormhole.SimpleFactory().
         WithOpenAI("your-api-key").
         Build()
     
     response, err := client.Text().
         Model("gpt-5").
-        Prompt("Hello, Prism Go!").
+        Prompt("Hello, Wormhole!").
         Generate(context.Background())
     ```
     
     ## 📚 Resources
-    - [📖 **Documentation**](https://pkg.go.dev/github.com/prism-php/prism-go@{{ .Tag }})
-    - [⚡ **Performance Guide**](https://github.com/prism-php/prism-go/blob/{{ .Tag }}/PERFORMANCE.md)
-    - [🚀 **Examples**](https://github.com/prism-php/prism-go/tree/{{ .Tag }}/examples)
-    - [📋 **Changelog**](https://github.com/prism-php/prism-go/blob/{{ .Tag }}/CHANGELOG.md)
+    - [📖 **Documentation**](https://pkg.go.dev/github.com/garyblankenship/wormhole@{{ .Tag }})
+    - [⚡ **Performance Guide**](https://github.com/garyblankenship/wormhole/blob/{{ .Tag }}/PERFORMANCE.md)
+    - [🚀 **Examples**](https://github.com/garyblankenship/wormhole/tree/{{ .Tag }}/examples)
+    - [📋 **Changelog**](https://github.com/garyblankenship/wormhole/blob/{{ .Tag }}/CHANGELOG.md)
     
     ## 🆚 Performance Comparison
     | SDK | Core Latency | Memory Usage | Providers |
     |-----|--------------|--------------|-----------|
-    | **Prism Go** | **67 ns** | **256 B/op** | **6+** |
+    | **Wormhole** | **67 ns** | **256 B/op** | **6+** |
     | Competitor A | 11,000 ns | Not disclosed | 3-4 |
     | Competitor B | Not disclosed | Not disclosed | 2-3 |
     

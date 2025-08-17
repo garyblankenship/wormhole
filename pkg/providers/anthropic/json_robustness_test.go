@@ -10,7 +10,7 @@ import (
 // tool call arguments that contain regex patterns and escaped strings
 func TestJSONRobustness(t *testing.T) {
 	tests := []struct {
-		name         string
+		name          string
 		toolArguments string
 		expectError   bool
 	}{
@@ -54,14 +54,14 @@ func TestJSONRobustness(t *testing.T) {
 			expectError: false,
 		},
 		{
-			name:         "Malformed JSON",
+			name:          "Malformed JSON",
 			toolArguments: `{"incomplete": }`,
-			expectError:  true,
+			expectError:   true,
 		},
 		{
-			name:         "Empty arguments",
+			name:          "Empty arguments",
 			toolArguments: "",
-			expectError:  true,
+			expectError:   true,
 		},
 	}
 
@@ -83,7 +83,7 @@ func TestJSONRobustness(t *testing.T) {
 					if data == nil {
 						t.Error("Parsed data should not be nil for valid JSON")
 					}
-					
+
 					// Log success for visibility
 					t.Logf("Successfully parsed %d fields from %q", len(data), tt.name)
 				}
@@ -108,7 +108,7 @@ func TestJSONRobustness_Benchmarks(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Iteration %d failed: %v", i, err)
 		}
-		
+
 		// Verify key fields exist
 		if _, ok := data["enhanced_prompt"]; !ok {
 			t.Fatal("Missing enhanced_prompt field")
@@ -117,6 +117,6 @@ func TestJSONRobustness_Benchmarks(t *testing.T) {
 			t.Fatal("Missing key_improvements field")
 		}
 	}
-	
+
 	t.Log("Successfully parsed complex Claude response 100 times")
 }

@@ -92,19 +92,21 @@ func Retry(ctx context.Context, config RetryConfig, fn func() error) error {
 }
 
 // RetryMiddleware implements retry with exponential backoff.
-// 
+//
 // Example usage:
-//   config := middleware.DefaultRetryConfig() // Recommended defaults
-//   middleware.RetryMiddleware(config)
+//
+//	config := middleware.DefaultRetryConfig() // Recommended defaults
+//	middleware.RetryMiddleware(config)
 //
 // Custom configuration:
-//   config := middleware.RetryConfig{
-//       MaxRetries: 5,
-//       InitialDelay: 2 * time.Second,
-//       MaxDelay: 30 * time.Second,
-//       Multiplier: 2.0,
-//       Jitter: true,
-//   }
+//
+//	config := middleware.RetryConfig{
+//	    MaxRetries: 5,
+//	    InitialDelay: 2 * time.Second,
+//	    MaxDelay: 30 * time.Second,
+//	    Multiplier: 2.0,
+//	    Jitter: true,
+//	}
 func RetryMiddleware(config RetryConfig) Middleware {
 	return func(next Handler) Handler {
 		return func(ctx context.Context, req interface{}) (interface{}, error) {

@@ -15,7 +15,7 @@ func LenientUnmarshal(data []byte, v interface{}) error {
 		// In the future, we can add specific fixes for known AI model issues
 		return err
 	}
-	
+
 	return nil
 }
 
@@ -25,12 +25,12 @@ func UnmarshalAnthropicToolArgs(args string, v interface{}) error {
 	if args == "" {
 		return fmt.Errorf("empty tool arguments")
 	}
-	
+
 	// Try standard JSON unmarshaling first
 	if err := json.Unmarshal([]byte(args), v); err != nil {
 		// If it fails, add context about the tool arguments parsing failure
 		return fmt.Errorf("failed to parse Anthropic tool arguments (may contain regex or escaped patterns): %w", err)
 	}
-	
+
 	return nil
 }

@@ -10,7 +10,7 @@ import (
 func main() {
 	fmt.Println("=== OpenAI-Compatible APIs with BaseURL ===")
 	fmt.Println("🚀 NEW: Zero configuration needed - just change the BaseURL!")
-	
+
 	// Simple setup - one client can access ANY OpenAI-compatible API
 	client := wormhole.New(
 		wormhole.WithOpenAI("your-api-key-if-needed"), // Default config
@@ -21,7 +21,7 @@ func main() {
 	// Example 1: LMStudio (local) - just change BaseURL!
 	fmt.Println("--- Example 1: LMStudio (local) ---")
 	_, err := client.Text().
-		BaseURL("http://localhost:1234/v1").  // ✨ That's it!
+		BaseURL("http://localhost:1234/v1"). // ✨ That's it!
 		Model("llama-3.2-8b").
 		Prompt("Write a short story about time travel").
 		Temperature(0.9).
@@ -37,7 +37,7 @@ func main() {
 	// Example 2: vLLM (local/remote) - just change BaseURL!
 	fmt.Println("--- Example 2: vLLM (local/remote) ---")
 	_, err = client.Text().
-		BaseURL("http://localhost:8000/v1").  // ✨ That's it!
+		BaseURL("http://localhost:8000/v1"). // ✨ That's it!
 		Model("codellama-13b").
 		Prompt("Write a Python function to calculate fibonacci numbers").
 		Temperature(0.2).
@@ -102,10 +102,10 @@ func main() {
 	fmt.Println("✅ Works with ANY OpenAI-compatible API")
 	fmt.Println("✅ Consistent API across all providers")
 	fmt.Println("✅ Simple and maintainable")
-	
+
 	fmt.Println("\n📋 SUPPORTED APIs:")
 	fmt.Println("• LMStudio: http://localhost:1234/v1")
-	fmt.Println("• vLLM: http://localhost:8000/v1") 
+	fmt.Println("• vLLM: http://localhost:8000/v1")
 	fmt.Println("• Ollama: http://localhost:11434/v1")
 	fmt.Println("• OpenRouter: https://openrouter.ai/api/v1")
 	fmt.Println("• Any custom OpenAI-compatible API")
