@@ -14,9 +14,9 @@ archives:
   - format: tar.gz
     files:
       - README.md
-      - CHANGELOG.md
+      - docs/CHANGELOG.md
       - LICENSE
-      - PERFORMANCE.md
+      - docs/PERFORMANCE.md
       - docs/**/*
       - examples/**/*
     name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
@@ -91,9 +91,9 @@ release:
     
     ## 📚 Resources
     - [📖 **Documentation**](https://pkg.go.dev/github.com/garyblankenship/wormhole@{{ .Tag }})
-    - [⚡ **Performance Guide**](https://github.com/garyblankenship/wormhole/blob/{{ .Tag }}/PERFORMANCE.md)
+    - [⚡ **Performance Guide**](https://github.com/garyblankenship/wormhole/blob/{{ .Tag }}/docs/PERFORMANCE.md)
     - [🚀 **Examples**](https://github.com/garyblankenship/wormhole/tree/{{ .Tag }}/examples)
-    - [📋 **Changelog**](https://github.com/garyblankenship/wormhole/blob/{{ .Tag }}/CHANGELOG.md)
+    - [📋 **Changelog**](https://github.com/garyblankenship/wormhole/blob/{{ .Tag }}/docs/CHANGELOG.md)
     
     ## 🆚 Performance Comparison
     | SDK | Core Latency | Memory Usage | Providers |

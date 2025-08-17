@@ -817,7 +817,7 @@ go get github.com/garyblankenship/wormhole@latest
 - **[Documentation](https://github.com/garyblankenship/wormhole/blob/main/docs/)** - Complete guides and examples
 - **[Migration Guide](https://github.com/garyblankenship/wormhole/blob/main/MIGRATION_V1.md)** - Upgrade from v1.1.x  
 - **[Examples](https://github.com/garyblankenship/wormhole/tree/main/examples)** - Working code for every use case
-- **[Benchmarks](https://github.com/garyblankenship/wormhole/blob/main/PERFORMANCE.md)** - See the numbers for yourself
+- **[Benchmarks](https://github.com/garyblankenship/wormhole/blob/main/docs/PERFORMANCE.md)** - See the numbers for yourself
 
 ### 🐛 **Support & Issues**
 Found a bug? Your first mistake was doubting my code. Your second mistake was not reading the docs.
