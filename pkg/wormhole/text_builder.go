@@ -3,6 +3,7 @@ package wormhole
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 
 	"github.com/garyblankenship/wormhole/pkg/types"
 )
@@ -141,11 +142,17 @@ func (b *TextRequestBuilder) Generate(ctx context.Context) (*types.TextResponse,
 
 	// Provider handles all model validation and constraints
 
+	// Check if provider supports text capability
+	textProvider, ok := types.GetTextCapability(provider)
+	if !ok {
+		return nil, fmt.Errorf("provider %s does not support text generation", provider.Name())
+	}
+
 	// Apply middleware chain if configured
 	if b.getWormhole().middlewareChain != nil {
 		handler := b.getWormhole().middlewareChain.Apply(func(ctx context.Context, req interface{}) (interface{}, error) {
 			textReq := req.(*types.TextRequest)
-			return provider.Text(ctx, *textReq)
+			return textProvider.Text(ctx, *textReq)
 		})
 		resp, err := handler(ctx, b.request)
 		if err != nil {
@@ -154,7 +161,7 @@ func (b *TextRequestBuilder) Generate(ctx context.Context) (*types.TextResponse,
 		return resp.(*types.TextResponse), nil
 	}
 
-	return provider.Text(ctx, *b.request)
+	return textProvider.Text(ctx, *b.request)
 }
 
 // Stream executes the request and returns a streaming response
@@ -183,11 +190,17 @@ func (b *TextRequestBuilder) Stream(ctx context.Context) (<-chan types.StreamChu
 
 	// Provider handles all model validation and constraints
 
+	// Check if provider supports streaming capability
+	streamProvider, ok := types.GetStreamCapability(provider)
+	if !ok {
+		return nil, fmt.Errorf("provider %s does not support streaming", provider.Name())
+	}
+
 	// Apply middleware chain if configured
 	if b.getWormhole().middlewareChain != nil {
 		handler := b.getWormhole().middlewareChain.Apply(func(ctx context.Context, req interface{}) (interface{}, error) {
 			textReq := req.(*types.TextRequest)
-			return provider.Stream(ctx, *textReq)
+			return streamProvider.Stream(ctx, *textReq)
 		})
 		resp, err := handler(ctx, b.request)
 		if err != nil {
@@ -196,7 +209,7 @@ func (b *TextRequestBuilder) Stream(ctx context.Context) (<-chan types.StreamChu
 		return resp.(<-chan types.StreamChunk), nil
 	}
 
-	return provider.Stream(ctx, *b.request)
+	return streamProvider.Stream(ctx, *b.request)
 }
 
 // ToJSON returns the request as JSON
@@ -207,32 +220,3 @@ func (b *TextRequestBuilder) ToJSON() (string, error) {
 	}
 	return string(jsonBytes), nil
 }
-
-// getProviderWithBaseURL gets the provider, creating a temporary one with custom baseURL if specified
-func (b *TextRequestBuilder) getProviderWithBaseURL() (types.Provider, error) {
-	// If no custom baseURL, use normal provider
-	if b.getBaseURL() == "" {
-		return b.getWormhole().getProvider(b.getProvider())
-	}
-	
-	// Create a temporary OpenAI-compatible provider with custom baseURL
-	providerName := b.getProvider()
-	if providerName == "" {
-		providerName = b.getWormhole().config.DefaultProvider
-	}
-	
-	// Get existing provider config for API key
-	var apiKey string
-	if providerConfig, exists := b.getWormhole().config.Providers[providerName]; exists {
-		apiKey = providerConfig.APIKey
-	}
-	
-	// Create temporary provider with custom baseURL
-	tempConfig := types.ProviderConfig{
-		APIKey:  apiKey,
-		BaseURL: b.getBaseURL(),
-	}
-	
-	return b.getWormhole().createOpenAICompatibleProvider(tempConfig)
-}
-

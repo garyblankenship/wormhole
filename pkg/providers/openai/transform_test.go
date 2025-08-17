@@ -81,7 +81,7 @@ func TestTransformTextResponseWithJSONCleaning(t *testing.T) {
 	}
 
 	result := provider.transformTextResponse(response)
-	
+
 	// Should have cleaned the JSON
 	expected := `{"variations": [{"strategy": "test"}]}`
 	assert.Equal(t, expected, result.Text)
@@ -93,7 +93,7 @@ func TestTransformTextResponseWithoutCleaning(t *testing.T) {
 
 	// Test with non-Anthropic model - should not clean
 	response := &chatCompletionResponse{
-		ID:      "test-id", 
+		ID:      "test-id",
 		Model:   "gpt-4",
 		Created: time.Now().Unix(),
 		Choices: []struct {
@@ -111,7 +111,7 @@ func TestTransformTextResponseWithoutCleaning(t *testing.T) {
 	}
 
 	result := provider.transformTextResponse(response)
-	
+
 	// Should NOT have cleaned the JSON for non-Anthropic models
 	expected := "```json\n{\"key\": \"value\"}\n```"
 	assert.Equal(t, expected, result.Text)

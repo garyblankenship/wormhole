@@ -162,7 +162,7 @@ func cleanJSONResponse(content string) string {
 	if !strings.Contains(content, "```") {
 		return content
 	}
-	
+
 	if strings.Contains(content, "```json") {
 		// Extract JSON from markdown code blocks
 		start := strings.Index(content, "```json") + 7
@@ -171,19 +171,19 @@ func cleanJSONResponse(content string) string {
 			return strings.TrimSpace(content[start:end])
 		}
 	} else if strings.Contains(content, "```") {
-		// Extract JSON from generic code blocks  
+		// Extract JSON from generic code blocks
 		start := strings.Index(content, "```") + 3
 		end := strings.LastIndex(content, "```")
 		if start < end {
 			cleaned := strings.TrimSpace(content[start:end])
 			// Only return cleaned version if it looks like JSON
 			if (strings.HasPrefix(cleaned, "{") && strings.HasSuffix(cleaned, "}")) ||
-			   (strings.HasPrefix(cleaned, "[") && strings.HasSuffix(cleaned, "]")) {
+				(strings.HasPrefix(cleaned, "[") && strings.HasSuffix(cleaned, "]")) {
 				return cleaned
 			}
 		}
 	}
-	
+
 	return content
 }
 
@@ -199,12 +199,12 @@ func (p *Provider) transformTextResponse(response *chatCompletionResponse) *type
 
 	choice := response.Choices[0]
 	content := choice.Message.Content
-	
+
 	// Clean JSON responses that may be wrapped in markdown code blocks
 	// This is particularly needed for Anthropic models via OpenRouter that return JSON in code blocks
-	if strings.Contains(content, "```") && 
-	   (strings.Contains(strings.ToLower(response.Model), "claude") || 
-	    strings.Contains(strings.ToLower(response.Model), "anthropic")) {
+	if strings.Contains(content, "```") &&
+		(strings.Contains(strings.ToLower(response.Model), "claude") ||
+			strings.Contains(strings.ToLower(response.Model), "anthropic")) {
 		content = cleanJSONResponse(content)
 	}
 
@@ -303,9 +303,22 @@ func (p *Provider) convertToolCalls(toolCalls []toolCall) []types.ToolCall {
 	result := make([]types.ToolCall, len(toolCalls))
 
 	for i, tc := range toolCalls {
+		// Parse arguments from JSON string to map[string]interface{}
+		var argsMap map[string]interface{}
+		if tc.Function.Arguments != "" {
+			if err := json.Unmarshal([]byte(tc.Function.Arguments), &argsMap); err != nil {
+				// If parsing fails, create empty map
+				argsMap = make(map[string]interface{})
+			}
+		} else {
+			argsMap = make(map[string]interface{})
+		}
+
 		result[i] = types.ToolCall{
-			ID:   tc.ID,
-			Type: tc.Type,
+			ID:        tc.ID,
+			Type:      tc.Type,
+			Name:      tc.Function.Name, // Set top-level Name field
+			Arguments: argsMap,          // Set top-level Arguments field
 			Function: &types.ToolCallFunction{
 				Name:      tc.Function.Name,
 				Arguments: tc.Function.Arguments,

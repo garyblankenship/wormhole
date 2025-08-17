@@ -9,7 +9,7 @@ import (
 
 func TestDefaultRetryConfig(t *testing.T) {
 	config := DefaultRetryConfig()
-	
+
 	if config.MaxRetries != 3 {
 		t.Errorf("Expected MaxRetries=3, got %d", config.MaxRetries)
 	}
@@ -28,7 +28,7 @@ func TestDefaultRetryConfig(t *testing.T) {
 	if config.RetryableFunc == nil {
 		t.Error("Expected RetryableFunc to be set")
 	}
-	
+
 	// Test default RetryableFunc
 	if !config.RetryableFunc(errors.New("test error")) {
 		t.Error("Expected default RetryableFunc to return true for any error")
@@ -40,7 +40,7 @@ func TestDefaultRetryConfig(t *testing.T) {
 
 func TestRetry(t *testing.T) {
 	ctx := context.Background()
-	
+
 	t.Run("success_on_first_try", func(t *testing.T) {
 		config := RetryConfig{
 			MaxRetries:   3,
@@ -48,13 +48,13 @@ func TestRetry(t *testing.T) {
 			MaxDelay:     10 * time.Millisecond,
 			Multiplier:   2.0,
 		}
-		
+
 		callCount := 0
 		fn := func() error {
 			callCount++
 			return nil // Success on first call
 		}
-		
+
 		err := Retry(ctx, config, fn)
 		if err != nil {
 			t.Errorf("Expected no error, got %v", err)
@@ -63,7 +63,7 @@ func TestRetry(t *testing.T) {
 			t.Errorf("Expected 1 call, got %d", callCount)
 		}
 	})
-	
+
 	t.Run("success_after_retries", func(t *testing.T) {
 		config := RetryConfig{
 			MaxRetries:   3,
@@ -71,7 +71,7 @@ func TestRetry(t *testing.T) {
 			MaxDelay:     10 * time.Millisecond,
 			Multiplier:   2.0,
 		}
-		
+
 		callCount := 0
 		fn := func() error {
 			callCount++
@@ -80,7 +80,7 @@ func TestRetry(t *testing.T) {
 			}
 			return nil // Success on third call
 		}
-		
+
 		err := Retry(ctx, config, fn)
 		if err != nil {
 			t.Errorf("Expected no error, got %v", err)
@@ -89,7 +89,7 @@ func TestRetry(t *testing.T) {
 			t.Errorf("Expected 3 calls, got %d", callCount)
 		}
 	})
-	
+
 	t.Run("exhausts_all_retries", func(t *testing.T) {
 		config := RetryConfig{
 			MaxRetries:   2,
@@ -97,14 +97,14 @@ func TestRetry(t *testing.T) {
 			MaxDelay:     10 * time.Millisecond,
 			Multiplier:   2.0,
 		}
-		
+
 		callCount := 0
 		expectedErr := errors.New("persistent failure")
 		fn := func() error {
 			callCount++
 			return expectedErr
 		}
-		
+
 		err := Retry(ctx, config, fn)
 		if err != expectedErr {
 			t.Errorf("Expected persistent failure error, got %v", err)
@@ -113,7 +113,7 @@ func TestRetry(t *testing.T) {
 			t.Errorf("Expected 3 calls (1 initial + 2 retries), got %d", callCount)
 		}
 	})
-	
+
 	t.Run("non_retryable_error", func(t *testing.T) {
 		config := RetryConfig{
 			MaxRetries:   3,
@@ -124,14 +124,14 @@ func TestRetry(t *testing.T) {
 				return err.Error() != "non-retryable"
 			},
 		}
-		
+
 		callCount := 0
 		nonRetryableErr := errors.New("non-retryable")
 		fn := func() error {
 			callCount++
 			return nonRetryableErr
 		}
-		
+
 		err := Retry(ctx, config, fn)
 		if err != nonRetryableErr {
 			t.Errorf("Expected non-retryable error, got %v", err)
@@ -140,24 +140,24 @@ func TestRetry(t *testing.T) {
 			t.Errorf("Expected 1 call (no retries for non-retryable), got %d", callCount)
 		}
 	})
-	
+
 	t.Run("context_cancellation", func(t *testing.T) {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Millisecond)
 		defer cancel()
-		
+
 		config := RetryConfig{
 			MaxRetries:   10,
 			InitialDelay: 10 * time.Millisecond, // Longer than context timeout
 			MaxDelay:     100 * time.Millisecond,
 			Multiplier:   2.0,
 		}
-		
+
 		callCount := 0
 		fn := func() error {
 			callCount++
 			return errors.New("failure")
 		}
-		
+
 		err := Retry(ctx, config, fn)
 		if err != context.DeadlineExceeded {
 			t.Errorf("Expected context.DeadlineExceeded, got %v", err)
@@ -167,7 +167,7 @@ func TestRetry(t *testing.T) {
 			t.Error("Expected at least one call before context cancellation")
 		}
 	})
-	
+
 	t.Run("jitter_applied", func(t *testing.T) {
 		config := RetryConfig{
 			MaxRetries:   2,
@@ -176,17 +176,17 @@ func TestRetry(t *testing.T) {
 			Multiplier:   2.0,
 			Jitter:       true,
 		}
-		
+
 		callCount := 0
 		startTime := time.Now()
 		fn := func() error {
 			callCount++
 			return errors.New("failure")
 		}
-		
+
 		Retry(ctx, config, fn)
 		duration := time.Since(startTime)
-		
+
 		// With jitter, total time should be at least base delay time but vary
 		expectedMinTime := 10 * time.Millisecond // First retry delay
 		if duration < expectedMinTime {
@@ -202,20 +202,20 @@ func TestRetryMiddleware(t *testing.T) {
 		MaxDelay:     10 * time.Millisecond,
 		Multiplier:   2.0,
 	}
-	
+
 	t.Run("successful_request", func(t *testing.T) {
 		callCount := 0
 		mockHandler := func(ctx context.Context, req interface{}) (interface{}, error) {
 			callCount++
 			return "success", nil
 		}
-		
+
 		middleware := RetryMiddleware(config)
 		wrappedHandler := middleware(mockHandler)
-		
+
 		ctx := context.Background()
 		resp, err := wrappedHandler(ctx, "test request")
-		
+
 		if err != nil {
 			t.Errorf("Expected no error, got %v", err)
 		}
@@ -226,7 +226,7 @@ func TestRetryMiddleware(t *testing.T) {
 			t.Errorf("Expected 1 call for successful request, got %d", callCount)
 		}
 	})
-	
+
 	t.Run("retry_until_success", func(t *testing.T) {
 		callCount := 0
 		mockHandler := func(ctx context.Context, req interface{}) (interface{}, error) {
@@ -236,13 +236,13 @@ func TestRetryMiddleware(t *testing.T) {
 			}
 			return "eventual success", nil
 		}
-		
+
 		middleware := RetryMiddleware(config)
 		wrappedHandler := middleware(mockHandler)
-		
+
 		ctx := context.Background()
 		resp, err := wrappedHandler(ctx, "test request")
-		
+
 		if err != nil {
 			t.Errorf("Expected no error, got %v", err)
 		}
@@ -253,7 +253,7 @@ func TestRetryMiddleware(t *testing.T) {
 			t.Errorf("Expected 2 calls, got %d", callCount)
 		}
 	})
-	
+
 	t.Run("exhausts_retries", func(t *testing.T) {
 		callCount := 0
 		expectedErr := errors.New("persistent failure")
@@ -261,13 +261,13 @@ func TestRetryMiddleware(t *testing.T) {
 			callCount++
 			return nil, expectedErr
 		}
-		
+
 		middleware := RetryMiddleware(config)
 		wrappedHandler := middleware(mockHandler)
-		
+
 		ctx := context.Background()
 		resp, err := wrappedHandler(ctx, "test request")
-		
+
 		if err != expectedErr {
 			t.Errorf("Expected persistent failure, got %v", err)
 		}
@@ -283,16 +283,16 @@ func TestRetryMiddleware(t *testing.T) {
 func TestExponentialBackoff(t *testing.T) {
 	base := 100 * time.Millisecond
 	max := 5 * time.Second
-	
+
 	// Test exponential growth
 	delay0 := ExponentialBackoff(0, base, max)
 	delay1 := ExponentialBackoff(1, base, max)
 	delay2 := ExponentialBackoff(2, base, max)
-	
-	expected0 := base                 // 100ms * 2^0 = 100ms
-	expected1 := base * 2             // 100ms * 2^1 = 200ms  
-	expected2 := base * 4             // 100ms * 2^2 = 400ms
-	
+
+	expected0 := base     // 100ms * 2^0 = 100ms
+	expected1 := base * 2 // 100ms * 2^1 = 200ms
+	expected2 := base * 4 // 100ms * 2^2 = 400ms
+
 	if delay0 != expected0 {
 		t.Errorf("Expected delay0=%v, got %v", expected0, delay0)
 	}
@@ -302,7 +302,7 @@ func TestExponentialBackoff(t *testing.T) {
 	if delay2 != expected2 {
 		t.Errorf("Expected delay2=%v, got %v", expected2, delay2)
 	}
-	
+
 	// Test max cap
 	delayLarge := ExponentialBackoff(20, base, max)
 	if delayLarge != max {
@@ -313,15 +313,15 @@ func TestExponentialBackoff(t *testing.T) {
 func TestLinearBackoff(t *testing.T) {
 	base := 100 * time.Millisecond
 	max := 5 * time.Second
-	
+
 	delay0 := LinearBackoff(0, base, max)
 	delay1 := LinearBackoff(1, base, max)
 	delay2 := LinearBackoff(2, base, max)
-	
-	expected0 := base         // 100ms * (0+1) = 100ms
-	expected1 := base * 2     // 100ms * (1+1) = 200ms
-	expected2 := base * 3     // 100ms * (2+1) = 300ms
-	
+
+	expected0 := base     // 100ms * (0+1) = 100ms
+	expected1 := base * 2 // 100ms * (1+1) = 200ms
+	expected2 := base * 3 // 100ms * (2+1) = 300ms
+
 	if delay0 != expected0 {
 		t.Errorf("Expected delay0=%v, got %v", expected0, delay0)
 	}
@@ -331,7 +331,7 @@ func TestLinearBackoff(t *testing.T) {
 	if delay2 != expected2 {
 		t.Errorf("Expected delay2=%v, got %v", expected2, delay2)
 	}
-	
+
 	// Test max cap
 	delayLarge := LinearBackoff(100, base, max)
 	if delayLarge != max {
@@ -342,18 +342,18 @@ func TestLinearBackoff(t *testing.T) {
 func TestFibonacciBackoff(t *testing.T) {
 	base := 100 * time.Millisecond
 	max := 5 * time.Second
-	
+
 	delay0 := FibonacciBackoff(0, base, max)
 	delay1 := FibonacciBackoff(1, base, max)
 	delay2 := FibonacciBackoff(2, base, max)
 	delay3 := FibonacciBackoff(3, base, max)
-	
+
 	// Fibonacci: 1, 1, 2, 3, 5, 8, 13, ...
-	expected0 := base         // 100ms * 1 = 100ms
-	expected1 := base         // 100ms * 1 = 100ms
-	expected2 := base * 2     // 100ms * 2 = 200ms
-	expected3 := base * 3     // 100ms * 3 = 300ms
-	
+	expected0 := base     // 100ms * 1 = 100ms
+	expected1 := base     // 100ms * 1 = 100ms
+	expected2 := base * 2 // 100ms * 2 = 200ms
+	expected3 := base * 3 // 100ms * 3 = 300ms
+
 	if delay0 != expected0 {
 		t.Errorf("Expected delay0=%v, got %v", expected0, delay0)
 	}
@@ -371,23 +371,23 @@ func TestFibonacciBackoff(t *testing.T) {
 func TestRetryableError(t *testing.T) {
 	originalErr := errors.New("network timeout")
 	retryableErr := RetryableError{Err: originalErr}
-	
+
 	// Test Error method
 	if retryableErr.Error() != originalErr.Error() {
 		t.Errorf("Expected '%s', got '%s'", originalErr.Error(), retryableErr.Error())
 	}
-	
+
 	// Test IsRetryable
 	if !IsRetryable(retryableErr) {
 		t.Error("Expected RetryableError to be retryable")
 	}
-	
+
 	// Test with regular error
 	regularErr := errors.New("regular error")
 	if IsRetryable(regularErr) {
 		t.Error("Expected regular error to not be retryable")
 	}
-	
+
 	// Test with wrapped RetryableError
 	wrappedErr := errors.New("wrapped: " + retryableErr.Error())
 	if IsRetryable(wrappedErr) {
@@ -406,10 +406,10 @@ func TestAdaptiveRetry(t *testing.T) {
 		SuccessThreshold: 3,
 		FailureThreshold: 2,
 	}
-	
+
 	retry := NewAdaptiveRetry(config)
 	ctx := context.Background()
-	
+
 	t.Run("adapts_to_success", func(t *testing.T) {
 		// First increase the delay by having failures
 		failCount := 0
@@ -420,11 +420,11 @@ func TestAdaptiveRetry(t *testing.T) {
 			}
 			return nil
 		}
-		
+
 		// This should increase the delay
 		retry.Execute(ctx, fn1)
 		initialIncreasedDelay := retry.currentDelay
-		
+
 		// Now record several successes to reduce delay
 		for i := 0; i < config.SuccessThreshold; i++ {
 			fn := func() error { return nil }
@@ -433,16 +433,16 @@ func TestAdaptiveRetry(t *testing.T) {
 				t.Fatalf("Expected no error, got %v", err)
 			}
 		}
-		
+
 		// Current delay should be reduced from the increased value
 		if retry.currentDelay >= initialIncreasedDelay {
 			t.Errorf("Expected delay to be reduced from %v, got %v", initialIncreasedDelay, retry.currentDelay)
 		}
 	})
-	
+
 	t.Run("adapts_to_failure", func(t *testing.T) {
 		retry := NewAdaptiveRetry(config) // Fresh instance
-		
+
 		// Force failures to increase delay
 		callCount := 0
 		fn := func() error {
@@ -452,12 +452,12 @@ func TestAdaptiveRetry(t *testing.T) {
 			}
 			return nil // Success after threshold failures
 		}
-		
+
 		err := retry.Execute(ctx, fn)
 		if err != nil {
 			t.Fatalf("Expected eventual success, got %v", err)
 		}
-		
+
 		// Delay should be increased after consecutive failures
 		if retry.currentDelay <= config.InitialDelay {
 			t.Errorf("Expected delay to be increased above %v, got %v", config.InitialDelay, retry.currentDelay)
@@ -476,7 +476,7 @@ func TestAdaptiveRetryMiddleware(t *testing.T) {
 		SuccessThreshold: 2,
 		FailureThreshold: 2,
 	}
-	
+
 	callCount := 0
 	mockHandler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		callCount++
@@ -485,13 +485,13 @@ func TestAdaptiveRetryMiddleware(t *testing.T) {
 		}
 		return "success", nil
 	}
-	
+
 	middleware := AdaptiveRetryMiddleware(config)
 	wrappedHandler := middleware(mockHandler)
-	
+
 	ctx := context.Background()
 	resp, err := wrappedHandler(ctx, "test")
-	
+
 	if err != nil {
 		t.Errorf("Expected no error, got %v", err)
 	}

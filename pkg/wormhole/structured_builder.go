@@ -166,31 +166,3 @@ func (b *StructuredRequestBuilder) GenerateAs(ctx context.Context, result interf
 
 	return nil
 }
-
-// getProviderWithBaseURL gets the provider, creating a temporary one with custom baseURL if specified
-func (b *StructuredRequestBuilder) getProviderWithBaseURL() (types.Provider, error) {
-	// If no custom baseURL, use normal provider
-	if b.getBaseURL() == "" {
-		return b.getWormhole().getProvider(b.getProvider())
-	}
-	
-	// Create a temporary OpenAI-compatible provider with custom baseURL
-	providerName := b.getProvider()
-	if providerName == "" {
-		providerName = b.getWormhole().config.DefaultProvider
-	}
-	
-	// Get existing provider config for API key
-	var apiKey string
-	if providerConfig, exists := b.getWormhole().config.Providers[providerName]; exists {
-		apiKey = providerConfig.APIKey
-	}
-	
-	// Create temporary provider with custom baseURL
-	tempConfig := types.ProviderConfig{
-		APIKey:  apiKey,
-		BaseURL: b.getBaseURL(),
-	}
-	
-	return b.getWormhole().createOpenAICompatibleProvider(tempConfig)
-}

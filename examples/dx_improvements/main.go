@@ -45,7 +45,7 @@ func main() {
 		Multiplier:   2.0,
 		Jitter:       true,
 	}
-	fmt.Printf("  Custom RetryConfig: MaxRetries: %d, InitialDelay: %v\n", 
+	fmt.Printf("  Custom RetryConfig: MaxRetries: %d, InitialDelay: %v\n",
 		customRetry.MaxRetries, customRetry.InitialDelay)
 
 	// 3. BETTER ERROR MESSAGES - Typed error demonstration
@@ -84,9 +84,9 @@ func main() {
 
 	// 4. MIDDLEWARE COMPOSITION - Production patterns
 	fmt.Println("\n4. Production Middleware Stack:")
-	
+
 	productionClient := wormhole.New(
-		wormhole.WithDefaultProvider("openai"), 
+		wormhole.WithDefaultProvider("openai"),
 		wormhole.WithOpenAI("your-key-here"),
 		// Professional middleware stack from feedback
 		wormhole.WithMiddleware(
@@ -99,7 +99,7 @@ func main() {
 	)
 
 	fmt.Printf("  ✓ Retry with exponential backoff\n")
-	fmt.Printf("  ✓ Circuit breaker (5 failures, 30s timeout)\n")  
+	fmt.Printf("  ✓ Circuit breaker (5 failures, 30s timeout)\n")
 	fmt.Printf("  ✓ Rate limiting (100 req/sec)\n")
 	fmt.Printf("  ✓ Response caching (5min TTL)\n")
 	fmt.Printf("  ✓ Request timeout (60s)\n")
@@ -108,7 +108,7 @@ func main() {
 	fmt.Println("\n5. Future: Template Integration (Concept)")
 	fmt.Printf("  // What meesix needs but wormhole doesn't provide YET:\n")
 	fmt.Printf("  // response, err := client.Text().\n")
-	fmt.Printf("  //     Model(\"gpt-5\").\n") 
+	fmt.Printf("  //     Model(\"gpt-5\").\n")
 	fmt.Printf("  //     TemplatePrompt(\"prompts/role.tpl\", templateData).\n")
 	fmt.Printf("  //     Generate(ctx)\n")
 	fmt.Printf("  //\n")
@@ -139,17 +139,17 @@ func main() {
 // DemonstratePainPoints shows the BEFORE vs AFTER
 func DemonstratePainPoints() {
 	fmt.Println("=== Before vs After Comparison ===")
-	
+
 	fmt.Println("\n❌ BEFORE (Confusing):")
 	fmt.Printf("  middleware.CacheMiddleware(cache, ttl) // Wrong - doesn't exist\n")
 	fmt.Printf("  middleware.RetryConfig{} // How do I configure this?\n")
 	fmt.Printf("  // Had to dive into source code to find DefaultRetryConfig()\n")
-	
+
 	fmt.Println("\n✅ AFTER (Clear):")
-	fmt.Printf("  middleware.AvailableMiddleware() // Discover all options\n") 
+	fmt.Printf("  middleware.AvailableMiddleware() // Discover all options\n")
 	fmt.Printf("  middleware.CacheMiddleware(middleware.CacheConfig{...}) // Clear signature\n")
 	fmt.Printf("  middleware.DefaultRetryConfig() // Well-documented default\n")
-	
+
 	fmt.Println("\n📈 Impact:")
 	fmt.Printf("  - No more source diving\n")
 	fmt.Printf("  - Clear examples in GoDoc\n")

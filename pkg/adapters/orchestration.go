@@ -2,6 +2,7 @@ package adapters
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/garyblankenship/wormhole/pkg/types"
@@ -79,8 +80,14 @@ func (a *WormholeToOrchestrationAdapter) CreateCompletion(ctx context.Context, r
 		wormholeReq.BaseRequest.Model = a.model
 	}
 
+	// Check if provider supports text capability
+	textProvider, ok := types.GetTextCapability(a.provider)
+	if !ok {
+		return nil, fmt.Errorf("provider %s does not support text generation", a.provider.Name())
+	}
+
 	// Call Wormhole provider
-	resp, err := a.provider.Text(ctx, wormholeReq)
+	resp, err := textProvider.Text(ctx, wormholeReq)
 	if err != nil {
 		return nil, err
 	}
@@ -116,8 +123,14 @@ func (a *WormholeToOrchestrationAdapter) CreateStreamingCompletion(ctx context.C
 		wormholeReq.BaseRequest.Model = a.model
 	}
 
+	// Check if provider supports streaming capability
+	streamProvider, ok := types.GetStreamCapability(a.provider)
+	if !ok {
+		return nil, fmt.Errorf("provider %s does not support streaming", a.provider.Name())
+	}
+
 	// Call Wormhole provider streaming
-	stream, err := a.provider.Stream(ctx, wormholeReq)
+	stream, err := streamProvider.Stream(ctx, wormholeReq)
 	if err != nil {
 		return nil, err
 	}
@@ -215,7 +228,13 @@ func (a *WormholeToOrchestrationAdapter) HealthCheck(ctx context.Context) error 
 		Messages: []types.Message{types.NewUserMessage("test")},
 	}
 
-	_, err := a.provider.Text(ctx, req)
+	// Check if provider supports text capability
+	textProvider, ok := types.GetTextCapability(a.provider)
+	if !ok {
+		return fmt.Errorf("provider %s does not support text generation", a.provider.Name())
+	}
+
+	_, err := textProvider.Text(ctx, req)
 	return err
 }
 

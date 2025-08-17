@@ -1012,19 +1012,19 @@ func TestIntegration_OpenRouter(t *testing.T) {
 		// The provider handles model validation at request time
 		// This test just verifies the client was created successfully
 		assert.NotNil(t, client)
-		
+
 		// The beauty of the new architecture: any model name can be passed
 		// and the provider will validate it when the request is made
 		ctx := context.Background()
-		
+
 		// This will fail due to auth, but proves the model isn't pre-validated
 		_, err := client.Text().
 			Provider("openrouter").
-			Model("any-model-name-works").  // No pre-registration needed!
+			Model("any-model-name-works"). // No pre-registration needed!
 			Prompt("test").
 			MaxTokens(5).
 			Generate(ctx)
-		
+
 		// Should get auth error, not model validation error
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "auth", "Should get auth error, not model validation error")

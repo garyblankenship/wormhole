@@ -80,7 +80,7 @@ func (f *SimpleFactory) Ollama(baseURL ...string) *Wormhole {
 	return New(
 		WithDefaultProvider("ollama"),
 		WithOllama(types.ProviderConfig{
-			BaseURL: url,
+			BaseURL:       url,
 			DynamicModels: true, // Users can load any model in Ollama
 		}),
 	)
@@ -100,7 +100,7 @@ func (f *SimpleFactory) LMStudio(baseURL ...string) *Wormhole {
 	return New(
 		WithDefaultProvider("lmstudio"),
 		WithLMStudio(types.ProviderConfig{
-			BaseURL: url,
+			BaseURL:       url,
 			DynamicModels: true, // Users can load any model in LMStudio
 		}),
 	)
@@ -116,7 +116,7 @@ func (f *SimpleFactory) OpenRouter(apiKey ...string) *Wormhole {
 	return New(
 		WithDefaultProvider("openrouter"),
 		WithOpenAICompatible("openrouter", "https://openrouter.ai/api/v1", types.ProviderConfig{
-			APIKey: key,
+			APIKey:        key,
 			DynamicModels: true, // Enable all 200+ OpenRouter models without registry validation
 		}),
 	)

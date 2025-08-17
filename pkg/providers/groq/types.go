@@ -70,8 +70,6 @@ type groqStreamDelta struct {
 	ToolCalls []groqToolCall `json:"tool_calls,omitempty"`
 }
 
-
-
 // Finish reason mappings
 var finishReasonMap = map[string]types.FinishReason{
 	"stop":           types.FinishReasonStop,

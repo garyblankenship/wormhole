@@ -546,5 +546,5 @@ func registerOpenRouterModels() {
 	for _, model := range openRouterModels {
 		types.DefaultModelRegistry.Register(model)
 	}
-	
+
 }

@@ -35,7 +35,7 @@ func main() {
 		}),
 		wormhole.WithTimeout(2*time.Minute),
 	)
-	
+
 	// Use legacyClient for the rest of examples to show it still works
 	_ = client // Both approaches work
 
@@ -57,7 +57,7 @@ func main() {
 	for _, model := range models {
 		fmt.Printf("\n🧠 Testing model: %s\n", model)
 
-		// NEW: Using BaseURL approach 
+		// NEW: Using BaseURL approach
 		response, err := client.Text().
 			BaseURL("https://openrouter.ai/api/v1"). // ✨ Just add this line!
 			Model(model).

@@ -43,19 +43,19 @@ func TestLenientUnmarshal(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			var result map[string]interface{}
 			err := LenientUnmarshal([]byte(tt.input), &result)
-			
+
 			if tt.wantErr {
 				if err == nil {
 					t.Errorf("LenientUnmarshal() expected error but got none")
 				}
 				return
 			}
-			
+
 			if err != nil {
 				t.Errorf("LenientUnmarshal() unexpected error: %v", err)
 				return
 			}
-			
+
 			if tt.want != nil {
 				// Compare the parsed results
 				for key, expectedValue := range tt.want {
@@ -104,14 +104,14 @@ func TestUnmarshalAnthropicToolArgs(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			var result map[string]interface{}
 			err := UnmarshalAnthropicToolArgs(tt.args, &result)
-			
+
 			if tt.wantErr {
 				if err == nil {
 					t.Errorf("UnmarshalAnthropicToolArgs() expected error but got none")
 				}
 				return
 			}
-			
+
 			if err != nil {
 				t.Errorf("UnmarshalAnthropicToolArgs() unexpected error: %v", err)
 			}
@@ -125,15 +125,15 @@ func TestUnmarshalAnthropicToolArgs_RealWorld(t *testing.T) {
 	realWorldArgs := `{
 		"enhanced_prompt": "You are a template generation system. Execute these steps sequentially:\\n\\n1. WORD COUNT: Tokenize user input on whitespace (regex: \\\\s+). Count non-empty tokens. Store as integer N.\\n\\n2. CLASSIFICATION: Assign tier based on N:\\n   - SIMPLE: N ∈ [0,10]\\n   - MEDIUM: N ∈ [11,30]\\n   - COMPLEX: N ≥ 31\\nOverride to COMPLEX if: code blocks > 50 chars OR technical specs detected (regex: \\\\b(API|SQL|JSON|XML)\\\\b)"
 	}`
-	
+
 	var result map[string]interface{}
 	err := UnmarshalAnthropicToolArgs(realWorldArgs, &result)
-	
+
 	if err != nil {
 		t.Errorf("UnmarshalAnthropicToolArgs() failed on real-world data: %v", err)
 		return
 	}
-	
+
 	// Verify we can access the enhanced_prompt field
 	if prompt, ok := result["enhanced_prompt"].(string); !ok {
 		t.Error("UnmarshalAnthropicToolArgs() failed to parse enhanced_prompt field")
@@ -146,7 +146,7 @@ func TestUnmarshalAnthropicToolArgs_RealWorld(t *testing.T) {
 func BenchmarkLenientUnmarshal(b *testing.B) {
 	validJSON := `{"pattern": "\\\\d+", "text": "some text with \\\\s+ patterns"}`
 	var result map[string]interface{}
-	
+
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		LenientUnmarshal([]byte(validJSON), &result)
@@ -156,7 +156,7 @@ func BenchmarkLenientUnmarshal(b *testing.B) {
 func BenchmarkStandardUnmarshal(b *testing.B) {
 	validJSON := `{"pattern": "\\\\d+", "text": "some text with \\\\s+ patterns"}`
 	var result map[string]interface{}
-	
+
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		json.Unmarshal([]byte(validJSON), &result)
@@ -166,7 +166,7 @@ func BenchmarkStandardUnmarshal(b *testing.B) {
 func BenchmarkUnmarshalAnthropicToolArgs(b *testing.B) {
 	toolArgs := `{"function_name": "search", "query": "\\\\d+ pattern", "context": "regex matching"}`
 	var result map[string]interface{}
-	
+
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		UnmarshalAnthropicToolArgs(toolArgs, &result)
