@@ -20,10 +20,16 @@ client := wormhole.New(config)
 
 **After (v1.0)**:
 ```go
+import (
+    "os"
+    
+    "github.com/garyblankenship/wormhole/pkg/wormhole"
+)
+
 // New functional options pattern
 client := wormhole.New(
     wormhole.WithDefaultProvider("openai"),
-    wormhole.WithOpenAI("your-api-key"),
+    wormhole.WithOpenAI(os.Getenv("OPENAI_API_KEY")),
 )
 ```
 
@@ -46,9 +52,9 @@ client := wormhole.New(config)
 ```go
 client := wormhole.New(
     wormhole.WithDefaultProvider("openai"),
-    wormhole.WithOpenAI("openai-key"),
-    wormhole.WithAnthropic("anthropic-key"),
-    wormhole.WithGemini("gemini-key"),
+    wormhole.WithOpenAI(os.Getenv("OPENAI_API_KEY")),
+    wormhole.WithAnthropic(os.Getenv("ANTHROPIC_API_KEY")),
+    wormhole.WithGemini(os.Getenv("GEMINI_API_KEY")),
 )
 ```
 
@@ -293,15 +299,206 @@ client := wormhole.New(
 - **Type Safety**: Compile-time validation of all options
 - **Composability**: Options can be combined and reused
 
+## Step-by-Step Migration Process
+
+### Step 1: Update Dependencies
+```bash
+# Update to latest version
+go get github.com/garyblankenship/wormhole@latest
+
+# Clean module cache if needed
+go clean -modcache
+go mod tidy
+```
+
+### Step 2: Update Imports (if needed)
+```go
+// Usually no import changes needed, but verify:
+import "github.com/garyblankenship/wormhole/pkg/wormhole"
+```
+
+### Step 3: Convert Client Creation
+Replace old config-based creation with functional options:
+
+```diff
+- config := wormhole.Config{
+-     DefaultProvider: "openai",
+-     Providers: map[string]types.ProviderConfig{
+-         "openai": {APIKey: os.Getenv("OPENAI_API_KEY")},
+-     },
+- }
+- client := wormhole.New(config)
+
++ client := wormhole.New(
++     wormhole.WithDefaultProvider("openai"),
++     wormhole.WithOpenAI(os.Getenv("OPENAI_API_KEY")),
++ )
+```
+
+### Step 4: Migrate Middleware
+```diff
+- client := wormhole.New(config)
+- client.Use(middleware.RetryMiddleware(retryConfig))
+- client.Use(middleware.RateLimitMiddleware(10))
+
++ client := wormhole.New(
++     wormhole.WithOpenAI(os.Getenv("OPENAI_API_KEY")),
++     wormhole.WithMiddleware(
++         middleware.RetryMiddleware(retryConfig),
++         middleware.RateLimitMiddleware(10),
++     ),
++ )
+```
+
+### Step 5: Remove Post-Creation Mutations
+```diff
+- client := wormhole.New(config)
+- client.WithAnthropic("key")           // ❌ NO LONGER EXISTS
+- client.RegisterProvider("custom", fn) // ❌ NO LONGER EXISTS
+
++ client := wormhole.New(
++     wormhole.WithOpenAI(os.Getenv("OPENAI_API_KEY")),
++     wormhole.WithAnthropic(os.Getenv("ANTHROPIC_API_KEY")),
++     wormhole.WithCustomProvider("custom", fn),
++ )
+```
+
+### Step 6: Test Your Migration
+Create a simple test to verify your migration:
+
+```go
+package main
+
+import (
+    "context"
+    "fmt"
+    "log"
+    "os"
+    
+    "github.com/garyblankenship/wormhole/pkg/wormhole"
+)
+
+func main() {
+    // Test basic functionality after migration
+    client := wormhole.New(
+        wormhole.WithDefaultProvider("openai"),
+        wormhole.WithOpenAI(os.Getenv("OPENAI_API_KEY")),
+    )
+    
+    ctx := context.Background()
+    response, err := client.Text().
+        Model("gpt-4o-mini").
+        Prompt("Hello, migration test!").
+        MaxTokens(50).
+        Generate(ctx)
+    
+    if err != nil {
+        log.Printf("Migration test failed: %v", err)
+        return
+    }
+    
+    fmt.Printf("✅ Migration successful! Response: %s\n", response.Content)
+}
+```
+
+## Migration Troubleshooting
+
+### Build Errors After Migration
+
+**Error**: `cannot use client.Use (undefined)`
+```bash
+client.Use undefined (type *wormhole.Wormhole has no field or method Use)
+```
+
+**Solution**: Move middleware to client creation:
+```go
+// ❌ Old way (doesn't work)
+client.Use(middleware.RetryMiddleware(config))
+
+// ✅ New way
+client := wormhole.New(
+    wormhole.WithOpenAI(os.Getenv("OPENAI_API_KEY")),
+    wormhole.WithMiddleware(middleware.RetryMiddleware(config)),
+)
+```
+
+**Error**: `client.RegisterProvider undefined`
+```bash
+client.RegisterProvider undefined
+```
+
+**Solution**: Use functional options:
+```go
+// ❌ Old way
+client.RegisterProvider("custom", factory)
+
+// ✅ New way
+client := wormhole.New(
+    wormhole.WithCustomProvider("custom", factory),
+    wormhole.WithProviderConfig("custom", types.ProviderConfig{...}),
+)
+```
+
+### Runtime Errors After Migration
+
+**Error**: `provider "openai" not found`
+
+**Solutions**:
+1. Ensure you're setting the default provider:
+```go
+client := wormhole.New(
+    wormhole.WithDefaultProvider("openai"), // ← This is required
+    wormhole.WithOpenAI(os.Getenv("OPENAI_API_KEY")),
+)
+```
+
+2. Or specify provider explicitly in requests:
+```go
+response, err := client.Text().
+    Using("openai").
+    Model("gpt-4o").
+    Generate(ctx)
+```
+
+**Error**: Missing environment variables
+
+**Solution**: Verify your environment variables are set:
+```bash
+# Check if variables are set
+echo $OPENAI_API_KEY
+echo $ANTHROPIC_API_KEY
+
+# Set them if missing
+export OPENAI_API_KEY="sk-your-key-here"
+```
+
+### Performance Issues After Migration
+
+**Problem**: Slower response times
+
+**Investigation**: Check if middleware ordering changed:
+```go
+// Middleware executes in LIFO order - order matters!
+wormhole.WithMiddleware(
+    middleware.TimeoutMiddleware(30*time.Second),   // Executes FIRST
+    middleware.RetryMiddleware(config),             // Executes SECOND
+    middleware.RateLimitMiddleware(10),             // Executes LAST
+)
+```
+
 ## Migration Checklist
 
-- [ ] Replace `wormhole.New(config)` with `wormhole.New(options...)`
-- [ ] Convert provider configurations to `WithProvider()` options
-- [ ] Move middleware from `.Use()` calls to `WithMiddleware()` option
-- [ ] Replace `.RegisterProvider()` with `WithCustomProvider()` option  
-- [ ] Remove all post-creation `.With*()` method calls
-- [ ] Update factory helper usage to get Options, not mutate clients
-- [ ] Test thoroughly - the API is now immutable after creation
+- [ ] **Update dependencies**: `go get github.com/garyblankenship/wormhole@latest`
+- [ ] **Replace `wormhole.New(config)`** with `wormhole.New(options...)`
+- [ ] **Convert provider configurations** to `WithProvider()` options
+- [ ] **Move middleware** from `.Use()` calls to `WithMiddleware()` option
+- [ ] **Replace `.RegisterProvider()`** with `WithCustomProvider()` option  
+- [ ] **Remove all post-creation** `.With*()` method calls
+- [ ] **Update factory helper usage** to get Options, not mutate clients
+- [ ] **Add environment variable usage** instead of hardcoded keys
+- [ ] **Test basic functionality** with a simple request
+- [ ] **Verify middleware ordering** if using multiple middlewares
+- [ ] **Update documentation/comments** reflecting new patterns
 
 ## Quick Search & Replace
 
