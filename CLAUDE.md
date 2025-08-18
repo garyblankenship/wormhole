@@ -25,6 +25,39 @@ Wormhole is a high-performance Go SDK for LLM API integration with sub-microseco
 - Maintain clean architecture with capability-based interfaces
 - Ensure all tests pass with race detection enabled
 
+## File Organization Standards (CRITICAL - NO FUCKING CLUTTER)
+### Base Directory Rules
+- **ONLY**: README.md, CLAUDE.md, go.mod, go.sum, LICENSE, Makefile, .gitignore
+- **NO** test files, compiled binaries, coverage outputs, random .md files
+- **NO** examples, demos, or documentation files in base
+
+### Documentation Standards
+- **ALL** documentation goes in docs/ folder
+- **Consistent naming**: lowercase-with-hyphens.md (never UPPERCASE.md)
+- **Descriptive names**: "quick-start.md" not "QUICK_START.md"
+- **Professional appearance**: Must look clean when ls docs/ is run
+- **Comprehensive docs/README.md**: MUST explain every file's purpose
+
+### Examples Standards  
+- **ALL** examples go in examples/ folder
+- **NO** quirky Rick & Morty themed names (quantum_chat, portal_stream, etc.)
+- **Descriptive names**: "interactive-chat", "streaming-demo", "concurrent-analysis"
+- **NO** compiled binaries committed to git
+- **NO** random test reports or artifacts
+
+### Git Standards
+- **Comprehensive .gitignore**: Must prevent compiled binaries, coverage files, test artifacts
+- **NO** committing temporary files, build outputs, or IDE artifacts
+- **Clean repository**: Every file must have a justified purpose
+
+### Quality Control
+- **Before ANY commit**: Verify base directory contains ONLY essential files
+- **Documentation consistency**: All internal links must use new lowercase filenames
+- **Example relevance**: Remove outdated, duplicate, or confusing examples
+- **Professional presentation**: Repository must look enterprise-ready at first glance
+
+**VIOLATION = IMMEDIATE CLEANUP REQUIRED**
+
 ## Recent Organizational Changes
 - Moved cmd/ demo files to examples/basic/ and examples/comprehensive/
 - Moved dynamic_models_test.go to examples/openrouter_example/
