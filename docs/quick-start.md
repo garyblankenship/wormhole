@@ -48,7 +48,7 @@ func main() {
         log.Fatal(err)
     }
 
-    fmt.Println(response.Content)
+    fmt.Println(response.Text)
 }
 ```
 
@@ -75,7 +75,7 @@ if err != nil {
     return
 }
 
-fmt.Println(response.Content)
+fmt.Println(response.Text)
 ```
 
 ### 2. Streaming Responses
@@ -95,7 +95,7 @@ for chunk := range stream {
         log.Printf("Stream error: %v", chunk.Error)
         break
     }
-    fmt.Print(chunk.Content)
+    fmt.Print(chunk.Text)
 }
 ```
 
@@ -120,7 +120,7 @@ if err != nil {
     return
 }
 
-fmt.Println(response.Content)
+fmt.Println(response.Text)
 ```
 
 ## Common Pitfalls & Solutions
@@ -222,4 +222,4 @@ client := wormhole.New(
 - **Documentation**: Full README with all features
 - **Providers**: See [PROVIDERS.md](PROVIDERS.md) for setup guides
 
-**Performance**: Wormhole operates at 94.89ns overhead - 116x faster than alternatives. 🚀
+**Performance**: Wormhole operates at 67ns overhead - 165x faster than alternatives. 🚀

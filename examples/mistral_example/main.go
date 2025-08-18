@@ -6,8 +6,8 @@ import (
 	"log"
 	"os"
 
-	"github.com/garyblankenship/wormhole/pkg/providers/mistral"
 	"github.com/garyblankenship/wormhole/pkg/types"
+	"github.com/garyblankenship/wormhole/pkg/wormhole"
 )
 
 func main() {
@@ -17,27 +17,19 @@ func main() {
 		log.Fatal("MISTRAL_API_KEY environment variable is required")
 	}
 
-	// Create Mistral provider
-	config := types.ProviderConfig{
-		APIKey: apiKey,
-	}
-
-	provider := mistral.New(config)
+	// Create wormhole client with Mistral provider
+	client := wormhole.New(
+		wormhole.WithDefaultProvider("mistral"),
+		wormhole.WithMistral(apiKey),
+	)
 
 	// Example 1: Simple text generation
 	fmt.Println("=== Text Generation ===")
-	textRequest := types.TextRequest{
-		BaseRequest: types.BaseRequest{
-			Model: "mistral-large-latest",
-		},
-		Messages: []types.Message{
-			&types.UserMessage{
-				Content: "What is the capital of France?",
-			},
-		},
-	}
 
-	response, err := provider.Text(context.Background(), textRequest)
+	response, err := client.Text().
+		Model("mistral-large-latest").
+		Messages(types.NewUserMessage("What is the capital of France?")).
+		Generate(context.Background())
 	if err != nil {
 		log.Printf("Text generation error: %v", err)
 	} else {
@@ -50,15 +42,14 @@ func main() {
 
 	// Example 2: Embeddings
 	fmt.Println("=== Embeddings ===")
-	embeddingsRequest := types.EmbeddingsRequest{
-		Model: "mistral-embed",
-		Input: []string{
+
+	embeddingsResponse, err := client.Embeddings().
+		Model("mistral-embed").
+		Input([]string{
 			"Hello, world!",
 			"How are you?",
-		},
-	}
-
-	embeddingsResponse, err := provider.Embeddings(context.Background(), embeddingsRequest)
+		}).
+		Generate(context.Background())
 	if err != nil {
 		log.Printf("Embeddings generation error: %v", err)
 	} else {
@@ -74,18 +65,11 @@ func main() {
 
 	// Example 3: Streaming
 	fmt.Println("=== Streaming Text Generation ===")
-	streamRequest := types.TextRequest{
-		BaseRequest: types.BaseRequest{
-			Model: "mistral-large-latest",
-		},
-		Messages: []types.Message{
-			&types.UserMessage{
-				Content: "Tell me a short story about a brave knight.",
-			},
-		},
-	}
 
-	stream, err := provider.Stream(context.Background(), streamRequest)
+	stream, err := client.Text().
+		Model("mistral-large-latest").
+		Messages(types.NewUserMessage("Tell me a short story about a brave knight.")).
+		Stream(context.Background())
 	if err != nil {
 		log.Printf("Streaming error: %v", err)
 	} else {
@@ -109,16 +93,12 @@ func main() {
 
 	// Example 4: Structured output with function calling
 	fmt.Println("=== Structured Output ===")
-	structuredRequest := types.StructuredRequest{
-		BaseRequest: types.BaseRequest{
-			Model: "mistral-large-latest",
-		},
-		Messages: []types.Message{
-			&types.UserMessage{
-				Content: "Extract the name, age, and occupation from: 'John Doe is a 30-year-old software engineer.'",
-			},
-		},
-		Schema: map[string]interface{}{
+
+	var result map[string]interface{}
+	structuredResponse, err := client.Structured().
+		Model("mistral-large-latest").
+		Messages(types.NewUserMessage("Extract the name, age, and occupation from: 'John Doe is a 30-year-old software engineer.'")).
+		Schema(map[string]interface{}{
 			"type": "object",
 			"properties": map[string]interface{}{
 				"name": map[string]interface{}{
@@ -135,16 +115,12 @@ func main() {
 				},
 			},
 			"required": []string{"name", "age", "occupation"},
-		},
-		SchemaName: "person_info",
-		Mode:       types.StructuredModeTools,
-	}
-
-	structuredResponse, err := provider.Structured(context.Background(), structuredRequest)
+		}).
+		GenerateAs(context.Background(), &result)
 	if err != nil {
 		log.Printf("Structured generation error: %v", err)
 	} else {
-		fmt.Printf("Structured data: %+v\n", structuredResponse.Data)
+		fmt.Printf("Structured data: %+v\n", result)
 		fmt.Printf("Model: %s\n", structuredResponse.Model)
 		fmt.Printf("Usage: %+v\n", structuredResponse.Usage)
 	}
