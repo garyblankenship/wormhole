@@ -54,7 +54,7 @@ func main() {
 		Using(provider).
 		Model(getStreamingModel(provider)).
 		Messages(
-			types.NewSystemMessage("You are streaming through an interdimensional wormhole at 94.89 nanoseconds per operation."),
+			types.NewSystemMessage("You are streaming through an interdimensional wormhole at 67 nanoseconds per operation."),
 			types.NewUserMessage(prompt),
 		).
 		MaxTokens(500).
@@ -132,7 +132,7 @@ func main() {
 func getStreamingModel(provider string) string {
 	switch provider {
 	case "openai":
-		return "gpt-4-turbo-preview"
+		return "gpt-4o"
 	case "anthropic":
 		return "claude-3-opus-20240229"
 	default:

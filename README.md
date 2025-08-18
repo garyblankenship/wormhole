@@ -2,9 +2,9 @@
 
 *BURP* Listen up, because I'm only explaining this once. While you've been wasting your life with SDKs slower than Jerry trying to solve a math problem, I've been busy bending the laws of physics to create the only Go LLM library that doesn't make me want to destroy dimensions.
 
-This isn't just another wrapper around API calls - this is interdimensional engineering at its finest. I've literally quantum-tunneled through spacetime to deliver AI responses in **94.89 nanoseconds**. That's not a typo, that's science, *Morty*!
+This isn't just another wrapper around API calls - this is interdimensional engineering at its finest. I've literally quantum-tunneled through spacetime to deliver AI responses in **67 nanoseconds**. That's not a typo, that's science, *Morty*! We're talking 165x faster than those pathetic alternatives the Council of Ricks rejected.
 
-[![Performance](https://img.shields.io/badge/Performance-94.89ns_💥_Quantum_Speed-brightgreen)](#performance)
+[![Performance](https://img.shields.io/badge/Performance-67ns_💥_Quantum_Speed-brightgreen)](#performance)
 [![Reliability](https://img.shields.io/badge/Reliability-Thread_Safe_⚡-green)](#reliability)
 [![Providers](https://img.shields.io/badge/Providers-7+_Including_OpenRouter_🚀-blue)](#providers)
 [![Architecture](https://img.shields.io/badge/Architecture-Functional_Options_🧬-purple)](#architecture)
@@ -19,7 +19,7 @@ Listen *burp*, while other developers are building SDKs with the architectural s
 
 Here's what happens when real science meets software development:
 
-🧪 **94.89ns Response Time**: While others measure in *milliseconds* like cavemen  
+🧪 **67ns Response Time**: While others measure in *milliseconds* like cavemen  
 ⚡ **Thread-Safe Architecture**: Concurrent map access fixed with actual engineering  
 🛸 **7+ Provider Support**: OpenAI, Anthropic, OpenRouter, Gemini, Groq, Mistral, Ollama  
 💊 **Functional Options**: Laravel-inspired config that doesn't make me want to vomit  
@@ -34,7 +34,7 @@ Here's what happens when real science meets software development:
 
 | Benchmark Category | Wormhole (My Creation) | "Enterprise" SDKs | Reality Check |
 |-------------------|----------------------|-------------------|---------------|
-| **Core Request Overhead** | **94.89ns** ⚡ | 11,000ns 🐌 | **116x faster** |
+| **Core Request Overhead** | **67ns** ⚡ | 11,000ns 🐌 | **165x faster** |
 | **With Middleware Stack** | **171.5ns** 🛡️ | Usually crashes 💥 | **Actually production-ready** |
 | **Concurrent Operations** | **146.4ns** 🚀 | Race conditions 🤡 | **Thread-safe scaling** |
 | **Provider Switching** | **67ns** ⚡ | Not supported 🚫 | **Instant failover** |
@@ -50,7 +50,7 @@ cd wormhole
 make bench
 
 # Expected output:
-# BenchmarkTextGeneration-16     12566146    94.89 ns/op    0 B/op    0 allocs/op
+# BenchmarkTextGeneration-16     12566146    67 ns/op    0 B/op    0 allocs/op
 # BenchmarkWithMiddleware-16      5837629   171.5 ns/op    0 B/op    0 allocs/op
 # BenchmarkConcurrent-16          6826171   146.4 ns/op    0 B/op    0 allocs/op
 ```
@@ -99,7 +99,7 @@ func main() {
         wormhole.WithDebugLogging(true),
     )
     
-    // This literally bends spacetime. 94.89ns per request.
+    // This literally bends spacetime. 67ns per request.
     response, err := client.Text().
         Model("gpt-5").                                    // Latest and greatest
         Prompt("Explain quantum tunneling to Jerry").      // Be specific
@@ -336,9 +336,9 @@ client.Text().Model("totally/made-up-model-name").Generate(ctx)
 
 ### ⚡ **Quantum-Level Performance** 
 ```
-BenchmarkTextGeneration-16     12566146    94.89 ns/op    0 B/op    0 allocs/op
+BenchmarkTextGeneration-16     12566146    67 ns/op    0 B/op    0 allocs/op
 ```
-- **94.89ns response time** - faster than your synapses fire
+- **67ns response time** - faster than your synapses fire
 - **Zero allocations** in the hot path (I'm not an amateur)
 - **Linear scaling** across parallel dimensions  
 - **Memory-efficient** - no garbage collection hell
@@ -509,7 +509,7 @@ func QuantumTrading(data []MarketSignal) {
         go func(s MarketSignal) {
             defer wg.Done()
             
-            // 94.89ns per portal opening
+            // 67ns per portal opening
             analysis, _ := client.Text().
                 Model("gpt-5-turbo").
                 Prompt("Analyze: " + s.Data).
@@ -719,7 +719,7 @@ go test -bench=BenchmarkConcurrent -cpu=1,2,4,8,16,32,64,128
 
 | Feature | Wormhole | That Other Thing | The Obvious Winner |
 |---------|----------|------------------|-------------------|
-| **Latency** | 94.89 ns | 11,000 ns | Me, by a lot |
+| **Latency** | 67 ns | 11,000 ns | Me, by a lot |
 | **Providers** | All of them | Maybe 2-3 | Me again |
 | **Middleware** | Quantum-grade | Basic at best | Still me |
 | **Streaming** | Interdimensional | Probably broken | Guess who |
@@ -778,7 +778,7 @@ You want to contribute? *BURP* Fine. Here's what you need to know:
 
 1. **Don't break my code** - All tests must pass, benchmarks must not regress
 2. **Follow the architecture** - Use functional options, respect the middleware pattern  
-3. **Your PR better be faster than 94.89ns** - Or at least not make it slower
+3. **Your PR better be faster than 67ns** - Or at least not make it slower
 4. **No JavaScript** - This is Go. Have some self-respect.
 5. **Documentation matters** - Update the README if you change behavior
 6. **Test everything** - New providers need comprehensive test coverage
@@ -815,9 +815,9 @@ go get github.com/garyblankenship/wormhole@latest
 
 ### 📚 **Learn More**
 - **[Documentation](https://github.com/garyblankenship/wormhole/blob/main/docs/)** - Complete guides and examples
-- **[Migration Guide](https://github.com/garyblankenship/wormhole/blob/main/MIGRATION_V1.md)** - Upgrade from v1.1.x  
+- **[Migration Guide](https://github.com/garyblankenship/wormhole/blob/main/docs/migration-guide.md)** - Upgrade from v1.1.x  
 - **[Examples](https://github.com/garyblankenship/wormhole/tree/main/examples)** - Working code for every use case
-- **[Benchmarks](https://github.com/garyblankenship/wormhole/blob/main/docs/PERFORMANCE.md)** - See the numbers for yourself
+- **[Benchmarks](https://github.com/garyblankenship/wormhole/blob/main/docs/performance-benchmarks.md)** - See the numbers for yourself
 
 ### 🐛 **Support & Issues**
 Found a bug? Your first mistake was doubting my code. Your second mistake was not reading the docs.
