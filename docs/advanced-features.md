@@ -85,9 +85,17 @@ Enterprise-grade reliability and observability.
 ### Production Middleware Stack
 
 ```go
+import (
+    "os"
+    "time"
+    
+    "github.com/garyblankenship/wormhole/pkg/middleware"
+    "github.com/garyblankenship/wormhole/pkg/wormhole"
+)
+
 client := wormhole.New(
     wormhole.WithDefaultProvider("openai"),
-    wormhole.WithOpenAI("your-api-key"),
+    wormhole.WithOpenAI(os.Getenv("OPENAI_API_KEY")),
     wormhole.WithTimeout(30*time.Second),              // Global timeouts
     wormhole.WithRetries(3, 2*time.Second),            // Auto-retry with backoff
     wormhole.WithMiddleware(
@@ -108,18 +116,33 @@ client := wormhole.New(
 ### Custom Middleware
 
 ```go
-func CustomMiddleware() middleware.Middleware {
+import (
+    "context"
+    "log"
+    "os"
+    "time"
+    
+    "github.com/garyblankenship/wormhole/pkg/middleware"
+    "github.com/garyblankenship/wormhole/pkg/wormhole"
+)
+
+func CustomLoggingMiddleware() middleware.Middleware {
     return func(next middleware.Handler) middleware.Handler {
         return func(ctx context.Context, req interface{}) (interface{}, error) {
             // Pre-processing
             start := time.Now()
+            log.Printf("Starting request: %T", req)
             
             // Call next middleware
             resp, err := next(ctx, req)
             
             // Post-processing
             duration := time.Since(start)
-            log.Printf("Request took %v", duration)
+            if err != nil {
+                log.Printf("Request failed after %v: %v", duration, err)
+            } else {
+                log.Printf("Request succeeded in %v", duration)
+            }
             
             return resp, err
         }
@@ -129,8 +152,8 @@ func CustomMiddleware() middleware.Middleware {
 // Use custom middleware with functional options
 client := wormhole.New(
     wormhole.WithDefaultProvider("openai"),
-    wormhole.WithOpenAI("your-api-key"),
-    wormhole.WithMiddleware(CustomMiddleware()),
+    wormhole.WithOpenAI(os.Getenv("OPENAI_API_KEY")),
+    wormhole.WithMiddleware(CustomLoggingMiddleware()),
 )
 ```
 
@@ -153,27 +176,145 @@ client.Use(middleware.LoadBalancerMiddleware(middleware.RoundRobin, providers))
 
 Type-safe JSON responses with schema validation.
 
+### Method 1: Using Raw Schema (JSON Schema format)
+
 ```go
+import (
+    "context"
+    "fmt"
+    "os"
+    
+    "github.com/garyblankenship/wormhole/pkg/wormhole"
+)
+
 type Person struct {
     Name string `json:"name"`
     Age  int    `json:"age"`
     City string `json:"city"`
 }
 
-var person Person
+func main() {
+    client := wormhole.New(
+        wormhole.WithDefaultProvider("openai"),
+        wormhole.WithOpenAI(os.Getenv("OPENAI_API_KEY")),
+    )
+
+    var person Person
+    err := client.Structured().
+        Model("gpt-4o").
+        Prompt("Generate a realistic person profile for a software engineer").
+        Schema(map[string]interface{}{
+            "type": "object",
+            "properties": map[string]interface{}{
+                "name": map[string]interface{}{"type": "string"},
+                "age":  map[string]interface{}{"type": "integer", "minimum": 18, "maximum": 100},
+                "city": map[string]interface{}{"type": "string"},
+            },
+            "required": []string{"name", "age"},
+            "additionalProperties": false,
+        }).
+        GenerateAs(ctx, &person)
+
+    if err != nil {
+        log.Printf("Error generating structured output: %v", err)
+        return
+    }
+
+    fmt.Printf("Generated person: %+v\n", person)
+}
+```
+
+### Method 2: Using Typed Schema Builders
+
+```go
+import "github.com/garyblankenship/wormhole/pkg/types"
+
+func generateWithTypedSchema() {
+    schema := &types.ObjectSchema{
+        BaseSchema: types.BaseSchema{
+            Type: "object",
+            Description: "A person profile",
+        },
+        Properties: map[string]types.SchemaInterface{
+            "name": &types.StringSchema{
+                BaseSchema: types.BaseSchema{Type: "string"},
+            },
+            "age": &types.NumberSchema{
+                BaseSchema: types.BaseSchema{Type: "integer"},
+            },
+            "city": &types.StringSchema{
+                BaseSchema: types.BaseSchema{Type: "string"},
+            },
+        },
+        Required: []string{"name", "age"},
+    }
+
+    var person Person
+    err := client.Structured().
+        Model("gpt-4o").
+        Prompt("Generate a person profile").
+        Schema(schema).
+        GenerateAs(ctx, &person)
+
+    if err != nil {
+        log.Printf("Error: %v", err)
+        return
+    }
+
+    fmt.Printf("Person: %+v\n", person)
+}
+```
+
+### Complex Nested Structures
+
+```go
+type Company struct {
+    Name      string   `json:"name"`
+    Employees []Person `json:"employees"`
+    Address   Address  `json:"address"`
+}
+
+type Address struct {
+    Street  string `json:"street"`
+    City    string `json:"city"`
+    Country string `json:"country"`
+}
+
+schema := map[string]interface{}{
+    "type": "object",
+    "properties": map[string]interface{}{
+        "name": map[string]interface{}{"type": "string"},
+        "employees": map[string]interface{}{
+            "type": "array",
+            "items": map[string]interface{}{
+                "type": "object",
+                "properties": map[string]interface{}{
+                    "name": map[string]interface{}{"type": "string"},
+                    "age":  map[string]interface{}{"type": "integer"},
+                    "city": map[string]interface{}{"type": "string"},
+                },
+                "required": []string{"name", "age"},
+            },
+        },
+        "address": map[string]interface{}{
+            "type": "object",
+            "properties": map[string]interface{}{
+                "street":  map[string]interface{}{"type": "string"},
+                "city":    map[string]interface{}{"type": "string"},
+                "country": map[string]interface{}{"type": "string"},
+            },
+            "required": []string{"city", "country"},
+        },
+    },
+    "required": []string{"name", "employees", "address"},
+}
+
+var company Company
 err := client.Structured().
     Model("gpt-4o").
-    Prompt("Generate a person profile").
-    Schema(map[string]interface{}{
-        "type": "object",
-        "properties": map[string]interface{}{
-            "name": map[string]interface{}{"type": "string"},
-            "age":  map[string]interface{}{"type": "integer"},
-            "city": map[string]interface{}{"type": "string"},
-        },
-        "required": []string{"name", "age"},
-    }).
-    GenerateAs(ctx, &person)
+    Prompt("Generate a fictional tech company with 3 employees").
+    Schema(schema).
+    GenerateAs(ctx, &company)
 ```
 
 ## Model Validation & Constraints
@@ -363,6 +504,132 @@ go func() {
 }()
 ```
 
+## Troubleshooting Advanced Features
+
+### Custom Provider Issues
+
+**Problem**: Custom provider not found
+```bash
+Error: provider "myprovider" not found
+```
+
+**Solution**: Register before use
+```go
+client := wormhole.New(
+    wormhole.WithCustomProvider("myprovider", MyProviderFactory),
+    wormhole.WithProviderConfig("myprovider", types.ProviderConfig{
+        APIKey: "key",
+        BaseURL: "https://api.example.com",
+    }),
+    wormhole.WithDefaultProvider("myprovider"),
+)
+```
+
+### Middleware Ordering Issues
+
+**Problem**: Middleware not executing in expected order
+
+**Solution**: Remember middleware executes in LIFO order:
+```go
+// This middleware stack executes: Auth -> RateLimit -> Retry -> Provider
+wormhole.WithMiddleware(
+    middleware.RetryMiddleware(config),     // Executes FIRST (closest to provider)
+    middleware.RateLimitMiddleware(10),     // Executes SECOND  
+    middleware.AuthMiddleware(apiKey),      // Executes LAST (outermost)
+)
+```
+
+### Structured Output Validation Errors
+
+**Problem**: Schema validation fails with cryptic messages
+
+**Solution**: Enable debug logging to see full validation details:
+```go
+client := wormhole.New(
+    wormhole.WithOpenAI(os.Getenv("OPENAI_API_KEY")),
+    wormhole.WithDebugLogging(log.Default()),
+)
+```
+
+### Memory Leaks in Long-Running Applications
+
+**Problem**: Goroutine leaks with streaming
+
+**Solution**: Always handle context cancellation:
+```go
+ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+defer cancel()
+
+stream, err := client.Text().Stream(ctx)
+for chunk := range stream {
+    select {
+    case <-ctx.Done():
+        return ctx.Err()
+    default:
+        // Process chunk
+    }
+}
+```
+
+### Circuit Breaker Not Triggering
+
+**Problem**: Circuit breaker doesn't open despite failures
+
+**Solution**: Ensure error threshold and types are correct:
+```go
+// Opens after 5 consecutive failures within 30 seconds
+middleware.CircuitBreakerMiddleware(5, 30*time.Second)
+```
+
+## Performance Tips
+
+### Connection Pooling
+```go
+// Use connection pooling for high-throughput applications
+import "net/http"
+
+transport := &http.Transport{
+    MaxIdleConns:        100,
+    MaxIdleConnsPerHost: 10,
+    IdleConnTimeout:     90 * time.Second,
+}
+
+client := &http.Client{Transport: transport}
+// Pass custom client to provider config
+```
+
+### Request Batching
+```go
+// Process multiple prompts concurrently
+func processPromptsBatch(prompts []string) {
+    var wg sync.WaitGroup
+    semaphore := make(chan struct{}, 10) // Limit to 10 concurrent requests
+    
+    for _, prompt := range prompts {
+        wg.Add(1)
+        go func(p string) {
+            defer wg.Done()
+            semaphore <- struct{}{} // Acquire
+            defer func() { <-semaphore }() // Release
+            
+            response, err := client.Text().
+                Model("gpt-4o").
+                Prompt(p).
+                Generate(ctx)
+            
+            if err != nil {
+                log.Printf("Error processing %s: %v", p, err)
+                return
+            }
+            
+            // Process response
+        }(prompt)
+    }
+    
+    wg.Wait()
+}
+```
+
 ## Best Practices
 
 1. **Always use context with timeouts**
@@ -373,5 +640,7 @@ go func() {
 6. **Validate models before making requests**
 7. **Use structured output for reliable data extraction**
 8. **Implement health checks for production systems**
+9. **Handle goroutine lifecycle in streaming applications**
+10. **Use connection pooling for high-throughput scenarios**
 
 See the `examples/` directory for complete working implementations of these patterns.

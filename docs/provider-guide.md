@@ -32,15 +32,33 @@ This document outlines the available LLM providers in Wormhole Go and their capa
   - ❌ Text-to-speech
   - ❌ Image generation
 
-### 🚧 OpenAI (Updated for new types)
+### ✅ OpenAI
 - **Package**: `github.com/garyblankenship/wormhole/pkg/providers/openai`
-- **Status**: Being updated for new type system
-- **Models**: `gpt-5`, `gpt-5-mini`, `text-embedding-ada-002`, `dall-e-3`
+- **Status**: ✅ Fully updated for new type system
+- **Models**: `gpt-4o`, `gpt-4o-mini`, `gpt-4-turbo`, `text-embedding-3-small`, `text-embedding-3-large`, `dall-e-3`
+- **Features**:
+  - ✅ Text generation with system prompts
+  - ✅ Streaming responses
+  - ✅ Structured output (JSON mode and schema)
+  - ✅ Embeddings generation
+  - ✅ Function/Tool calling
+  - ✅ Multi-modal input (vision)
+  - ✅ Audio (Whisper STT, TTS)
+  - ✅ Image generation (DALL-E)
 
-### 🚧 Anthropic (Updated for new types)
+### ✅ Anthropic
 - **Package**: `github.com/garyblankenship/wormhole/pkg/providers/anthropic`
-- **Status**: Being updated for new type system
-- **Models**: `claude-3-5-sonnet-20241022`, `claude-3-opus-20240229`
+- **Status**: ✅ Fully updated for new type system
+- **Models**: `claude-3-5-sonnet-20241022`, `claude-3-5-haiku-20241022`, `claude-3-opus-20240229`
+- **Features**:
+  - ✅ Text generation with system prompts
+  - ✅ Streaming responses
+  - ✅ Structured output (JSON mode)
+  - ✅ Function/Tool calling
+  - ✅ Multi-modal input (vision, documents)
+  - ❌ Embeddings (use OpenAI or Gemini)
+  - ❌ Audio (TTS/STT)
+  - ❌ Image generation
 
 ### ✅ OpenRouter (Multi-Provider Gateway)
 - **Package**: `github.com/garyblankenship/wormhole/pkg/providers/openai_compatible`
@@ -73,15 +91,17 @@ OpenRouter provides access to 200+ models from different providers through a sin
 
 ```go
 import (
+    "os"
+    
     "github.com/garyblankenship/wormhole/pkg/wormhole"
     "github.com/garyblankenship/wormhole/pkg/types"
 )
 
 // Configure as OpenAI-compatible provider with functional options
-w := wormhole.New(
+client := wormhole.New(
     wormhole.WithDefaultProvider("openrouter"),
     wormhole.WithOpenAICompatible("openrouter", "https://openrouter.ai/api/v1", types.ProviderConfig{
-        APIKey: "your-openrouter-api-key",
+        APIKey: os.Getenv("OPENROUTER_API_KEY"),
     }),
 )
 ```
@@ -98,7 +118,7 @@ models := []string{
 }
 
 for _, model := range models {
-    response, err := w.Text().
+    response, err := client.Text().
         Model(model).
         Prompt("Explain quantum computing in one sentence").
         MaxTokens(100).
@@ -140,7 +160,7 @@ func generateResponse(prompt string, complexity string) (*types.TextResponse, er
     
     // Try models in order of preference/cost
     for _, model := range models {
-        response, err := w.Text().
+        response, err := client.Text().
             Model(model).
             Prompt(prompt).
             Generate(ctx)
@@ -183,7 +203,7 @@ weatherTool := types.NewTool(
 
 // Try function calling with fallback
 for _, model := range functionModels {
-    response, err := w.Text().
+    response, err := client.Text().
         Model(model).
         Messages(types.NewUserMessage("What's the weather in Tokyo?")).
         Tools([]*types.Tool{weatherTool}).
@@ -208,7 +228,7 @@ embeddingModels := []string{
 text := "The universe is vast and full of possibilities"
 
 for _, model := range embeddingModels {
-    response, err := w.Embeddings().
+    response, err := client.Embeddings().
         Model(model).
         Input(text).
         Generate(ctx)
@@ -237,7 +257,7 @@ func compareStreamingPerformance(prompt string) {
         fmt.Printf("\n--- Streaming with %s ---\n", model)
         
         start := time.Now()
-        stream, err := w.Text().
+        stream, err := client.Text().
             Model(model).
             Prompt(prompt).
             MaxTokens(200).
@@ -274,56 +294,61 @@ import (
     "context"
     "fmt"
     "log"
+    "os"
     
-    "github.com/garyblankenship/wormhole/pkg/providers/gemini"
-    "github.com/garyblankenship/wormhole/pkg/types"
+    "github.com/garyblankenship/wormhole/pkg/wormhole"
 )
 
 func main() {
     ctx := context.Background()
     
-    // Initialize provider
-    provider := gemini.New("your-api-key", types.ProviderConfig{})
+    // Initialize client with Gemini provider
+    client := wormhole.New(
+        wormhole.WithDefaultProvider("gemini"),
+        wormhole.WithGemini(os.Getenv("GEMINI_API_KEY")),
+    )
     
-    // Create request
-    request := types.TextRequest{
-        Model: "gemini-1.5-flash",
-        Messages: []types.Message{
-            types.NewUserMessage("What is Go programming language?"),
-        },
-        MaxTokens: 200,
-    }
+    // Generate response using builder pattern
+    response, err := client.Text().
+        Model("gemini-1.5-flash").
+        Prompt("What is Go programming language?").
+        MaxTokens(200).
+        Generate(ctx)
     
-    // Generate response
-    response, err := provider.Text(ctx, request)
     if err != nil {
-        log.Fatal(err)
+        log.Printf("Error generating text: %v", err)
+        return
     }
     
-    fmt.Println(response.Text)
+    fmt.Println(response.Content)
 }
 ```
 
 ### Streaming Responses
 
 ```go
-stream, err := provider.Stream(ctx, request)
+stream, err := client.Text().
+    Model("gemini-1.5-flash").
+    Prompt("Write a story about space exploration").
+    Stream(ctx)
+
 if err != nil {
-    log.Fatal(err)
+    log.Printf("Error starting stream: %v", err)
+    return
 }
 
 for chunk := range stream {
     if chunk.Error != nil {
-        log.Printf("Error: %v", chunk.Error)
+        log.Printf("Stream error: %v", chunk.Error)
         break
     }
     
-    if chunk.Text != "" {
-        fmt.Print(chunk.Text)
+    if chunk.Content != "" {
+        fmt.Print(chunk.Content)
     }
     
     if chunk.FinishReason != nil {
-        fmt.Printf("\\n[Finished: %s]\\n", *chunk.FinishReason)
+        fmt.Printf("\n[Finished: %s]\n", *chunk.FinishReason)
         break
     }
 }
@@ -332,43 +357,44 @@ for chunk := range stream {
 ### Structured Output
 
 ```go
-import "github.com/garyblankenship/wormhole/pkg/types"
-
-// Define schema
-schema := &types.ObjectSchema{
-    BaseSchema: types.BaseSchema{Type: "object"},
-    Properties: map[string]types.Schema{
-        "name": &types.StringSchema{
-            BaseSchema: types.BaseSchema{Type: "string"},
-        },
-        "age": &types.NumberSchema{
-            BaseSchema: types.BaseSchema{Type: "number"},
-        },
-    },
-    Required: []string{"name", "age"},
+type Person struct {
+    Name string `json:"name"`
+    Age  int    `json:"age"`
 }
 
-request := types.StructuredRequest{
-    Model: "gemini-1.5-flash",
-    Messages: []types.Message{
-        types.NewUserMessage("Generate a person with name and age"),
+// Define schema using map format
+schema := map[string]interface{}{
+    "type": "object",
+    "properties": map[string]interface{}{
+        "name": map[string]interface{}{"type": "string"},
+        "age":  map[string]interface{}{"type": "integer", "minimum": 1, "maximum": 120},
     },
-    Schema: schema,
+    "required": []string{"name", "age"},
+    "additionalProperties": false,
 }
 
-response, err := provider.Structured(ctx, request)
+var person Person
+err := client.Structured().
+    Model("gemini-1.5-flash").
+    Prompt("Generate a realistic person with name and age").
+    Schema(schema).
+    GenerateAs(ctx, &person)
+
 if err != nil {
-    log.Fatal(err)
+    log.Printf("Error generating structured output: %v", err)
+    return
 }
 
-fmt.Printf("Structured data: %+v\\n", response.Data)
+fmt.Printf("Generated person: %+v\n", person)
 ```
 
 ### Tool Calling
 
 ```go
-// Define a tool
-tool := types.NewTool(
+import "github.com/garyblankenship/wormhole/pkg/types"
+
+// Define a tool using the NewTool helper
+weatherTool := types.NewTool(
     "get_weather",
     "Get current weather for a location",
     map[string]interface{}{
@@ -376,86 +402,96 @@ tool := types.NewTool(
         "properties": map[string]interface{}{
             "location": map[string]interface{}{
                 "type": "string",
-                "description": "City name",
+                "description": "City name with country if needed",
             },
         },
         "required": []string{"location"},
     },
 )
 
-request := types.TextRequest{
-    Model: "gemini-1.5-flash",
-    Messages: []types.Message{
-        types.NewUserMessage("What's the weather in Paris?"),
-    },
-    Tools: []types.Tool{*tool},
-    ToolChoice: &types.ToolChoice{
-        Type: types.ToolChoiceTypeAuto,
-    },
-}
+response, err := client.Text().
+    Model("gemini-1.5-flash").
+    Prompt("What's the weather like in Paris?").
+    Tools([]*types.Tool{weatherTool}).
+    Generate(ctx)
 
-response, err := provider.Text(ctx, request)
 if err != nil {
-    log.Fatal(err)
+    log.Printf("Error with tool calling: %v", err)
+    return
 }
 
-// Check for tool calls
-for _, toolCall := range response.ToolCalls {
-    fmt.Printf("Tool called: %s with args: %+v\\n", toolCall.Name, toolCall.Arguments)
+// Check for tool calls in response
+if len(response.ToolCalls) > 0 {
+    for _, toolCall := range response.ToolCalls {
+        fmt.Printf("Tool called: %s with args: %+v\n", toolCall.Name, toolCall.Arguments)
+        // Here you would implement the actual weather API call
+    }
+} else {
+    fmt.Printf("Response: %s\n", response.Content)
 }
 ```
 
 ### Multi-modal Input
 
 ```go
-// Load image data
-imageData, err := os.ReadFile("image.jpg")
+import (
+    "io"
+    "os"
+    
+    "github.com/garyblankenship/wormhole/pkg/types"
+)
+
+// Load image from file
+file, err := os.Open("image.jpg")
 if err != nil {
-    log.Fatal(err)
+    log.Printf("Error opening image: %v", err)
+    return
 }
+defer file.Close()
 
-// Create user message with image
-userMsg := &types.UserMessage{
-    Content: "What do you see in this image?",
-    Media: []types.Media{
-        &types.ImageMedia{
-            Data:     imageData,
-            MimeType: "image/jpeg",
-        },
-    },
-}
-
-request := types.TextRequest{
-    Model:    "gemini-1.5-flash",
-    Messages: []types.Message{userMsg},
-}
-
-response, err := provider.Text(ctx, request)
+imageData, err := io.ReadAll(file)
 if err != nil {
-    log.Fatal(err)
+    log.Printf("Error reading image: %v", err)
+    return
 }
 
-fmt.Println(response.Text)
+// Create message with image
+response, err := client.Text().
+    Model("gemini-1.5-flash").
+    UserMessage("What do you see in this image?").
+    AddImage(imageData, "image/jpeg").
+    Generate(ctx)
+
+if err != nil {
+    log.Printf("Error with multi-modal request: %v", err)
+    return
+}
+
+fmt.Printf("Image description: %s\n", response.Content)
 ```
 
 ### Embeddings
 
 ```go
-request := types.EmbeddingsRequest{
-    Model: "text-embedding-004",
-    Input: []string{
-        "The quick brown fox jumps over the lazy dog",
-        "Machine learning is a subset of artificial intelligence",
-    },
+texts := []string{
+    "The quick brown fox jumps over the lazy dog",
+    "Machine learning is a subset of artificial intelligence",
+    "Wormhole makes LLM integration simple and fast",
 }
 
-response, err := provider.Embeddings(ctx, request)
+response, err := client.Embeddings().
+    Model("text-embedding-004").
+    Input(texts).
+    Generate(ctx)
+
 if err != nil {
-    log.Fatal(err)
+    log.Printf("Error generating embeddings: %v", err)
+    return
 }
 
 for i, embedding := range response.Embeddings {
-    fmt.Printf("Embedding %d: %d dimensions\\n", i, len(embedding.Embedding))
+    fmt.Printf("Text %d: %d dimensions, first 5 values: %v\n", 
+        i+1, len(embedding.Embedding), embedding.Embedding[:5])
 }
 ```
 
@@ -526,6 +562,138 @@ Legend:
 - ❌ Not supported by provider
 - 📋 Planned
 
+## Provider-Specific Setup Guide
+
+### OpenAI Setup
+```bash
+# Get API key from https://platform.openai.com/api-keys
+export OPENAI_API_KEY="sk-your-key-here"
+```
+
+```go
+client := wormhole.New(
+    wormhole.WithDefaultProvider("openai"),
+    wormhole.WithOpenAI(os.Getenv("OPENAI_API_KEY")),
+)
+```
+
+### Anthropic Setup
+```bash
+# Get API key from https://console.anthropic.com/
+export ANTHROPIC_API_KEY="sk-ant-your-key-here"
+```
+
+```go
+client := wormhole.New(
+    wormhole.WithDefaultProvider("anthropic"),
+    wormhole.WithAnthropic(os.Getenv("ANTHROPIC_API_KEY")),
+)
+```
+
+### Google Gemini Setup
+```bash
+# Get API key from https://makersuite.google.com/app/apikey
+export GEMINI_API_KEY="your-key-here"
+```
+
+```go
+client := wormhole.New(
+    wormhole.WithDefaultProvider("gemini"),
+    wormhole.WithGemini(os.Getenv("GEMINI_API_KEY")),
+)
+```
+
+### Groq Setup
+```bash
+# Get API key from https://console.groq.com/keys
+export GROQ_API_KEY="gsk_your-key-here"
+```
+
+```go
+client := wormhole.New(
+    wormhole.WithDefaultProvider("groq"),
+    wormhole.WithGroq(os.Getenv("GROQ_API_KEY")),
+)
+```
+
+### OpenRouter Setup
+```bash
+# Get API key from https://openrouter.ai/keys
+export OPENROUTER_API_KEY="sk-or-your-key-here"
+```
+
+```go
+client := wormhole.New(
+    wormhole.WithDefaultProvider("openrouter"),
+    wormhole.WithOpenAICompatible("openrouter", "https://openrouter.ai/api/v1", types.ProviderConfig{
+        APIKey: os.Getenv("OPENROUTER_API_KEY"),
+    }),
+)
+```
+
+## Common Provider Issues & Solutions
+
+### API Key Problems
+```bash
+Error: 401 Unauthorized / Invalid API key
+```
+
+**Solutions**:
+- Verify API key format (OpenAI: `sk-`, Anthropic: `sk-ant-`, etc.)
+- Check environment variable is set: `echo $OPENAI_API_KEY`
+- Ensure API key has correct permissions/credits
+- For Anthropic: Verify you're using the correct console (Claude.ai vs API console)
+
+### Model Not Available
+```bash
+Error: model "gpt-5" is not available
+```
+
+**Solutions**:
+- Check model name spelling and availability
+- OpenAI: Use `gpt-4o`, `gpt-4o-mini` instead of `gpt-5`
+- Anthropic: Use `claude-3-5-sonnet-20241022` for latest models
+- Verify your API key has access to the requested model
+
+### Rate Limiting
+```bash
+Error: Rate limit exceeded
+```
+
+**Solutions**:
+```go
+// Add retry middleware
+client := wormhole.New(
+    wormhole.WithOpenAI(os.Getenv("OPENAI_API_KEY")),
+    wormhole.WithRetries(3, 2*time.Second),
+    wormhole.WithMiddleware(
+        middleware.RateLimitMiddleware(10), // 10 requests per second
+    ),
+)
+```
+
+### Network/Regional Issues
+```bash
+Error: dial tcp: connection refused
+```
+
+**Solutions**:
+- Check internet connectivity
+- For China/restricted regions: Use OpenRouter as proxy
+- Verify corporate firewall allows HTTPS to provider domains
+- Try different provider as fallback
+
+### Structured Output Failures
+```bash
+Error: response is not valid JSON
+```
+
+**Solutions**:
+- Use models that support structured output (GPT-4o, Claude-3.5-Sonnet, Gemini-1.5)
+- Simplify your schema - complex nested structures may fail
+- Add schema validation and retry logic
+- Use Wormhole's built-in JSON parsing with error recovery
+
 ## Best Practices
 
 1. **Always handle errors** - Network requests can fail
@@ -534,6 +702,10 @@ Legend:
 4. **Handle streaming properly** - Check for errors in chunks
 5. **Respect rate limits** - Implement backoff strategies
 6. **Use appropriate models** - Match model capabilities to use case
+7. **Set up fallback providers** - For high availability
+8. **Monitor API usage and costs** - Especially with premium models
+9. **Use environment variables** - Never hardcode API keys
+10. **Test with multiple providers** - Ensure compatibility
 
 ## Contributing
 
