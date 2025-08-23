@@ -50,7 +50,7 @@ func TestAnthropicProvider_IntegrationTextGeneration(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			// Track the actual request sent to the API
-			var capturedRequest map[string]interface{}
+			var capturedRequest map[string]any
 			var capturedHeaders http.Header
 
 			// Create a mock server
@@ -64,7 +64,7 @@ func TestAnthropicProvider_IntegrationTextGeneration(t *testing.T) {
 				capturedHeaders = r.Header
 
 				// Capture and verify the request body
-				var reqBody map[string]interface{}
+				var reqBody map[string]any
 				err := json.NewDecoder(r.Body).Decode(&reqBody)
 				require.NoError(t, err)
 				capturedRequest = reqBody
@@ -81,33 +81,33 @@ func TestAnthropicProvider_IntegrationTextGeneration(t *testing.T) {
 				}
 
 				// Verify messages format
-				messages, ok := reqBody["messages"].([]interface{})
+				messages, ok := reqBody["messages"].([]any)
 				require.True(t, ok, "messages should be an array")
 				require.Len(t, messages, 1)
 
-				msg := messages[0].(map[string]interface{})
+				msg := messages[0].(map[string]any)
 				assert.Equal(t, "user", msg["role"])
 
-				content := msg["content"].([]interface{})
+				content := msg["content"].([]any)
 				require.Len(t, content, 1)
-				contentPart := content[0].(map[string]interface{})
+				contentPart := content[0].(map[string]any)
 				assert.Equal(t, "text", contentPart["type"])
 				assert.Equal(t, "Hello, world!", contentPart["text"])
 
 				// Return a mock response
-				response := map[string]interface{}{
+				response := map[string]any{
 					"id":          "msg_test123",
 					"type":        "message",
 					"role":        "assistant",
 					"model":       tc.model,
 					"stop_reason": "end_turn",
-					"content": []map[string]interface{}{
+					"content": []map[string]any{
 						{
 							"type": "text",
 							"text": "Hello! This is a test response from Claude.",
 						},
 					},
-					"usage": map[string]interface{}{
+					"usage": map[string]any{
 						"input_tokens":  10,
 						"output_tokens": 8,
 					},
@@ -172,7 +172,7 @@ func TestAnthropicProvider_IntegrationStreaming(t *testing.T) {
 	// Create a mock server that returns streaming responses
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// Verify streaming request
-		var reqBody map[string]interface{}
+		var reqBody map[string]any
 		json.NewDecoder(r.Body).Decode(&reqBody)
 		assert.Equal(t, true, reqBody["stream"])
 
@@ -282,10 +282,10 @@ func TestAnthropicProvider_IntegrationStructuredOutput(t *testing.T) {
 	// Create mock server that returns tool call response
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// Verify tools in request
-		var reqBody map[string]interface{}
+		var reqBody map[string]any
 		json.NewDecoder(r.Body).Decode(&reqBody)
 
-		tools, ok := reqBody["tools"].([]interface{})
+		tools, ok := reqBody["tools"].([]any)
 		require.True(t, ok, "Request should include tools")
 		require.Len(t, tools, 1)
 
@@ -295,13 +295,13 @@ func TestAnthropicProvider_IntegrationStructuredOutput(t *testing.T) {
 		assert.NotNil(t, toolChoice)
 
 		// Return tool call response
-		response := map[string]interface{}{
+		response := map[string]any{
 			"id":          "msg_tool123",
 			"type":        "message",
 			"role":        "assistant",
 			"model":       "claude-3-sonnet-20240229",
 			"stop_reason": "tool_use",
-			"content": []map[string]interface{}{
+			"content": []map[string]any{
 				{
 					"type": "text",
 					"text": "I'll extract the structured data for you.",
@@ -310,14 +310,14 @@ func TestAnthropicProvider_IntegrationStructuredOutput(t *testing.T) {
 					"type": "tool_use",
 					"id":   "tool_call_123",
 					"name": "extract_user_info",
-					"input": map[string]interface{}{
+					"input": map[string]any{
 						"name": "John Doe",
 						"age":  30,
 						"city": "New York",
 					},
 				},
 			},
-			"usage": map[string]interface{}{
+			"usage": map[string]any{
 				"input_tokens":  20,
 				"output_tokens": 15,
 			},
@@ -335,9 +335,9 @@ func TestAnthropicProvider_IntegrationStructuredOutput(t *testing.T) {
 	})
 
 	// Create structured request
-	schema := map[string]interface{}{
+	schema := map[string]any{
 		"type": "object",
-		"properties": map[string]interface{}{
+		"properties": map[string]any{
 			"name": map[string]string{"type": "string"},
 			"age":  map[string]string{"type": "integer"},
 			"city": map[string]string{"type": "string"},
@@ -366,7 +366,7 @@ func TestAnthropicProvider_IntegrationStructuredOutput(t *testing.T) {
 
 	// Verify structured data
 	require.NotNil(t, response.Data)
-	data, ok := response.Data.(map[string]interface{})
+	data, ok := response.Data.(map[string]any)
 	require.True(t, ok)
 	assert.Equal(t, "John Doe", data["name"])
 	assert.Equal(t, float64(30), data["age"]) // JSON numbers are float64
@@ -502,19 +502,19 @@ func TestAnthropicProvider_Authentication(t *testing.T) {
 			authHeader = r.Header.Get("x-api-key")
 			versionHeader = r.Header.Get("anthropic-version")
 
-			response := map[string]interface{}{
+			response := map[string]any{
 				"id":          "test",
 				"type":        "message",
 				"role":        "assistant",
 				"model":       "claude-3-sonnet-20240229",
 				"stop_reason": "end_turn",
-				"content": []map[string]interface{}{
+				"content": []map[string]any{
 					{
 						"type": "text",
 						"text": "Test response",
 					},
 				},
-				"usage": map[string]interface{}{
+				"usage": map[string]any{
 					"input_tokens":  5,
 					"output_tokens": 2,
 				},
@@ -553,25 +553,25 @@ func TestAnthropicProvider_ToolCalling(t *testing.T) {
 	// Create mock server that returns tool call response
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// Verify tools in request
-		var reqBody map[string]interface{}
+		var reqBody map[string]any
 		json.NewDecoder(r.Body).Decode(&reqBody)
 
-		tools, ok := reqBody["tools"].([]interface{})
+		tools, ok := reqBody["tools"].([]any)
 		require.True(t, ok, "Request should include tools")
 		require.Len(t, tools, 1)
 
-		tool := tools[0].(map[string]interface{})
+		tool := tools[0].(map[string]any)
 		assert.Equal(t, "get_weather", tool["name"])
 		assert.Equal(t, "Get current weather for a location", tool["description"])
 
 		// Return tool call response
-		response := map[string]interface{}{
+		response := map[string]any{
 			"id":          "msg_tool123",
 			"type":        "message",
 			"role":        "assistant",
 			"model":       "claude-3-sonnet-20240229",
 			"stop_reason": "tool_use",
-			"content": []map[string]interface{}{
+			"content": []map[string]any{
 				{
 					"type": "text",
 					"text": "I'll get the weather for you.",
@@ -580,13 +580,13 @@ func TestAnthropicProvider_ToolCalling(t *testing.T) {
 					"type": "tool_use",
 					"id":   "tool_call_123",
 					"name": "get_weather",
-					"input": map[string]interface{}{
+					"input": map[string]any{
 						"location": "San Francisco",
 						"unit":     "celsius",
 					},
 				},
 			},
-			"usage": map[string]interface{}{
+			"usage": map[string]any{
 				"input_tokens":  15,
 				"output_tokens": 10,
 			},
@@ -607,9 +607,9 @@ func TestAnthropicProvider_ToolCalling(t *testing.T) {
 	weatherTool := types.NewTool(
 		"get_weather",
 		"Get current weather for a location",
-		map[string]interface{}{
+		map[string]any{
 			"type": "object",
-			"properties": map[string]interface{}{
+			"properties": map[string]any{
 				"location": map[string]string{"type": "string"},
 				"unit":     map[string]string{"type": "string"},
 			},
@@ -641,7 +641,7 @@ func TestAnthropicProvider_ToolCalling(t *testing.T) {
 
 	// Check arguments contain expected data - Arguments should be parsed from Function.Arguments
 	require.NotNil(t, toolCall.Function)
-	var args map[string]interface{}
+	var args map[string]any
 	err = json.Unmarshal([]byte(toolCall.Function.Arguments), &args)
 	require.NoError(t, err)
 	assert.Equal(t, "San Francisco", args["location"])
@@ -653,39 +653,39 @@ func TestAnthropicProvider_MultimodalMessages(t *testing.T) {
 	// Create mock server that handles image messages
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// Verify multimodal content in request
-		var reqBody map[string]interface{}
+		var reqBody map[string]any
 		json.NewDecoder(r.Body).Decode(&reqBody)
 
-		messages, ok := reqBody["messages"].([]interface{})
+		messages, ok := reqBody["messages"].([]any)
 		require.True(t, ok)
 		require.Len(t, messages, 1)
 
-		msg := messages[0].(map[string]interface{})
-		content := msg["content"].([]interface{})
+		msg := messages[0].(map[string]any)
+		content := msg["content"].([]any)
 		require.Len(t, content, 2) // Text + image
 
 		// Check text part
-		textPart := content[0].(map[string]interface{})
+		textPart := content[0].(map[string]any)
 		assert.Equal(t, "text", textPart["type"])
 		assert.Equal(t, "What's in this image?", textPart["text"])
 
 		// Check image part
-		imagePart := content[1].(map[string]interface{})
+		imagePart := content[1].(map[string]any)
 		assert.Equal(t, "image", imagePart["type"])
 
-		response := map[string]interface{}{
+		response := map[string]any{
 			"id":          "msg_vision123",
 			"type":        "message",
 			"role":        "assistant",
 			"model":       "claude-3-sonnet-20240229",
 			"stop_reason": "end_turn",
-			"content": []map[string]interface{}{
+			"content": []map[string]any{
 				{
 					"type": "text",
 					"text": "I can see a beautiful landscape with mountains and a lake.",
 				},
 			},
-			"usage": map[string]interface{}{
+			"usage": map[string]any{
 				"input_tokens":  25,
 				"output_tokens": 12,
 			},
@@ -705,7 +705,7 @@ func TestAnthropicProvider_MultimodalMessages(t *testing.T) {
 	// Create multimodal message
 	parts := []types.MessagePart{
 		types.TextPart("What's in this image?"),
-		types.ImagePart(map[string]interface{}{
+		types.ImagePart(map[string]any{
 			"type":       "base64",
 			"media_type": "image/jpeg",
 			"data":       "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==",

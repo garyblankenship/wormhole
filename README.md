@@ -21,7 +21,7 @@ Here's what happens when real science meets software development:
 
 🧪 **67ns Response Time**: While others measure in *milliseconds* like cavemen  
 ⚡ **Thread-Safe Architecture**: Concurrent map access fixed with actual engineering  
-🛸 **7+ Provider Support**: OpenAI, Anthropic, OpenRouter, Gemini, Groq, Mistral, Ollama  
+🛸 **7+ Provider Support**: OpenAI, Anthropic, OpenRouter, Gemini + OpenAI-compatible (Groq, Mistral, Ollama)  
 💊 **Functional Options**: Laravel-inspired config that doesn't make me want to vomit  
 🔬 **Production Middleware**: Circuit breakers, rate limiting, retries, health checks  
 🌀 **Dynamic Provider Registration**: Add custom providers without touching my perfect code  
@@ -182,6 +182,10 @@ client := wormhole.New(
     wormhole.WithDefaultProvider("openai"),
     wormhole.WithOpenAI("sk-..."),
     wormhole.WithAnthropic("sk-ant-..."),
+    wormhole.WithGroq("gsk_..."),                            // OpenAI-compatible via quantum tunneling
+    wormhole.WithMistral(types.ProviderConfig{              // OpenAI-compatible with advanced config
+        APIKey: "sk-...",
+    }),
     wormhole.WithTimeout(30*time.Second),
     wormhole.WithRetries(3, 2*time.Second),
 )
@@ -221,6 +225,8 @@ client := wormhole.New(
     wormhole.WithDefaultProvider("anthropic"),
     wormhole.WithOpenAI("your-key-here-genius"),
     wormhole.WithAnthropic("another-key-wow-so-secure"),
+    wormhole.WithGroq("your-groq-key"),                             // Fastest inference via quantum tunneling
+    wormhole.WithMistral(types.ProviderConfig{APIKey: "your-mistral-key"}), // European AI excellence
     wormhole.WithTimeout(30*time.Second),                           // Prevents universe collapse
     wormhole.WithRetries(3, 2*time.Second),                         // Exponential backoff included
     wormhole.WithMiddleware(

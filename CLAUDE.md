@@ -58,6 +58,12 @@ Wormhole is a high-performance Go SDK for LLM API integration with sub-microseco
 
 **VIOLATION = IMMEDIATE CLEANUP REQUIRED**
 
+### Claude Code AI Enforcement
+- **NEVER** allow untracked files to accumulate in base directory
+- **IMMEDIATELY** clean up any clutter when detected during sessions
+- **PROACTIVELY** update .gitignore to prevent specific patterns from recurring
+- **REFUSE** to continue work if base directory contains non-essential files
+
 ## Recent Organizational Changes
 - Moved cmd/ demo files to examples/basic/ and examples/comprehensive/
 - Moved dynamic_models_test.go to examples/openrouter_example/

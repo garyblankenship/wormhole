@@ -34,7 +34,7 @@ func DefaultLoggingConfig(logger types.Logger) LoggingConfig {
 // DetailedLoggingMiddleware creates request/response logging middleware with configuration
 func DetailedLoggingMiddleware(config LoggingConfig) Middleware {
 	return func(next Handler) Handler {
-		return func(ctx context.Context, req interface{}) (interface{}, error) {
+		return func(ctx context.Context, req any) (any, error) {
 			start := time.Now()
 
 			// Log request if enabled
@@ -81,7 +81,7 @@ func DebugLoggingMiddleware(logger types.Logger) Middleware {
 }
 
 // logRequest logs the outgoing request
-func logRequest(config LoggingConfig, req interface{}) {
+func logRequest(config LoggingConfig, req any) {
 	sanitized := redactSensitiveData(req, config.RedactKeys)
 
 	switch r := req.(type) {
@@ -122,7 +122,7 @@ func logRequest(config LoggingConfig, req interface{}) {
 }
 
 // logResponse logs the response details
-func logResponse(config LoggingConfig, resp interface{}, duration time.Duration) {
+func logResponse(config LoggingConfig, resp any, duration time.Duration) {
 	switch r := resp.(type) {
 	case *types.TextResponse:
 		config.Logger.Debug(fmt.Sprintf("Text response received in %v:", duration))
@@ -203,14 +203,14 @@ func logError(config LoggingConfig, err error, duration time.Duration) {
 }
 
 // redactSensitiveData removes sensitive information from data before logging
-func redactSensitiveData(data interface{}, redactKeys []string) interface{} {
+func redactSensitiveData(data any, redactKeys []string) any {
 	// Convert to map for processing
 	jsonData, err := json.Marshal(data)
 	if err != nil {
 		return data
 	}
 
-	var mapData map[string]interface{}
+	var mapData map[string]any
 	if err := json.Unmarshal(jsonData, &mapData); err != nil {
 		return data
 	}

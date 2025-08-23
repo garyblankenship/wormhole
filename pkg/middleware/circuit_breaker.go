@@ -50,7 +50,7 @@ func NewCircuitBreaker(failureThreshold int, timeout time.Duration) *CircuitBrea
 }
 
 // Execute wraps a function call with circuit breaker logic
-func (cb *CircuitBreaker) Execute(ctx context.Context, fn func() (interface{}, error)) (interface{}, error) {
+func (cb *CircuitBreaker) Execute(ctx context.Context, fn func() (any, error)) (any, error) {
 	cb.mu.Lock()
 
 	// Check if we should transition from open to half-open
@@ -89,7 +89,7 @@ func (cb *CircuitBreaker) Execute(ctx context.Context, fn func() (interface{}, e
 	return cb.handleSuccess(result)
 }
 
-func (cb *CircuitBreaker) handleError(result interface{}, err error) (interface{}, error) {
+func (cb *CircuitBreaker) handleError(result any, err error) (any, error) {
 	cb.failures++
 	cb.lastFailureTime = time.Now()
 
@@ -107,7 +107,7 @@ func (cb *CircuitBreaker) handleError(result interface{}, err error) (interface{
 	return result, err
 }
 
-func (cb *CircuitBreaker) handleSuccess(result interface{}) (interface{}, error) {
+func (cb *CircuitBreaker) handleSuccess(result any) (any, error) {
 	cb.failures = 0
 
 	switch cb.state {
@@ -134,8 +134,8 @@ func CircuitBreakerMiddleware(threshold int, timeout time.Duration) Middleware {
 	breaker := NewCircuitBreaker(threshold, timeout)
 
 	return func(next Handler) Handler {
-		return func(ctx context.Context, req interface{}) (interface{}, error) {
-			return breaker.Execute(ctx, func() (interface{}, error) {
+		return func(ctx context.Context, req any) (any, error) {
+			return breaker.Execute(ctx, func() (any, error) {
 				return next(ctx, req)
 			})
 		}

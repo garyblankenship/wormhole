@@ -23,7 +23,7 @@ type OrchestrationCompletionRequest struct {
 	Model       string
 	MaxTokens   int
 	Temperature float64
-	Variables   map[string]interface{}
+	Variables   map[string]any
 }
 
 // OrchestrationCompletionResponse represents a response from an AI provider

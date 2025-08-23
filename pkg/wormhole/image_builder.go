@@ -101,7 +101,7 @@ func (b *ImageRequestBuilder) Generate(ctx context.Context) (*types.ImageRespons
 
 	// Apply middleware chain if configured
 	if b.getWormhole().middlewareChain != nil {
-		handler := b.getWormhole().middlewareChain.Apply(func(ctx context.Context, req interface{}) (interface{}, error) {
+		handler := b.getWormhole().middlewareChain.Apply(func(ctx context.Context, req any) (any, error) {
 			imageReq := req.(*types.ImageRequest)
 			return imageProvider.GenerateImage(ctx, *imageReq)
 		})

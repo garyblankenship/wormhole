@@ -168,13 +168,28 @@ make bench           # Performance benchmarks
 
 **Provider Implementation Guide:**
 
-1. **Create Provider Package Structure:**
+1. **Choose Provider Architecture:**
+
+   **Option A: OpenAI-Compatible Provider (Recommended)**
+   ```go
+   // Most new providers should use this approach - no new packages needed!
+   // Add to pkg/wormhole/options.go:
+   func WithYourProvider(apiKey string, config ...types.ProviderConfig) Option {
+       var cfg types.ProviderConfig
+       if len(config) > 0 {
+           cfg = config[0]
+       }
+       cfg.APIKey = apiKey
+       return WithOpenAICompatible("yourprovider", "https://api.yourprovider.com/v1", cfg)
+   }
+   ```
+
+   **Option B: Custom Provider Package (Only if non-OpenAI compatible)**
    ```
    pkg/providers/yourprovider/
    ├── yourprovider.go      # Main provider implementation
    ├── types.go             # Provider-specific request/response types
    ├── transform.go         # Request/response transformations
-   ├── client.go           # HTTP client configuration
    └── yourprovider_test.go # Comprehensive test suite
    ```
 

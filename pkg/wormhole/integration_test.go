@@ -92,7 +92,7 @@ func TestOpenAIIntegration_TextGeneration(t *testing.T) {
 			body, err := io.ReadAll(r.Body)
 			require.NoError(t, err)
 
-			var req map[string]interface{}
+			var req map[string]any
 			err = json.Unmarshal(body, &req)
 			require.NoError(t, err)
 
@@ -101,31 +101,31 @@ func TestOpenAIIntegration_TextGeneration(t *testing.T) {
 			assert.Equal(t, float64(100), req["max_completion_tokens"]) // GPT-5 uses max_completion_tokens
 
 			// Verify messages structure
-			messages, ok := req["messages"].([]interface{})
+			messages, ok := req["messages"].([]any)
 			require.True(t, ok)
 			require.Len(t, messages, 1)
 
-			message := messages[0].(map[string]interface{})
+			message := messages[0].(map[string]any)
 			assert.Equal(t, "user", message["role"])
 			assert.Equal(t, "Hello, how are you?", message["content"])
 
 			// Send mock response
-			response := map[string]interface{}{
+			response := map[string]any{
 				"id":      "chatcmpl-test123",
 				"object":  "chat.completion",
 				"created": 1699999999,
 				"model":   "gpt-5",
-				"choices": []map[string]interface{}{
+				"choices": []map[string]any{
 					{
 						"index": 0,
-						"message": map[string]interface{}{
+						"message": map[string]any{
 							"role":    "assistant",
 							"content": "I'm doing well, thank you for asking!",
 						},
 						"finish_reason": "stop",
 					},
 				},
-				"usage": map[string]interface{}{
+				"usage": map[string]any{
 					"prompt_tokens":     10,
 					"completion_tokens": 12,
 					"total_tokens":      22,
@@ -169,39 +169,39 @@ func TestOpenAIIntegration_TextGeneration(t *testing.T) {
 			body, err := io.ReadAll(r.Body)
 			require.NoError(t, err)
 
-			var req map[string]interface{}
+			var req map[string]any
 			err = json.Unmarshal(body, &req)
 			require.NoError(t, err)
 
 			// Verify messages include system message
-			messages := req["messages"].([]interface{})
+			messages := req["messages"].([]any)
 			require.Len(t, messages, 2)
 
-			systemMsg := messages[0].(map[string]interface{})
+			systemMsg := messages[0].(map[string]any)
 			assert.Equal(t, "system", systemMsg["role"])
 			assert.Equal(t, "You are a helpful assistant.", systemMsg["content"])
 
-			userMsg := messages[1].(map[string]interface{})
+			userMsg := messages[1].(map[string]any)
 			assert.Equal(t, "user", userMsg["role"])
 			assert.Equal(t, "What's 2+2?", userMsg["content"])
 
 			// Mock response
-			response := map[string]interface{}{
+			response := map[string]any{
 				"id":      "chatcmpl-math123",
 				"object":  "chat.completion",
 				"created": 1699999999,
 				"model":   "gpt-5",
-				"choices": []map[string]interface{}{
+				"choices": []map[string]any{
 					{
 						"index": 0,
-						"message": map[string]interface{}{
+						"message": map[string]any{
 							"role":    "assistant",
 							"content": "2 + 2 = 4",
 						},
 						"finish_reason": "stop",
 					},
 				},
-				"usage": map[string]interface{}{
+				"usage": map[string]any{
 					"prompt_tokens":     15,
 					"completion_tokens": 8,
 					"total_tokens":      23,
@@ -235,40 +235,40 @@ func TestOpenAIIntegration_TextGeneration(t *testing.T) {
 			body, err := io.ReadAll(r.Body)
 			require.NoError(t, err)
 
-			var req map[string]interface{}
+			var req map[string]any
 			err = json.Unmarshal(body, &req)
 			require.NoError(t, err)
 
 			// Verify conversation history
-			messages := req["messages"].([]interface{})
+			messages := req["messages"].([]any)
 			require.Len(t, messages, 3)
 
-			assert.Equal(t, "user", messages[0].(map[string]interface{})["role"])
-			assert.Equal(t, "Hello", messages[0].(map[string]interface{})["content"])
+			assert.Equal(t, "user", messages[0].(map[string]any)["role"])
+			assert.Equal(t, "Hello", messages[0].(map[string]any)["content"])
 
-			assert.Equal(t, "assistant", messages[1].(map[string]interface{})["role"])
-			assert.Equal(t, "Hi there!", messages[1].(map[string]interface{})["content"])
+			assert.Equal(t, "assistant", messages[1].(map[string]any)["role"])
+			assert.Equal(t, "Hi there!", messages[1].(map[string]any)["content"])
 
-			assert.Equal(t, "user", messages[2].(map[string]interface{})["role"])
-			assert.Equal(t, "How are you?", messages[2].(map[string]interface{})["content"])
+			assert.Equal(t, "user", messages[2].(map[string]any)["role"])
+			assert.Equal(t, "How are you?", messages[2].(map[string]any)["content"])
 
 			// Mock response
-			response := map[string]interface{}{
+			response := map[string]any{
 				"id":      "chatcmpl-conv123",
 				"object":  "chat.completion",
 				"created": 1699999999,
 				"model":   "gpt-5",
-				"choices": []map[string]interface{}{
+				"choices": []map[string]any{
 					{
 						"index": 0,
-						"message": map[string]interface{}{
+						"message": map[string]any{
 							"role":    "assistant",
 							"content": "I'm doing great, thanks for asking!",
 						},
 						"finish_reason": "stop",
 					},
 				},
-				"usage": map[string]interface{}{
+				"usage": map[string]any{
 					"prompt_tokens":     20,
 					"completion_tokens": 10,
 					"total_tokens":      30,
@@ -313,19 +313,19 @@ func TestOpenAIIntegration_FunctionCalling(t *testing.T) {
 			body, err := io.ReadAll(r.Body)
 			require.NoError(t, err)
 
-			var req map[string]interface{}
+			var req map[string]any
 			err = json.Unmarshal(body, &req)
 			require.NoError(t, err)
 
 			// Verify tools in request
-			tools, ok := req["tools"].([]interface{})
+			tools, ok := req["tools"].([]any)
 			require.True(t, ok)
 			require.Len(t, tools, 1)
 
-			tool := tools[0].(map[string]interface{})
+			tool := tools[0].(map[string]any)
 			assert.Equal(t, "function", tool["type"])
 
-			function := tool["function"].(map[string]interface{})
+			function := tool["function"].(map[string]any)
 			assert.Equal(t, "get_weather", function["name"])
 			assert.Equal(t, "Get current weather for a location", function["description"])
 
@@ -333,21 +333,21 @@ func TestOpenAIIntegration_FunctionCalling(t *testing.T) {
 			assert.Equal(t, "auto", req["tool_choice"])
 
 			// Mock function call response
-			response := map[string]interface{}{
+			response := map[string]any{
 				"id":      "chatcmpl-func123",
 				"object":  "chat.completion",
 				"created": 1699999999,
 				"model":   "gpt-5",
-				"choices": []map[string]interface{}{
+				"choices": []map[string]any{
 					{
 						"index": 0,
-						"message": map[string]interface{}{
+						"message": map[string]any{
 							"role": "assistant",
-							"tool_calls": []map[string]interface{}{
+							"tool_calls": []map[string]any{
 								{
 									"id":   "call-123",
 									"type": "function",
-									"function": map[string]interface{}{
+									"function": map[string]any{
 										"name":      "get_weather",
 										"arguments": `{"location": "San Francisco, CA"}`,
 									},
@@ -357,7 +357,7 @@ func TestOpenAIIntegration_FunctionCalling(t *testing.T) {
 						"finish_reason": "tool_calls",
 					},
 				},
-				"usage": map[string]interface{}{
+				"usage": map[string]any{
 					"prompt_tokens":     25,
 					"completion_tokens": 15,
 					"total_tokens":      40,
@@ -379,9 +379,9 @@ func TestOpenAIIntegration_FunctionCalling(t *testing.T) {
 		tool := types.NewTool(
 			"get_weather",
 			"Get current weather for a location",
-			map[string]interface{}{
+			map[string]any{
 				"type": "object",
-				"properties": map[string]interface{}{
+				"properties": map[string]any{
 					"location": map[string]string{
 						"type":        "string",
 						"description": "The city and state, e.g. San Francisco, CA",
@@ -419,7 +419,7 @@ func TestOpenAIIntegration_StreamingGeneration(t *testing.T) {
 			body, err := io.ReadAll(r.Body)
 			require.NoError(t, err)
 
-			var req map[string]interface{}
+			var req map[string]any
 			err = json.Unmarshal(body, &req)
 			require.NoError(t, err)
 
@@ -503,8 +503,8 @@ func TestIntegration_ErrorHandling(t *testing.T) {
 		server := MockOpenAIServer(t, func(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(http.StatusUnauthorized)
 			w.Header().Set("Content-Type", "application/json")
-			json.NewEncoder(w).Encode(map[string]interface{}{
-				"error": map[string]interface{}{
+			json.NewEncoder(w).Encode(map[string]any{
+				"error": map[string]any{
 					"message": "Invalid API key",
 					"type":    "invalid_request_error",
 					"code":    "invalid_api_key",
@@ -539,8 +539,8 @@ func TestIntegration_ErrorHandling(t *testing.T) {
 		server := MockOpenAIServer(t, func(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(http.StatusTooManyRequests)
 			w.Header().Set("Content-Type", "application/json")
-			json.NewEncoder(w).Encode(map[string]interface{}{
-				"error": map[string]interface{}{
+			json.NewEncoder(w).Encode(map[string]any{
+				"error": map[string]any{
 					"message": "Rate limit exceeded",
 					"type":    "rate_limit_error",
 				},
@@ -575,8 +575,8 @@ func TestIntegration_ErrorHandling(t *testing.T) {
 		server := MockOpenAIServer(t, func(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(http.StatusInternalServerError)
 			w.Header().Set("Content-Type", "application/json")
-			json.NewEncoder(w).Encode(map[string]interface{}{
-				"error": map[string]interface{}{
+			json.NewEncoder(w).Encode(map[string]any{
+				"error": map[string]any{
 					"message": "Internal server error",
 					"type":    "server_error",
 				},
@@ -612,15 +612,15 @@ func TestIntegration_ErrorHandling(t *testing.T) {
 			time.Sleep(2 * time.Second)
 
 			// Return a proper JSON response (which shouldn't be reached due to timeout)
-			response := map[string]interface{}{
+			response := map[string]any{
 				"id":      "chatcmpl-timeout123",
 				"object":  "chat.completion",
 				"created": 1699999999,
 				"model":   "gpt-5",
-				"choices": []map[string]interface{}{
+				"choices": []map[string]any{
 					{
 						"index": 0,
-						"message": map[string]interface{}{
+						"message": map[string]any{
 							"role":    "assistant",
 							"content": "This shouldn't be reached",
 						},
@@ -691,22 +691,22 @@ func TestIntegration_MultipleProviders(t *testing.T) {
 	t.Run("switching between providers", func(t *testing.T) {
 		// OpenAI server
 		openaiServer := MockOpenAIServer(t, func(w http.ResponseWriter, r *http.Request) {
-			response := map[string]interface{}{
+			response := map[string]any{
 				"id":      "chatcmpl-openai123",
 				"object":  "chat.completion",
 				"created": 1699999999,
 				"model":   "gpt-5",
-				"choices": []map[string]interface{}{
+				"choices": []map[string]any{
 					{
 						"index": 0,
-						"message": map[string]interface{}{
+						"message": map[string]any{
 							"role":    "assistant",
 							"content": "OpenAI response",
 						},
 						"finish_reason": "stop",
 					},
 				},
-				"usage": map[string]interface{}{
+				"usage": map[string]any{
 					"prompt_tokens":     5,
 					"completion_tokens": 3,
 					"total_tokens":      8,
@@ -719,18 +719,18 @@ func TestIntegration_MultipleProviders(t *testing.T) {
 
 		// Anthropic-style server (different format)
 		anthropicServer := MockOpenAIServer(t, func(w http.ResponseWriter, r *http.Request) {
-			response := map[string]interface{}{
+			response := map[string]any{
 				"id":    "msg-anthropic123",
 				"type":  "message",
 				"model": "claude-3-opus",
-				"content": []map[string]interface{}{
+				"content": []map[string]any{
 					{
 						"type": "text",
 						"text": "Anthropic response",
 					},
 				},
 				"stop_reason": "end_turn",
-				"usage": map[string]interface{}{
+				"usage": map[string]any{
 					"input_tokens":  5,
 					"output_tokens": 3,
 				},
@@ -782,22 +782,22 @@ func TestIntegration_Middleware(t *testing.T) {
 
 	t.Run("metrics middleware", func(t *testing.T) {
 		server := MockOpenAIServer(t, func(w http.ResponseWriter, r *http.Request) {
-			response := map[string]interface{}{
+			response := map[string]any{
 				"id":      "chatcmpl-middleware123",
 				"object":  "chat.completion",
 				"created": 1699999999,
 				"model":   "gpt-5",
-				"choices": []map[string]interface{}{
+				"choices": []map[string]any{
 					{
 						"index": 0,
-						"message": map[string]interface{}{
+						"message": map[string]any{
 							"role":    "assistant",
 							"content": "Middleware test response",
 						},
 						"finish_reason": "stop",
 					},
 				},
-				"usage": map[string]interface{}{
+				"usage": map[string]any{
 					"prompt_tokens":     10,
 					"completion_tokens": 5,
 					"total_tokens":      15,
@@ -838,19 +838,19 @@ func TestIntegration_Middleware(t *testing.T) {
 	})
 
 	t.Run("custom capture middleware", func(t *testing.T) {
-		var capturedRequest interface{}
-		var capturedResponse interface{}
+		var capturedRequest any
+		var capturedResponse any
 
 		server := MockOpenAIServer(t, func(w http.ResponseWriter, r *http.Request) {
-			response := map[string]interface{}{
+			response := map[string]any{
 				"id":      "chatcmpl-capture123",
 				"object":  "chat.completion",
 				"created": 1699999999,
 				"model":   "gpt-5",
-				"choices": []map[string]interface{}{
+				"choices": []map[string]any{
 					{
 						"index": 0,
-						"message": map[string]interface{}{
+						"message": map[string]any{
 							"role":    "assistant",
 							"content": "Capture test response",
 						},
@@ -865,7 +865,7 @@ func TestIntegration_Middleware(t *testing.T) {
 
 		// Create custom middleware that captures request/response
 		captureMiddleware := func(next middleware.Handler) middleware.Handler {
-			return func(ctx context.Context, req interface{}) (interface{}, error) {
+			return func(ctx context.Context, req any) (any, error) {
 				capturedRequest = req
 				resp, err := next(ctx, req)
 				if err == nil {
@@ -926,7 +926,7 @@ func TestIntegration_OpenRouter(t *testing.T) {
 			body, err := io.ReadAll(r.Body)
 			require.NoError(t, err)
 
-			var req map[string]interface{}
+			var req map[string]any
 			err = json.Unmarshal(body, &req)
 			require.NoError(t, err)
 
@@ -940,29 +940,29 @@ func TestIntegration_OpenRouter(t *testing.T) {
 			}
 
 			// Verify messages
-			messages := req["messages"].([]interface{})
+			messages := req["messages"].([]any)
 			assert.Len(t, messages, 1)
-			message := messages[0].(map[string]interface{})
+			message := messages[0].(map[string]any)
 			assert.Equal(t, "user", message["role"])
 			assert.Equal(t, "Hello OpenRouter!", message["content"])
 
 			// Mock OpenRouter response (OpenAI-compatible format)
-			response := map[string]interface{}{
+			response := map[string]any{
 				"id":      "chatcmpl-openrouter123",
 				"object":  "chat.completion",
 				"created": 1699999999,
 				"model":   "openai/gpt-5-mini",
-				"choices": []map[string]interface{}{
+				"choices": []map[string]any{
 					{
 						"index": 0,
-						"message": map[string]interface{}{
+						"message": map[string]any{
 							"role":    "assistant",
 							"content": "Hello! I'm GPT-5 Mini via OpenRouter. How can I help you today?",
 						},
 						"finish_reason": "stop",
 					},
 				},
-				"usage": map[string]interface{}{
+				"usage": map[string]any{
 					"prompt_tokens":     5,
 					"completion_tokens": 15,
 					"total_tokens":      20,
@@ -1036,15 +1036,15 @@ func TestIntegration_OpenRouter(t *testing.T) {
 			// Simulate slow response (200ms delay)
 			time.Sleep(200 * time.Millisecond)
 
-			response := map[string]interface{}{
+			response := map[string]any{
 				"id":      "chatcmpl-slow123",
 				"object":  "chat.completion",
 				"created": 1699999999,
 				"model":   "openai/gpt-5-mini",
-				"choices": []map[string]interface{}{
+				"choices": []map[string]any{
 					{
 						"index": 0,
-						"message": map[string]interface{}{
+						"message": map[string]any{
 							"role":    "assistant",
 							"content": "Slow response from OpenRouter",
 						},

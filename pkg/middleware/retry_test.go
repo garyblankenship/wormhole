@@ -205,7 +205,7 @@ func TestRetryMiddleware(t *testing.T) {
 
 	t.Run("successful_request", func(t *testing.T) {
 		callCount := 0
-		mockHandler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		mockHandler := func(ctx context.Context, req any) (any, error) {
 			callCount++
 			return "success", nil
 		}
@@ -229,7 +229,7 @@ func TestRetryMiddleware(t *testing.T) {
 
 	t.Run("retry_until_success", func(t *testing.T) {
 		callCount := 0
-		mockHandler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		mockHandler := func(ctx context.Context, req any) (any, error) {
 			callCount++
 			if callCount < 2 {
 				return nil, errors.New("temporary failure")
@@ -257,7 +257,7 @@ func TestRetryMiddleware(t *testing.T) {
 	t.Run("exhausts_retries", func(t *testing.T) {
 		callCount := 0
 		expectedErr := errors.New("persistent failure")
-		mockHandler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		mockHandler := func(ctx context.Context, req any) (any, error) {
 			callCount++
 			return nil, expectedErr
 		}
@@ -478,7 +478,7 @@ func TestAdaptiveRetryMiddleware(t *testing.T) {
 	}
 
 	callCount := 0
-	mockHandler := func(ctx context.Context, req interface{}) (interface{}, error) {
+	mockHandler := func(ctx context.Context, req any) (any, error) {
 		callCount++
 		if callCount < 2 {
 			return nil, errors.New("failure")

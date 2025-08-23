@@ -20,7 +20,9 @@ func main() {
 	// Create wormhole client with Mistral provider
 	client := wormhole.New(
 		wormhole.WithDefaultProvider("mistral"),
-		wormhole.WithMistral(apiKey),
+		wormhole.WithMistral(types.ProviderConfig{
+			APIKey: apiKey,
+		}),
 	)
 
 	// Example 1: Simple text generation
@@ -45,10 +47,7 @@ func main() {
 
 	embeddingsResponse, err := client.Embeddings().
 		Model("mistral-embed").
-		Input([]string{
-			"Hello, world!",
-			"How are you?",
-		}).
+		Input("Hello, world!", "How are you?").
 		Generate(context.Background())
 	if err != nil {
 		log.Printf("Embeddings generation error: %v", err)
@@ -94,22 +93,22 @@ func main() {
 	// Example 4: Structured output with function calling
 	fmt.Println("=== Structured Output ===")
 
-	var result map[string]interface{}
-	structuredResponse, err := client.Structured().
+	var result map[string]any
+	err = client.Structured().
 		Model("mistral-large-latest").
 		Messages(types.NewUserMessage("Extract the name, age, and occupation from: 'John Doe is a 30-year-old software engineer.'")).
-		Schema(map[string]interface{}{
+		Schema(map[string]any{
 			"type": "object",
-			"properties": map[string]interface{}{
-				"name": map[string]interface{}{
+			"properties": map[string]any{
+				"name": map[string]any{
 					"type":        "string",
 					"description": "The person's full name",
 				},
-				"age": map[string]interface{}{
+				"age": map[string]any{
 					"type":        "integer",
 					"description": "The person's age",
 				},
-				"occupation": map[string]interface{}{
+				"occupation": map[string]any{
 					"type":        "string",
 					"description": "The person's job or occupation",
 				},
@@ -121,7 +120,5 @@ func main() {
 		log.Printf("Structured generation error: %v", err)
 	} else {
 		fmt.Printf("Structured data: %+v\n", result)
-		fmt.Printf("Model: %s\n", structuredResponse.Model)
-		fmt.Printf("Usage: %+v\n", structuredResponse.Usage)
 	}
 }

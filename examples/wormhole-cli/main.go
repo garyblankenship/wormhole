@@ -313,9 +313,9 @@ func executeStructured(ctx context.Context, client *wormhole.Wormhole, config CL
 		IQ         int    `json:"iq"`
 	}
 
-	schema := map[string]interface{}{
+	schema := map[string]any{
 		"type": "object",
-		"properties": map[string]interface{}{
+		"properties": map[string]any{
 			"name":       map[string]string{"type": "string"},
 			"age":        map[string]string{"type": "integer"},
 			"occupation": map[string]string{"type": "string"},

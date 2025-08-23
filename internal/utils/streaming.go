@@ -201,6 +201,6 @@ func NewJSONStreamParser(r io.Reader) *JSONStreamParser {
 }
 
 // Parse reads and parses the next JSON object
-func (p *JSONStreamParser) Parse(v interface{}) error {
+func (p *JSONStreamParser) Parse(v any) error {
 	return p.decoder.Decode(v)
 }

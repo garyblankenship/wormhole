@@ -15,7 +15,7 @@ func TestChain(t *testing.T) {
 		var order []string
 
 		mw1 := func(next Handler) Handler {
-			return func(ctx context.Context, req interface{}) (interface{}, error) {
+			return func(ctx context.Context, req any) (any, error) {
 				order = append(order, "mw1-before")
 				resp, err := next(ctx, req)
 				order = append(order, "mw1-after")
@@ -24,7 +24,7 @@ func TestChain(t *testing.T) {
 		}
 
 		mw2 := func(next Handler) Handler {
-			return func(ctx context.Context, req interface{}) (interface{}, error) {
+			return func(ctx context.Context, req any) (any, error) {
 				order = append(order, "mw2-before")
 				resp, err := next(ctx, req)
 				order = append(order, "mw2-after")
@@ -32,7 +32,7 @@ func TestChain(t *testing.T) {
 			}
 		}
 
-		handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		handler := func(ctx context.Context, req any) (any, error) {
 			order = append(order, "handler")
 			return "response", nil
 		}
@@ -56,12 +56,12 @@ func TestChain(t *testing.T) {
 		expectedErr := errors.New("test error")
 
 		mw := func(next Handler) Handler {
-			return func(ctx context.Context, req interface{}) (interface{}, error) {
+			return func(ctx context.Context, req any) (any, error) {
 				return next(ctx, req)
 			}
 		}
 
-		handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		handler := func(ctx context.Context, req any) (any, error) {
 			return nil, expectedErr
 		}
 
@@ -79,7 +79,7 @@ func TestMetricsMiddleware(t *testing.T) {
 		metrics := NewMetrics()
 		mw := MetricsMiddleware(metrics)
 
-		handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		handler := func(ctx context.Context, req any) (any, error) {
 			time.Sleep(10 * time.Millisecond)
 			return "response", nil
 		}
@@ -100,7 +100,7 @@ func TestMetricsMiddleware(t *testing.T) {
 		metrics := NewMetrics()
 		mw := MetricsMiddleware(metrics)
 
-		handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		handler := func(ctx context.Context, req any) (any, error) {
 			return nil, errors.New("test error")
 		}
 
@@ -119,7 +119,7 @@ func TestTimeoutMiddleware(t *testing.T) {
 	t.Run("allows fast requests", func(t *testing.T) {
 		mw := TimeoutMiddleware(100 * time.Millisecond)
 
-		handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		handler := func(ctx context.Context, req any) (any, error) {
 			return "response", nil
 		}
 
@@ -133,7 +133,7 @@ func TestTimeoutMiddleware(t *testing.T) {
 	t.Run("times out slow requests", func(t *testing.T) {
 		mw := TimeoutMiddleware(10 * time.Millisecond)
 
-		handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		handler := func(ctx context.Context, req any) (any, error) {
 			time.Sleep(50 * time.Millisecond)
 			return "response", nil
 		}

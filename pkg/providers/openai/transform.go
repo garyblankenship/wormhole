@@ -10,8 +10,8 @@ import (
 )
 
 // buildChatPayload builds the OpenAI chat completion payload
-func (p *Provider) buildChatPayload(request *types.TextRequest) map[string]interface{} {
-	payload := map[string]interface{}{
+func (p *Provider) buildChatPayload(request *types.TextRequest) map[string]any {
+	payload := map[string]any{
 		"model":    request.Model,
 		"messages": p.transformMessages(request.Messages),
 	}
@@ -24,12 +24,23 @@ func (p *Provider) buildChatPayload(request *types.TextRequest) map[string]inter
 		payload["top_p"] = *request.TopP
 	}
 	if request.MaxTokens != nil && *request.MaxTokens > 0 {
-		// GPT-5 models require max_completion_tokens instead of deprecated max_tokens
-		if isGPT5Model(request.Model) {
-			payload["max_completion_tokens"] = *request.MaxTokens
-		} else {
-			payload["max_tokens"] = *request.MaxTokens
+		// Use configurable parameter name for max tokens (default: "max_tokens")
+		maxTokensParam := "max_tokens"
+		
+		// Check for provider-specific parameter configuration
+		if p.Config.Params != nil {
+			if param, ok := p.Config.Params["max_tokens_param"].(string); ok {
+				maxTokensParam = param
+			}
 		}
+		
+		// GPT-5 models require max_completion_tokens instead of deprecated max_tokens
+		// This fallback remains for backward compatibility when no explicit config is provided
+		if maxTokensParam == "max_tokens" && isGPT5Model(request.Model) {
+			maxTokensParam = "max_completion_tokens"
+		}
+		
+		payload[maxTokensParam] = *request.MaxTokens
 	}
 	if len(request.Stop) > 0 {
 		payload["stop"] = request.Stop
@@ -69,11 +80,11 @@ func (p *Provider) buildChatPayload(request *types.TextRequest) map[string]inter
 }
 
 // transformMessages converts internal messages to OpenAI format
-func (p *Provider) transformMessages(messages []types.Message) []map[string]interface{} {
-	result := make([]map[string]interface{}, len(messages))
+func (p *Provider) transformMessages(messages []types.Message) []map[string]any {
+	result := make([]map[string]any, len(messages))
 
 	for i, msg := range messages {
-		openAIMsg := map[string]interface{}{
+		openAIMsg := map[string]any{
 			"role": string(msg.GetRole()),
 		}
 
@@ -84,15 +95,15 @@ func (p *Provider) transformMessages(messages []types.Message) []map[string]inte
 			openAIMsg["content"] = c
 		case []types.MessagePart:
 			// Multi-modal content
-			parts := make([]map[string]interface{}, len(c))
+			parts := make([]map[string]any, len(c))
 			for j, part := range c {
 				if part.Type == "text" {
-					parts[j] = map[string]interface{}{
+					parts[j] = map[string]any{
 						"type": "text",
 						"text": part.Text,
 					}
 				} else if part.Type == "image" {
-					parts[j] = map[string]interface{}{
+					parts[j] = map[string]any{
 						"type":      "image_url",
 						"image_url": part.Data,
 					}
@@ -121,14 +132,14 @@ func (p *Provider) transformMessages(messages []types.Message) []map[string]inte
 }
 
 // transformTools converts internal tools to OpenAI format
-func (p *Provider) transformTools(tools []types.Tool) []map[string]interface{} {
-	result := make([]map[string]interface{}, len(tools))
+func (p *Provider) transformTools(tools []types.Tool) []map[string]any {
+	result := make([]map[string]any, len(tools))
 
 	for i, tool := range tools {
 		parameters, _ := json.Marshal(tool.Function.Parameters)
-		result[i] = map[string]interface{}{
+		result[i] = map[string]any{
 			"type": tool.Type,
-			"function": map[string]interface{}{
+			"function": map[string]any{
 				"name":        tool.Function.Name,
 				"description": tool.Function.Description,
 				"parameters":  json.RawMessage(parameters),
@@ -140,14 +151,14 @@ func (p *Provider) transformTools(tools []types.Tool) []map[string]interface{} {
 }
 
 // transformToolCalls converts internal tool calls to OpenAI format
-func (p *Provider) transformToolCalls(toolCalls []types.ToolCall) []map[string]interface{} {
-	result := make([]map[string]interface{}, len(toolCalls))
+func (p *Provider) transformToolCalls(toolCalls []types.ToolCall) []map[string]any {
+	result := make([]map[string]any, len(toolCalls))
 
 	for i, tc := range toolCalls {
-		result[i] = map[string]interface{}{
+		result[i] = map[string]any{
 			"id":   tc.ID,
 			"type": tc.Type,
-			"function": map[string]interface{}{
+			"function": map[string]any{
 				"name":      tc.Function.Name,
 				"arguments": tc.Function.Arguments,
 			},
@@ -303,15 +314,15 @@ func (p *Provider) convertToolCalls(toolCalls []toolCall) []types.ToolCall {
 	result := make([]types.ToolCall, len(toolCalls))
 
 	for i, tc := range toolCalls {
-		// Parse arguments from JSON string to map[string]interface{}
-		var argsMap map[string]interface{}
+		// Parse arguments from JSON string to map[string]any
+		var argsMap map[string]any
 		if tc.Function.Arguments != "" {
 			if err := json.Unmarshal([]byte(tc.Function.Arguments), &argsMap); err != nil {
 				// If parsing fails, create empty map
-				argsMap = make(map[string]interface{})
+				argsMap = make(map[string]any)
 			}
 		} else {
-			argsMap = make(map[string]interface{})
+			argsMap = make(map[string]any)
 		}
 
 		result[i] = types.ToolCall{
@@ -353,7 +364,7 @@ func (p *Provider) mapFinishReason(reason string) types.FinishReason {
 }
 
 // transformToolChoice converts tool choice to OpenAI format
-func (p *Provider) transformToolChoice(choice *types.ToolChoice) interface{} {
+func (p *Provider) transformToolChoice(choice *types.ToolChoice) any {
 	if choice == nil {
 		return "auto"
 	}
@@ -366,9 +377,9 @@ func (p *Provider) transformToolChoice(choice *types.ToolChoice) interface{} {
 	case types.ToolChoiceTypeAny:
 		return "required"
 	case types.ToolChoiceTypeSpecific:
-		return map[string]interface{}{
+		return map[string]any{
 			"type": "function",
-			"function": map[string]interface{}{
+			"function": map[string]any{
 				"name": choice.ToolName,
 			},
 		}
@@ -382,12 +393,12 @@ func (p *Provider) schemaToTool(schema types.Schema, name string) (*types.Tool, 
 		name = "structured_output"
 	}
 
-	// Convert Schema interface to map[string]interface{}
+	// Convert Schema interface to map[string]any
 	schemaBytes, err := json.Marshal(schema)
 	if err != nil {
 		return nil, err
 	}
-	var params map[string]interface{}
+	var params map[string]any
 	if err := json.Unmarshal(schemaBytes, &params); err != nil {
 		return nil, err
 	}

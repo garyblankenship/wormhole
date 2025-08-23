@@ -17,27 +17,27 @@ const (
 // Message represents a single message in a conversation
 type Message interface {
 	GetRole() Role
-	GetContent() interface{}
+	GetContent() any
 }
 
 // BaseMessage provides common message functionality
 type BaseMessage struct {
 	Role    Role        `json:"role"`
-	Content interface{} `json:"content"`
+	Content any `json:"content"`
 }
 
 func (m BaseMessage) GetRole() Role {
 	return m.Role
 }
 
-func (m BaseMessage) GetContent() interface{} {
+func (m BaseMessage) GetContent() any {
 	return m.Content
 }
 
 func (m BaseMessage) MarshalJSON() ([]byte, error) {
 	return json.Marshal(struct {
 		Role    Role        `json:"role"`
-		Content interface{} `json:"content"`
+		Content any `json:"content"`
 	}{
 		Role:    m.Role,
 		Content: m.Content,
@@ -53,7 +53,7 @@ func (m *SystemMessage) GetRole() Role {
 	return RoleSystem
 }
 
-func (m *SystemMessage) GetContent() interface{} {
+func (m *SystemMessage) GetContent() any {
 	return m.Content
 }
 
@@ -84,7 +84,7 @@ func (m *UserMessage) GetRole() Role {
 	return RoleUser
 }
 
-func (m *UserMessage) GetContent() interface{} {
+func (m *UserMessage) GetContent() any {
 	return m.Content
 }
 
@@ -117,7 +117,7 @@ func (m *AssistantMessage) GetRole() Role {
 	return RoleAssistant
 }
 
-func (m *AssistantMessage) GetContent() interface{} {
+func (m *AssistantMessage) GetContent() any {
 	return m.Content
 }
 
@@ -153,7 +153,7 @@ func (m *ToolResultMessage) GetRole() Role {
 	return RoleTool
 }
 
-func (m *ToolResultMessage) GetContent() interface{} {
+func (m *ToolResultMessage) GetContent() any {
 	return m.Content
 }
 
@@ -181,7 +181,7 @@ func NewToolResultMessage(toolCallID string, content string) *ToolResultMessage 
 type MessagePart struct {
 	Type string      `json:"type"`
 	Text string      `json:"text,omitempty"`
-	Data interface{} `json:"data,omitempty"`
+	Data any `json:"data,omitempty"`
 }
 
 // TextPart creates a text message part
@@ -193,7 +193,7 @@ func TextPart(text string) MessagePart {
 }
 
 // ImagePart creates an image message part
-func ImagePart(data interface{}) MessagePart {
+func ImagePart(data any) MessagePart {
 	return MessagePart{
 		Type: "image",
 		Data: data,

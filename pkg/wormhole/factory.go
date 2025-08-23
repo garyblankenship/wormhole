@@ -46,25 +46,6 @@ func (f *SimpleFactory) Gemini(apiKey ...string) *Wormhole {
 	)
 }
 
-// Groq creates a Wormhole client configured for Groq
-func (f *SimpleFactory) Groq(apiKey ...string) *Wormhole {
-	key := f.getAPIKey(apiKey, "GROQ_API_KEY")
-
-	return New(
-		WithDefaultProvider("groq"),
-		WithGroq(key),
-	)
-}
-
-// Mistral creates a Wormhole client configured for Mistral
-func (f *SimpleFactory) Mistral(apiKey ...string) *Wormhole {
-	key := f.getAPIKey(apiKey, "MISTRAL_API_KEY")
-
-	return New(
-		WithDefaultProvider("mistral"),
-		WithMistral(types.ProviderConfig{APIKey: key}),
-	)
-}
 
 // Ollama creates a Wormhole client configured for Ollama
 func (f *SimpleFactory) Ollama(baseURL ...string) *Wormhole {
@@ -83,6 +64,26 @@ func (f *SimpleFactory) Ollama(baseURL ...string) *Wormhole {
 			BaseURL:       url,
 			DynamicModels: true, // Users can load any model in Ollama
 		}),
+	)
+}
+
+// Groq creates a Wormhole client configured for Groq
+func (f *SimpleFactory) Groq(apiKey ...string) *Wormhole {
+	key := f.getAPIKey(apiKey, "GROQ_API_KEY")
+
+	return New(
+		WithDefaultProvider("groq"),
+		WithGroq(key),
+	)
+}
+
+// Mistral creates a Wormhole client configured for Mistral
+func (f *SimpleFactory) Mistral(apiKey ...string) *Wormhole {
+	key := f.getAPIKey(apiKey, "MISTRAL_API_KEY")
+
+	return New(
+		WithDefaultProvider("mistral"),
+		WithMistral(types.ProviderConfig{APIKey: key}),
 	)
 }
 
@@ -216,15 +217,6 @@ func QuickGemini(apiKey ...string) *Wormhole {
 	return Quick.Gemini(apiKey...)
 }
 
-// QuickGroq creates a Groq client with minimal configuration
-func QuickGroq(apiKey ...string) *Wormhole {
-	return Quick.Groq(apiKey...)
-}
-
-// QuickMistral creates a Mistral client with minimal configuration
-func QuickMistral(apiKey ...string) *Wormhole {
-	return Quick.Mistral(apiKey...)
-}
 
 // QuickOllama creates an Ollama client with minimal configuration
 func QuickOllama(baseURL ...string) *Wormhole {
@@ -234,6 +226,16 @@ func QuickOllama(baseURL ...string) *Wormhole {
 // QuickLMStudio creates an LMStudio client with minimal configuration
 func QuickLMStudio(baseURL ...string) *Wormhole {
 	return Quick.LMStudio(baseURL...)
+}
+
+// QuickGroq creates a Groq client with minimal configuration
+func QuickGroq(apiKey ...string) *Wormhole {
+	return Quick.Groq(apiKey...)
+}
+
+// QuickMistral creates a Mistral client with minimal configuration
+func QuickMistral(apiKey ...string) *Wormhole {
+	return Quick.Mistral(apiKey...)
 }
 
 // QuickOpenRouter creates an OpenRouter client with minimal configuration

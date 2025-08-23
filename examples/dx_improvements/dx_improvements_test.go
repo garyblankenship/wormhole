@@ -203,7 +203,7 @@ func TestDXImprovementsIntegration(t *testing.T) {
 
 	// Verify the chain works
 	callCount := 0
-	mockHandler := func(ctx context.Context, req interface{}) (interface{}, error) {
+	mockHandler := func(ctx context.Context, req any) (any, error) {
 		callCount++
 		return "success", nil
 	}

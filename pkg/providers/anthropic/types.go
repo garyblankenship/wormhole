@@ -20,7 +20,7 @@ type contentPart struct {
 	Input toolInput `json:"input,omitempty"`
 }
 
-type toolInput map[string]interface{}
+type toolInput map[string]any
 
 type messageUsage struct {
 	InputTokens  int `json:"input_tokens"`

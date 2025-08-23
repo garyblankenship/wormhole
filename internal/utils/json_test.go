@@ -9,23 +9,23 @@ func TestLenientUnmarshal(t *testing.T) {
 	tests := []struct {
 		name    string
 		input   string
-		want    map[string]interface{}
+		want    map[string]any
 		wantErr bool
 	}{
 		{
 			name:  "valid JSON",
 			input: `{"pattern": "\\d+", "text": "normal text"}`,
-			want:  map[string]interface{}{"pattern": "\\d+", "text": "normal text"},
+			want:  map[string]any{"pattern": "\\d+", "text": "normal text"},
 		},
 		{
 			name:  "Claude regex patterns (properly escaped)",
 			input: `{"enhanced_prompt": "regex: \\\\s+ ... \\\\b(API|SQL|JSON|XML)\\\\b"}`,
-			want:  map[string]interface{}{"enhanced_prompt": "regex: \\\\s+ ... \\\\b(API|SQL|JSON|XML)\\\\b"},
+			want:  map[string]any{"enhanced_prompt": "regex: \\\\s+ ... \\\\b(API|SQL|JSON|XML)\\\\b"},
 		},
 		{
 			name:  "complex regex with date patterns",
 			input: `{"pattern": "\\\\d{4}-\\\\d{2}-\\\\d{2}\\\\s+\\\\d{2}:\\\\d{2}:\\\\d{2}"}`,
-			want:  map[string]interface{}{"pattern": "\\\\d{4}-\\\\d{2}-\\\\d{2}\\\\s+\\\\d{2}:\\\\d{2}:\\\\d{2}"},
+			want:  map[string]any{"pattern": "\\\\d{4}-\\\\d{2}-\\\\d{2}\\\\s+\\\\d{2}:\\\\d{2}:\\\\d{2}"},
 		},
 		{
 			name:    "invalid JSON",
@@ -41,7 +41,7 @@ func TestLenientUnmarshal(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			var result map[string]interface{}
+			var result map[string]any
 			err := LenientUnmarshal([]byte(tt.input), &result)
 
 			if tt.wantErr {
@@ -102,7 +102,7 @@ func TestUnmarshalAnthropicToolArgs(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			var result map[string]interface{}
+			var result map[string]any
 			err := UnmarshalAnthropicToolArgs(tt.args, &result)
 
 			if tt.wantErr {
@@ -126,7 +126,7 @@ func TestUnmarshalAnthropicToolArgs_RealWorld(t *testing.T) {
 		"enhanced_prompt": "You are a template generation system. Execute these steps sequentially:\\n\\n1. WORD COUNT: Tokenize user input on whitespace (regex: \\\\s+). Count non-empty tokens. Store as integer N.\\n\\n2. CLASSIFICATION: Assign tier based on N:\\n   - SIMPLE: N ∈ [0,10]\\n   - MEDIUM: N ∈ [11,30]\\n   - COMPLEX: N ≥ 31\\nOverride to COMPLEX if: code blocks > 50 chars OR technical specs detected (regex: \\\\b(API|SQL|JSON|XML)\\\\b)"
 	}`
 
-	var result map[string]interface{}
+	var result map[string]any
 	err := UnmarshalAnthropicToolArgs(realWorldArgs, &result)
 
 	if err != nil {
@@ -145,7 +145,7 @@ func TestUnmarshalAnthropicToolArgs_RealWorld(t *testing.T) {
 // Benchmark to ensure our functions don't significantly impact performance
 func BenchmarkLenientUnmarshal(b *testing.B) {
 	validJSON := `{"pattern": "\\\\d+", "text": "some text with \\\\s+ patterns"}`
-	var result map[string]interface{}
+	var result map[string]any
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
@@ -155,7 +155,7 @@ func BenchmarkLenientUnmarshal(b *testing.B) {
 
 func BenchmarkStandardUnmarshal(b *testing.B) {
 	validJSON := `{"pattern": "\\\\d+", "text": "some text with \\\\s+ patterns"}`
-	var result map[string]interface{}
+	var result map[string]any
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
@@ -165,7 +165,7 @@ func BenchmarkStandardUnmarshal(b *testing.B) {
 
 func BenchmarkUnmarshalAnthropicToolArgs(b *testing.B) {
 	toolArgs := `{"function_name": "search", "query": "\\\\d+ pattern", "context": "regex matching"}`
-	var result map[string]interface{}
+	var result map[string]any
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {

@@ -27,8 +27,15 @@ type BaseProvider struct {
 
 // NewBaseProvider creates a new base provider
 func NewBaseProvider(name string, config types.ProviderConfig) *BaseProvider {
+	// Handle timeout configuration:
+	// - 0 = unlimited timeout (no timeout)
+	// - >0 = timeout in seconds
+	// - default = 30 seconds
 	timeout := 30 * time.Second
-	if config.Timeout > 0 {
+	if config.Timeout == 0 {
+		// Unlimited timeout - set to 0 to disable HTTP client timeout
+		timeout = 0
+	} else if config.Timeout > 0 {
 		timeout = time.Duration(config.Timeout) * time.Second
 	}
 
@@ -66,7 +73,7 @@ func (p *BaseProvider) Name() string {
 }
 
 // DoRequest performs an HTTP request with common error handling
-func (p *BaseProvider) DoRequest(ctx context.Context, method, url string, body interface{}, result interface{}) error {
+func (p *BaseProvider) DoRequest(ctx context.Context, method, url string, body any, result any) error {
 	var reqBody io.Reader
 	if body != nil {
 		jsonBody, err := json.Marshal(body)
@@ -120,9 +127,9 @@ func (p *BaseProvider) DoRequest(ctx context.Context, method, url string, body i
 		// Try to parse provider-specific error message
 		errorMessage := fmt.Sprintf("HTTP %d: %s", resp.StatusCode, resp.Status)
 		if len(respBody) > 0 {
-			var errorResp map[string]interface{}
+			var errorResp map[string]any
 			if err := json.Unmarshal(respBody, &errorResp); err == nil {
-				if errorObj, ok := errorResp["error"].(map[string]interface{}); ok {
+				if errorObj, ok := errorResp["error"].(map[string]any); ok {
 					if msg, ok := errorObj["message"].(string); ok && msg != "" {
 						errorMessage = msg
 					}
@@ -181,7 +188,7 @@ func (p *BaseProvider) isRetryableStatus(statusCode int) bool {
 }
 
 // StreamRequest performs a streaming HTTP request
-func (p *BaseProvider) StreamRequest(ctx context.Context, method, url string, body interface{}) (io.ReadCloser, error) {
+func (p *BaseProvider) StreamRequest(ctx context.Context, method, url string, body any) (io.ReadCloser, error) {
 	var reqBody io.Reader
 	if body != nil {
 		jsonBody, err := json.Marshal(body)

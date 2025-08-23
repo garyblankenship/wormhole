@@ -44,10 +44,10 @@ func TestToolFormat(t *testing.T) {
 	tool := types.NewTool(
 		"get_weather",
 		"Get weather information",
-		map[string]interface{}{
+		map[string]any{
 			"type": "object",
-			"properties": map[string]interface{}{
-				"location": map[string]interface{}{
+			"properties": map[string]any{
+				"location": map[string]any{
 					"type":        "string",
 					"description": "City name",
 				},
@@ -71,7 +71,7 @@ func TestContentParts(t *testing.T) {
 	t.Run("multimodal content", func(t *testing.T) {
 		parts := []types.MessagePart{
 			types.TextPart("Look at this image:"),
-			types.ImagePart(map[string]interface{}{
+			types.ImagePart(map[string]any{
 				"type":       "base64",
 				"media_type": "image/jpeg",
 				"data":       "base64data",

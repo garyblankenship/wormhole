@@ -48,7 +48,7 @@ func TestOpenAIProvider_IntegrationTextGeneration(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			// Track the actual request sent to the API
-			var capturedRequest map[string]interface{}
+			var capturedRequest map[string]any
 
 			// Create a mock server
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -58,7 +58,7 @@ func TestOpenAIProvider_IntegrationTextGeneration(t *testing.T) {
 				assert.Equal(t, "Bearer test-api-key", r.Header.Get("Authorization"))
 
 				// Capture and verify the request body
-				var reqBody map[string]interface{}
+				var reqBody map[string]any
 				err := json.NewDecoder(r.Body).Decode(&reqBody)
 				require.NoError(t, err)
 				capturedRequest = reqBody
@@ -77,22 +77,22 @@ func TestOpenAIProvider_IntegrationTextGeneration(t *testing.T) {
 				}
 
 				// Return a mock response
-				response := map[string]interface{}{
+				response := map[string]any{
 					"id":      "chatcmpl-test123",
 					"object":  "chat.completion",
 					"created": time.Now().Unix(),
 					"model":   tc.model,
-					"choices": []map[string]interface{}{
+					"choices": []map[string]any{
 						{
 							"index": 0,
-							"message": map[string]interface{}{
+							"message": map[string]any{
 								"role":    "assistant",
 								"content": "Hello! This is a test response.",
 							},
 							"finish_reason": "stop",
 						},
 					},
-					"usage": map[string]interface{}{
+					"usage": map[string]any{
 						"prompt_tokens":     10,
 						"completion_tokens": 8,
 						"total_tokens":      18,
@@ -154,7 +154,7 @@ func TestOpenAIProvider_IntegrationStreaming(t *testing.T) {
 	// Create a mock server that returns streaming responses
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// Verify streaming request
-		var reqBody map[string]interface{}
+		var reqBody map[string]any
 		json.NewDecoder(r.Body).Decode(&reqBody)
 		assert.Equal(t, true, reqBody["stream"])
 
@@ -368,15 +368,15 @@ func TestOpenAIProvider_Authentication(t *testing.T) {
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			authHeader = r.Header.Get("Authorization")
 
-			response := map[string]interface{}{
+			response := map[string]any{
 				"id":      "test",
 				"object":  "chat.completion",
 				"created": time.Now().Unix(),
 				"model":   "gpt-4",
-				"choices": []map[string]interface{}{
+				"choices": []map[string]any{
 					{
 						"index": 0,
-						"message": map[string]interface{}{
+						"message": map[string]any{
 							"role":    "assistant",
 							"content": "Test response",
 						},
@@ -417,30 +417,30 @@ func TestOpenAIProvider_ToolCalling(t *testing.T) {
 	// Create mock server that returns tool call response
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// Verify tools in request
-		var reqBody map[string]interface{}
+		var reqBody map[string]any
 		json.NewDecoder(r.Body).Decode(&reqBody)
 
-		tools, ok := reqBody["tools"].([]interface{})
+		tools, ok := reqBody["tools"].([]any)
 		require.True(t, ok, "Request should include tools")
 		require.Len(t, tools, 1)
 
 		// Return tool call response
-		response := map[string]interface{}{
+		response := map[string]any{
 			"id":      "chatcmpl-tool123",
 			"object":  "chat.completion",
 			"created": time.Now().Unix(),
 			"model":   "gpt-4",
-			"choices": []map[string]interface{}{
+			"choices": []map[string]any{
 				{
 					"index": 0,
-					"message": map[string]interface{}{
+					"message": map[string]any{
 						"role":    "assistant",
 						"content": nil,
-						"tool_calls": []map[string]interface{}{
+						"tool_calls": []map[string]any{
 							{
 								"id":   "call_123",
 								"type": "function",
-								"function": map[string]interface{}{
+								"function": map[string]any{
 									"name":      "get_weather",
 									"arguments": `{"location": "San Francisco"}`,
 								},
@@ -467,9 +467,9 @@ func TestOpenAIProvider_ToolCalling(t *testing.T) {
 	weatherTool := types.NewTool(
 		"get_weather",
 		"Get current weather for a location",
-		map[string]interface{}{
+		map[string]any{
 			"type": "object",
-			"properties": map[string]interface{}{
+			"properties": map[string]any{
 				"location": map[string]string{"type": "string"},
 			},
 			"required": []string{"location"},

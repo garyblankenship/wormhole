@@ -25,6 +25,7 @@ import (
     "log"
     "os"
 
+    "github.com/garyblankenship/wormhole/pkg/types"
     "github.com/garyblankenship/wormhole/pkg/wormhole"
 )
 
@@ -106,6 +107,10 @@ client := wormhole.New(
     wormhole.WithDefaultProvider("openai"),
     wormhole.WithOpenAI(os.Getenv("OPENAI_API_KEY")),
     wormhole.WithAnthropic(os.Getenv("ANTHROPIC_API_KEY")),
+    wormhole.WithGroq(os.Getenv("GROQ_API_KEY")),                    // Fast inference
+    wormhole.WithMistral(types.ProviderConfig{                      // European AI
+        APIKey: os.Getenv("MISTRAL_API_KEY"),
+    }),
 )
 
 // Use specific provider
@@ -191,6 +196,8 @@ Error: dial tcp: connection refused
 export OPENAI_API_KEY="your-key"
 export ANTHROPIC_API_KEY="your-key"
 export GEMINI_API_KEY="your-key"
+export GROQ_API_KEY="your-key"
+export MISTRAL_API_KEY="your-key"
 ```
 
 ### Option 2: .env File (with godotenv)
@@ -206,6 +213,8 @@ Create `.env` file:
 ```
 OPENAI_API_KEY=your-key
 ANTHROPIC_API_KEY=your-key
+GROQ_API_KEY=your-key
+MISTRAL_API_KEY=your-key
 ```
 
 ### Option 3: Direct Configuration (Development Only)

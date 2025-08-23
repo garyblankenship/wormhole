@@ -417,7 +417,7 @@ func TestJSONStreamParser_Parsing(t *testing.T) {
 		input := `{"name": "test", "value": 123}`
 		parser := NewJSONStreamParser(strings.NewReader(input))
 
-		var result map[string]interface{}
+		var result map[string]any
 		err := parser.Parse(&result)
 
 		require.NoError(t, err)
@@ -431,10 +431,10 @@ func TestJSONStreamParser_Parsing(t *testing.T) {
 {"id": 3}`
 		parser := NewJSONStreamParser(strings.NewReader(input))
 
-		var results []map[string]interface{}
+		var results []map[string]any
 
 		for {
-			var obj map[string]interface{}
+			var obj map[string]any
 			err := parser.Parse(&obj)
 			if err == io.EOF {
 				break
@@ -470,7 +470,7 @@ func TestJSONStreamParser_Parsing(t *testing.T) {
 		input := `{"name": "test", "value": 123,}` // Invalid trailing comma
 		parser := NewJSONStreamParser(strings.NewReader(input))
 
-		var result map[string]interface{}
+		var result map[string]any
 		err := parser.Parse(&result)
 
 		assert.Error(t, err)
@@ -480,7 +480,7 @@ func TestJSONStreamParser_Parsing(t *testing.T) {
 	t.Run("EOF on empty input", func(t *testing.T) {
 		parser := NewJSONStreamParser(strings.NewReader(""))
 
-		var result map[string]interface{}
+		var result map[string]any
 		err := parser.Parse(&result)
 
 		assert.Equal(t, io.EOF, err)

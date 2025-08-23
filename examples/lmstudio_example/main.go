@@ -67,14 +67,14 @@ func main() {
 	weatherTool := types.NewTool(
 		"get_weather",
 		"Get the current weather for a location",
-		map[string]interface{}{
+		map[string]any{
 			"type": "object",
-			"properties": map[string]interface{}{
-				"location": map[string]interface{}{
+			"properties": map[string]any{
+				"location": map[string]any{
 					"type":        "string",
 					"description": "The city name",
 				},
-				"unit": map[string]interface{}{
+				"unit": map[string]any{
 					"type":        "string",
 					"enum":        []string{"celsius", "fahrenheit"},
 					"description": "Temperature unit",
@@ -112,24 +112,24 @@ func main() {
 		Hobbies []string `json:"hobbies"`
 	}
 
-	schema := map[string]interface{}{
+	schema := map[string]any{
 		"type": "object",
-		"properties": map[string]interface{}{
-			"name": map[string]interface{}{
+		"properties": map[string]any{
+			"name": map[string]any{
 				"type":        "string",
 				"description": "Person's full name",
 			},
-			"age": map[string]interface{}{
+			"age": map[string]any{
 				"type":        "integer",
 				"description": "Person's age",
 			},
-			"city": map[string]interface{}{
+			"city": map[string]any{
 				"type":        "string",
 				"description": "City where the person lives",
 			},
-			"hobbies": map[string]interface{}{
+			"hobbies": map[string]any{
 				"type": "array",
-				"items": map[string]interface{}{
+				"items": map[string]any{
 					"type": "string",
 				},
 				"description": "List of hobbies",

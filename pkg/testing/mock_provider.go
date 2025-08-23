@@ -14,7 +14,7 @@ type MockProvider struct {
 	textResponses  []types.TextResponse
 	textIndex      int
 	streamChunks   []types.TextChunk
-	structuredData interface{}
+	structuredData any
 	embeddings     []types.Embedding
 	shouldError    bool
 	errorMessage   string
@@ -40,7 +40,7 @@ func (m *MockProvider) WithStreamChunks(chunks []types.TextChunk) *MockProvider 
 }
 
 // WithStructuredData sets the structured data to return
-func (m *MockProvider) WithStructuredData(data interface{}) *MockProvider {
+func (m *MockProvider) WithStructuredData(data any) *MockProvider {
 	m.structuredData = data
 	return m
 }
@@ -133,7 +133,7 @@ func (m *MockProvider) Structured(ctx context.Context, request types.StructuredR
 
 	data := m.structuredData
 	if data == nil {
-		data = map[string]interface{}{
+		data = map[string]any{
 			"mock": "structured response",
 		}
 	}

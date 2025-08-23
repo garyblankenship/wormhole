@@ -75,9 +75,9 @@ func TestTextGeneration(t *testing.T) {
 		tool := types.NewTool(
 			"get_weather",
 			"Get weather for a location",
-			map[string]interface{}{
+			map[string]any{
 				"type": "object",
-				"properties": map[string]interface{}{
+				"properties": map[string]any{
 					"location": map[string]string{
 						"type": "string",
 					},
@@ -103,9 +103,9 @@ func TestStructuredGeneration(t *testing.T) {
 		wormhole.WithDefaultProvider("mock"),
 	)
 
-	schema := map[string]interface{}{
+	schema := map[string]any{
 		"type": "object",
-		"properties": map[string]interface{}{
+		"properties": map[string]any{
 			"name": map[string]string{"type": "string"},
 			"age":  map[string]string{"type": "integer"},
 		},

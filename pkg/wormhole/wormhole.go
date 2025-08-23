@@ -8,8 +8,6 @@ import (
 	"github.com/garyblankenship/wormhole/pkg/middleware"
 	"github.com/garyblankenship/wormhole/pkg/providers/anthropic"
 	"github.com/garyblankenship/wormhole/pkg/providers/gemini"
-	"github.com/garyblankenship/wormhole/pkg/providers/groq"
-	"github.com/garyblankenship/wormhole/pkg/providers/mistral"
 	"github.com/garyblankenship/wormhole/pkg/providers/ollama"
 	"github.com/garyblankenship/wormhole/pkg/providers/openai"
 	"github.com/garyblankenship/wormhole/pkg/types"
@@ -104,15 +102,10 @@ func (p *Wormhole) registerBuiltinProviders() {
 	p.providerFactories["gemini"] = func(c types.ProviderConfig) (types.Provider, error) {
 		return gemini.New(c.APIKey, c), nil
 	}
-	p.providerFactories["groq"] = func(c types.ProviderConfig) (types.Provider, error) {
-		return groq.New(c.APIKey, c), nil
-	}
-	p.providerFactories["mistral"] = func(c types.ProviderConfig) (types.Provider, error) {
-		return mistral.New(c), nil
-	}
 	p.providerFactories["ollama"] = func(c types.ProviderConfig) (types.Provider, error) {
 		return ollama.New(c), nil
 	}
+	// NOTE: groq and mistral now use the generic openai provider via WithOpenAICompatible()
 }
 
 // Text creates a new text generation request builder
@@ -194,8 +187,12 @@ func (p *Wormhole) Provider(name string) (types.Provider, error) {
 	}
 
 	// Apply DefaultTimeout if provider config doesn't have explicit timeout
-	if config.Timeout == 0 && p.config.DefaultTimeout > 0 {
+	// Special case: if DefaultTimeout is 0 (unlimited), only apply to configs without explicit timeout
+	if config.Timeout == 0 && p.config.DefaultTimeout != 0 {
 		config.Timeout = int(p.config.DefaultTimeout.Seconds())
+	} else if config.Timeout == 0 && p.config.DefaultTimeout == 0 {
+		// Unlimited timeout requested - only apply when provider config is also 0
+		config.Timeout = 0
 	}
 
 	// Use the factory to create the provider instance

@@ -205,12 +205,12 @@ func IsRetryableError(err error) bool {
 type ModelConstraintError struct {
 	*WormholeError
 	Constraint string      `json:"constraint"`
-	Expected   interface{} `json:"expected"`
-	Actual     interface{} `json:"actual"`
+	Expected   any `json:"expected"`
+	Actual     any `json:"actual"`
 }
 
 // NewModelConstraintError creates a new model constraint error
-func NewModelConstraintError(model, constraint string, expected, actual interface{}) *ModelConstraintError {
+func NewModelConstraintError(model, constraint string, expected, actual any) *ModelConstraintError {
 	baseErr := ErrProviderConstraintError.
 		WithModel(model).
 		WithDetails(fmt.Sprintf("constraint '%s' violated: expected %v, got %v", constraint, expected, actual))

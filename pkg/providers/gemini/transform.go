@@ -13,11 +13,11 @@ import (
 )
 
 // transformMessages converts types.Message to Gemini format
-func (g *Gemini) transformMessages(messages []types.Message) ([]map[string]interface{}, error) {
-	var contents []map[string]interface{}
+func (g *Gemini) transformMessages(messages []types.Message) ([]map[string]any, error) {
+	var contents []map[string]any
 
 	for _, msg := range messages {
-		content := map[string]interface{}{
+		content := map[string]any{
 			"role": g.mapRole(string(msg.GetRole())),
 		}
 
@@ -48,13 +48,13 @@ func (g *Gemini) mapRole(role string) string {
 }
 
 // transformMessageToParts converts a message to Gemini parts
-func (g *Gemini) transformMessageToParts(msg types.Message) ([]map[string]interface{}, error) {
-	var parts []map[string]interface{}
+func (g *Gemini) transformMessageToParts(msg types.Message) ([]map[string]any, error) {
+	var parts []map[string]any
 
 	switch m := msg.(type) {
 	case *types.UserMessage:
 		if m.Content != "" {
-			parts = append(parts, map[string]interface{}{"text": m.Content})
+			parts = append(parts, map[string]any{"text": m.Content})
 		}
 
 		// Handle media
@@ -68,13 +68,13 @@ func (g *Gemini) transformMessageToParts(msg types.Message) ([]map[string]interf
 
 	case *types.AssistantMessage:
 		if m.Content != "" {
-			parts = append(parts, map[string]interface{}{"text": m.Content})
+			parts = append(parts, map[string]any{"text": m.Content})
 		}
 
 		// Handle tool calls
 		for _, toolCall := range m.ToolCalls {
-			parts = append(parts, map[string]interface{}{
-				"functionCall": map[string]interface{}{
+			parts = append(parts, map[string]any{
+				"functionCall": map[string]any{
 					"name": toolCall.Name,
 					"args": toolCall.Arguments,
 				},
@@ -82,17 +82,17 @@ func (g *Gemini) transformMessageToParts(msg types.Message) ([]map[string]interf
 		}
 
 	case *types.ToolResultMessage:
-		parts = append(parts, map[string]interface{}{
-			"functionResponse": map[string]interface{}{
+		parts = append(parts, map[string]any{
+			"functionResponse": map[string]any{
 				"name": m.ToolCallID,
-				"response": map[string]interface{}{
+				"response": map[string]any{
 					"result": m.Content,
 				},
 			},
 		})
 
 	case *types.SystemMessage:
-		parts = append(parts, map[string]interface{}{"text": m.Content})
+		parts = append(parts, map[string]any{"text": m.Content})
 
 	default:
 		return nil, fmt.Errorf("unsupported message type: %T", msg)
@@ -102,7 +102,7 @@ func (g *Gemini) transformMessageToParts(msg types.Message) ([]map[string]interf
 }
 
 // transformMedia converts media to Gemini format
-func (g *Gemini) transformMedia(media types.Media) (map[string]interface{}, error) {
+func (g *Gemini) transformMedia(media types.Media) (map[string]any, error) {
 	switch m := media.(type) {
 	case *types.ImageMedia:
 		if m.URL != "" {
@@ -110,16 +110,16 @@ func (g *Gemini) transformMedia(media types.Media) (map[string]interface{}, erro
 			return nil, errors.New("Gemini requires base64 encoded images, URLs are not supported")
 		}
 
-		return map[string]interface{}{
-			"inlineData": map[string]interface{}{
+		return map[string]any{
+			"inlineData": map[string]any{
 				"mimeType": m.MimeType,
 				"data":     base64.StdEncoding.EncodeToString(m.Data),
 			},
 		}, nil
 
 	case *types.DocumentMedia:
-		return map[string]interface{}{
-			"inlineData": map[string]interface{}{
+		return map[string]any{
+			"inlineData": map[string]any{
 				"mimeType": m.MimeType,
 				"data":     base64.StdEncoding.EncodeToString(m.Data),
 			},
@@ -131,13 +131,13 @@ func (g *Gemini) transformMedia(media types.Media) (map[string]interface{}, erro
 }
 
 // transformTools converts tools to Gemini format
-func (g *Gemini) transformTools(tools []types.Tool) ([]map[string]interface{}, error) {
-	var geminiTools []map[string]interface{}
+func (g *Gemini) transformTools(tools []types.Tool) ([]map[string]any, error) {
+	var geminiTools []map[string]any
 
-	var functions []map[string]interface{}
+	var functions []map[string]any
 	for _, tool := range tools {
 		schema := g.transformToolSchema(tool.InputSchema)
-		functions = append(functions, map[string]interface{}{
+		functions = append(functions, map[string]any{
 			"name":        tool.Name,
 			"description": tool.Description,
 			"parameters":  schema,
@@ -145,7 +145,7 @@ func (g *Gemini) transformTools(tools []types.Tool) ([]map[string]interface{}, e
 	}
 
 	if len(functions) > 0 {
-		geminiTools = append(geminiTools, map[string]interface{}{
+		geminiTools = append(geminiTools, map[string]any{
 			"functionDeclarations": functions,
 		})
 	}
@@ -154,7 +154,7 @@ func (g *Gemini) transformTools(tools []types.Tool) ([]map[string]interface{}, e
 }
 
 // transformToolSchema converts tool schema to Gemini format
-func (g *Gemini) transformToolSchema(schema map[string]interface{}) map[string]interface{} {
+func (g *Gemini) transformToolSchema(schema map[string]any) map[string]any {
 	// Gemini expects JSON Schema format
 	if _, ok := schema["type"]; !ok {
 		schema["type"] = "object"
@@ -163,33 +163,33 @@ func (g *Gemini) transformToolSchema(schema map[string]interface{}) map[string]i
 }
 
 // transformToolChoice converts tool choice to Gemini format
-func (g *Gemini) transformToolChoice(choice *types.ToolChoice) map[string]interface{} {
+func (g *Gemini) transformToolChoice(choice *types.ToolChoice) map[string]any {
 	if choice == nil {
 		return nil
 	}
 
 	switch choice.Type {
 	case types.ToolChoiceTypeAuto:
-		return map[string]interface{}{
-			"functionCallingConfig": map[string]interface{}{
+		return map[string]any{
+			"functionCallingConfig": map[string]any{
 				"mode": "AUTO",
 			},
 		}
 	case types.ToolChoiceTypeNone:
-		return map[string]interface{}{
-			"functionCallingConfig": map[string]interface{}{
+		return map[string]any{
+			"functionCallingConfig": map[string]any{
 				"mode": "NONE",
 			},
 		}
 	case types.ToolChoiceTypeAny:
-		return map[string]interface{}{
-			"functionCallingConfig": map[string]interface{}{
+		return map[string]any{
+			"functionCallingConfig": map[string]any{
 				"mode": "ANY",
 			},
 		}
 	case types.ToolChoiceTypeSpecific:
-		return map[string]interface{}{
-			"functionCallingConfig": map[string]interface{}{
+		return map[string]any{
+			"functionCallingConfig": map[string]any{
 				"mode":                 "ANY",
 				"allowedFunctionNames": []string{choice.ToolName},
 			},
@@ -200,15 +200,15 @@ func (g *Gemini) transformToolChoice(choice *types.ToolChoice) map[string]interf
 }
 
 // transformSchema converts a types.Schema to Gemini schema format
-func (g *Gemini) transformSchema(schema types.Schema) map[string]interface{} {
+func (g *Gemini) transformSchema(schema types.Schema) map[string]any {
 	return g.schemaToMap(schema)
 }
 
 // schemaToMap recursively converts schema to map
-func (g *Gemini) schemaToMap(schema types.Schema) map[string]interface{} {
+func (g *Gemini) schemaToMap(schema types.Schema) map[string]any {
 	// Handle raw JSON bytes
 	if bytes, ok := schema.([]byte); ok {
-		var result map[string]interface{}
+		var result map[string]any
 		if err := json.Unmarshal(bytes, &result); err == nil {
 			return result
 		}
@@ -216,7 +216,7 @@ func (g *Gemini) schemaToMap(schema types.Schema) map[string]interface{} {
 
 	// Handle schema interface
 	if schemaIface, ok := schema.(types.SchemaInterface); ok {
-		result := map[string]interface{}{
+		result := map[string]any{
 			"type": schemaIface.GetType(),
 		}
 
@@ -227,11 +227,11 @@ func (g *Gemini) schemaToMap(schema types.Schema) map[string]interface{} {
 	}
 
 	// Default empty result
-	result := map[string]interface{}{}
+	result := map[string]any{}
 
 	switch s := schema.(type) {
 	case *types.ObjectSchema:
-		properties := make(map[string]interface{})
+		properties := make(map[string]any)
 		for name, prop := range s.Properties {
 			properties[name] = g.schemaToMap(prop)
 		}
@@ -319,7 +319,7 @@ func (g *Gemini) transformTextResponse(response *geminiTextResponse) (*types.Tex
 	}
 
 	// Add metadata
-	result.Metadata = map[string]interface{}{
+	result.Metadata = map[string]any{
 		"provider": "gemini",
 	}
 
@@ -351,7 +351,7 @@ func (g *Gemini) transformStructuredResponse(response *geminiTextResponse, schem
 	}
 
 	// Parse JSON
-	var data interface{}
+	var data any
 	if err := json.Unmarshal([]byte(text), &data); err != nil {
 		return nil, fmt.Errorf("failed to parse structured response: %w", err)
 	}
@@ -378,7 +378,7 @@ func (g *Gemini) transformStructuredResponse(response *geminiTextResponse, schem
 	}
 
 	// Add metadata
-	result.Metadata = map[string]interface{}{
+	result.Metadata = map[string]any{
 		"provider": "gemini",
 	}
 
@@ -398,7 +398,7 @@ func (g *Gemini) transformEmbeddingsResponse(response *geminiEmbeddingsResponse)
 
 	return &types.EmbeddingsResponse{
 		Embeddings: embeddings,
-		Metadata: map[string]interface{}{
+		Metadata: map[string]any{
 			"provider": "gemini",
 		},
 	}, nil

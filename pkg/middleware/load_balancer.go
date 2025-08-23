@@ -250,7 +250,7 @@ func (lb *LoadBalancer) selectAdaptive(providers []*ProviderHandler) *ProviderHa
 }
 
 // Execute runs a request through the load balancer
-func (lb *LoadBalancer) Execute(ctx context.Context, req interface{}) (interface{}, error) {
+func (lb *LoadBalancer) Execute(ctx context.Context, req any) (any, error) {
 	provider, err := lb.SelectProvider(ctx)
 	if err != nil {
 		return nil, err
@@ -397,7 +397,7 @@ func LoadBalancerMiddleware(strategy LoadBalanceStrategy, providers map[string]H
 	}
 
 	return func(next Handler) Handler {
-		return func(ctx context.Context, req interface{}) (interface{}, error) {
+		return func(ctx context.Context, req any) (any, error) {
 			return lb.Execute(ctx, req)
 		}
 	}
