@@ -298,7 +298,7 @@ func TestWormholeError_JSONSerialization(t *testing.T) {
 		data, jsonErr := json.Marshal(err)
 		require.NoError(t, jsonErr)
 
-		var result map[string]interface{}
+		var result map[string]any
 		jsonErr = json.Unmarshal(data, &result)
 		require.NoError(t, jsonErr)
 

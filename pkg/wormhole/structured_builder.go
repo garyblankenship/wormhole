@@ -65,7 +65,7 @@ func (b *StructuredRequestBuilder) SystemPrompt(prompt string) *StructuredReques
 }
 
 // Schema sets the JSON schema for the response
-func (b *StructuredRequestBuilder) Schema(schema interface{}) *StructuredRequestBuilder {
+func (b *StructuredRequestBuilder) Schema(schema any) *StructuredRequestBuilder {
 	schemaBytes, err := json.Marshal(schema)
 	if err != nil {
 		// Store error to return during Generate
@@ -133,7 +133,7 @@ func (b *StructuredRequestBuilder) Generate(ctx context.Context) (*types.Structu
 
 	// Apply middleware chain if configured
 	if b.getWormhole().middlewareChain != nil {
-		handler := b.getWormhole().middlewareChain.Apply(func(ctx context.Context, req interface{}) (interface{}, error) {
+		handler := b.getWormhole().middlewareChain.Apply(func(ctx context.Context, req any) (any, error) {
 			structuredReq := req.(*types.StructuredRequest)
 			return structuredProvider.Structured(ctx, *structuredReq)
 		})
@@ -148,7 +148,7 @@ func (b *StructuredRequestBuilder) Generate(ctx context.Context) (*types.Structu
 }
 
 // GenerateAs executes the request and unmarshals the response into the provided type
-func (b *StructuredRequestBuilder) GenerateAs(ctx context.Context, result interface{}) error {
+func (b *StructuredRequestBuilder) GenerateAs(ctx context.Context, result any) error {
 	response, err := b.Generate(ctx)
 	if err != nil {
 		return err

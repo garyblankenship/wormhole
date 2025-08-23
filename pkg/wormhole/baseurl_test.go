@@ -46,10 +46,10 @@ func TestBaseURLFunctionality(t *testing.T) {
 	})
 
 	t.Run("BaseURL works with structured requests", func(t *testing.T) {
-		schema := map[string]interface{}{
+		schema := map[string]any{
 			"type": "object",
-			"properties": map[string]interface{}{
-				"name": map[string]interface{}{"type": "string"},
+			"properties": map[string]any{
+				"name": map[string]any{"type": "string"},
 			},
 		}
 

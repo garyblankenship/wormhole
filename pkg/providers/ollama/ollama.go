@@ -113,7 +113,7 @@ func (p *Provider) Structured(ctx context.Context, request types.StructuredReque
 	}
 
 	// Parse JSON response
-	var data interface{}
+	var data any
 	err = json.Unmarshal([]byte(response.Text), &data)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse structured response: %w", err)
@@ -217,14 +217,14 @@ func (p *Provider) ListModels(ctx context.Context) (*modelsResponse, error) {
 
 // PullModel pulls a model from Ollama registry
 func (p *Provider) PullModel(ctx context.Context, model string) error {
-	payload := map[string]interface{}{
+	payload := map[string]any{
 		"name": model,
 	}
 
 	url := p.GetBaseURL() + "/api/pull"
 
 	// This is a streaming endpoint but we'll treat it as regular request for simplicity
-	var response map[string]interface{} // Ollama returns various status messages
+	var response map[string]any // Ollama returns various status messages
 	err := p.doOllamaRequest(ctx, http.MethodPost, url, payload, &response)
 	if err != nil {
 		return fmt.Errorf("failed to pull model %s: %w", model, err)
@@ -234,14 +234,14 @@ func (p *Provider) PullModel(ctx context.Context, model string) error {
 }
 
 // ShowModel shows information about a model
-func (p *Provider) ShowModel(ctx context.Context, model string) (map[string]interface{}, error) {
-	payload := map[string]interface{}{
+func (p *Provider) ShowModel(ctx context.Context, model string) (map[string]any, error) {
+	payload := map[string]any{
 		"name": model,
 	}
 
 	url := p.GetBaseURL() + "/api/show"
 
-	var response map[string]interface{}
+	var response map[string]any
 	err := p.doOllamaRequest(ctx, http.MethodPost, url, payload, &response)
 	if err != nil {
 		return nil, fmt.Errorf("failed to show model %s: %w", model, err)
@@ -252,13 +252,13 @@ func (p *Provider) ShowModel(ctx context.Context, model string) (map[string]inte
 
 // DeleteModel deletes a model from Ollama
 func (p *Provider) DeleteModel(ctx context.Context, model string) error {
-	payload := map[string]interface{}{
+	payload := map[string]any{
 		"name": model,
 	}
 
 	url := p.GetBaseURL() + "/api/delete"
 
-	var response map[string]interface{}
+	var response map[string]any
 	err := p.doOllamaRequest(ctx, http.MethodDelete, url, payload, &response)
 	if err != nil {
 		return fmt.Errorf("failed to delete model %s: %w", model, err)
@@ -268,7 +268,7 @@ func (p *Provider) DeleteModel(ctx context.Context, model string) error {
 }
 
 // doOllamaRequest performs HTTP requests without Bearer authentication
-func (p *Provider) doOllamaRequest(ctx context.Context, method, url string, body interface{}, result interface{}) error {
+func (p *Provider) doOllamaRequest(ctx context.Context, method, url string, body any, result any) error {
 	var reqBody io.Reader
 	if body != nil {
 		jsonBody, err := json.Marshal(body)
@@ -322,7 +322,7 @@ func (p *Provider) doOllamaRequest(ctx context.Context, method, url string, body
 }
 
 // streamOllamaRequest performs streaming HTTP requests without Bearer authentication
-func (p *Provider) streamOllamaRequest(ctx context.Context, method, url string, body interface{}) (io.ReadCloser, error) {
+func (p *Provider) streamOllamaRequest(ctx context.Context, method, url string, body any) (io.ReadCloser, error) {
 	var reqBody io.Reader
 	if body != nil {
 		jsonBody, err := json.Marshal(body)

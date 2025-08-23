@@ -26,6 +26,14 @@ Start here if you're new to Wormhole or need quick implementation guidance.
 - Provider-specific capabilities and limitations
 - Configuration examples for each provider
 - Multi-provider setup patterns
+- OpenAI-compatible provider consolidation architecture
+
+### [🔄 provider-consolidation-migration.md](./provider-consolidation-migration.md)
+**Provider Architecture Consolidation Guide (v1.4.0+)**
+- Zero-breaking-change consolidation of OpenAI-compatible providers
+- Architectural improvements and code reduction
+- Migration guide and benefits overview
+- Future provider addition patterns
 
 ## 🔧 Technical Deep Dives
 

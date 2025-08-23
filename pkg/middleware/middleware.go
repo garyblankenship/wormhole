@@ -12,7 +12,7 @@ import (
 type Middleware func(next Handler) Handler
 
 // Handler represents any provider method signature
-type Handler func(ctx context.Context, req interface{}) (interface{}, error)
+type Handler func(ctx context.Context, req any) (any, error)
 
 // Chain manages a chain of middleware
 type Chain struct {
@@ -43,7 +43,7 @@ func (c *Chain) Add(middleware Middleware) {
 // MetricsMiddleware tracks request metrics
 func MetricsMiddleware(metrics *Metrics) Middleware {
 	return func(next Handler) Handler {
-		return func(ctx context.Context, req interface{}) (interface{}, error) {
+		return func(ctx context.Context, req any) (any, error) {
 			start := time.Now()
 
 			resp, err := next(ctx, req)
@@ -59,7 +59,7 @@ func MetricsMiddleware(metrics *Metrics) Middleware {
 // LoggingMiddleware creates basic logging middleware
 func LoggingMiddleware(logger types.Logger) Middleware {
 	return func(next Handler) Handler {
-		return func(ctx context.Context, req interface{}) (interface{}, error) {
+		return func(ctx context.Context, req any) (any, error) {
 			logger.Debug("Wormhole request", "request", req)
 
 			resp, err := next(ctx, req)
@@ -78,12 +78,12 @@ func LoggingMiddleware(logger types.Logger) Middleware {
 // TimeoutMiddleware enforces request timeouts
 func TimeoutMiddleware(timeout time.Duration) Middleware {
 	return func(next Handler) Handler {
-		return func(ctx context.Context, req interface{}) (interface{}, error) {
+		return func(ctx context.Context, req any) (any, error) {
 			ctx, cancel := context.WithTimeout(ctx, timeout)
 			defer cancel()
 
 			type result struct {
-				resp interface{}
+				resp any
 				err  error
 			}
 

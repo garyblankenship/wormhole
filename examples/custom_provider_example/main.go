@@ -43,7 +43,7 @@ func (p *ExampleProvider) Text(ctx context.Context, request types.TextRequest) (
 	return &types.TextResponse{
 		Text:  fmt.Sprintf("Mock response from %s using model %s", p.Name(), request.Model),
 		Model: request.Model,
-		Metadata: map[string]interface{}{
+		Metadata: map[string]any{
 			"provider":    p.Name(),
 			"api_key":     p.config.APIKey[:8] + "...", // Don't log full key
 			"base_url":    p.config.BaseURL,
@@ -79,7 +79,7 @@ func (p *ExampleProvider) Stream(ctx context.Context, request types.TextRequest)
 func (p *ExampleProvider) Structured(ctx context.Context, request types.StructuredRequest) (*types.StructuredResponse, error) {
 	// Simple mock structured response
 	return &types.StructuredResponse{
-		Data: map[string]interface{}{
+		Data: map[string]any{
 			"message":  "Structured response from custom provider",
 			"model":    request.Model,
 			"provider": p.Name(),
@@ -221,11 +221,11 @@ func main() {
 		Using("example").
 		Model("example-structured-model").
 		Prompt("Generate structured data").
-		Schema(map[string]interface{}{
+		Schema(map[string]any{
 			"type": "object",
-			"properties": map[string]interface{}{
-				"message": map[string]interface{}{"type": "string"},
-				"number":  map[string]interface{}{"type": "integer"},
+			"properties": map[string]any{
+				"message": map[string]any{"type": "string"},
+				"number":  map[string]any{"type": "integer"},
 			},
 		}).
 		GenerateAs(ctx, &result)

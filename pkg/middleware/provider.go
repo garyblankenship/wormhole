@@ -44,7 +44,7 @@ func (m *JSONCleaningMiddleware) ApplyStructured(next types.StructuredHandler) t
 		// Apply JSON cleaning if this provider needs it
 		if resp != nil && resp.Raw != "" {
 			// Use standard JSON parsing for validation
-			var data interface{}
+			var data any
 			if err := json.Unmarshal([]byte(resp.Raw), &data); err != nil {
 				// If it fails, try to clean the JSON
 				cleaned := cleanJSONResponse(resp.Raw)

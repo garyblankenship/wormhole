@@ -38,12 +38,12 @@ type inlineData struct {
 
 type functionCall struct {
 	Name string                 `json:"name"`
-	Args map[string]interface{} `json:"args"`
+	Args map[string]any `json:"args"`
 }
 
 type functionResponse struct {
 	Name     string                 `json:"name"`
-	Response map[string]interface{} `json:"response"`
+	Response map[string]any `json:"response"`
 }
 
 type usageMetadata struct {
@@ -136,16 +136,16 @@ type geminiTool struct {
 type functionDeclaration struct {
 	Name        string                 `json:"name"`
 	Description string                 `json:"description"`
-	Parameters  map[string]interface{} `json:"parameters"`
+	Parameters  map[string]any `json:"parameters"`
 }
 
 // Schema types for structured output
 type geminiSchema struct {
 	Type        string                 `json:"type"`
-	Properties  map[string]interface{} `json:"properties,omitempty"`
+	Properties  map[string]any `json:"properties,omitempty"`
 	Required    []string               `json:"required,omitempty"`
 	Items       *geminiSchema          `json:"items,omitempty"`
-	Enum        []interface{}          `json:"enum,omitempty"`
+	Enum        []any          `json:"enum,omitempty"`
 	Description string                 `json:"description,omitempty"`
 }
 

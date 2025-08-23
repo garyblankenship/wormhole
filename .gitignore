@@ -145,3 +145,5 @@ config/local.yaml
 # Documentation artifacts
 docs/build/
 site/
+data/
+logs/

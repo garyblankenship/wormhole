@@ -49,11 +49,11 @@ func main() {
 
 	// Create multiple provider handlers
 	providers := map[string]middleware.Handler{
-		"primary": func(ctx context.Context, req interface{}) (interface{}, error) {
+		"primary": func(ctx context.Context, req any) (any, error) {
 			// Primary provider logic
 			return "Response from primary", nil
 		},
-		"secondary": func(ctx context.Context, req interface{}) (interface{}, error) {
+		"secondary": func(ctx context.Context, req any) (any, error) {
 			// Secondary provider logic
 			return "Response from secondary", nil
 		},
@@ -64,7 +64,7 @@ func main() {
 
 	// Apply to chain
 	chain := middleware.NewChain(lb)
-	handler := chain.Apply(func(ctx context.Context, req interface{}) (interface{}, error) {
+	handler := chain.Apply(func(ctx context.Context, req any) (any, error) {
 		return "Default response", nil
 	})
 
@@ -218,7 +218,7 @@ func (p *MockProvider) Stream(ctx context.Context, req types.TextRequest) (<-cha
 	return ch, nil
 }
 func (p *MockProvider) Structured(ctx context.Context, req types.StructuredRequest) (*types.StructuredResponse, error) {
-	return &types.StructuredResponse{Data: map[string]interface{}{"mock": true}}, nil
+	return &types.StructuredResponse{Data: map[string]any{"mock": true}}, nil
 }
 func (p *MockProvider) Embeddings(ctx context.Context, req types.EmbeddingsRequest) (*types.EmbeddingsResponse, error) {
 	return &types.EmbeddingsResponse{}, nil

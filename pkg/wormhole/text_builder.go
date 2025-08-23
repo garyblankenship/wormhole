@@ -95,7 +95,7 @@ func (b *TextRequestBuilder) Tools(tools ...types.Tool) *TextRequestBuilder {
 }
 
 // ToolChoice sets how the model should use tools
-func (b *TextRequestBuilder) ToolChoice(choice interface{}) *TextRequestBuilder {
+func (b *TextRequestBuilder) ToolChoice(choice any) *TextRequestBuilder {
 	if tc, ok := choice.(*types.ToolChoice); ok {
 		b.request.ToolChoice = tc
 	} else if str, ok := choice.(string); ok {
@@ -105,13 +105,13 @@ func (b *TextRequestBuilder) ToolChoice(choice interface{}) *TextRequestBuilder 
 }
 
 // ResponseFormat sets the response format
-func (b *TextRequestBuilder) ResponseFormat(format interface{}) *TextRequestBuilder {
+func (b *TextRequestBuilder) ResponseFormat(format any) *TextRequestBuilder {
 	b.request.ResponseFormat = format
 	return b
 }
 
 // ProviderOptions sets provider-specific options
-func (b *TextRequestBuilder) ProviderOptions(options map[string]interface{}) *TextRequestBuilder {
+func (b *TextRequestBuilder) ProviderOptions(options map[string]any) *TextRequestBuilder {
 	b.request.ProviderOptions = options
 	return b
 }
@@ -150,7 +150,7 @@ func (b *TextRequestBuilder) Generate(ctx context.Context) (*types.TextResponse,
 
 	// Apply middleware chain if configured
 	if b.getWormhole().middlewareChain != nil {
-		handler := b.getWormhole().middlewareChain.Apply(func(ctx context.Context, req interface{}) (interface{}, error) {
+		handler := b.getWormhole().middlewareChain.Apply(func(ctx context.Context, req any) (any, error) {
 			textReq := req.(*types.TextRequest)
 			return textProvider.Text(ctx, *textReq)
 		})
@@ -198,7 +198,7 @@ func (b *TextRequestBuilder) Stream(ctx context.Context) (<-chan types.StreamChu
 
 	// Apply middleware chain if configured
 	if b.getWormhole().middlewareChain != nil {
-		handler := b.getWormhole().middlewareChain.Apply(func(ctx context.Context, req interface{}) (interface{}, error) {
+		handler := b.getWormhole().middlewareChain.Apply(func(ctx context.Context, req any) (any, error) {
 			textReq := req.(*types.TextRequest)
 			return streamProvider.Stream(ctx, *textReq)
 		})

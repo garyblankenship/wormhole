@@ -69,7 +69,7 @@ func BenchmarkEmbeddings(b *testing.B) {
 // BenchmarkStructuredGeneration measures structured output performance
 func BenchmarkStructuredGeneration(b *testing.B) {
 	mockProvider := testing_pkg.NewMockProvider("mock")
-	mockProvider.WithStructuredData(map[string]interface{}{"name": "John", "age": 30})
+	mockProvider.WithStructuredData(map[string]any{"name": "John", "age": 30})
 
 	client := &Wormhole{
 		providers: map[string]types.Provider{"mock": mockProvider},
@@ -77,11 +77,11 @@ func BenchmarkStructuredGeneration(b *testing.B) {
 	}
 
 	ctx := context.Background()
-	schema := map[string]interface{}{
+	schema := map[string]any{
 		"type": "object",
-		"properties": map[string]interface{}{
-			"name": map[string]interface{}{"type": "string"},
-			"age":  map[string]interface{}{"type": "integer"},
+		"properties": map[string]any{
+			"name": map[string]any{"type": "string"},
+			"age":  map[string]any{"type": "integer"},
 		},
 	}
 
@@ -110,21 +110,21 @@ func BenchmarkWithMiddleware(b *testing.B) {
 
 	// Create middleware stack
 	rateLimitMiddleware := func(next middleware.Handler) middleware.Handler {
-		return func(ctx context.Context, req interface{}) (interface{}, error) {
+		return func(ctx context.Context, req any) (any, error) {
 			// Simulate rate limiting check
 			return next(ctx, req)
 		}
 	}
 
 	metricsMiddleware := func(next middleware.Handler) middleware.Handler {
-		return func(ctx context.Context, req interface{}) (interface{}, error) {
+		return func(ctx context.Context, req any) (any, error) {
 			// Simulate metrics collection
 			return next(ctx, req)
 		}
 	}
 
 	circuitBreakerMiddleware := func(next middleware.Handler) middleware.Handler {
-		return func(ctx context.Context, req interface{}) (interface{}, error) {
+		return func(ctx context.Context, req any) (any, error) {
 			// Simulate circuit breaker check
 			return next(ctx, req)
 		}

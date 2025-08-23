@@ -109,8 +109,8 @@ func Retry(ctx context.Context, config RetryConfig, fn func() error) error {
 //	}
 func RetryMiddleware(config RetryConfig) Middleware {
 	return func(next Handler) Handler {
-		return func(ctx context.Context, req interface{}) (interface{}, error) {
-			var result interface{}
+		return func(ctx context.Context, req any) (any, error) {
+			var result any
 			err := Retry(ctx, config, func() error {
 				var retryErr error
 				result, retryErr = next(ctx, req)
@@ -133,11 +133,11 @@ func CircuitBreakerRetryMiddleware(config CircuitBreakerRetryConfig) Middleware 
 	breaker := NewCircuitBreaker(config.CircuitThreshold, config.CircuitTimeout)
 
 	return func(next Handler) Handler {
-		return func(ctx context.Context, req interface{}) (interface{}, error) {
-			var result interface{}
+		return func(ctx context.Context, req any) (any, error) {
+			var result any
 
 			err := Retry(ctx, config.RetryConfig, func() error {
-				res, execErr := breaker.Execute(ctx, func() (interface{}, error) {
+				res, execErr := breaker.Execute(ctx, func() (any, error) {
 					var err error
 					result, err = next(ctx, req)
 					return result, err
@@ -251,8 +251,8 @@ func AdaptiveRetryMiddleware(config AdaptiveRetryConfig) Middleware {
 	retry := NewAdaptiveRetry(config)
 
 	return func(next Handler) Handler {
-		return func(ctx context.Context, req interface{}) (interface{}, error) {
-			var result interface{}
+		return func(ctx context.Context, req any) (any, error) {
+			var result any
 			err := retry.Execute(ctx, func() error {
 				var retryErr error
 				result, retryErr = next(ctx, req)

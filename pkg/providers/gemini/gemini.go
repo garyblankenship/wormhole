@@ -136,26 +136,26 @@ func (g *Gemini) Images(ctx context.Context, request types.ImagesRequest) (*type
 }
 
 // buildTextPayload builds the request payload for text generation
-func (g *Gemini) buildTextPayload(request types.TextRequest) (map[string]interface{}, error) {
+func (g *Gemini) buildTextPayload(request types.TextRequest) (map[string]any, error) {
 	contents, err := g.transformMessages(request.Messages)
 	if err != nil {
 		return nil, err
 	}
 
-	payload := map[string]interface{}{
+	payload := map[string]any{
 		"contents": contents,
 	}
 
 	if request.SystemPrompt != "" {
-		payload["systemInstruction"] = map[string]interface{}{
-			"parts": []map[string]interface{}{
+		payload["systemInstruction"] = map[string]any{
+			"parts": []map[string]any{
 				{"text": request.SystemPrompt},
 			},
 		}
 	}
 
 	// Add generation config
-	generationConfig := map[string]interface{}{}
+	generationConfig := map[string]any{}
 	if request.MaxTokens != nil && *request.MaxTokens > 0 {
 		generationConfig["maxOutputTokens"] = *request.MaxTokens
 	}
@@ -191,7 +191,7 @@ func (g *Gemini) buildTextPayload(request types.TextRequest) (map[string]interfa
 }
 
 // buildStructuredPayload builds the request payload for structured generation
-func (g *Gemini) buildStructuredPayload(request types.StructuredRequest) (map[string]interface{}, error) {
+func (g *Gemini) buildStructuredPayload(request types.StructuredRequest) (map[string]any, error) {
 	// For Gemini, we use response schema in generation config
 	textRequest := types.TextRequest{
 		BaseRequest:  request.BaseRequest,
@@ -205,11 +205,11 @@ func (g *Gemini) buildStructuredPayload(request types.StructuredRequest) (map[st
 	}
 
 	// Add response schema to generation config
-	if generationConfig, ok := payload["generationConfig"].(map[string]interface{}); ok {
+	if generationConfig, ok := payload["generationConfig"].(map[string]any); ok {
 		generationConfig["responseMimeType"] = "application/json"
 		generationConfig["responseSchema"] = g.transformSchema(request.Schema)
 	} else {
-		payload["generationConfig"] = map[string]interface{}{
+		payload["generationConfig"] = map[string]any{
 			"responseMimeType": "application/json",
 			"responseSchema":   g.transformSchema(request.Schema),
 		}
@@ -219,13 +219,13 @@ func (g *Gemini) buildStructuredPayload(request types.StructuredRequest) (map[st
 }
 
 // buildEmbeddingsPayload builds the request payload for embeddings
-func (g *Gemini) buildEmbeddingsPayload(request types.EmbeddingsRequest) map[string]interface{} {
-	requests := make([]map[string]interface{}, len(request.Input))
+func (g *Gemini) buildEmbeddingsPayload(request types.EmbeddingsRequest) map[string]any {
+	requests := make([]map[string]any, len(request.Input))
 
 	for i, input := range request.Input {
-		requests[i] = map[string]interface{}{
-			"content": map[string]interface{}{
-				"parts": []map[string]interface{}{
+		requests[i] = map[string]any{
+			"content": map[string]any{
+				"parts": []map[string]any{
 					{"text": input},
 				},
 			},
@@ -242,7 +242,7 @@ func (g *Gemini) buildEmbeddingsPayload(request types.EmbeddingsRequest) map[str
 		}
 	}
 
-	return map[string]interface{}{
+	return map[string]any{
 		"requests": requests,
 	}
 }

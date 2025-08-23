@@ -78,7 +78,7 @@ func (b *EmbeddingsRequestBuilder) Generate(ctx context.Context) (*types.Embeddi
 
 	// Apply middleware chain if configured
 	if b.getWormhole().middlewareChain != nil {
-		handler := b.getWormhole().middlewareChain.Apply(func(ctx context.Context, req interface{}) (interface{}, error) {
+		handler := b.getWormhole().middlewareChain.Apply(func(ctx context.Context, req any) (any, error) {
 			embeddingsReq := req.(*types.EmbeddingsRequest)
 			return embeddingsProvider.Embeddings(ctx, *embeddingsReq)
 		})

@@ -189,9 +189,9 @@ func TestCacheMiddleware(t *testing.T) {
 
 	// Mock handler that increments a counter
 	callCount := 0
-	mockHandler := func(ctx context.Context, req interface{}) (interface{}, error) {
+	mockHandler := func(ctx context.Context, req any) (any, error) {
 		callCount++
-		return map[string]interface{}{"count": callCount, "req": req}, nil
+		return map[string]any{"count": callCount, "req": req}, nil
 	}
 
 	middleware := CacheMiddleware(config)
@@ -219,8 +219,8 @@ func TestCacheMiddleware(t *testing.T) {
 	}
 
 	// Responses should be identical
-	resp1Map := resp1.(map[string]interface{})
-	resp2Map := resp2.(map[string]interface{})
+	resp1Map := resp1.(map[string]any)
+	resp2Map := resp2.(map[string]any)
 	if resp1Map["count"] != resp2Map["count"] {
 		t.Errorf("Expected cached response, got different counts: %v vs %v", resp1Map["count"], resp2Map["count"])
 	}
@@ -241,9 +241,9 @@ func TestCacheMiddlewareWithCacheableFunc(t *testing.T) {
 	config := CacheConfig{
 		Cache: cache,
 		TTL:   1 * time.Hour,
-		CacheableFunc: func(req interface{}) bool {
+		CacheableFunc: func(req any) bool {
 			// Only cache requests with "cacheable": true
-			if reqMap, ok := req.(map[string]interface{}); ok {
+			if reqMap, ok := req.(map[string]any); ok {
 				if cacheable, exists := reqMap["cacheable"].(bool); exists {
 					return cacheable
 				}
@@ -253,9 +253,9 @@ func TestCacheMiddlewareWithCacheableFunc(t *testing.T) {
 	}
 
 	callCount := 0
-	mockHandler := func(ctx context.Context, req interface{}) (interface{}, error) {
+	mockHandler := func(ctx context.Context, req any) (any, error) {
 		callCount++
-		return map[string]interface{}{"count": callCount}, nil
+		return map[string]any{"count": callCount}, nil
 	}
 
 	middleware := CacheMiddleware(config)
@@ -264,7 +264,7 @@ func TestCacheMiddlewareWithCacheableFunc(t *testing.T) {
 	ctx := context.Background()
 
 	// Non-cacheable request should not be cached
-	req1 := map[string]interface{}{"cacheable": false, "data": "test1"}
+	req1 := map[string]any{"cacheable": false, "data": "test1"}
 	wrappedHandler(ctx, req1)
 	wrappedHandler(ctx, req1) // Second call
 	if callCount != 2 {
@@ -272,7 +272,7 @@ func TestCacheMiddlewareWithCacheableFunc(t *testing.T) {
 	}
 
 	// Cacheable request should be cached
-	req2 := map[string]interface{}{"cacheable": true, "data": "test2"}
+	req2 := map[string]any{"cacheable": true, "data": "test2"}
 	wrappedHandler(ctx, req2)
 	wrappedHandler(ctx, req2) // Second call should use cache
 	if callCount != 3 {
@@ -288,7 +288,7 @@ func TestCacheMiddlewareErrorHandling(t *testing.T) {
 	}
 
 	// Handler that returns error
-	mockHandler := func(ctx context.Context, req interface{}) (interface{}, error) {
+	mockHandler := func(ctx context.Context, req any) (any, error) {
 		return nil, errors.New("handler error")
 	}
 
@@ -315,13 +315,13 @@ func TestCacheMiddlewareKeyGeneratorError(t *testing.T) {
 	config := CacheConfig{
 		Cache: cache,
 		TTL:   1 * time.Hour,
-		KeyGenerator: func(req interface{}) (string, error) {
+		KeyGenerator: func(req any) (string, error) {
 			return "", errors.New("key generation failed")
 		},
 	}
 
 	callCount := 0
-	mockHandler := func(ctx context.Context, req interface{}) (interface{}, error) {
+	mockHandler := func(ctx context.Context, req any) (any, error) {
 		callCount++
 		return "response", nil
 	}

@@ -8,13 +8,13 @@ import (
 )
 
 // Schema represents a structured output schema interface or raw JSON bytes
-type Schema interface{}
+type Schema any
 
 // SchemaInterface represents the original schema interface
 type SchemaInterface interface {
 	GetType() string
 	GetDescription() string
-	Validate(data interface{}) error
+	Validate(data any) error
 }
 
 // BaseSchema provides common schema functionality
@@ -38,7 +38,7 @@ type ObjectSchema struct {
 	Required   []string                   `json:"required,omitempty"`
 }
 
-func (s *ObjectSchema) Validate(data interface{}) error {
+func (s *ObjectSchema) Validate(data any) error {
 	if data == nil {
 		return NewWormholeError(ErrorCodeValidation, "data cannot be nil", false)
 	}
@@ -53,7 +53,7 @@ func (s *ObjectSchema) Validate(data interface{}) error {
 	}
 
 	// Convert to map for unified processing
-	dataMap := make(map[string]interface{})
+	dataMap := make(map[string]any)
 	if value.Kind() == reflect.Map {
 		for _, key := range value.MapKeys() {
 			dataMap[fmt.Sprintf("%v", key.Interface())] = value.MapIndex(key).Interface()
@@ -100,7 +100,7 @@ type ArraySchema struct {
 	Items SchemaInterface `json:"items"`
 }
 
-func (s *ArraySchema) Validate(data interface{}) error {
+func (s *ArraySchema) Validate(data any) error {
 	if data == nil {
 		return NewWormholeError(ErrorCodeValidation, "data cannot be nil", false)
 	}
@@ -133,7 +133,7 @@ type StringSchema struct {
 	Pattern   string `json:"pattern,omitempty"`
 }
 
-func (s *StringSchema) Validate(data interface{}) error {
+func (s *StringSchema) Validate(data any) error {
 	if data == nil {
 		return NewWormholeError(ErrorCodeValidation, "data cannot be nil", false)
 	}
@@ -173,7 +173,7 @@ type NumberSchema struct {
 	Maximum *float64 `json:"maximum,omitempty"`
 }
 
-func (s *NumberSchema) Validate(data interface{}) error {
+func (s *NumberSchema) Validate(data any) error {
 	if data == nil {
 		return NewWormholeError(ErrorCodeValidation, "data cannot be nil", false)
 	}
@@ -211,7 +211,7 @@ type BooleanSchema struct {
 	BaseSchema
 }
 
-func (s *BooleanSchema) Validate(data interface{}) error {
+func (s *BooleanSchema) Validate(data any) error {
 	if data == nil {
 		return NewWormholeError(ErrorCodeValidation, "data cannot be nil", false)
 	}
@@ -226,10 +226,10 @@ func (s *BooleanSchema) Validate(data interface{}) error {
 // EnumSchema represents an enum schema
 type EnumSchema struct {
 	BaseSchema
-	Enum []interface{} `json:"enum"`
+	Enum []any `json:"enum"`
 }
 
-func (s *EnumSchema) Validate(data interface{}) error {
+func (s *EnumSchema) Validate(data any) error {
 	if data == nil {
 		return NewWormholeError(ErrorCodeValidation, "data cannot be nil", false)
 	}

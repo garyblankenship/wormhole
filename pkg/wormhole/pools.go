@@ -9,7 +9,7 @@ import (
 // Memory pools for frequently allocated objects
 var (
 	textRequestPool = sync.Pool{
-		New: func() interface{} {
+		New: func() any {
 			return &types.TextRequest{
 				Messages: make([]types.Message, 0, 4), // Pre-allocate capacity for 4 messages
 			}
@@ -17,7 +17,7 @@ var (
 	}
 
 	structuredRequestPool = sync.Pool{
-		New: func() interface{} {
+		New: func() any {
 			return &types.StructuredRequest{
 				Messages: make([]types.Message, 0, 4), // Pre-allocate capacity for 4 messages
 			}
@@ -25,7 +25,7 @@ var (
 	}
 
 	embeddingsRequestPool = sync.Pool{
-		New: func() interface{} {
+		New: func() any {
 			return &types.EmbeddingsRequest{
 				Input: make([]string, 0, 2), // Pre-allocate capacity for 2 inputs
 			}
@@ -33,13 +33,13 @@ var (
 	}
 
 	imageRequestPool = sync.Pool{
-		New: func() interface{} {
+		New: func() any {
 			return &types.ImageRequest{}
 		},
 	}
 
 	messageSlicePool = sync.Pool{
-		New: func() interface{} {
+		New: func() any {
 			return make([]types.Message, 0, 8) // Pre-allocate capacity for 8 messages
 		},
 	}

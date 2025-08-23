@@ -56,30 +56,22 @@ func WithGemini(apiKey string, config ...types.ProviderConfig) Option {
 	}
 }
 
-// WithGroq configures the Groq provider.
+// WithGroq configures the Groq provider as an OpenAI-compatible endpoint.
 func WithGroq(apiKey string, config ...types.ProviderConfig) Option {
-	return func(c *Config) {
-		if c.Providers == nil {
-			c.Providers = make(map[string]types.ProviderConfig)
-		}
-
-		var cfg types.ProviderConfig
-		if len(config) > 0 {
-			cfg = config[0]
-		}
-		cfg.APIKey = apiKey
-		c.Providers["groq"] = cfg
+	var cfg types.ProviderConfig
+	if len(config) > 0 {
+		cfg = config[0]
 	}
+	cfg.APIKey = apiKey
+	
+	// Use the generic OpenAI-compatible provider factory
+	return WithOpenAICompatible("groq", "https://api.groq.com/openai/v1", cfg)
 }
 
-// WithMistral configures the Mistral provider.
+// WithMistral configures the Mistral provider as an OpenAI-compatible endpoint.
 func WithMistral(config types.ProviderConfig) Option {
-	return func(c *Config) {
-		if c.Providers == nil {
-			c.Providers = make(map[string]types.ProviderConfig)
-		}
-		c.Providers["mistral"] = config
-	}
+	// Use the generic OpenAI-compatible provider factory
+	return WithOpenAICompatible("mistral", "https://api.mistral.ai/v1", config)
 }
 
 // WithOllama configures the Ollama provider.
@@ -207,6 +199,14 @@ func WithMiddleware(mw ...middleware.Middleware) Option {
 func WithTimeout(timeout time.Duration) Option {
 	return func(c *Config) {
 		c.DefaultTimeout = timeout
+	}
+}
+
+// WithUnlimitedTimeout disables HTTP client timeouts for long-running AI processing.
+// Use for heavy text processing that may take 3+ minutes.
+func WithUnlimitedTimeout() Option {
+	return func(c *Config) {
+		c.DefaultTimeout = 0 // 0 = unlimited timeout
 	}
 }
 

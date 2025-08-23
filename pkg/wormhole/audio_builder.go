@@ -104,7 +104,7 @@ func (b *SpeechToTextBuilder) Transcribe(ctx context.Context) (*types.SpeechToTe
 		if legacyProvider, ok := types.AsCapability[types.LegacyProvider](provider); ok {
 			// Apply middleware chain if configured
 			if b.wormhole.middlewareChain != nil {
-				handler := b.wormhole.middlewareChain.Apply(func(ctx context.Context, req interface{}) (interface{}, error) {
+				handler := b.wormhole.middlewareChain.Apply(func(ctx context.Context, req any) (any, error) {
 					sttReq := req.(*types.SpeechToTextRequest)
 					return legacyProvider.SpeechToText(ctx, *sttReq)
 				})
@@ -121,7 +121,7 @@ func (b *SpeechToTextBuilder) Transcribe(ctx context.Context) (*types.SpeechToTe
 
 	// Apply middleware chain if configured
 	if b.wormhole.middlewareChain != nil {
-		handler := b.wormhole.middlewareChain.Apply(func(ctx context.Context, req interface{}) (interface{}, error) {
+		handler := b.wormhole.middlewareChain.Apply(func(ctx context.Context, req any) (any, error) {
 			sttReq := req.(*types.SpeechToTextRequest)
 			return sttProvider.SpeechToText(ctx, *sttReq)
 		})
@@ -197,7 +197,7 @@ func (b *TextToSpeechBuilder) Generate(ctx context.Context) (*types.TextToSpeech
 		if legacyProvider, ok := types.AsCapability[types.LegacyProvider](provider); ok {
 			// Apply middleware chain if configured
 			if b.wormhole.middlewareChain != nil {
-				handler := b.wormhole.middlewareChain.Apply(func(ctx context.Context, req interface{}) (interface{}, error) {
+				handler := b.wormhole.middlewareChain.Apply(func(ctx context.Context, req any) (any, error) {
 					ttsReq := req.(*types.TextToSpeechRequest)
 					return legacyProvider.TextToSpeech(ctx, *ttsReq)
 				})
@@ -214,7 +214,7 @@ func (b *TextToSpeechBuilder) Generate(ctx context.Context) (*types.TextToSpeech
 
 	// Apply middleware chain if configured
 	if b.wormhole.middlewareChain != nil {
-		handler := b.wormhole.middlewareChain.Apply(func(ctx context.Context, req interface{}) (interface{}, error) {
+		handler := b.wormhole.middlewareChain.Apply(func(ctx context.Context, req any) (any, error) {
 			ttsReq := req.(*types.TextToSpeechRequest)
 			return ttsProvider.TextToSpeech(ctx, *ttsReq)
 		})

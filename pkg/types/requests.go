@@ -10,7 +10,7 @@ type BaseRequest struct {
 	PresencePenalty  *float32               `json:"presence_penalty,omitempty"`
 	FrequencyPenalty *float32               `json:"frequency_penalty,omitempty"`
 	Seed             *int                   `json:"seed,omitempty"`
-	ProviderOptions  map[string]interface{} `json:"-"`
+	ProviderOptions  map[string]any `json:"-"`
 }
 
 // TextRequest represents a text generation request
@@ -20,7 +20,7 @@ type TextRequest struct {
 	SystemPrompt   string      `json:"-"`
 	Tools          []Tool      `json:"tools,omitempty"`
 	ToolChoice     *ToolChoice `json:"tool_choice,omitempty"`
-	ResponseFormat interface{} `json:"response_format,omitempty"`
+	ResponseFormat any `json:"response_format,omitempty"`
 }
 
 // StructuredRequest represents a structured output request
@@ -47,7 +47,7 @@ type EmbeddingsRequest struct {
 	Model           string                 `json:"model"`
 	Input           []string               `json:"input"`
 	Dimensions      *int                   `json:"dimensions,omitempty"`
-	ProviderOptions map[string]interface{} `json:"-"`
+	ProviderOptions map[string]any `json:"-"`
 }
 
 // ImagesRequest represents an image generation request
@@ -59,7 +59,7 @@ type ImagesRequest struct {
 	Style           string                 `json:"style,omitempty"`
 	N               int                    `json:"n,omitempty"`
 	ResponseFormat  string                 `json:"response_format,omitempty"`
-	ProviderOptions map[string]interface{} `json:"-"`
+	ProviderOptions map[string]any `json:"-"`
 }
 
 // SpeechToTextRequest represents a speech-to-text request
@@ -87,7 +87,7 @@ type TextToSpeechRequest struct {
 	Voice           string                 `json:"voice,omitempty"`
 	Speed           float32                `json:"speed,omitempty"`
 	ResponseFormat  string                 `json:"response_format,omitempty"`
-	ProviderOptions map[string]interface{} `json:"-"`
+	ProviderOptions map[string]any `json:"-"`
 }
 
 // ImageRequest represents an image generation request (alias for ImagesRequest)
@@ -97,12 +97,12 @@ type ImageRequest = ImagesRequest
 type AudioRequest struct {
 	Type            AudioRequestType       `json:"type"`
 	Model           string                 `json:"model"`
-	Input           interface{}            `json:"input,omitempty"`    // string for TTS, []byte for STT
+	Input           any            `json:"input,omitempty"`    // string for TTS, []byte for STT
 	Voice           string                 `json:"voice,omitempty"`    // TTS only
 	Speed           float32                `json:"speed,omitempty"`    // TTS only
 	Language        string                 `json:"language,omitempty"` // STT only
 	Prompt          string                 `json:"prompt,omitempty"`   // STT only
 	Temperature     *float32               `json:"temperature,omitempty"`
 	ResponseFormat  string                 `json:"response_format,omitempty"`
-	ProviderOptions map[string]interface{} `json:"-"`
+	ProviderOptions map[string]any `json:"-"`
 }

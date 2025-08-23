@@ -109,7 +109,7 @@ func (p *Provider) Structured(ctx context.Context, request types.StructuredReque
 	}
 
 	// Extract structured data from response
-	var data interface{}
+	var data any
 	if request.Mode == types.StructuredModeJSON {
 		err = json.Unmarshal([]byte(response.Text), &data)
 	} else if len(response.ToolCalls) > 0 {
@@ -134,7 +134,7 @@ func (p *Provider) Structured(ctx context.Context, request types.StructuredReque
 
 // Embeddings generates embeddings
 func (p *Provider) Embeddings(ctx context.Context, request types.EmbeddingsRequest) (*types.EmbeddingsResponse, error) {
-	payload := map[string]interface{}{
+	payload := map[string]any{
 		"model": request.Model,
 		"input": request.Input,
 	}
@@ -156,7 +156,7 @@ func (p *Provider) Embeddings(ctx context.Context, request types.EmbeddingsReque
 
 // Images generates images
 func (p *Provider) Images(ctx context.Context, request types.ImagesRequest) (*types.ImagesResponse, error) {
-	payload := map[string]interface{}{
+	payload := map[string]any{
 		"model":  request.Model,
 		"prompt": request.Prompt,
 	}
@@ -200,7 +200,7 @@ func (p *Provider) Audio(ctx context.Context, request types.AudioRequest) (*type
 
 // handleTextToSpeech handles text-to-speech requests
 func (p *Provider) handleTextToSpeech(ctx context.Context, request types.AudioRequest) (*types.AudioResponse, error) {
-	payload := map[string]interface{}{
+	payload := map[string]any{
 		"model": request.Model,
 		"input": request.Input,
 	}

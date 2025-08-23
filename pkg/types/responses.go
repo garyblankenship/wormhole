@@ -31,18 +31,18 @@ type TextResponse struct {
 	FinishReason FinishReason           `json:"finish_reason"`
 	Usage        *Usage                 `json:"usage,omitempty"`
 	Created      time.Time              `json:"created"`
-	Metadata     map[string]interface{} `json:"metadata,omitempty"`
+	Metadata     map[string]any `json:"metadata,omitempty"`
 }
 
 // StructuredResponse represents a structured output response
 type StructuredResponse struct {
 	ID       string                 `json:"id"`
 	Model    string                 `json:"model"`
-	Data     interface{}            `json:"data"`
+	Data     any            `json:"data"`
 	Raw      string                 `json:"raw,omitempty"`
 	Usage    *Usage                 `json:"usage,omitempty"`
 	Created  time.Time              `json:"created"`
-	Metadata map[string]interface{} `json:"metadata,omitempty"`
+	Metadata map[string]any `json:"metadata,omitempty"`
 }
 
 // StreamChunk represents a streaming response chunk (alias for TextChunk)
@@ -74,7 +74,7 @@ type EmbeddingsResponse struct {
 	Embeddings []Embedding            `json:"embeddings"`
 	Usage      *Usage                 `json:"usage,omitempty"`
 	Created    time.Time              `json:"created"`
-	Metadata   map[string]interface{} `json:"metadata,omitempty"`
+	Metadata   map[string]any `json:"metadata,omitempty"`
 }
 
 // Embedding represents a single embedding vector
@@ -89,7 +89,7 @@ type ImagesResponse struct {
 	Model    string                 `json:"model"`
 	Images   []GeneratedImage       `json:"images"`
 	Created  time.Time              `json:"created"`
-	Metadata map[string]interface{} `json:"metadata,omitempty"`
+	Metadata map[string]any `json:"metadata,omitempty"`
 }
 
 // GeneratedImage represents a generated image
@@ -109,7 +109,7 @@ type SpeechToTextResponse struct {
 	Language string                 `json:"language,omitempty"`
 	Duration *float64               `json:"duration,omitempty"`
 	Created  time.Time              `json:"created,omitempty"`
-	Metadata map[string]interface{} `json:"metadata,omitempty"`
+	Metadata map[string]any `json:"metadata,omitempty"`
 }
 
 // TextToSpeechResponse represents a text-to-speech response
@@ -119,7 +119,7 @@ type TextToSpeechResponse struct {
 	Audio    []byte                 `json:"audio"`
 	Format   string                 `json:"format,omitempty"`
 	Created  time.Time              `json:"created,omitempty"`
-	Metadata map[string]interface{} `json:"metadata,omitempty"`
+	Metadata map[string]any `json:"metadata,omitempty"`
 }
 
 // AudioResponse represents an audio response
@@ -130,7 +130,7 @@ type AudioResponse struct {
 	Text     string                 `json:"text,omitempty"`  // For STT
 	Format   string                 `json:"format,omitempty"`
 	Created  time.Time              `json:"created,omitempty"`
-	Metadata map[string]interface{} `json:"metadata,omitempty"`
+	Metadata map[string]any `json:"metadata,omitempty"`
 }
 
 // Error types
@@ -151,5 +151,5 @@ type OCRResponse struct {
 	Model    string                 `json:"model"`
 	Text     string                 `json:"text"`
 	Created  int64                  `json:"created"`
-	Metadata map[string]interface{} `json:"metadata,omitempty"`
+	Metadata map[string]any `json:"metadata,omitempty"`
 }

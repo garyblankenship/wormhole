@@ -36,9 +36,9 @@ func TestBuildChatPayload(t *testing.T) {
 		tool := types.NewTool(
 			"test_tool",
 			"Test tool",
-			map[string]interface{}{
+			map[string]any{
 				"type": "object",
-				"properties": map[string]interface{}{
+				"properties": map[string]any{
 					"param": map[string]string{"type": "string"},
 				},
 			},
@@ -92,7 +92,7 @@ func TestStreamChunkParsing(t *testing.T) {
 func TestMultimodalMessages(t *testing.T) {
 	parts := []types.MessagePart{
 		types.TextPart("Look at this:"),
-		types.ImagePart(map[string]interface{}{
+		types.ImagePart(map[string]any{
 			"url": "https://example.com/image.jpg",
 		}),
 	}

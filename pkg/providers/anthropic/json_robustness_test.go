@@ -67,7 +67,7 @@ func TestJSONRobustness(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			var data map[string]interface{}
+			var data map[string]any
 			err := utils.UnmarshalAnthropicToolArgs(tt.toolArguments, &data)
 
 			if tt.expectError {
@@ -103,7 +103,7 @@ func TestJSONRobustness_Benchmarks(t *testing.T) {
 
 	// Run this multiple times to check for performance issues
 	for i := 0; i < 100; i++ {
-		var data map[string]interface{}
+		var data map[string]any
 		err := utils.UnmarshalAnthropicToolArgs(complexArgs, &data)
 		if err != nil {
 			t.Fatalf("Iteration %d failed: %v", i, err)

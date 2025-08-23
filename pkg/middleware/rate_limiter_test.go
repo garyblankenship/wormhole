@@ -14,7 +14,7 @@ func TestRateLimitMiddleware(t *testing.T) {
 	t.Run("allows requests within rate limit", func(t *testing.T) {
 		mw := RateLimitMiddleware(10) // 10 requests per second
 
-		handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		handler := func(ctx context.Context, req any) (any, error) {
 			return "response", nil
 		}
 
@@ -33,7 +33,7 @@ func TestRateLimitMiddleware(t *testing.T) {
 	// 	mw := RateLimitMiddleware(5) // 5 requests per second
 	//
 	// 	var count int
-	// 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+	// 	handler := func(ctx context.Context, req any) (any, error) {
 	// 		count++
 	// 		return "response", nil
 	// 	}
@@ -76,7 +76,7 @@ func TestAdaptiveRateLimitMiddleware(t *testing.T) {
 		mw := AdaptiveRateLimitMiddleware(5, 2, 10, 50*time.Millisecond)
 
 		var handlerLatency time.Duration
-		handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		handler := func(ctx context.Context, req any) (any, error) {
 			time.Sleep(handlerLatency)
 			return "response", nil
 		}
@@ -103,7 +103,7 @@ func TestConcurrentRateLimiting(t *testing.T) {
 
 		var count int
 		var mu sync.Mutex
-		handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		handler := func(ctx context.Context, req any) (any, error) {
 			mu.Lock()
 			count++
 			mu.Unlock()

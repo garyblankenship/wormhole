@@ -194,7 +194,7 @@ func RateLimitMiddleware(requestsPerSecond int) Middleware {
 	limiter := NewRateLimiter(requestsPerSecond)
 
 	return func(next Handler) Handler {
-		return func(ctx context.Context, req interface{}) (interface{}, error) {
+		return func(ctx context.Context, req any) (any, error) {
 			if err := limiter.Wait(ctx); err != nil {
 				return nil, err
 			}
@@ -208,7 +208,7 @@ func AdaptiveRateLimitMiddleware(initialRate, minRate, maxRate int, targetLatenc
 	limiter := NewAdaptiveRateLimiter(initialRate, minRate, maxRate, targetLatency)
 
 	return func(next Handler) Handler {
-		return func(ctx context.Context, req interface{}) (interface{}, error) {
+		return func(ctx context.Context, req any) (any, error) {
 			start := time.Now()
 
 			if err := limiter.Wait(ctx); err != nil {

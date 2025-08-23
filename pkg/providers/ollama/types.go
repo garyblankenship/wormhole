@@ -16,7 +16,7 @@ type chatRequest struct {
 // message represents an Ollama message
 type message struct {
 	Role    string      `json:"role"`
-	Content interface{} `json:"content"`          // string or []contentPart for multimodal
+	Content any `json:"content"`          // string or []contentPart for multimodal
 	Images  []string    `json:"images,omitempty"` // base64 encoded images
 }
 

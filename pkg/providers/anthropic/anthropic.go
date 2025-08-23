@@ -116,7 +116,7 @@ func (p *Provider) Structured(ctx context.Context, request types.StructuredReque
 		return nil, fmt.Errorf("no tool call in response")
 	}
 
-	var data interface{}
+	var data any
 	if response.ToolCalls[0].Function != nil {
 		err = utils.UnmarshalAnthropicToolArgs(response.ToolCalls[0].Function.Arguments, &data)
 	} else {
@@ -153,7 +153,7 @@ func (p *Provider) Images(ctx context.Context, request types.ImagesRequest) (*ty
 }
 
 // doAnthropicRequest performs an HTTP request with Anthropic-specific headers
-func (p *Provider) doAnthropicRequest(ctx context.Context, method, url string, body interface{}, result interface{}) error {
+func (p *Provider) doAnthropicRequest(ctx context.Context, method, url string, body any, result any) error {
 	// Use custom header handling for Anthropic
 	jsonBody, err := json.Marshal(body)
 	if err != nil {
@@ -206,7 +206,7 @@ func (p *Provider) doAnthropicRequest(ctx context.Context, method, url string, b
 }
 
 // streamAnthropicRequest performs a streaming HTTP request
-func (p *Provider) streamAnthropicRequest(ctx context.Context, method, url string, body interface{}) (io.ReadCloser, error) {
+func (p *Provider) streamAnthropicRequest(ctx context.Context, method, url string, body any) (io.ReadCloser, error) {
 	jsonBody, err := json.Marshal(body)
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal request body: %w", err)

@@ -15,7 +15,7 @@ type ModelInfo struct {
 	MaxTokens     int                    `json:"max_tokens,omitempty"`
 	Cost          *ModelCost             `json:"cost,omitempty"`
 	Capabilities  []ModelCapability      `json:"capabilities"`
-	Constraints   map[string]interface{} `json:"constraints,omitempty"`
+	Constraints   map[string]any `json:"constraints,omitempty"`
 	Deprecated    bool                   `json:"deprecated,omitempty"`
 }
 
@@ -161,7 +161,7 @@ func (r *ModelRegistry) EstimateCost(modelID string, inputTokens, outputTokens i
 }
 
 // GetConstraints returns model-specific constraints
-func (r *ModelRegistry) GetConstraints(modelID string) (map[string]interface{}, error) {
+func (r *ModelRegistry) GetConstraints(modelID string) (map[string]any, error) {
 	model, exists := r.Get(modelID)
 	if !exists {
 		return nil, ErrModelNotFound.WithModel(modelID)
@@ -193,7 +193,7 @@ func ValidateModelForCapability(modelID string, capability ModelCapability) erro
 }
 
 // GetModelConstraints returns constraints for a model
-func GetModelConstraints(modelID string) (map[string]interface{}, error) {
+func GetModelConstraints(modelID string) (map[string]any, error) {
 	return DefaultModelRegistry.GetConstraints(modelID)
 }
 

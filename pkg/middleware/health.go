@@ -177,7 +177,7 @@ func (hc *HealthChecker) checkProvider(provider string) {
 // HealthCheckMiddleware adds health checking to requests
 func HealthCheckMiddleware(checker *HealthChecker, providerName string) Middleware {
 	return func(next Handler) Handler {
-		return func(ctx context.Context, req interface{}) (interface{}, error) {
+		return func(ctx context.Context, req any) (any, error) {
 			// Check if provider is healthy
 			if !checker.IsHealthy(providerName) {
 				status := checker.GetStatus(providerName)

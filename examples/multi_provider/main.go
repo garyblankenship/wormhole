@@ -6,9 +6,8 @@ import (
 	"log"
 	"os"
 
-	"github.com/garyblankenship/wormhole/pkg/providers/gemini"
-	"github.com/garyblankenship/wormhole/pkg/providers/groq"
 	"github.com/garyblankenship/wormhole/pkg/types"
+	"github.com/garyblankenship/wormhole/pkg/wormhole"
 )
 
 func main() {
@@ -28,21 +27,20 @@ func main() {
 }
 
 func testGemini(ctx context.Context, apiKey string) {
-	provider := gemini.New(apiKey, types.ProviderConfig{})
+	// Create Wormhole client with Gemini provider
+	client := wormhole.New(
+		wormhole.WithGemini(apiKey, types.ProviderConfig{}),
+	)
 
 	// Test text generation
 	maxTokens := 100
-	request := types.TextRequest{
-		BaseRequest: types.BaseRequest{
-			Model:     "gemini-1.5-flash",
-			MaxTokens: &maxTokens,
-		},
-		Messages: []types.Message{
-			types.NewUserMessage("What is the capital of France?"),
-		},
-	}
+	response, err := client.Text().
+		Using("gemini").
+		Model("gemini-1.5-flash").
+		MaxTokens(maxTokens).
+		Messages(types.NewUserMessage("What is the capital of France?")).
+		Generate(ctx)
 
-	response, err := provider.Text(ctx, request)
 	if err != nil {
 		log.Printf("Gemini text error: %v", err)
 		return
@@ -51,12 +49,12 @@ func testGemini(ctx context.Context, apiKey string) {
 	fmt.Printf("Gemini Response: %s\n", response.Text)
 
 	// Test embeddings
-	embRequest := types.EmbeddingsRequest{
-		Model: "text-embedding-004",
-		Input: []string{"Hello world", "How are you?"},
-	}
+	embResponse, err := client.Embeddings().
+		Using("gemini").
+		Model("text-embedding-004").
+		Input("Hello world", "How are you?").
+		Generate(ctx)
 
-	embResponse, err := provider.Embeddings(ctx, embRequest)
 	if err != nil {
 		log.Printf("Gemini embeddings error: %v", err)
 		return
@@ -66,21 +64,20 @@ func testGemini(ctx context.Context, apiKey string) {
 }
 
 func testGroq(ctx context.Context, apiKey string) {
-	provider := groq.New(apiKey, types.ProviderConfig{})
+	// Create Wormhole client with Groq provider (now using OpenAI-compatible)
+	client := wormhole.New(
+		wormhole.WithGroq(apiKey),
+	)
 
 	// Test text generation
 	maxTokens := 100
-	request := types.TextRequest{
-		BaseRequest: types.BaseRequest{
-			Model:     "llama3-8b-8192",
-			MaxTokens: &maxTokens,
-		},
-		Messages: []types.Message{
-			types.NewUserMessage("Explain quantum computing in one sentence."),
-		},
-	}
+	response, err := client.Text().
+		Using("groq").
+		Model("llama3-8b-8192").
+		MaxTokens(maxTokens).
+		Messages(types.NewUserMessage("Explain quantum computing in one sentence.")).
+		Generate(ctx)
 
-	response, err := provider.Text(ctx, request)
 	if err != nil {
 		log.Printf("Groq text error: %v", err)
 		return
@@ -90,7 +87,13 @@ func testGroq(ctx context.Context, apiKey string) {
 
 	// Test streaming
 	fmt.Println("Groq Streaming:")
-	stream, err := provider.Stream(ctx, request)
+	stream, err := client.Text().
+		Using("groq").
+		Model("llama3-8b-8192").
+		MaxTokens(maxTokens).
+		Messages(types.NewUserMessage("Explain quantum computing in one sentence.")).
+		Stream(ctx)
+
 	if err != nil {
 		log.Printf("Groq stream error: %v", err)
 		return

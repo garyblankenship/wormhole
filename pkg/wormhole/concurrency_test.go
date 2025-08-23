@@ -123,23 +123,13 @@ func TestConcurrentOptionCreation(t *testing.T) {
 
 			// Each goroutine creates a uniquely configured client
 			var w *Wormhole
-			switch routineID % 4 {
+			switch routineID % 2 {
 			case 0:
 				w = New(
 					WithDefaultProvider("gemini"),
 					WithGemini("test-key"),
 				)
 			case 1:
-				w = New(
-					WithDefaultProvider("groq"),
-					WithGroq("test-key"),
-				)
-			case 2:
-				w = New(
-					WithDefaultProvider("mistral"),
-					WithMistral(types.ProviderConfig{APIKey: "test-key"}),
-				)
-			case 3:
 				w = New(
 					WithDefaultProvider("ollama"),
 					WithOllama(types.ProviderConfig{

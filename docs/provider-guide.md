@@ -19,7 +19,8 @@ This document outlines the available LLM providers in Wormhole Go and their capa
   - ❌ Image generation
 
 ### ✅ Groq
-- **Package**: `github.com/garyblankenship/wormhole/pkg/providers/groq`
+- **Implementation**: Uses OpenAI-compatible provider via `WithGroq()`
+- **API Endpoint**: `https://api.groq.com/openai/v1`
 - **Models**: `llama3-8b-8192`, `llama3-70b-8192`, `mixtral-8x7b-32768`
 - **Features**:
   - ✅ Text generation
@@ -76,8 +77,20 @@ This document outlines the available LLM providers in Wormhole Go and their capa
   - ❌ Audio (varies by underlying provider)
   - ❌ Image generation (varies by underlying provider)
 
+### ✅ Mistral AI
+- **Implementation**: Uses OpenAI-compatible provider via `WithMistral()`
+- **API Endpoint**: `https://api.mistral.ai/v1`
+- **Models**: `mistral-large-latest`, `mistral-medium`, `mistral-small`, `mistral-embed`
+- **Features**:
+  - ✅ Text generation
+  - ✅ Streaming responses
+  - ✅ Structured output (JSON mode)
+  - ✅ Embeddings generation
+  - ✅ Tool calling
+  - ❌ Audio (TTS/STT)
+  - ❌ Image generation
+
 ### 📋 Planned Providers
-- **Mistral AI**: Text generation, embeddings
 - **Ollama**: Local model support
 - **xAI**: Grok models
 

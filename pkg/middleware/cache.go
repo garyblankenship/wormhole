@@ -11,8 +11,8 @@ import (
 
 // Cache interface for middleware
 type Cache interface {
-	Get(key string) (interface{}, bool)
-	Set(key string, value interface{}, ttl time.Duration)
+	Get(key string) (any, bool)
+	Set(key string, value any, ttl time.Duration)
 	Delete(key string)
 	Clear()
 }
@@ -25,7 +25,7 @@ type MemoryCache struct {
 }
 
 type cacheEntry struct {
-	value      interface{}
+	value      any
 	expiration time.Time
 }
 
@@ -43,7 +43,7 @@ func NewMemoryCache(maxSize int) *MemoryCache {
 }
 
 // Get retrieves a value from the cache
-func (mc *MemoryCache) Get(key string) (interface{}, bool) {
+func (mc *MemoryCache) Get(key string) (any, bool) {
 	mc.mu.RLock()
 	defer mc.mu.RUnlock()
 
@@ -60,7 +60,7 @@ func (mc *MemoryCache) Get(key string) (interface{}, bool) {
 }
 
 // Set stores a value in the cache
-func (mc *MemoryCache) Set(key string, value interface{}, ttl time.Duration) {
+func (mc *MemoryCache) Set(key string, value any, ttl time.Duration) {
 	mc.mu.Lock()
 	defer mc.mu.Unlock()
 
@@ -124,10 +124,10 @@ func (mc *MemoryCache) cleanup() {
 }
 
 // CacheKeyGenerator generates cache keys from requests
-type CacheKeyGenerator func(req interface{}) (string, error)
+type CacheKeyGenerator func(req any) (string, error)
 
 // DefaultCacheKeyGenerator creates a cache key by hashing the JSON representation
-func DefaultCacheKeyGenerator(req interface{}) (string, error) {
+func DefaultCacheKeyGenerator(req any) (string, error) {
 	data, err := json.Marshal(req)
 	if err != nil {
 		return "", err
@@ -142,7 +142,7 @@ type CacheConfig struct {
 	Cache         Cache
 	TTL           time.Duration
 	KeyGenerator  CacheKeyGenerator
-	CacheableFunc func(req interface{}) bool
+	CacheableFunc func(req any) bool
 }
 
 // CacheMiddleware implements response caching.
@@ -166,7 +166,7 @@ func CacheMiddleware(config CacheConfig) Middleware {
 	}
 
 	return func(next Handler) Handler {
-		return func(ctx context.Context, req interface{}) (interface{}, error) {
+		return func(ctx context.Context, req any) (any, error) {
 			// Check if request is cacheable
 			if config.CacheableFunc != nil && !config.CacheableFunc(req) {
 				return next(ctx, req)
@@ -213,7 +213,7 @@ func NewTTLCache(maxSize int, defaultTTL time.Duration) *TTLCache {
 }
 
 // SetDefault stores a value with the default TTL
-func (tc *TTLCache) SetDefault(key string, value interface{}) {
+func (tc *TTLCache) SetDefault(key string, value any) {
 	tc.Set(key, value, tc.defaultTTL)
 }
 
@@ -228,7 +228,7 @@ type LRUCache struct {
 
 type lruNode struct {
 	key   string
-	value interface{}
+	value any
 	prev  *lruNode
 	next  *lruNode
 }
@@ -250,7 +250,7 @@ func NewLRUCache(capacity int) *LRUCache {
 }
 
 // Get retrieves a value from the LRU cache
-func (lru *LRUCache) Get(key string) (interface{}, bool) {
+func (lru *LRUCache) Get(key string) (any, bool) {
 	lru.mu.Lock()
 	defer lru.mu.Unlock()
 
@@ -266,7 +266,7 @@ func (lru *LRUCache) Get(key string) (interface{}, bool) {
 }
 
 // Set stores a value in the LRU cache
-func (lru *LRUCache) Set(key string, value interface{}, ttl time.Duration) {
+func (lru *LRUCache) Set(key string, value any, ttl time.Duration) {
 	lru.mu.Lock()
 	defer lru.mu.Unlock()
 

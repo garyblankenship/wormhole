@@ -10,8 +10,8 @@ import (
 )
 
 // buildMessagePayload builds the Anthropic messages API payload
-func (p *Provider) buildMessagePayload(request *types.TextRequest) map[string]interface{} {
-	payload := map[string]interface{}{
+func (p *Provider) buildMessagePayload(request *types.TextRequest) map[string]any {
+	payload := map[string]any{
 		"model":    request.Model,
 		"messages": p.transformMessages(request.Messages),
 	}
@@ -56,8 +56,8 @@ func (p *Provider) buildMessagePayload(request *types.TextRequest) map[string]in
 }
 
 // transformMessages converts internal messages to Anthropic format
-func (p *Provider) transformMessages(messages []types.Message) []map[string]interface{} {
-	var result []map[string]interface{}
+func (p *Provider) transformMessages(messages []types.Message) []map[string]any {
+	var result []map[string]any
 
 	for _, msg := range messages {
 		// Skip system messages as they go in a separate field
@@ -65,7 +65,7 @@ func (p *Provider) transformMessages(messages []types.Message) []map[string]inte
 			continue
 		}
 
-		anthropicMsg := map[string]interface{}{
+		anthropicMsg := map[string]any{
 			"role": p.mapRole(msg.GetRole()),
 		}
 
@@ -80,26 +80,26 @@ func (p *Provider) transformMessages(messages []types.Message) []map[string]inte
 }
 
 // buildContent builds the content array for a message
-func (p *Provider) buildContent(msg types.Message) []map[string]interface{} {
-	var contentParts []map[string]interface{}
+func (p *Provider) buildContent(msg types.Message) []map[string]any {
+	var contentParts []map[string]any
 
 	content := msg.GetContent()
 
 	switch c := content.(type) {
 	case string:
-		contentParts = append(contentParts, map[string]interface{}{
+		contentParts = append(contentParts, map[string]any{
 			"type": "text",
 			"text": c,
 		})
 	case []types.MessagePart:
 		for _, part := range c {
 			if part.Type == "text" {
-				contentParts = append(contentParts, map[string]interface{}{
+				contentParts = append(contentParts, map[string]any{
 					"type": "text",
 					"text": part.Text,
 				})
 			} else if part.Type == "image" {
-				contentParts = append(contentParts, map[string]interface{}{
+				contentParts = append(contentParts, map[string]any{
 					"type":   "image",
 					"source": part.Data,
 				})
@@ -107,7 +107,7 @@ func (p *Provider) buildContent(msg types.Message) []map[string]interface{} {
 		}
 	default:
 		// Try to convert to string
-		contentParts = append(contentParts, map[string]interface{}{
+		contentParts = append(contentParts, map[string]any{
 			"type": "text",
 			"text": fmt.Sprintf("%v", content),
 		})
@@ -124,9 +124,9 @@ func (p *Provider) buildContent(msg types.Message) []map[string]interface{} {
 	// Handle assistant messages with tool calls
 	if assistantMsg, ok := msg.(*types.AssistantMessage); ok && len(assistantMsg.ToolCalls) > 0 {
 		for _, toolCall := range assistantMsg.ToolCalls {
-			var input map[string]interface{}
+			var input map[string]any
 			utils.UnmarshalAnthropicToolArgs(toolCall.Function.Arguments, &input)
-			contentParts = append(contentParts, map[string]interface{}{
+			contentParts = append(contentParts, map[string]any{
 				"type":  "tool_use",
 				"id":    toolCall.ID,
 				"name":  toolCall.Function.Name,
@@ -153,12 +153,12 @@ func (p *Provider) mapRole(role types.Role) string {
 }
 
 // transformTools converts internal tools to Anthropic format
-func (p *Provider) transformTools(tools []types.Tool) []map[string]interface{} {
-	result := make([]map[string]interface{}, len(tools))
+func (p *Provider) transformTools(tools []types.Tool) []map[string]any {
+	result := make([]map[string]any, len(tools))
 
 	for i, tool := range tools {
 		parameters, _ := json.Marshal(tool.Function.Parameters)
-		result[i] = map[string]interface{}{
+		result[i] = map[string]any{
 			"name":         tool.Function.Name,
 			"description":  tool.Function.Description,
 			"input_schema": json.RawMessage(parameters),
@@ -280,8 +280,8 @@ func (p *Provider) schemaToTool(schema json.RawMessage, name string) (*types.Too
 		name = "structured_output"
 	}
 
-	// Convert json.RawMessage to map[string]interface{}
-	var params map[string]interface{}
+	// Convert json.RawMessage to map[string]any
+	var params map[string]any
 	if err := json.Unmarshal(schema, &params); err != nil {
 		return nil, err
 	}

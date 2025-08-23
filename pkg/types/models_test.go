@@ -13,7 +13,7 @@ func TestModelInfo_Structure(t *testing.T) {
 		Currency:     "USD",
 	}
 
-	constraints := map[string]interface{}{
+	constraints := map[string]any{
 		"temperature": 1.0,
 		"max_tokens":  4096,
 	}
@@ -450,7 +450,7 @@ func TestModelRegistry_EstimateCost(t *testing.T) {
 func TestModelRegistry_GetConstraints(t *testing.T) {
 	registry := NewModelRegistry()
 
-	constraints := map[string]interface{}{
+	constraints := map[string]any{
 		"temperature": 1.0,
 		"max_tokens":  4096,
 		"top_p":       0.9,
@@ -547,7 +547,7 @@ func TestGlobalHelperFunctions(t *testing.T) {
 			OutputTokens: 0.002,
 			Currency:     "USD",
 		},
-		Constraints: map[string]interface{}{
+		Constraints: map[string]any{
 			"temperature": 0.7,
 		},
 	}

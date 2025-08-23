@@ -109,9 +109,9 @@ func structuredExample(ctx context.Context, p *wormhole.Wormhole) {
 		Category string  `json:"category"`
 	}
 
-	schema := map[string]interface{}{
+	schema := map[string]any{
 		"type": "object",
-		"properties": map[string]interface{}{
+		"properties": map[string]any{
 			"name":     map[string]string{"type": "string"},
 			"price":    map[string]string{"type": "number"},
 			"in_stock": map[string]string{"type": "boolean"},
@@ -141,14 +141,14 @@ func toolExample(ctx context.Context, p *wormhole.Wormhole) {
 	weatherTool := types.NewTool(
 		"get_current_weather",
 		"Get the current weather in a given location",
-		map[string]interface{}{
+		map[string]any{
 			"type": "object",
-			"properties": map[string]interface{}{
-				"location": map[string]interface{}{
+			"properties": map[string]any{
+				"location": map[string]any{
 					"type":        "string",
 					"description": "The city and state, e.g. San Francisco, CA",
 				},
-				"unit": map[string]interface{}{
+				"unit": map[string]any{
 					"type":        "string",
 					"enum":        []string{"celsius", "fahrenheit"},
 					"description": "The unit of temperature",

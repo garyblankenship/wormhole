@@ -106,14 +106,14 @@ func main() {
 	weatherTool := types.NewTool(
 		"get_weather",
 		"Get current weather for a location",
-		map[string]interface{}{
+		map[string]any{
 			"type": "object",
-			"properties": map[string]interface{}{
-				"location": map[string]interface{}{
+			"properties": map[string]any{
+				"location": map[string]any{
 					"type":        "string",
 					"description": "City and state/country",
 				},
-				"unit": map[string]interface{}{
+				"unit": map[string]any{
 					"type":        "string",
 					"enum":        []string{"celsius", "fahrenheit"},
 					"description": "Temperature unit",
@@ -151,21 +151,21 @@ func main() {
 	// Example 4: Structured output (JSON mode)
 	fmt.Println("\n\n4. 📊 Structured Output (JSON)")
 
-	jsonSchema := map[string]interface{}{
+	jsonSchema := map[string]any{
 		"type": "object",
-		"properties": map[string]interface{}{
-			"summary": map[string]interface{}{
+		"properties": map[string]any{
+			"summary": map[string]any{
 				"type":        "string",
 				"description": "Brief summary of the concept",
 			},
-			"key_points": map[string]interface{}{
+			"key_points": map[string]any{
 				"type": "array",
-				"items": map[string]interface{}{
+				"items": map[string]any{
 					"type": "string",
 				},
 				"description": "List of key points",
 			},
-			"difficulty": map[string]interface{}{
+			"difficulty": map[string]any{
 				"type": "string",
 				"enum": []string{"beginner", "intermediate", "advanced"},
 			},
