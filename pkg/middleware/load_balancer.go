@@ -7,6 +7,8 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/garyblankenship/wormhole/pkg/config"
 )
 
 var (
@@ -62,7 +64,7 @@ func NewLoadBalancer(strategy LoadBalanceStrategy) *LoadBalancer {
 	return &LoadBalancer{
 		providers:      make([]*ProviderHandler, 0),
 		strategy:       strategy,
-		healthInterval: 30 * time.Second,
+		healthInterval: config.DefaultLoadBalancerHealthInterval,
 	}
 }
 

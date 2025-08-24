@@ -6,6 +6,8 @@ import (
 	"math"
 	"net/http"
 	"time"
+
+	"github.com/garyblankenship/wormhole/pkg/config"
 )
 
 // RetryConfig holds configuration for retry logic
@@ -20,11 +22,11 @@ type RetryConfig struct {
 // DefaultRetryConfig returns sensible defaults for retry configuration
 func DefaultRetryConfig() RetryConfig {
 	return RetryConfig{
-		MaxRetries:      3,
-		InitialDelay:    1 * time.Second,
-		MaxDelay:        30 * time.Second,
-		BackoffMultiple: 2.0,
-		Jitter:          true,
+		MaxRetries:      config.GetDefaultMaxRetries(),
+		InitialDelay:    config.GetDefaultInitialDelay(),
+		MaxDelay:        config.GetDefaultMaxDelay(),
+		BackoffMultiple: config.DefaultBackoffMultiple,
+		Jitter:          config.DefaultJitterEnabled,
 	}
 }
 

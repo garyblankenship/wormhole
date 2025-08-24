@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/garyblankenship/wormhole/internal/utils"
+	"github.com/garyblankenship/wormhole/pkg/config"
 	"github.com/garyblankenship/wormhole/pkg/providers"
 	"github.com/garyblankenship/wormhole/pkg/types"
 )
@@ -291,10 +292,13 @@ func (p *Provider) doOllamaRequest(ctx context.Context, method, url string, body
 		req.Header.Set(k, v)
 	}
 
-	client := &http.Client{Timeout: time.Duration(30) * time.Second}
-	if p.Config.Timeout > 0 {
-		client.Timeout = time.Duration(p.Config.Timeout) * time.Second
+	timeout := config.GetDefaultHTTPTimeout()
+	if p.Config.Timeout == 0 {
+		timeout = 0 // Unlimited timeout
+	} else if p.Config.Timeout > 0 {
+		timeout = time.Duration(p.Config.Timeout) * time.Second
 	}
+	client := &http.Client{Timeout: timeout}
 
 	resp, err := client.Do(req)
 	if err != nil {
@@ -347,10 +351,13 @@ func (p *Provider) streamOllamaRequest(ctx context.Context, method, url string, 
 		req.Header.Set(k, v)
 	}
 
-	client := &http.Client{Timeout: time.Duration(30) * time.Second}
-	if p.Config.Timeout > 0 {
-		client.Timeout = time.Duration(p.Config.Timeout) * time.Second
+	timeout := config.GetDefaultHTTPTimeout()
+	if p.Config.Timeout == 0 {
+		timeout = 0 // Unlimited timeout
+	} else if p.Config.Timeout > 0 {
+		timeout = time.Duration(p.Config.Timeout) * time.Second
 	}
+	client := &http.Client{Timeout: timeout}
 
 	resp, err := client.Do(req)
 	if err != nil {

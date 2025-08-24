@@ -10,18 +10,19 @@ import (
 	"testing"
 	"time"
 
+	"github.com/garyblankenship/wormhole/pkg/config"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
 func TestRetryConfig_Defaults(t *testing.T) {
-	config := DefaultRetryConfig()
+	retryConfig := DefaultRetryConfig()
 
-	assert.Equal(t, 3, config.MaxRetries)
-	assert.Equal(t, 1*time.Second, config.InitialDelay)
-	assert.Equal(t, 30*time.Second, config.MaxDelay)
-	assert.Equal(t, 2.0, config.BackoffMultiple)
-	assert.True(t, config.Jitter)
+	assert.Equal(t, config.DefaultMaxRetries, retryConfig.MaxRetries)
+	assert.Equal(t, config.DefaultInitialDelay, retryConfig.InitialDelay)
+	assert.Equal(t, config.DefaultMaxDelay, retryConfig.MaxDelay)
+	assert.Equal(t, config.DefaultBackoffMultiple, retryConfig.BackoffMultiple)
+	assert.Equal(t, config.DefaultJitterEnabled, retryConfig.Jitter)
 }
 
 func TestRetryableError(t *testing.T) {

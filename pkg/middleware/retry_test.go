@@ -5,35 +5,37 @@ import (
 	"errors"
 	"testing"
 	"time"
+
+	"github.com/garyblankenship/wormhole/pkg/config"
 )
 
 func TestDefaultRetryConfig(t *testing.T) {
-	config := DefaultRetryConfig()
+	retryConfig := DefaultRetryConfig()
 
-	if config.MaxRetries != 3 {
-		t.Errorf("Expected MaxRetries=3, got %d", config.MaxRetries)
+	if retryConfig.MaxRetries != config.DefaultMaxRetries {
+		t.Errorf("Expected MaxRetries=%d, got %d", config.DefaultMaxRetries, retryConfig.MaxRetries)
 	}
-	if config.InitialDelay != 1*time.Second {
-		t.Errorf("Expected InitialDelay=1s, got %v", config.InitialDelay)
+	if retryConfig.InitialDelay != config.DefaultInitialDelay {
+		t.Errorf("Expected InitialDelay=%v, got %v", config.DefaultInitialDelay, retryConfig.InitialDelay)
 	}
-	if config.MaxDelay != 30*time.Second {
-		t.Errorf("Expected MaxDelay=30s, got %v", config.MaxDelay)
+	if retryConfig.MaxDelay != config.DefaultMaxDelay {
+		t.Errorf("Expected MaxDelay=%v, got %v", config.DefaultMaxDelay, retryConfig.MaxDelay)
 	}
-	if config.Multiplier != 2.0 {
-		t.Errorf("Expected Multiplier=2.0, got %f", config.Multiplier)
+	if retryConfig.Multiplier != config.DefaultBackoffMultiple {
+		t.Errorf("Expected Multiplier=%f, got %f", config.DefaultBackoffMultiple, retryConfig.Multiplier)
 	}
-	if !config.Jitter {
-		t.Error("Expected Jitter=true")
+	if retryConfig.Jitter != config.DefaultJitterEnabled {
+		t.Errorf("Expected Jitter=%t, got %t", config.DefaultJitterEnabled, retryConfig.Jitter)
 	}
-	if config.RetryableFunc == nil {
+	if retryConfig.RetryableFunc == nil {
 		t.Error("Expected RetryableFunc to be set")
 	}
 
 	// Test default RetryableFunc
-	if !config.RetryableFunc(errors.New("test error")) {
+	if !retryConfig.RetryableFunc(errors.New("test error")) {
 		t.Error("Expected default RetryableFunc to return true for any error")
 	}
-	if config.RetryableFunc(nil) {
+	if retryConfig.RetryableFunc(nil) {
 		t.Error("Expected default RetryableFunc to return false for nil error")
 	}
 }

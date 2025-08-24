@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/garyblankenship/wormhole/internal/utils"
+	"github.com/garyblankenship/wormhole/pkg/config"
 	"github.com/garyblankenship/wormhole/pkg/providers"
 	"github.com/garyblankenship/wormhole/pkg/types"
 )
@@ -264,7 +265,13 @@ func (p *Provider) handleSpeechToText(ctx context.Context, request types.AudioRe
 	req.Header.Set("Content-Type", contentType)
 
 	// Execute request
-	client := &http.Client{Timeout: time.Duration(p.Config.Timeout) * time.Second}
+	timeout := config.GetDefaultHTTPTimeout()
+	if p.Config.Timeout == 0 {
+		timeout = 0 // Unlimited timeout
+	} else if p.Config.Timeout > 0 {
+		timeout = time.Duration(p.Config.Timeout) * time.Second
+	}
+	client := &http.Client{Timeout: timeout}
 	resp, err := client.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("request failed: %w", err)

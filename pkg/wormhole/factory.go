@@ -4,6 +4,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/garyblankenship/wormhole/pkg/config"
 	"github.com/garyblankenship/wormhole/pkg/middleware"
 	"github.com/garyblankenship/wormhole/pkg/types"
 )
@@ -130,14 +131,14 @@ func (f *SimpleFactory) WithRateLimit(requestsPerSecond int) Option {
 
 // WithRetry returns an option to add retry middleware with exponential backoff
 func (f *SimpleFactory) WithRetry(maxRetries int) Option {
-	config := middleware.RetryConfig{
+	retryConfig := middleware.RetryConfig{
 		MaxRetries:   maxRetries,
-		InitialDelay: 1 * time.Second,
-		MaxDelay:     30 * time.Second,
-		Multiplier:   2.0,
-		Jitter:       true,
+		InitialDelay: config.GetDefaultInitialDelay(),
+		MaxDelay:     config.GetDefaultMaxDelay(),
+		Multiplier:   config.DefaultBackoffMultiple,
+		Jitter:       config.DefaultJitterEnabled,
 	}
-	return WithMiddleware(middleware.RetryMiddleware(config))
+	return WithMiddleware(middleware.RetryMiddleware(retryConfig))
 }
 
 // WithCircuitBreaker returns an option to add circuit breaker middleware

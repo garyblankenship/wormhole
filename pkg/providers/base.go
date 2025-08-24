@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/garyblankenship/wormhole/internal/utils"
+	"github.com/garyblankenship/wormhole/pkg/config"
 	"github.com/garyblankenship/wormhole/pkg/types"
 )
 
@@ -26,17 +27,17 @@ type BaseProvider struct {
 }
 
 // NewBaseProvider creates a new base provider
-func NewBaseProvider(name string, config types.ProviderConfig) *BaseProvider {
+func NewBaseProvider(name string, providerConfig types.ProviderConfig) *BaseProvider {
 	// Handle timeout configuration:
 	// - 0 = unlimited timeout (no timeout)
 	// - >0 = timeout in seconds
-	// - default = 30 seconds
-	timeout := 30 * time.Second
-	if config.Timeout == 0 {
+	// - default = configured default timeout
+	timeout := config.GetDefaultHTTPTimeout()
+	if providerConfig.Timeout == 0 {
 		// Unlimited timeout - set to 0 to disable HTTP client timeout
 		timeout = 0
-	} else if config.Timeout > 0 {
-		timeout = time.Duration(config.Timeout) * time.Second
+	} else if providerConfig.Timeout > 0 {
+		timeout = time.Duration(providerConfig.Timeout) * time.Second
 	}
 
 	httpClient := &http.Client{
@@ -45,23 +46,23 @@ func NewBaseProvider(name string, config types.ProviderConfig) *BaseProvider {
 
 	// Configure retry logic - skip retry client if MaxRetries is 0
 	var retryClient *utils.RetryableHTTPClient
-	if config.MaxRetries == 0 {
+	if providerConfig.MaxRetries == 0 {
 		// No retries - use plain HTTP client
 		retryClient = utils.NewRetryableHTTPClient(httpClient, utils.RetryConfig{MaxRetries: 0})
 	} else {
 		retryConfig := utils.DefaultRetryConfig()
-		if config.MaxRetries > 0 {
-			retryConfig.MaxRetries = config.MaxRetries
+		if providerConfig.MaxRetries > 0 {
+			retryConfig.MaxRetries = providerConfig.MaxRetries
 		}
-		if config.RetryDelay > 0 {
-			retryConfig.InitialDelay = time.Duration(config.RetryDelay) * time.Millisecond
+		if providerConfig.RetryDelay > 0 {
+			retryConfig.InitialDelay = time.Duration(providerConfig.RetryDelay) * time.Millisecond
 		}
 		retryClient = utils.NewRetryableHTTPClient(httpClient, retryConfig)
 	}
 
 	return &BaseProvider{
 		name:        name,
-		Config:      config,
+		Config:      providerConfig,
 		httpClient:  httpClient,
 		retryClient: retryClient,
 	}
