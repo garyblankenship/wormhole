@@ -22,6 +22,7 @@ Here's what happens when real science meets software development:
 🧪 **67ns Response Time**: While others measure in *milliseconds* like cavemen  
 ⚡ **Thread-Safe Architecture**: Concurrent map access fixed with actual engineering  
 🛸 **7+ Provider Support**: OpenAI, Anthropic, OpenRouter, Gemini + OpenAI-compatible (Groq, Mistral, Ollama)  
+🧬 **Vector Embeddings**: Semantic search, RAG, and recommendations with all major providers  
 💊 **Functional Options**: Laravel-inspired config that doesn't make me want to vomit  
 🔬 **Production Middleware**: Circuit breakers, rate limiting, retries, health checks  
 🌀 **Dynamic Provider Registration**: Add custom providers without touching my perfect code  
@@ -116,6 +117,15 @@ func main() {
     fmt.Printf("⚡ Tokens: %d in, %d out\n", 
         response.Usage.InputTokens, 
         response.Usage.OutputTokens)
+        
+    // Bonus: Generate embeddings for semantic search/RAG
+    embeddings, _ := client.Embeddings().
+        Model("text-embedding-3-small").
+        Input("Convert text to vectors for AI magic").
+        Dimensions(512).  // Smaller = faster, larger = more precise
+        Generate(context.Background())
+        
+    fmt.Printf("🧬 Embedding: %d dimensions\n", len(embeddings.Data[0].Embedding))
 }
 ```
 
@@ -178,16 +188,30 @@ config := wormhole.Config{
 client := wormhole.New(config)
 
 // After (v1.2.0 - the Rick way)
+// Configure per-provider retry settings
+maxRetries := 3
+retryDelay := 2 * time.Second
+
 client := wormhole.New(
     wormhole.WithDefaultProvider("openai"),
-    wormhole.WithOpenAI("sk-..."),
-    wormhole.WithAnthropic("sk-ant-..."),
-    wormhole.WithGroq("gsk_..."),                            // OpenAI-compatible via quantum tunneling
+    wormhole.WithOpenAI("sk-...", types.ProviderConfig{
+        MaxRetries: &maxRetries,
+        RetryDelay: &retryDelay,
+    }),
+    wormhole.WithAnthropic("sk-ant-...", types.ProviderConfig{
+        MaxRetries: &maxRetries,
+        RetryDelay: &retryDelay,
+    }),
+    wormhole.WithGroq("gsk_...", types.ProviderConfig{       // OpenAI-compatible via quantum tunneling
+        MaxRetries: &maxRetries,
+        RetryDelay: &retryDelay,
+    }),
     wormhole.WithMistral(types.ProviderConfig{              // OpenAI-compatible with advanced config
-        APIKey: "sk-...",
+        APIKey:     "sk-...",
+        MaxRetries: &maxRetries,
+        RetryDelay: &retryDelay,
     }),
     wormhole.WithTimeout(30*time.Second),
-    wormhole.WithRetries(3, 2*time.Second),
 )
 ```
 
@@ -227,12 +251,21 @@ client := wormhole.New(
     wormhole.WithAnthropic("another-key-wow-so-secure"),
     wormhole.WithGroq("your-groq-key"),                             // Fastest inference via quantum tunneling
     wormhole.WithMistral(types.ProviderConfig{APIKey: "your-mistral-key"}), // European AI excellence
+    
+    // 🧬 NEW: Per-provider retry configuration (more precise than middleware)
+    wormhole.WithOpenAI("your-key", types.ProviderConfig{
+        MaxRetries:    &[]int{3}[0],              // 3 retries for OpenAI
+        RetryDelay:    &[]time.Duration{500 * time.Millisecond}[0], // 500ms initial delay
+        RetryMaxDelay: &[]time.Duration{10 * time.Second}[0],       // Cap at 10s
+    }),
+    wormhole.WithAnthropic("your-key", types.ProviderConfig{
+        MaxRetries: &[]int{5}[0], // More aggressive retrying for Anthropic
+    }),
+    
     wormhole.WithTimeout(30*time.Second),                           // Prevents universe collapse
-    wormhole.WithRetries(3, 2*time.Second),                         // Exponential backoff included
     wormhole.WithMiddleware(
-        middleware.CircuitBreakerMiddleware(5, 30*time.Second),      // Circuit breaker
-        middleware.RateLimitMiddleware(100),                         // Rate limiting  
-        middleware.RetryMiddleware(middleware.DefaultRetryConfig()), // Extra retry layer
+        middleware.CircuitBreakerMiddleware(5, 30*time.Second), // Circuit breaker
+        middleware.RateLimitMiddleware(100),                    // Rate limiting
     ),
 )
 
@@ -362,11 +395,46 @@ BenchmarkTextGeneration-16     12566146    67 ns/op    0 B/op    0 allocs/op
 Because I'm not trying to destroy reality (today):
 - ✅ **Quantum Circuit Breakers** - `middleware.CircuitBreakerMiddleware()` prevents cascade failures
 - ✅ **Temporal Rate Limiting** - `middleware.RateLimitMiddleware()` respects spacetime laws
-- ✅ **Multiverse Retry Logic** - `middleware.RetryMiddleware()` with exponential backoff across realities
+- ✅ **Per-Provider Retry Logic** - Individual retry configurations per provider with exponential backoff
 - ✅ **Dimensional Health Checks** - `middleware.HealthMiddleware()` monitors portal stability
 - ✅ **Entropic Load Balancing** - `middleware.LoadBalancerMiddleware()` distributes across universes
 - ✅ **Temporal Caching** - `middleware.CacheMiddleware()` stores responses across timelines
 - ✅ **Quantum Logging** - `middleware.LoggingMiddleware()` for debugging interdimensional issues
+
+### 🔄 **Per-Provider Retry Configuration (NEW)**
+*Finally - precision control over retry behavior instead of one-size-fits-all middleware*
+
+```go
+// Configure different retry strategies per provider
+client := wormhole.New(
+    // OpenAI: Conservative retries (they're usually stable)
+    wormhole.WithOpenAI("key", types.ProviderConfig{
+        MaxRetries:    &[]int{2}[0],           // Just 2 retries
+        RetryDelay:    &[]time.Duration{200 * time.Millisecond}[0],
+        RetryMaxDelay: &[]time.Duration{5 * time.Second}[0],
+    }),
+    
+    // Anthropic: More aggressive retries (they can be finicky)
+    wormhole.WithAnthropic("key", types.ProviderConfig{
+        MaxRetries:    &[]int{5}[0],           // More retries
+        RetryDelay:    &[]time.Duration{500 * time.Millisecond}[0],
+        RetryMaxDelay: &[]time.Duration{30 * time.Second}[0],
+    }),
+    
+    // Disable retries completely for local providers
+    wormhole.WithOllama(types.ProviderConfig{
+        APIKey:     "not-needed",
+        MaxRetries: &[]int{0}[0], // No retries for local
+    }),
+)
+```
+
+**Why Per-Provider Retries Beat Middleware:**
+- 🎯 **Provider-Specific Tuning** - Different providers have different reliability profiles
+- ⚡ **Transport-Level Logic** - Retries happen at HTTP level, not application level  
+- 🧬 **Zero Configuration Overhead** - No middleware stack complexity
+- 🔧 **Fine-Grained Control** - Set different strategies per provider based on their quirks
+- 💪 **Respects Retry-After Headers** - Automatically honors server-requested delays
 
 ### 🎯 **Actually Working Features (Unlike Other SDKs)**
 - ✅ **Real-Time Streaming** - Already works across ALL providers with proper error handling
@@ -388,6 +456,116 @@ Because I'm not trying to destroy reality (today):
 | **Groq** | 99.96% | Fast inference or whatever | ✅ Online |
 | **Mistral** | 99.95% | European AI (metric system compatible) | ✅ Online |
 | **Ollama** | 99.94% | Local models for paranoid people | ✅ Online |
+
+## 🔄 Per-Provider Retry Configuration
+
+*Finally - precision control over retry behavior instead of one-size-fits-all middleware*
+
+### The Right Way to Handle Failures
+
+Each AI provider has different reliability characteristics. OpenAI is usually stable, Anthropic can be finicky, and local models shouldn't retry network calls at all. This is why I built **per-provider retry configuration**:
+
+```go
+// Configure different retry strategies per provider
+maxRetries := 3
+retryDelay := 500 * time.Millisecond
+maxRetryDelay := 10 * time.Second
+
+client := wormhole.New(
+    // OpenAI: Conservative retries (they're usually stable)
+    wormhole.WithOpenAI("sk-...", types.ProviderConfig{
+        MaxRetries:    &[]int{2}[0],           // Just 2 retries
+        RetryDelay:    &[]time.Duration{200 * time.Millisecond}[0],
+        RetryMaxDelay: &[]time.Duration{5 * time.Second}[0],
+    }),
+    
+    // Anthropic: More aggressive retries (they can be finicky)
+    wormhole.WithAnthropic("sk-ant-...", types.ProviderConfig{
+        MaxRetries:    &maxRetries,            // 3 retries
+        RetryDelay:    &retryDelay,            // 500ms initial delay
+        RetryMaxDelay: &maxRetryDelay,         // Cap at 10s
+    }),
+    
+    // Groq: Fast inference, fast retries
+    wormhole.WithGroq("gsk_...", types.ProviderConfig{
+        MaxRetries:    &[]int{5}[0],           // More retries for speed
+        RetryDelay:    &[]time.Duration{100 * time.Millisecond}[0], // Faster retries
+        RetryMaxDelay: &[]time.Duration{2 * time.Second}[0],
+    }),
+    
+    // Disable retries completely for local providers
+    wormhole.WithOllama(types.ProviderConfig{
+        APIKey:     "not-needed",
+        MaxRetries: &[]int{0}[0], // No retries for local
+    }),
+)
+```
+
+### Why Per-Provider Retries Beat Everything Else
+
+- 🎯 **Provider-Specific Tuning** - Different providers have different reliability profiles  
+- ⚡ **Transport-Level Logic** - Retries happen at HTTP level, not application level  
+- 🧬 **Zero Configuration Overhead** - No middleware stack complexity  
+- 🔧 **Fine-Grained Control** - Set different strategies per provider based on their quirks  
+- 💪 **Respects Retry-After Headers** - Automatically honors server-requested delays  
+- 🚀 **Production Proven** - 67ns overhead with enterprise-grade exponential backoff  
+
+### Retry Behavior by HTTP Status
+
+The retry system automatically handles different HTTP status codes intelligently:
+
+```go
+// These status codes trigger automatic retries:
+// 429 Too Many Requests    - Rate limiting (respects Retry-After header)
+// 500 Internal Server Error - Temporary server issues
+// 502 Bad Gateway         - Load balancer/proxy issues  
+// 503 Service Unavailable - Temporary overload
+// 504 Gateway Timeout     - Upstream timeout
+
+// These status codes DON'T retry (permanent failures):
+// 400 Bad Request         - Your request is malformed
+// 401 Unauthorized        - Invalid API key
+// 403 Forbidden          - Insufficient permissions
+// 404 Not Found          - Model/endpoint doesn't exist
+// 422 Unprocessable Entity - Validation errors
+```
+
+### Advanced Retry Patterns
+
+```go
+// Production-grade configuration
+productionRetries := 3
+productionDelay := 1 * time.Second
+productionMaxDelay := 30 * time.Second
+
+// Aggressive retrying for critical operations
+aggressiveRetries := 5
+aggressiveDelay := 2 * time.Second
+
+// No retries for non-critical or local operations
+noRetries := 0
+
+client := wormhole.New(
+    // Critical provider with conservative settings
+    wormhole.WithOpenAI("sk-...", types.ProviderConfig{
+        MaxRetries:    &productionRetries,
+        RetryDelay:    &productionDelay,
+        RetryMaxDelay: &productionMaxDelay,
+    }),
+    
+    // Backup provider with aggressive retries
+    wormhole.WithAnthropic("sk-ant-...", types.ProviderConfig{
+        MaxRetries:    &aggressiveRetries,
+        RetryDelay:    &aggressiveDelay,
+        RetryMaxDelay: &productionMaxDelay,
+    }),
+    
+    // Local provider - no network retries needed
+    wormhole.WithOllama(types.ProviderConfig{
+        MaxRetries: &noRetries,
+    }),
+)
+```
 
 ## Advanced Stuff for People Who Aren't Idiots
 
@@ -429,6 +607,104 @@ client.Structured().
 
 // Spoiler: It's not 42
 ```
+
+### Vector Embeddings (For When You Need AI to Actually Understand Things)
+
+Look *burp*, while everyone else is playing with cute chatbots, you might actually want to build something useful like search, recommendations, or RAG systems. That's where embeddings come in - they're like neural coordinates that map meaning into high-dimensional space. And yes, I made this API so simple even Jerry could use it.
+
+```go
+// Basic embedding generation - multiple providers supported
+response, err := client.Embeddings().
+    Provider("openai").
+    Model("text-embedding-3-small").
+    Input("Turn text into vectors", "Because math is beautiful").
+    Dimensions(512). // Optional: customize dimensions for compatible models
+    Generate(ctx)
+
+if err != nil {
+    log.Fatalf("Even Jerry could do better: %v", err)
+}
+
+// Access your precious vectors
+for i, embedding := range response.Data {
+    fmt.Printf("Text %d: %d dimensions\n", i, len(embedding.Embedding))
+    // embedding.Embedding is []float64 - do whatever science you want
+}
+```
+
+**🧬 Semantic Search Example (Actual Intelligence):**
+```go
+// Step 1: Embed your documents once (cache these, obviously)
+documents := []string{
+    "Go is a programming language by Google",
+    "Python is great for data science", 
+    "Machine learning requires lots of math",
+    "Databases store structured information",
+}
+
+docResponse, _ := client.Embeddings().
+    Provider("openai").
+    Model("text-embedding-3-small").
+    Input(documents...).
+    Generate(ctx)
+
+// Step 2: Embed user queries and find similar documents
+query := "coding languages"
+queryResponse, _ := client.Embeddings().
+    Provider("openai"). 
+    Model("text-embedding-3-small").
+    Input(query).
+    Generate(ctx)
+
+// Step 3: Calculate cosine similarity (basic math, even you can handle it)
+queryVector := queryResponse.Embeddings[0].Embedding
+for i, docEmbedding := range docResponse.Embeddings {
+    similarity := cosineSimilarity(queryVector, docEmbedding.Embedding)
+    fmt.Printf("Document %d similarity: %.3f\n", i, similarity)
+}
+// Output: Document 0 (Go language) will have highest similarity score
+```
+
+**⚡ Performance Tips (Because I Actually Care About Efficiency):**
+- **Batch Processing**: Send multiple texts in one request (way faster than multiple calls)
+- **Dimension Optimization**: Use smaller dimensions (256, 512) when you don't need NASA-level precision  
+- **Provider Choice**: OpenAI for quality, Ollama for local/free, Gemini for Google ecosystem
+- **Caching**: Store embeddings in a database - don't regenerate identical text
+
+**🎯 Supported Models Per Provider:**
+
+| Provider | Models | Dimensions | Notes |
+|----------|---------|-----------|-------|
+| **OpenAI** | `text-embedding-3-small`<br/>`text-embedding-3-large`<br/>`text-embedding-ada-002` | 1536 (small/ada)<br/>3072 (large)<br/>Customizable for v3 models | Best quality, customizable dimensions |
+| **Gemini** | `models/embedding-001` | 768 | Good performance, Google ecosystem |
+| **Ollama** | `nomic-embed-text`<br/>`all-minilm` (local models) | Varies by model | Free, local, no API limits |
+| **Mistral** | `mistral-embed` | 1024 | Use via `.BaseURL("https://api.mistral.ai/v1")` |
+| **Any OpenAI-Compatible** | Provider-specific models | Varies | Use `.BaseURL("https://provider-url/v1")` |
+| **Anthropic** | ❌ Not supported | N/A | They don't offer embeddings API |
+
+**🚀 OpenAI-Compatible Providers (No Separate Implementation Needed):**
+```go
+// Mistral embeddings
+response, _ := client.Embeddings().
+    BaseURL("https://api.mistral.ai/v1").
+    Model("mistral-embed").
+    Input("Text to embed").
+    Generate(ctx)
+
+// Any other OpenAI-compatible provider
+response, _ := client.Embeddings().
+    BaseURL("https://api.provider.com/v1").
+    Model("provider-embedding-model").
+    Input("Text to embed").
+    Generate(ctx)
+```
+
+**🛸 Real-World Applications (What You Should Actually Build):**
+- **Semantic Search**: Find documents by meaning, not just keywords
+- **Recommendation Systems**: "Users who liked X also liked..." but smarter
+- **RAG (Retrieval-Augmented Generation)**: Give LLMs relevant context from your data
+- **Content Classification**: Automatically categorize text by semantic similarity
+- **Duplicate Detection**: Find similar content even with different wording
 
 ### Model Discovery & Validation (Built-In Intelligence)
 
@@ -664,7 +940,7 @@ if err != nil {
     if errors.As(err, &wormholeErr) {
         switch wormholeErr.Code {
         case types.ErrorCodeRateLimit:
-            // Rate limited - retry automatically handled by middleware
+            // Rate limited - retry automatically handled per provider configuration
             log.Printf("Hit rate limit: %s", wormholeErr.Details)
             return wormholeErr // Middleware will retry if retryable
         case types.ErrorCodeAuth:
@@ -686,6 +962,84 @@ if err != nil {
     }
 }
 ```
+
+## 🔒 Security Best Practices (Because Even Geniuses Need Guardrails)
+
+Look, I may be an interdimensional scientist, but I'm not *completely* reckless with sensitive data. Here's how to keep your API keys and data secure:
+
+### API Key Management
+
+```go
+// ✅ CORRECT: Use environment variables
+client := wormhole.New(
+    wormhole.WithOpenAI(os.Getenv("OPENAI_API_KEY")),
+    wormhole.WithAnthropic(os.Getenv("ANTHROPIC_API_KEY")),
+)
+
+// ❌ WRONG: Never hardcode keys in source code
+client := wormhole.New(
+    wormhole.WithOpenAI("sk-hardcoded-key"), // DON'T BE THIS STUPID
+)
+```
+
+### Error Message Security
+
+Wormhole automatically masks API keys in error messages to prevent accidental exposure:
+
+```bash
+# Before (dangerous):
+Error: HTTP 401 at https://api.openai.com/v1/chat/completions?key=sk-1234567890abcdef
+
+# After (secure):  
+Error: HTTP 401 at https://api.openai.com/v1/chat/completions?key=sk-1****cdef
+```
+
+### Environment File Protection
+
+```bash
+# Create .env file for development
+echo "OPENAI_API_KEY=your-key-here" > .env
+echo "ANTHROPIC_API_KEY=your-other-key" >> .env
+
+# ALWAYS add to .gitignore
+echo ".env*" >> .gitignore
+echo "*.key" >> .gitignore
+echo "secrets/" >> .gitignore
+```
+
+### OpenAI-Compatible Provider Architecture
+
+Use the BaseURL approach for maximum flexibility and security:
+
+```go
+// All these providers use the same secure OpenAI interface
+providers := []struct {
+    name    string
+    baseURL string
+    apiKey  string
+}{
+    {"OpenAI", "", os.Getenv("OPENAI_API_KEY")},
+    {"Groq", "https://api.groq.com/openai/v1", os.Getenv("GROQ_API_KEY")},
+    {"Mistral", "https://api.mistral.ai/v1", os.Getenv("MISTRAL_API_KEY")},
+    {"Local Ollama", "http://localhost:11434/v1", ""}, // No key needed
+}
+```
+
+**Why This Architecture is Brilliant:**
+- ✅ One code path = one security audit surface
+- ✅ No separate provider implementations to maintain  
+- ✅ Instant support for new OpenAI-compatible providers
+- ✅ Consistent error handling and key masking across all providers
+
+### Production Security Checklist
+
+- [ ] All API keys in environment variables
+- [ ] `.env` files in `.gitignore`
+- [ ] Error logging doesn't expose keys
+- [ ] Use HTTPS endpoints only
+- [ ] Implement request/response logging middleware for auditing
+- [ ] Set appropriate timeouts to prevent resource exhaustion
+- [ ] Use structured error types for proper error handling
 
 ## Testing (Because I'm Not Completely Reckless)
 

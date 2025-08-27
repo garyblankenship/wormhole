@@ -34,28 +34,25 @@ func main() {
 	}
 	fmt.Printf("  CacheMiddleware: middleware.CacheConfig{Cache: cache, TTL: 5*time.Minute}\n")
 
-	// Retry middleware - showing DefaultRetryConfig vs custom
-	retryConfig := middleware.DefaultRetryConfig() // This exists and is documented!
-	fmt.Printf("  RetryMiddleware: middleware.DefaultRetryConfig() // Recommended\n")
-
-	customRetry := middleware.RetryConfig{
-		MaxRetries:   5,
-		InitialDelay: 2 * time.Second,
-		MaxDelay:     30 * time.Second,
-		Multiplier:   2.0,
-		Jitter:       true,
-	}
-	fmt.Printf("  Custom RetryConfig: MaxRetries: %d, InitialDelay: %v\n",
-		customRetry.MaxRetries, customRetry.InitialDelay)
+	// Per-provider retry configuration - NEW improved pattern!
+	maxRetries := 5
+	retryDelay := 2 * time.Second
+	maxRetryDelay := 30 * time.Second
+	fmt.Printf("  Per-Provider Retry: types.ProviderConfig{MaxRetries: &%d, RetryDelay: &%v}\n",
+		maxRetries, retryDelay)
+	fmt.Printf("  Benefits: Fine-grained control per provider, no middleware stack complexity\n")
 
 	// 3. BETTER ERROR MESSAGES - Typed error demonstration
 	fmt.Println("\n3. Better Error Messages:")
 
 	client := wormhole.New(
 		wormhole.WithDefaultProvider("openai"),
-		wormhole.WithOpenAI("invalid-key-demo"), // This will fail
+		wormhole.WithOpenAI("invalid-key-demo", types.ProviderConfig{
+			MaxRetries:    &maxRetries,
+			RetryDelay:    &retryDelay,
+			RetryMaxDelay: &maxRetryDelay,
+		}), // This will fail but demonstrate per-provider retry
 		wormhole.WithMiddleware(
-			middleware.RetryMiddleware(retryConfig),
 			middleware.CacheMiddleware(cacheConfig),
 		),
 	)
@@ -85,12 +82,17 @@ func main() {
 	// 4. MIDDLEWARE COMPOSITION - Production patterns
 	fmt.Println("\n4. Production Middleware Stack:")
 
+	productionRetries := 3
+	productionRetryDelay := 500 * time.Millisecond
+	
 	productionClient := wormhole.New(
 		wormhole.WithDefaultProvider("openai"),
-		wormhole.WithOpenAI("your-key-here"),
-		// Professional middleware stack from feedback
+		wormhole.WithOpenAI("your-key-here", types.ProviderConfig{
+			MaxRetries: &productionRetries,
+			RetryDelay: &productionRetryDelay,
+		}),
+		// Professional middleware stack from feedback  
 		wormhole.WithMiddleware(
-			middleware.RetryMiddleware(middleware.DefaultRetryConfig()),
 			middleware.CircuitBreakerMiddleware(5, 30*time.Second),
 			middleware.RateLimitMiddleware(100),
 			middleware.CacheMiddleware(cacheConfig),
@@ -98,7 +100,7 @@ func main() {
 		),
 	)
 
-	fmt.Printf("  ✓ Retry with exponential backoff\n")
+	fmt.Printf("  ✓ Per-provider retry with exponential backoff\n")
 	fmt.Printf("  ✓ Circuit breaker (5 failures, 30s timeout)\n")
 	fmt.Printf("  ✓ Rate limiting (100 req/sec)\n")
 	fmt.Printf("  ✓ Response caching (5min TTL)\n")

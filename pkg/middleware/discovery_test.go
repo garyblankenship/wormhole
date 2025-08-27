@@ -9,7 +9,6 @@ func TestAvailableMiddleware(t *testing.T) {
 
 	// Should have at least the core middleware
 	expectedMiddleware := []string{
-		"RetryMiddleware",
 		"CacheMiddleware",
 		"CircuitBreakerMiddleware",
 		"RateLimitMiddleware",
@@ -46,8 +45,8 @@ func TestAvailableMiddleware(t *testing.T) {
 	}
 
 	// Should have reasonable number of middleware
-	if len(middlewares) < 7 {
-		t.Errorf("Expected at least 7 middleware, got %d", len(middlewares))
+	if len(middlewares) < 6 {
+		t.Errorf("Expected at least 6 middleware, got %d", len(middlewares))
 	}
 }
 
@@ -57,15 +56,6 @@ func TestMiddlewareInfoStructure(t *testing.T) {
 	// Test specific examples for correctness
 	for _, mw := range middlewares {
 		switch mw.Name {
-		case "RetryMiddleware":
-			if mw.ConfigType != "RetryConfig" {
-				t.Errorf("RetryMiddleware should have ConfigType 'RetryConfig', got '%s'", mw.ConfigType)
-			}
-			expectedExample := "middleware.RetryMiddleware(middleware.DefaultRetryConfig())"
-			if mw.Example != expectedExample {
-				t.Errorf("RetryMiddleware example mismatch.\nExpected: %s\nGot: %s", expectedExample, mw.Example)
-			}
-
 		case "CacheMiddleware":
 			if mw.ConfigType != "CacheConfig" {
 				t.Errorf("CacheMiddleware should have ConfigType 'CacheConfig', got '%s'", mw.ConfigType)

@@ -303,3 +303,6 @@ func (p *Provider) handleSpeechToText(ctx context.Context, request types.AudioRe
 		Format: "text",
 	}, nil
 }
+
+// Temporarily disabled until request types are defined
+// These methods will be automatically provided by embedded BaseProvider with NotImplementedError

@@ -20,25 +20,27 @@ var (
 
 // Wormhole is the main client for interacting with LLM providers
 type Wormhole struct {
-	providerFactories map[string]types.ProviderFactory // Factory functions for creating providers
-	providers         map[string]types.Provider        // Cached provider instances
-	providersMutex    sync.RWMutex
-	config            Config
-	middlewareChain   *middleware.Chain
+	providerFactories   map[string]types.ProviderFactory // Factory functions for creating providers
+	providers           map[string]types.Provider        // Cached provider instances
+	providersMutex      sync.RWMutex
+	config              Config
+	providerMiddleware  *types.ProviderMiddlewareChain   // Type-safe middleware chain
+	middlewareChain     *middleware.Chain                // DEPRECATED: use providerMiddleware instead
 }
 
 // Config holds the configuration for Wormhole
 type Config struct {
-	DefaultProvider   string
-	Providers         map[string]types.ProviderConfig
-	CustomFactories   map[string]types.ProviderFactory
-	Middleware        []middleware.Middleware
-	DebugLogging      bool
-	Logger            types.Logger
-	DefaultTimeout    time.Duration
-	DefaultRetries    int
-	DefaultRetryDelay time.Duration
-	ModelValidation   bool // Whether to validate models against registry (default: true)
+	DefaultProvider      string
+	Providers            map[string]types.ProviderConfig
+	CustomFactories      map[string]types.ProviderFactory
+	ProviderMiddlewares  []types.ProviderMiddleware       // Type-safe middleware
+	Middleware           []middleware.Middleware          // DEPRECATED: use ProviderMiddlewares instead
+	DebugLogging         bool
+	Logger               types.Logger
+	DefaultTimeout       time.Duration
+	DefaultRetries       int
+	DefaultRetryDelay    time.Duration
+	ModelValidation      bool // Whether to validate models against registry (default: true)
 }
 
 // New creates a new Wormhole instance using functional options
@@ -73,17 +75,24 @@ func New(opts ...Option) *Wormhole {
 		p.providerFactories[name] = factory
 	}
 
-	// Initialize middleware chain
-	var middlewares []middleware.Middleware
+	// Initialize type-safe provider middleware chain
+	var providerMiddlewares []types.ProviderMiddleware
 
 	// Add debug logging if enabled
 	if config.DebugLogging && config.Logger != nil {
-		middlewares = append(middlewares, middleware.DebugLoggingMiddleware(config.Logger))
+		providerMiddlewares = append(providerMiddlewares, middleware.NewDebugTypedLoggingMiddleware(config.Logger))
 	}
 
-	// Add user-provided middleware
-	middlewares = append(middlewares, config.Middleware...)
+	// Add user-provided provider middlewares
+	providerMiddlewares = append(providerMiddlewares, config.ProviderMiddlewares...)
 
+	if len(providerMiddlewares) > 0 {
+		p.providerMiddleware = types.NewProviderChain(providerMiddlewares...)
+	}
+
+	// Legacy middleware support (deprecated)
+	var middlewares []middleware.Middleware
+	middlewares = append(middlewares, config.Middleware...)
 	if len(middlewares) > 0 {
 		p.middlewareChain = middleware.NewChain(middlewares...)
 	}

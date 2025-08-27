@@ -23,70 +23,58 @@ func (w *ProviderWrapper) Name() string {
 	return w.provider.Name()
 }
 
-// Text implements TextProvider with middleware
+// Text implements text generation with middleware
 func (w *ProviderWrapper) Text(ctx context.Context, request TextRequest) (*TextResponse, error) {
-	textProvider, ok := GetTextCapability(w.provider)
-	if !ok {
-		return nil, NewProviderError("text generation not supported", w.provider.Name())
-	}
-
-	handler := w.chain.ApplyText(textProvider.Text)
+	handler := w.chain.ApplyText(w.provider.Text)
 	return handler(ctx, request)
 }
 
-// Stream implements StreamProvider with middleware
+// Stream implements streaming with middleware
 func (w *ProviderWrapper) Stream(ctx context.Context, request TextRequest) (<-chan TextChunk, error) {
-	streamProvider, ok := GetStreamCapability(w.provider)
-	if !ok {
-		return nil, NewProviderError("streaming not supported", w.provider.Name())
-	}
-
-	handler := w.chain.ApplyStream(streamProvider.Stream)
+	handler := w.chain.ApplyStream(w.provider.Stream)
 	return handler(ctx, request)
 }
 
-// Structured implements StructuredProvider with middleware
+// Structured implements structured output with middleware
 func (w *ProviderWrapper) Structured(ctx context.Context, request StructuredRequest) (*StructuredResponse, error) {
-	structuredProvider, ok := GetStructuredCapability(w.provider)
-	if !ok {
-		return nil, NewProviderError("structured output not supported", w.provider.Name())
-	}
-
-	handler := w.chain.ApplyStructured(structuredProvider.Structured)
+	handler := w.chain.ApplyStructured(w.provider.Structured)
 	return handler(ctx, request)
 }
 
-// Embeddings implements EmbeddingsProvider with middleware
+// Embeddings implements embeddings with middleware
 func (w *ProviderWrapper) Embeddings(ctx context.Context, request EmbeddingsRequest) (*EmbeddingsResponse, error) {
-	embeddingsProvider, ok := GetEmbeddingsCapability(w.provider)
-	if !ok {
-		return nil, NewProviderError("embeddings not supported", w.provider.Name())
-	}
-
-	handler := w.chain.ApplyEmbeddings(embeddingsProvider.Embeddings)
+	handler := w.chain.ApplyEmbeddings(w.provider.Embeddings)
 	return handler(ctx, request)
 }
 
-// Audio implements AudioProvider with middleware
+// Audio implements audio with middleware
 func (w *ProviderWrapper) Audio(ctx context.Context, request AudioRequest) (*AudioResponse, error) {
-	audioProvider, ok := GetAudioCapability(w.provider)
-	if !ok {
-		return nil, NewProviderError("audio not supported", w.provider.Name())
-	}
-
-	handler := w.chain.ApplyAudio(audioProvider.Audio)
+	handler := w.chain.ApplyAudio(w.provider.Audio)
 	return handler(ctx, request)
 }
 
-// GenerateImage implements ImageProvider with middleware
+// GenerateImage implements image generation with middleware
 func (w *ProviderWrapper) GenerateImage(ctx context.Context, request ImageRequest) (*ImageResponse, error) {
-	imageProvider, ok := GetImageCapability(w.provider)
-	if !ok {
-		return nil, NewProviderError("image generation not supported", w.provider.Name())
-	}
-
-	handler := w.chain.ApplyImage(imageProvider.GenerateImage)
+	handler := w.chain.ApplyImage(w.provider.GenerateImage)
 	return handler(ctx, request)
+}
+
+// Images implements multiple image generation with middleware
+func (w *ProviderWrapper) Images(ctx context.Context, request ImagesRequest) (*ImagesResponse, error) {
+	// For now, delegate directly since we don't have middleware chain for Images yet
+	return w.provider.Images(ctx, request)
+}
+
+// SpeechToText implements speech-to-text with middleware
+func (w *ProviderWrapper) SpeechToText(ctx context.Context, request SpeechToTextRequest) (*SpeechToTextResponse, error) {
+	// For now, delegate directly since we don't have middleware chain for SpeechToText yet
+	return w.provider.SpeechToText(ctx, request)
+}
+
+// TextToSpeech implements text-to-speech with middleware
+func (w *ProviderWrapper) TextToSpeech(ctx context.Context, request TextToSpeechRequest) (*TextToSpeechResponse, error) {
+	// For now, delegate directly since we don't have middleware chain for TextToSpeech yet
+	return w.provider.TextToSpeech(ctx, request)
 }
 
 // Unwrap returns the underlying provider

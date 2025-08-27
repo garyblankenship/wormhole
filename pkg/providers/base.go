@@ -19,11 +19,13 @@ import (
 )
 
 // BaseProvider provides common functionality for all providers
+// Embeds the types.BaseProvider for default method implementations
+// and adds HTTP functionality for making requests
 type BaseProvider struct {
+	*types.BaseProvider
 	Config      types.ProviderConfig
 	httpClient  *http.Client
 	retryClient *utils.RetryableHTTPClient
-	name        string
 }
 
 // NewBaseProvider creates a new base provider
@@ -44,34 +46,30 @@ func NewBaseProvider(name string, providerConfig types.ProviderConfig) *BaseProv
 		Timeout: timeout,
 	}
 
-	// Configure retry logic - skip retry client if MaxRetries is 0
-	var retryClient *utils.RetryableHTTPClient
-	if providerConfig.MaxRetries == 0 {
-		// No retries - use plain HTTP client
-		retryClient = utils.NewRetryableHTTPClient(httpClient, utils.RetryConfig{MaxRetries: 0})
-	} else {
-		retryConfig := utils.DefaultRetryConfig()
-		if providerConfig.MaxRetries > 0 {
-			retryConfig.MaxRetries = providerConfig.MaxRetries
-		}
-		if providerConfig.RetryDelay > 0 {
-			retryConfig.InitialDelay = time.Duration(providerConfig.RetryDelay) * time.Millisecond
-		}
-		retryClient = utils.NewRetryableHTTPClient(httpClient, retryConfig)
+	// Configure retry logic based on per-provider settings
+	retryConfig := utils.DefaultRetryConfig() // Start with global defaults
+
+	// Override with provider-specific settings if provided
+	if providerConfig.MaxRetries != nil {
+		retryConfig.MaxRetries = *providerConfig.MaxRetries
 	}
+	if providerConfig.RetryDelay != nil {
+		retryConfig.InitialDelay = *providerConfig.RetryDelay
+	}
+	if providerConfig.RetryMaxDelay != nil {
+		retryConfig.MaxDelay = *providerConfig.RetryMaxDelay
+	}
+
+	retryClient := utils.NewRetryableHTTPClient(httpClient, retryConfig)
 
 	return &BaseProvider{
-		name:        name,
-		Config:      providerConfig,
-		httpClient:  httpClient,
-		retryClient: retryClient,
+		BaseProvider: types.NewBaseProvider(name),
+		Config:       providerConfig,
+		httpClient:   httpClient,
+		retryClient:  retryClient,
 	}
 }
 
-// Name returns the provider name
-func (p *BaseProvider) Name() string {
-	return p.name
-}
 
 // DoRequest performs an HTTP request with common error handling
 func (p *BaseProvider) DoRequest(ctx context.Context, method, url string, body any, result any) error {
@@ -108,7 +106,7 @@ func (p *BaseProvider) DoRequest(ctx context.Context, method, url string, body a
 		// Check for timeout errors and convert to WormholeError
 		if p.isTimeoutError(err) {
 			wormholeErr := types.NewWormholeError(types.ErrorCodeTimeout, "request timeout", true)
-			wormholeErr.Provider = p.name
+			wormholeErr.Provider = p.Name()
 			return wormholeErr
 		}
 
@@ -142,10 +140,10 @@ func (p *BaseProvider) DoRequest(ctx context.Context, method, url string, body a
 			errorCode,
 			errorMessage,
 			p.isRetryableStatus(resp.StatusCode),
-		).WithDetails(fmt.Sprintf("URL: %s\nResponse: %s", url, string(respBody)))
+		).WithDetails(fmt.Sprintf("URL: %s\nResponse: %s", p.maskAPIKeyInURL(url), string(respBody)))
 
 		wormholeErr.StatusCode = resp.StatusCode
-		wormholeErr.Provider = p.name
+		wormholeErr.Provider = p.Name()
 		return wormholeErr
 	}
 
@@ -244,7 +242,32 @@ func (p *BaseProvider) GetBaseURL() string {
 
 // NotImplementedError returns a standard not implemented error
 func (p *BaseProvider) NotImplementedError(method string) error {
-	return fmt.Errorf("%s provider does not support %s", p.name, method)
+	return fmt.Errorf("%s provider does not support %s", p.Name(), method)
+}
+
+// maskAPIKeyInURL masks API keys in URLs for security in error messages
+func (p *BaseProvider) maskAPIKeyInURL(rawURL string) string {
+	parsed, err := url.Parse(rawURL)
+	if err != nil {
+		return rawURL // Return original if parsing fails
+	}
+	
+	// Mask API keys in query parameters
+	query := parsed.Query()
+	for key, values := range query {
+		if strings.Contains(strings.ToLower(key), "key") || strings.Contains(strings.ToLower(key), "token") {
+			for i, value := range values {
+				if len(value) > 8 {
+					values[i] = value[:4] + "****" + value[len(value)-4:]
+				} else if len(value) > 0 {
+					values[i] = "****"
+				}
+			}
+		}
+	}
+	parsed.RawQuery = query.Encode()
+	
+	return parsed.String()
 }
 
 // isTimeoutError checks if an error is a timeout error

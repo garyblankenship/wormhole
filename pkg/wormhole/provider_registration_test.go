@@ -18,7 +18,7 @@ func TestProviderRegistration(t *testing.T) {
 		assert.Contains(t, wormhole.providerFactories, "anthropic")
 		assert.Contains(t, wormhole.providerFactories, "gemini")
 		assert.Contains(t, wormhole.providerFactories, "ollama")
-		
+
 		// groq and mistral are no longer built-in factories - they use WithOpenAICompatible()
 		assert.NotContains(t, wormhole.providerFactories, "groq")
 		assert.NotContains(t, wormhole.providerFactories, "mistral")

@@ -4,7 +4,6 @@ import (
 	"os"
 	"time"
 
-	"github.com/garyblankenship/wormhole/pkg/config"
 	"github.com/garyblankenship/wormhole/pkg/middleware"
 	"github.com/garyblankenship/wormhole/pkg/types"
 )
@@ -46,7 +45,6 @@ func (f *SimpleFactory) Gemini(apiKey ...string) *Wormhole {
 		WithGemini(key),
 	)
 }
-
 
 // Ollama creates a Wormhole client configured for Ollama
 func (f *SimpleFactory) Ollama(baseURL ...string) *Wormhole {
@@ -129,17 +127,6 @@ func (f *SimpleFactory) WithRateLimit(requestsPerSecond int) Option {
 	return WithMiddleware(middleware.RateLimitMiddleware(requestsPerSecond))
 }
 
-// WithRetry returns an option to add retry middleware with exponential backoff
-func (f *SimpleFactory) WithRetry(maxRetries int) Option {
-	retryConfig := middleware.RetryConfig{
-		MaxRetries:   maxRetries,
-		InitialDelay: config.GetDefaultInitialDelay(),
-		MaxDelay:     config.GetDefaultMaxDelay(),
-		Multiplier:   config.DefaultBackoffMultiple,
-		Jitter:       config.DefaultJitterEnabled,
-	}
-	return WithMiddleware(middleware.RetryMiddleware(retryConfig))
-}
 
 // WithCircuitBreaker returns an option to add circuit breaker middleware
 func (f *SimpleFactory) WithCircuitBreaker(threshold int, timeout time.Duration) Option {
@@ -217,7 +204,6 @@ func QuickAnthropic(apiKey ...string) *Wormhole {
 func QuickGemini(apiKey ...string) *Wormhole {
 	return Quick.Gemini(apiKey...)
 }
-
 
 // QuickOllama creates an Ollama client with minimal configuration
 func QuickOllama(baseURL ...string) *Wormhole {
