@@ -125,17 +125,17 @@ func (b *StructuredRequestBuilder) Generate(ctx context.Context) (*types.Structu
 		return nil, fmt.Errorf("no schema provided")
 	}
 
-	// Ensure we have a StructuredProvider
-	structuredProvider, ok := provider.(types.StructuredProvider)
-	if !ok {
-		return nil, fmt.Errorf("provider %s does not support structured output", provider.Name())
+	// Apply type-safe middleware chain if configured
+	if b.getWormhole().providerMiddleware != nil {
+		handler := b.getWormhole().providerMiddleware.ApplyStructured(provider.Structured)
+		return handler(ctx, *b.request)
 	}
 
-	// Apply middleware chain if configured
+	// Fallback to legacy middleware if configured
 	if b.getWormhole().middlewareChain != nil {
 		handler := b.getWormhole().middlewareChain.Apply(func(ctx context.Context, req any) (any, error) {
 			structuredReq := req.(*types.StructuredRequest)
-			return structuredProvider.Structured(ctx, *structuredReq)
+			return provider.Structured(ctx, *structuredReq)
 		})
 		resp, err := handler(ctx, b.request)
 		if err != nil {
@@ -144,7 +144,7 @@ func (b *StructuredRequestBuilder) Generate(ctx context.Context) (*types.Structu
 		return resp.(*types.StructuredResponse), nil
 	}
 
-	return structuredProvider.Structured(ctx, *b.request)
+	return provider.Structured(ctx, *b.request)
 }
 
 // GenerateAs executes the request and unmarshals the response into the provided type

@@ -13,16 +13,28 @@ import (
 
 // Example demonstrating all the user feedback improvements
 func main() {
-	// Create client with middleware for production reliability using functional options
+	// Configure per-provider retry settings for production reliability
+	maxRetries := 3
+	retryDelay := 200 * time.Millisecond
+	maxRetryDelay := 10 * time.Second
+	
+	// Create client with per-provider retry configuration and middleware
 	client := wormhole.New(
 		wormhole.WithDefaultProvider("openai"),
-		wormhole.WithOpenAI("your-openai-key"),
-		wormhole.WithAnthropic("your-anthropic-key"),
+		wormhole.WithOpenAI("your-openai-key", types.ProviderConfig{
+			MaxRetries:    &maxRetries,
+			RetryDelay:    &retryDelay,
+			RetryMaxDelay: &maxRetryDelay,
+		}), // Custom retry settings for OpenAI
+		wormhole.WithAnthropic("your-anthropic-key", types.ProviderConfig{
+			MaxRetries:    &maxRetries,
+			RetryDelay:    &retryDelay,
+			RetryMaxDelay: &maxRetryDelay,
+		}), // Same retry settings for Anthropic
 		// Production-grade middleware stack
 		wormhole.WithMiddleware(
-			middleware.RetryMiddleware(middleware.DefaultRetryConfig()), // Exponential backoff
-			middleware.CircuitBreakerMiddleware(5, 30*time.Second),      // Circuit breaking
-			middleware.RateLimitMiddleware(100),                         // Rate limiting
+			middleware.CircuitBreakerMiddleware(5, 30*time.Second), // Circuit breaking
+			middleware.RateLimitMiddleware(100),                    // Rate limiting
 		),
 	)
 

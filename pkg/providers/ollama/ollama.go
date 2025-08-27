@@ -132,11 +132,22 @@ func (p *Provider) Structured(ctx context.Context, request types.StructuredReque
 // Embeddings generates embeddings using Ollama's embeddings API
 func (p *Provider) Embeddings(ctx context.Context, request types.EmbeddingsRequest) (*types.EmbeddingsResponse, error) {
 	// Ollama embeddings API processes one input at a time
-	// For multiple inputs, we'll need to make multiple requests
+	// For multiple inputs, we process them concurrently for better performance
 	if len(request.Input) == 0 {
 		return nil, fmt.Errorf("no input provided for embeddings")
 	}
 
+	// For small batches, process sequentially to avoid overwhelming local Ollama instance
+	if len(request.Input) <= 3 {
+		return p.processEmbeddingsSequentially(ctx, request)
+	}
+
+	// For larger batches, use concurrent processing
+	return p.processEmbeddingsConcurrently(ctx, request)
+}
+
+// processEmbeddingsSequentially handles small batches sequentially
+func (p *Provider) processEmbeddingsSequentially(ctx context.Context, request types.EmbeddingsRequest) (*types.EmbeddingsResponse, error) {
 	embeddings := make([]types.Embedding, 0, len(request.Input))
 
 	for i, input := range request.Input {
@@ -157,6 +168,67 @@ func (p *Provider) Embeddings(ctx context.Context, request types.EmbeddingsReque
 			Index:     i,
 			Embedding: response.Embedding,
 		})
+	}
+
+	return &types.EmbeddingsResponse{
+		Model:      request.Model,
+		Embeddings: embeddings,
+		Usage:      nil, // Ollama doesn't provide usage info for embeddings
+		Created:    time.Now(),
+	}, nil
+}
+
+// processEmbeddingsConcurrently handles larger batches with controlled concurrency
+func (p *Provider) processEmbeddingsConcurrently(ctx context.Context, request types.EmbeddingsRequest) (*types.EmbeddingsResponse, error) {
+	type result struct {
+		index     int
+		embedding types.Embedding
+		err       error
+	}
+
+	// Limit concurrency to avoid overwhelming local Ollama instance
+	const maxConcurrency = 3
+	semaphore := make(chan struct{}, maxConcurrency)
+	results := make(chan result, len(request.Input))
+
+	// Start concurrent workers
+	for i, input := range request.Input {
+		go func(idx int, txt string) {
+			semaphore <- struct{}{} // Acquire semaphore
+			defer func() { <-semaphore }() // Release semaphore
+
+			payload := &embeddingsRequest{
+				Model:  request.Model,
+				Prompt: txt,
+			}
+
+			url := p.GetBaseURL() + "/api/embeddings"
+
+			var response embeddingsResponse
+			err := p.doOllamaRequest(ctx, http.MethodPost, url, payload, &response)
+			
+			if err != nil {
+				results <- result{index: idx, err: fmt.Errorf("failed to get embedding for input %d: %w", idx, err)}
+			} else {
+				results <- result{
+					index: idx,
+					embedding: types.Embedding{
+						Index:     idx,
+						Embedding: response.Embedding,
+					},
+				}
+			}
+		}(i, input)
+	}
+
+	// Collect results
+	embeddings := make([]types.Embedding, len(request.Input))
+	for i := 0; i < len(request.Input); i++ {
+		res := <-results
+		if res.err != nil {
+			return nil, res.err
+		}
+		embeddings[res.index] = res.embedding
 	}
 
 	return &types.EmbeddingsResponse{

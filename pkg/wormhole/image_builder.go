@@ -93,17 +93,17 @@ func (b *ImageRequestBuilder) Generate(ctx context.Context) (*types.ImageRespons
 		b.request.N = 1
 	}
 
-	// Ensure we have an ImageProvider
-	imageProvider, ok := provider.(types.ImageProvider)
-	if !ok {
-		return nil, fmt.Errorf("provider %s does not support image generation", provider.Name())
+	// Apply type-safe middleware chain if configured
+	if b.getWormhole().providerMiddleware != nil {
+		handler := b.getWormhole().providerMiddleware.ApplyImage(provider.GenerateImage)
+		return handler(ctx, *b.request)
 	}
 
-	// Apply middleware chain if configured
+	// Fallback to legacy middleware if configured
 	if b.getWormhole().middlewareChain != nil {
 		handler := b.getWormhole().middlewareChain.Apply(func(ctx context.Context, req any) (any, error) {
 			imageReq := req.(*types.ImageRequest)
-			return imageProvider.GenerateImage(ctx, *imageReq)
+			return provider.GenerateImage(ctx, *imageReq)
 		})
 		resp, err := handler(ctx, b.request)
 		if err != nil {
@@ -112,5 +112,5 @@ func (b *ImageRequestBuilder) Generate(ctx context.Context) (*types.ImageRespons
 		return resp.(*types.ImageResponse), nil
 	}
 
-	return imageProvider.GenerateImage(ctx, *b.request)
+	return provider.GenerateImage(ctx, *b.request)
 }

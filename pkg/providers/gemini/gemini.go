@@ -2,7 +2,6 @@ package gemini
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"strings"
 
@@ -105,8 +104,14 @@ func (g *Gemini) Structured(ctx context.Context, request types.StructuredRequest
 
 // Embeddings generates embeddings using Gemini models
 func (g *Gemini) Embeddings(ctx context.Context, request types.EmbeddingsRequest) (*types.EmbeddingsResponse, error) {
-	if !strings.Contains(request.Model, "embedding") {
-		return nil, errors.New("model must be an embedding model")
+	// More flexible model validation - check for known embedding models or "embedding" in name
+	isEmbeddingModel := strings.Contains(request.Model, "embedding") ||
+		request.Model == "models/embedding-001" ||
+		request.Model == "embedding-001" ||
+		strings.HasSuffix(request.Model, ":embedding")
+	
+	if !isEmbeddingModel {
+		return nil, fmt.Errorf("model '%s' does not appear to be an embedding model. Expected models containing 'embedding' or known embedding models", request.Model)
 	}
 
 	payload := g.buildEmbeddingsPayload(request)

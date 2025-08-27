@@ -9,12 +9,14 @@ import (
 )
 
 // Middleware represents a function that wraps provider calls
+// DEPRECATED: Use types.ProviderMiddleware for type-safe middleware instead
 type Middleware func(next Handler) Handler
 
 // Handler represents any provider method signature
 type Handler func(ctx context.Context, req any) (any, error)
 
 // Chain manages a chain of middleware
+// DEPRECATED: Use types.ProviderMiddlewareChain for type-safe middleware instead
 type Chain struct {
 	middlewares []Middleware
 }
@@ -150,12 +152,6 @@ type MiddlewareInfo struct {
 // AvailableMiddleware returns information about all available middleware
 func AvailableMiddleware() []MiddlewareInfo {
 	return []MiddlewareInfo{
-		{
-			Name:       "RetryMiddleware",
-			Purpose:    "Exponential backoff retry with jitter",
-			Example:    "middleware.RetryMiddleware(middleware.DefaultRetryConfig())",
-			ConfigType: "RetryConfig",
-		},
 		{
 			Name:       "CacheMiddleware",
 			Purpose:    "Response caching with TTL support",

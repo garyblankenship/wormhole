@@ -147,3 +147,8 @@ docs/build/
 site/
 data/
 logs/
+repomix-wormhole.md
+repomix.config.json
+CLAUDE.md
+.claude/
+*.repomix*

@@ -19,24 +19,36 @@ func WithDefaultProvider(name string) Option {
 }
 
 // WithOpenAI configures the OpenAI provider.
-func WithOpenAI(apiKey string) Option {
+func WithOpenAI(apiKey string, config ...types.ProviderConfig) Option {
 	return func(c *Config) {
 		if c.Providers == nil {
 			c.Providers = make(map[string]types.ProviderConfig)
 		}
-		c.Providers["openai"] = types.ProviderConfig{APIKey: apiKey}
+		
+		var cfg types.ProviderConfig
+		if len(config) > 0 {
+			cfg = config[0]
+		}
+		cfg.APIKey = apiKey
+		c.Providers["openai"] = cfg
 
 		// Models are now auto-registered globally in New() - no need to register here
 	}
 }
 
 // WithAnthropic configures the Anthropic provider.
-func WithAnthropic(apiKey string) Option {
+func WithAnthropic(apiKey string, config ...types.ProviderConfig) Option {
 	return func(c *Config) {
 		if c.Providers == nil {
 			c.Providers = make(map[string]types.ProviderConfig)
 		}
-		c.Providers["anthropic"] = types.ProviderConfig{APIKey: apiKey}
+		
+		var cfg types.ProviderConfig
+		if len(config) > 0 {
+			cfg = config[0]
+		}
+		cfg.APIKey = apiKey
+		c.Providers["anthropic"] = cfg
 	}
 }
 
@@ -63,7 +75,7 @@ func WithGroq(apiKey string, config ...types.ProviderConfig) Option {
 		cfg = config[0]
 	}
 	cfg.APIKey = apiKey
-	
+
 	// Use the generic OpenAI-compatible provider factory
 	return WithOpenAICompatible("groq", "https://api.groq.com/openai/v1", cfg)
 }
@@ -207,14 +219,6 @@ func WithTimeout(timeout time.Duration) Option {
 func WithUnlimitedTimeout() Option {
 	return func(c *Config) {
 		c.DefaultTimeout = 0 // 0 = unlimited timeout
-	}
-}
-
-// WithRetries configures the default retry behavior.
-func WithRetries(maxRetries int, baseDelay time.Duration) Option {
-	return func(c *Config) {
-		c.DefaultRetries = maxRetries
-		c.DefaultRetryDelay = baseDelay
 	}
 }
 

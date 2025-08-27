@@ -12,15 +12,23 @@ import (
 )
 
 func main() {
-	// Create client with comprehensive middleware stack using functional options
+	// Configure per-provider retry settings
+	maxRetries := 3
+	retryDelay := 100 * time.Millisecond
+	maxRetryDelay := 5 * time.Second
+	
+	// Create client with comprehensive middleware stack and per-provider retry configuration
 	client := wormhole.New(
-		wormhole.WithOpenAI(""), // Will use env var OPENAI_API_KEY
+		wormhole.WithOpenAI("", types.ProviderConfig{
+			MaxRetries:    &maxRetries,
+			RetryDelay:    &retryDelay,
+			RetryMaxDelay: &maxRetryDelay,
+		}), // Will use env var OPENAI_API_KEY with custom retry settings
 		wormhole.WithDefaultProvider("openai"),
 		wormhole.WithMiddleware(
-			middleware.RateLimitMiddleware(10),                          // 10 requests per second
-			middleware.RetryMiddleware(middleware.DefaultRetryConfig()), // Auto-retry on failures
-			middleware.CircuitBreakerMiddleware(5, 30*time.Second),      // Circuit breaker protection
-			middleware.TimeoutMiddleware(30*time.Second),                // Request timeout
+			middleware.RateLimitMiddleware(10),                     // 10 requests per second
+			middleware.CircuitBreakerMiddleware(5, 30*time.Second), // Circuit breaker protection
+			middleware.TimeoutMiddleware(30*time.Second),           // Request timeout
 			middleware.CacheMiddleware(middleware.CacheConfig{
 				Cache: middleware.NewMemoryCache(100),
 				TTL:   5 * time.Minute,
@@ -146,12 +154,14 @@ func main() {
 		fmt.Printf("Debug request completed (may have failed): %v\n", err)
 	}
 
-	// NEW: Structured error handling with middleware
+	// NEW: Structured error handling with per-provider retry configuration
 	fmt.Println("\nStructured error handling...")
+	retries := 2 // Fewer retries for error demonstration
 	errorClient := wormhole.New(
-		wormhole.WithOpenAI(""),
+		wormhole.WithOpenAI("", types.ProviderConfig{
+			MaxRetries: &retries,
+		}),
 		wormhole.WithDefaultProvider("openai"),
-		wormhole.WithMiddleware(middleware.RetryMiddleware(middleware.DefaultRetryConfig())),
 	)
 
 	_, err = errorClient.Text().
@@ -206,7 +216,9 @@ func main() {
 }
 
 // MockProvider for demonstration
-type MockProvider struct{}
+type MockProvider struct {
+	types.BaseProvider
+}
 
 func (p *MockProvider) Name() string { return "mock" }
 func (p *MockProvider) Text(ctx context.Context, req types.TextRequest) (*types.TextResponse, error) {

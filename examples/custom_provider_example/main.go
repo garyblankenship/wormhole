@@ -13,6 +13,7 @@ import (
 
 // ExampleProvider demonstrates implementing a custom provider
 type ExampleProvider struct {
+	types.BaseProvider
 	config types.ProviderConfig
 	client *http.Client
 }

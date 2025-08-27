@@ -147,14 +147,26 @@ func initializeWormhole(config CLIConfig) *wormhole.Wormhole {
 	}
 
 	// Create the interdimensional gateway using functional options
+	// Configure per-provider retry settings  
+	maxRetries := 3
+	retryDelay := 500 * time.Millisecond
+	
 	client := wormhole.New(
 		wormhole.WithDefaultProvider(config.Provider),
-		wormhole.WithOpenAI(os.Getenv("OPENAI_API_KEY")),
-		wormhole.WithAnthropic(os.Getenv("ANTHROPIC_API_KEY")),
-		wormhole.WithGemini(os.Getenv("GEMINI_API_KEY")),
-		// Add production-grade quantum stabilizers
+		wormhole.WithOpenAI(os.Getenv("OPENAI_API_KEY"), types.ProviderConfig{
+			MaxRetries: &maxRetries,
+			RetryDelay: &retryDelay,
+		}),
+		wormhole.WithAnthropic(os.Getenv("ANTHROPIC_API_KEY"), types.ProviderConfig{
+			MaxRetries: &maxRetries,
+			RetryDelay: &retryDelay,
+		}),
+		wormhole.WithGemini(os.Getenv("GEMINI_API_KEY"), types.ProviderConfig{
+			MaxRetries: &maxRetries,
+			RetryDelay: &retryDelay,
+		}),
+		// Add production-grade middleware
 		wormhole.WithMiddleware(
-			middleware.RetryMiddleware(middleware.DefaultRetryConfig()),
 			middleware.TimeoutMiddleware(30*time.Second),
 			middleware.RateLimitMiddleware(100), // 100 requests per second
 		),

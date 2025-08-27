@@ -3,7 +3,6 @@ package wormhole
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 
 	"github.com/garyblankenship/wormhole/pkg/types"
 )
@@ -142,17 +141,17 @@ func (b *TextRequestBuilder) Generate(ctx context.Context) (*types.TextResponse,
 
 	// Provider handles all model validation and constraints
 
-	// Check if provider supports text capability
-	textProvider, ok := types.GetTextCapability(provider)
-	if !ok {
-		return nil, fmt.Errorf("provider %s does not support text generation", provider.Name())
+	// Apply type-safe middleware chain if configured
+	if b.getWormhole().providerMiddleware != nil {
+		handler := b.getWormhole().providerMiddleware.ApplyText(provider.Text)
+		return handler(ctx, *b.request)
 	}
 
-	// Apply middleware chain if configured
+	// Fallback to legacy middleware if configured
 	if b.getWormhole().middlewareChain != nil {
 		handler := b.getWormhole().middlewareChain.Apply(func(ctx context.Context, req any) (any, error) {
 			textReq := req.(*types.TextRequest)
-			return textProvider.Text(ctx, *textReq)
+			return provider.Text(ctx, *textReq)
 		})
 		resp, err := handler(ctx, b.request)
 		if err != nil {
@@ -161,7 +160,7 @@ func (b *TextRequestBuilder) Generate(ctx context.Context) (*types.TextResponse,
 		return resp.(*types.TextResponse), nil
 	}
 
-	return textProvider.Text(ctx, *b.request)
+	return provider.Text(ctx, *b.request)
 }
 
 // Stream executes the request and returns a streaming response
@@ -190,17 +189,17 @@ func (b *TextRequestBuilder) Stream(ctx context.Context) (<-chan types.StreamChu
 
 	// Provider handles all model validation and constraints
 
-	// Check if provider supports streaming capability
-	streamProvider, ok := types.GetStreamCapability(provider)
-	if !ok {
-		return nil, fmt.Errorf("provider %s does not support streaming", provider.Name())
+	// Apply type-safe middleware chain if configured
+	if b.getWormhole().providerMiddleware != nil {
+		handler := b.getWormhole().providerMiddleware.ApplyStream(provider.Stream)
+		return handler(ctx, *b.request)
 	}
 
-	// Apply middleware chain if configured
+	// Fallback to legacy middleware if configured
 	if b.getWormhole().middlewareChain != nil {
 		handler := b.getWormhole().middlewareChain.Apply(func(ctx context.Context, req any) (any, error) {
 			textReq := req.(*types.TextRequest)
-			return streamProvider.Stream(ctx, *textReq)
+			return provider.Stream(ctx, *textReq)
 		})
 		resp, err := handler(ctx, b.request)
 		if err != nil {
@@ -209,7 +208,7 @@ func (b *TextRequestBuilder) Stream(ctx context.Context) (<-chan types.StreamChu
 		return resp.(<-chan types.StreamChunk), nil
 	}
 
-	return streamProvider.Stream(ctx, *b.request)
+	return provider.Stream(ctx, *b.request)
 }
 
 // ToJSON returns the request as JSON

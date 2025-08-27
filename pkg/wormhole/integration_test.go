@@ -552,7 +552,7 @@ func TestIntegration_ErrorHandling(t *testing.T) {
 			wormhole.WithDefaultProvider("openai"),
 			wormhole.WithOpenAICompatible("openai", server.URL, types.ProviderConfig{
 				APIKey:     "test-key",
-				MaxRetries: 0, // No retries
+				MaxRetries: func() *int { i := 0; return &i }(), // No retries
 			}),
 		)
 

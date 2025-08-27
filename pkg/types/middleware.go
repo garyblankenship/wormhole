@@ -22,7 +22,7 @@ type ProviderMiddleware interface {
 
 // Handler function types for different capabilities
 type TextHandler func(ctx context.Context, request TextRequest) (*TextResponse, error)
-type StreamHandler func(ctx context.Context, request TextRequest) (<-chan TextChunk, error)
+type StreamHandler func(ctx context.Context, request TextRequest) (<-chan StreamChunk, error)
 type StructuredHandler func(ctx context.Context, request StructuredRequest) (*StructuredResponse, error)
 type EmbeddingsHandler func(ctx context.Context, request EmbeddingsRequest) (*EmbeddingsResponse, error)
 type AudioHandler func(ctx context.Context, request AudioRequest) (*AudioResponse, error)
