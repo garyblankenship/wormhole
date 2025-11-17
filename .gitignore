@@ -152,3 +152,4 @@ repomix.config.json
 CLAUDE.md
 .claude/
 *.repomix*
+docs/workspace/
