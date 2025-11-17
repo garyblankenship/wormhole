@@ -27,75 +27,115 @@ func NewSSEParser(r io.Reader) *SSEParser {
 // Parse reads and parses the next SSE event
 func (p *SSEParser) Parse() (*SSEEvent, error) {
 	event := &SSEEvent{}
-	isEOF := false
 
 	for {
-		line, err := p.reader.ReadString('\n')
+		line, eof, err := p.readLine()
 		if err != nil {
-			if err == io.EOF && line != "" {
-				// Process the last line if it doesn't end with newline
-				isEOF = true
-			} else {
-				return nil, err
-			}
+			return nil, err
 		}
 
-		line = strings.TrimSpace(line)
+		// Check if we should return the event (EOF or empty line with data)
+		shouldReturn, returnErr := p.shouldReturnWithError(line, event, eof)
+		if returnErr != nil {
+			return nil, returnErr
+		}
+		if shouldReturn {
+			return event, nil
+		}
 
-		// Empty line signals end of event
-		if line == "" {
-			if event.Data != "" || event.Event != "" {
-				return event, nil
-			}
-			// If we hit EOF, return what we have (even if empty)
-			if isEOF {
-				if event.Data != "" || event.Event != "" || event.ID != "" {
-					return event, nil
-				}
+		// Skip empty lines and comments, but check for EOF first
+		if p.shouldSkip(line) {
+			// If we hit EOF while skipping empty lines, return EOF if no event data
+			if eof && !p.hasEventData(event) {
 				return nil, io.EOF
 			}
 			continue
 		}
 
-		// Skip comments
-		if strings.HasPrefix(line, ":") {
-			// If EOF and we have data, return the event
-			if isEOF && (event.Data != "" || event.Event != "" || event.ID != "") {
-				return event, nil
-			}
-			continue
+		// Parse and apply field to event
+		if err := p.parseField(line, event); err != nil {
+			continue // Invalid field format, skip
 		}
 
-		// Parse field
-		parts := strings.SplitN(line, ":", 2)
-		if len(parts) < 2 {
-			// If EOF and we have data, return the event
-			if isEOF && (event.Data != "" || event.Event != "" || event.ID != "") {
-				return event, nil
-			}
-			continue
-		}
-
-		field := strings.TrimSpace(parts[0])
-		value := strings.TrimSpace(parts[1])
-
-		switch field {
-		case "event":
-			event.Event = value
-		case "data":
-			if event.Data != "" {
-				event.Data += "\n"
-			}
-			event.Data += value
-		case "id":
-			event.ID = value
-			// Retry field is not used in SSEEvent
-		}
-
-		// If we reached EOF after processing this line, return the event
-		if isEOF {
+		// Return event if we reached EOF after processing
+		if eof {
 			return event, nil
 		}
+	}
+}
+
+// readLine reads next line and handles EOF
+func (p *SSEParser) readLine() (string, bool, error) {
+	line, err := p.reader.ReadString('\n')
+
+	// Handle EOF with remaining content
+	if err == io.EOF && line != "" {
+		return strings.TrimSpace(line), true, nil
+	}
+
+	// Handle other errors
+	if err != nil && err != io.EOF {
+		return "", false, err
+	}
+
+	return strings.TrimSpace(line), err == io.EOF, nil
+}
+
+// shouldReturn checks if event is complete and should be returned
+// Returns (shouldReturn bool, returnError error)
+func (p *SSEParser) shouldReturnWithError(line string, event *SSEEvent, isEOF bool) (bool, error) {
+	// Empty line signals end of event
+	if line == "" {
+		if p.hasEventData(event) {
+			return true, nil
+		}
+		// At EOF with no data, return EOF error
+		if isEOF {
+			if event.Data != "" || event.Event != "" || event.ID != "" {
+				return true, nil
+			}
+			return false, io.EOF
+		}
+	}
+	return false, nil
+}
+
+// shouldSkip checks if line should be skipped (comments)
+func (p *SSEParser) shouldSkip(line string) bool {
+	return line == "" || strings.HasPrefix(line, ":")
+}
+
+// hasEventData checks if event has meaningful data
+func (p *SSEParser) hasEventData(event *SSEEvent) bool {
+	return event.Data != "" || event.Event != ""
+}
+
+// parseField parses a field line and updates the event
+func (p *SSEParser) parseField(line string, event *SSEEvent) error {
+	parts := strings.SplitN(line, ":", 2)
+	if len(parts) < 2 {
+		return fmt.Errorf("invalid field format")
+	}
+
+	field := strings.TrimSpace(parts[0])
+	value := strings.TrimSpace(parts[1])
+
+	p.applyField(field, value, event)
+	return nil
+}
+
+// applyField applies a parsed field to the event
+func (p *SSEParser) applyField(field, value string, event *SSEEvent) {
+	switch field {
+	case "event":
+		event.Event = value
+	case "data":
+		if event.Data != "" {
+			event.Data += "\n"
+		}
+		event.Data += value
+	case "id":
+		event.ID = value
 	}
 }
 

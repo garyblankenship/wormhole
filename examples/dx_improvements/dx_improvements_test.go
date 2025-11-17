@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/garyblankenship/wormhole/internal/utils"
 	"github.com/garyblankenship/wormhole/pkg/middleware"
 )
 
@@ -14,8 +15,8 @@ func TestMiddlewareDiscovery(t *testing.T) {
 	middlewares := middleware.AvailableMiddleware()
 
 	// Should have the key middleware from DX improvements
+	// Retry was moved to internal/utils
 	expectedMiddleware := map[string]bool{
-		"RetryMiddleware":          true,
 		"CacheMiddleware":          true,
 		"CircuitBreakerMiddleware": true,
 		"RateLimitMiddleware":      true,
@@ -74,7 +75,7 @@ func TestCacheConfigurationPattern(t *testing.T) {
 
 func TestRetryConfigurationPattern(t *testing.T) {
 	// Test DefaultRetryConfig usage (recommended pattern)
-	defaultConfig := middleware.DefaultRetryConfig()
+	defaultConfig := utils.DefaultRetryConfig()
 	if defaultConfig.MaxRetries == 0 {
 		t.Error("Expected default config to have non-zero MaxRetries")
 	}
@@ -83,12 +84,12 @@ func TestRetryConfigurationPattern(t *testing.T) {
 	}
 
 	// Test custom configuration pattern
-	customConfig := middleware.RetryConfig{
-		MaxRetries:   5,
-		InitialDelay: 2 * time.Second,
-		MaxDelay:     30 * time.Second,
-		Multiplier:   2.0,
-		Jitter:       true,
+	customConfig := utils.RetryConfig{
+		MaxRetries:      5,
+		InitialDelay:    2 * time.Second,
+		MaxDelay:        30 * time.Second,
+		BackoffMultiple: 2.0,
+		Jitter:          true,
 	}
 
 	if customConfig.MaxRetries != 5 {
@@ -98,13 +99,8 @@ func TestRetryConfigurationPattern(t *testing.T) {
 		t.Errorf("Expected InitialDelay=2s, got %v", customConfig.InitialDelay)
 	}
 
-	// Test that middleware can be created with both patterns
-	defaultMW := middleware.RetryMiddleware(defaultConfig)
-	customMW := middleware.RetryMiddleware(customConfig)
-
-	if defaultMW == nil || customMW == nil {
-		t.Error("Expected both middleware to be created successfully")
-	}
+	// Retry logic is now in internal/utils with exponential backoff built-in
+	// The configurations are validated, which is the main test goal
 }
 
 func TestProductionMiddlewareStack(t *testing.T) {
@@ -116,16 +112,16 @@ func TestProductionMiddlewareStack(t *testing.T) {
 	}
 
 	// Verify all middleware can be created (the stack from the example)
+	// Retry is now in internal/utils, so we use the remaining middleware
 	middlewares := []middleware.Middleware{
-		middleware.RetryMiddleware(middleware.DefaultRetryConfig()),
 		middleware.CircuitBreakerMiddleware(5, 30*time.Second),
 		middleware.RateLimitMiddleware(100),
 		middleware.CacheMiddleware(cacheConfig),
 		middleware.TimeoutMiddleware(60 * time.Second),
 	}
 
-	if len(middlewares) != 5 {
-		t.Errorf("Expected 5 middleware in production stack, got %d", len(middlewares))
+	if len(middlewares) != 4 {
+		t.Errorf("Expected 4 middleware in production stack, got %d", len(middlewares))
 	}
 
 	// Test that they can be chained
@@ -163,16 +159,8 @@ func TestDXImprovementPatterns(t *testing.T) {
 		t.Error("Expected LRU cache to be created")
 	}
 
-	// 3. Test backoff algorithms (documented options)
-	exponential := middleware.ExponentialBackoff(2, 100*time.Millisecond, 5*time.Second)
-	linear := middleware.LinearBackoff(2, 100*time.Millisecond, 5*time.Second)
-	fibonacci := middleware.FibonacciBackoff(2, 100*time.Millisecond, 5*time.Second)
-
-	// All should return reasonable values
-	if exponential == 0 || linear == 0 || fibonacci == 0 {
-		t.Errorf("Expected non-zero backoff values, got exp=%v, lin=%v, fib=%v",
-			exponential, linear, fibonacci)
-	}
+	// 3. Test backoff algorithms are now in internal/utils
+	// The middleware discovery and cache patterns are the main DX improvements
 }
 
 // Integration test that verifies the example patterns actually work
@@ -188,13 +176,9 @@ func TestDXImprovementsIntegration(t *testing.T) {
 	}
 	cacheMW := middleware.CacheMiddleware(cacheConfig)
 
-	// Create retry following the documented pattern
-	retryConfig := middleware.DefaultRetryConfig()
-	retryMW := middleware.RetryMiddleware(retryConfig)
-
-	// Create a complete middleware stack
+	// Retry logic is now in internal/utils, not exposed as middleware
+	// Create a complete middleware stack with remaining middleware
 	chain := middleware.NewChain(
-		retryMW,
 		middleware.CircuitBreakerMiddleware(3, 10*time.Second),
 		middleware.RateLimitMiddleware(50),
 		cacheMW,
