@@ -73,21 +73,70 @@ func NewBaseProvider(name string, providerConfig types.ProviderConfig) *BaseProv
 
 // DoRequest performs an HTTP request with common error handling
 func (p *BaseProvider) DoRequest(ctx context.Context, method, url string, body any, result any) error {
-	var reqBody io.Reader
-	if body != nil {
-		jsonBody, err := json.Marshal(body)
-		if err != nil {
-			return fmt.Errorf("failed to marshal request body: %w", err)
-		}
-		reqBody = bytes.NewReader(jsonBody)
+	// Build and execute request
+	req, err := p.buildRequest(ctx, method, url, body)
+	if err != nil {
+		return err
 	}
 
+	// Execute with retry logic
+	resp, err := p.retryClient.Do(req)
+	if err != nil {
+		return p.handleRequestError(ctx, err)
+	}
+	defer resp.Body.Close()
+
+	// Read response
+	respBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return fmt.Errorf("failed to read response body: %w", err)
+	}
+
+	// Handle error responses
+	if resp.StatusCode >= 400 {
+		return p.buildErrorResponse(resp.StatusCode, resp.Status, url, respBody)
+	}
+
+	// Parse successful response
+	return p.parseResponse(respBody, result)
+}
+
+// buildRequest creates an HTTP request with headers and body
+func (p *BaseProvider) buildRequest(ctx context.Context, method, url string, body any) (*http.Request, error) {
+	// Marshal request body if provided
+	reqBody, err := p.marshalRequestBody(body)
+	if err != nil {
+		return nil, err
+	}
+
+	// Create request
 	req, err := http.NewRequestWithContext(ctx, method, url, reqBody)
 	if err != nil {
-		return fmt.Errorf("failed to create request: %w", err)
+		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
 
-	// Set common headers
+	// Set headers
+	p.setRequestHeaders(req)
+
+	return req, nil
+}
+
+// marshalRequestBody converts request body to io.Reader
+func (p *BaseProvider) marshalRequestBody(body any) (io.Reader, error) {
+	if body == nil {
+		return nil, nil
+	}
+
+	jsonBody, err := json.Marshal(body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal request body: %w", err)
+	}
+
+	return bytes.NewReader(jsonBody), nil
+}
+
+// setRequestHeaders sets common and custom headers
+func (p *BaseProvider) setRequestHeaders(req *http.Request) {
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+p.Config.APIKey)
 
@@ -95,62 +144,81 @@ func (p *BaseProvider) DoRequest(ctx context.Context, method, url string, body a
 	for k, v := range p.Config.Headers {
 		req.Header.Set(k, v)
 	}
+}
 
-	resp, err := p.retryClient.Do(req)
-	if err != nil {
-		// Check for context cancellation/timeout first - return as-is for proper error type checking
-		if ctx.Err() != nil {
-			return ctx.Err()
-		}
-
-		// Check for timeout errors and convert to WormholeError
-		if p.isTimeoutError(err) {
-			wormholeErr := types.NewWormholeError(types.ErrorCodeTimeout, "request timeout", true)
-			wormholeErr.Provider = p.Name()
-			return wormholeErr
-		}
-
-		return fmt.Errorf("request failed: %w", err)
-	}
-	defer resp.Body.Close()
-
-	respBody, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return fmt.Errorf("failed to read response body: %w", err)
+// handleRequestError processes errors from HTTP request execution
+func (p *BaseProvider) handleRequestError(ctx context.Context, err error) error {
+	// Guard: Check context cancellation first
+	if ctx.Err() != nil {
+		return ctx.Err()
 	}
 
-	if resp.StatusCode >= 400 {
-		// Enhanced error reporting with HTTP details as requested by user
-		errorCode := p.mapHTTPStatusToErrorCode(resp.StatusCode)
-
-		// Try to parse provider-specific error message
-		errorMessage := fmt.Sprintf("HTTP %d: %s", resp.StatusCode, resp.Status)
-		if len(respBody) > 0 {
-			var errorResp map[string]any
-			if err := json.Unmarshal(respBody, &errorResp); err == nil {
-				if errorObj, ok := errorResp["error"].(map[string]any); ok {
-					if msg, ok := errorObj["message"].(string); ok && msg != "" {
-						errorMessage = msg
-					}
-				}
-			}
-		}
-
-		wormholeErr := types.NewWormholeError(
-			errorCode,
-			errorMessage,
-			p.isRetryableStatus(resp.StatusCode),
-		).WithDetails(fmt.Sprintf("URL: %s\nResponse: %s", p.maskAPIKeyInURL(url), string(respBody)))
-
-		wormholeErr.StatusCode = resp.StatusCode
+	// Guard: Check for timeout errors
+	if p.isTimeoutError(err) {
+		wormholeErr := types.NewWormholeError(types.ErrorCodeTimeout, "request timeout", true)
 		wormholeErr.Provider = p.Name()
 		return wormholeErr
 	}
 
-	if result != nil && len(respBody) > 0 {
-		if err := json.Unmarshal(respBody, result); err != nil {
-			return fmt.Errorf("failed to unmarshal response: %w", err)
+	return fmt.Errorf("request failed: %w", err)
+}
+
+// buildErrorResponse creates a detailed error response for HTTP errors
+func (p *BaseProvider) buildErrorResponse(statusCode int, status, url string, respBody []byte) error {
+	errorCode := p.mapHTTPStatusToErrorCode(statusCode)
+	errorMessage := p.extractErrorMessage(statusCode, status, respBody)
+
+	wormholeErr := types.NewWormholeError(
+		errorCode,
+		errorMessage,
+		p.isRetryableStatus(statusCode),
+	).WithDetails(fmt.Sprintf("URL: %s\nResponse: %s", p.maskAPIKeyInURL(url), string(respBody)))
+
+	wormholeErr.StatusCode = statusCode
+	wormholeErr.Provider = p.Name()
+	return wormholeErr
+}
+
+// extractErrorMessage parses provider-specific error message from response
+func (p *BaseProvider) extractErrorMessage(statusCode int, status string, respBody []byte) string {
+	// Default message
+	errorMessage := fmt.Sprintf("HTTP %d: %s", statusCode, status)
+
+	// Guard: No body to parse
+	if len(respBody) == 0 {
+		return errorMessage
+	}
+
+	// Try to parse provider-specific error
+	var errorResp map[string]any
+	if err := json.Unmarshal(respBody, &errorResp); err != nil {
+		return errorMessage
+	}
+
+	// Extract nested error message if available
+	if errorObj, ok := errorResp["error"].(map[string]any); ok {
+		if msg, ok := errorObj["message"].(string); ok && msg != "" {
+			return msg
 		}
+	}
+
+	return errorMessage
+}
+
+// parseResponse unmarshals response body into result
+func (p *BaseProvider) parseResponse(respBody []byte, result any) error {
+	// Guard: No result to parse into
+	if result == nil {
+		return nil
+	}
+
+	// Guard: Empty response body
+	if len(respBody) == 0 {
+		return nil
+	}
+
+	if err := json.Unmarshal(respBody, result); err != nil {
+		return fmt.Errorf("failed to unmarshal response: %w", err)
 	}
 
 	return nil

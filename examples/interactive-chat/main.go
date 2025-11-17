@@ -135,13 +135,13 @@ func handleCommand(cmd string, currentDimension *string) {
 func getModelForDimension(dimension string) string {
 	switch dimension {
 	case "openai":
-		return "gpt-4-turbo-preview"
+		return "gpt-5"
 	case "anthropic":
-		return "claude-3-opus-20240229"
+		return "claude-sonnet-4-5"
 	case "gemini":
 		return "gemini-pro"
 	default:
-		return "gpt-3.5-turbo" // Fallback for Jerrys
+		return "gpt-5" // Fallback for Jerrys
 	}
 }
 

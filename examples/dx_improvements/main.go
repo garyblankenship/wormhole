@@ -61,7 +61,7 @@ func main() {
 
 	// This will demonstrate better error handling
 	_, err := client.Text().
-		Model("gpt-4o-mini").
+		Model("gpt-5-mini").
 		Prompt("Test error handling").
 		Generate(ctx)
 
@@ -118,7 +118,7 @@ func main() {
 
 	// 6. COST ESTIMATION - Show the capability
 	fmt.Println("\n6. Cost Management:")
-	if cost, err := types.EstimateModelCost("gpt-4o-mini", 1000, 500); err == nil {
+	if cost, err := types.EstimateModelCost("gpt-5-mini", 1000, 500); err == nil {
 		fmt.Printf("  ✓ Estimated cost for 1K input + 500 output: $%.4f\n", cost)
 	}
 

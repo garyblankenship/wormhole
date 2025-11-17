@@ -10,7 +10,9 @@ import (
 // TextRequestBuilder builds text generation requests
 type TextRequestBuilder struct {
 	CommonBuilder
-	request *types.TextRequest
+	request             *types.TextRequest
+	enableToolExecution bool // Whether to automatically execute tools
+	maxToolIterations   int  // Maximum number of tool execution rounds (default: 10)
 }
 
 // Using sets the provider to use
@@ -115,6 +117,35 @@ func (b *TextRequestBuilder) ProviderOptions(options map[string]any) *TextReques
 	return b
 }
 
+// ==================== Tool Execution Configuration ====================
+
+// WithToolsEnabled enables automatic tool execution.
+// When enabled, the SDK will automatically execute tools when the model requests them,
+// send results back, and continue the conversation until a final response is received.
+//
+// This is the default behavior when tools are registered on the client.
+func (b *TextRequestBuilder) WithToolsEnabled() *TextRequestBuilder {
+	b.enableToolExecution = true
+	return b
+}
+
+// WithToolsDisabled disables automatic tool execution.
+// When disabled, tool calls will be returned in the response and the caller
+// must manually execute them and send results back.
+func (b *TextRequestBuilder) WithToolsDisabled() *TextRequestBuilder {
+	b.enableToolExecution = false
+	return b
+}
+
+// WithMaxToolIterations sets the maximum number of tool execution rounds.
+// Default is 10. Set to 0 for unlimited (not recommended).
+//
+// This prevents infinite loops where the model keeps calling tools indefinitely.
+func (b *TextRequestBuilder) WithMaxToolIterations(max int) *TextRequestBuilder {
+	b.maxToolIterations = max
+	return b
+}
+
 // Generate executes the request and returns a response
 func (b *TextRequestBuilder) Generate(ctx context.Context) (*types.TextResponse, error) {
 	provider, err := b.getProviderWithBaseURL()
@@ -137,19 +168,34 @@ func (b *TextRequestBuilder) Generate(ctx context.Context) (*types.TextResponse,
 		return nil, types.ErrInvalidRequest.WithDetails("no model specified")
 	}
 
-	// Let the provider handle model validation at request time
+	// Check if we should enable automatic tool execution
+	wormhole := b.getWormhole()
+	shouldAutoExecuteTools := b.shouldAutoExecuteTools(wormhole)
 
-	// Provider handles all model validation and constraints
+	// If auto-execution is enabled, use the tool executor
+	if shouldAutoExecuteTools {
+		executor := NewToolExecutor(wormhole.toolRegistry)
+		maxIterations := b.maxToolIterations
+		if maxIterations == 0 {
+			maxIterations = 10 // Default
+		}
+
+		// ExecuteWithTools will handle middleware internally by calling provider.Text
+		// which goes through the middleware chain
+		return executor.ExecuteWithTools(ctx, *b.request, provider, maxIterations)
+	}
+
+	// Standard execution without automatic tool handling
 
 	// Apply type-safe middleware chain if configured
-	if b.getWormhole().providerMiddleware != nil {
-		handler := b.getWormhole().providerMiddleware.ApplyText(provider.Text)
+	if wormhole.providerMiddleware != nil {
+		handler := wormhole.providerMiddleware.ApplyText(provider.Text)
 		return handler(ctx, *b.request)
 	}
 
 	// Fallback to legacy middleware if configured
-	if b.getWormhole().middlewareChain != nil {
-		handler := b.getWormhole().middlewareChain.Apply(func(ctx context.Context, req any) (any, error) {
+	if wormhole.middlewareChain != nil {
+		handler := wormhole.middlewareChain.Apply(func(ctx context.Context, req any) (any, error) {
 			textReq := req.(*types.TextRequest)
 			return provider.Text(ctx, *textReq)
 		})
@@ -161,6 +207,24 @@ func (b *TextRequestBuilder) Generate(ctx context.Context) (*types.TextResponse,
 	}
 
 	return provider.Text(ctx, *b.request)
+}
+
+// shouldAutoExecuteTools determines if automatic tool execution should be enabled
+func (b *TextRequestBuilder) shouldAutoExecuteTools(wormhole *Wormhole) bool {
+	// Explicit disable takes precedence
+	if !b.enableToolExecution && b.maxToolIterations == 0 {
+		// User hasn't explicitly configured, check defaults
+		// Auto-enable if:
+		// 1. Tools are registered on the client AND
+		// 2. No tools explicitly set on request (use registry tools)
+		if wormhole.toolRegistry.Count() > 0 && len(b.request.Tools) == 0 {
+			return true
+		}
+		return false
+	}
+
+	// User explicitly enabled
+	return b.enableToolExecution
 }
 
 // Stream executes the request and returns a streaming response

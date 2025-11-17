@@ -1,10 +1,14 @@
 package wormhole
 
 import (
+	"context"
+	"encoding/json"
 	"fmt"
 	"sync"
 	"time"
 
+	"github.com/garyblankenship/wormhole/pkg/discovery"
+	"github.com/garyblankenship/wormhole/pkg/discovery/fetchers"
 	"github.com/garyblankenship/wormhole/pkg/middleware"
 	"github.com/garyblankenship/wormhole/pkg/providers/anthropic"
 	"github.com/garyblankenship/wormhole/pkg/providers/gemini"
@@ -26,6 +30,8 @@ type Wormhole struct {
 	config              Config
 	providerMiddleware  *types.ProviderMiddlewareChain   // Type-safe middleware chain
 	middlewareChain     *middleware.Chain                // DEPRECATED: use providerMiddleware instead
+	toolRegistry        *ToolRegistry                    // Registry of available tools for function calling
+	discoveryService    *discovery.DiscoveryService      // Dynamic model discovery service
 }
 
 // Config holds the configuration for Wormhole
@@ -40,7 +46,9 @@ type Config struct {
 	DefaultTimeout       time.Duration
 	DefaultRetries       int
 	DefaultRetryDelay    time.Duration
-	ModelValidation      bool // Whether to validate models against registry (default: true)
+	ModelValidation      bool                             // Whether to validate models against registry (default: true)
+	DiscoveryConfig      discovery.DiscoveryConfig        // Dynamic model discovery configuration
+	EnableDiscovery      bool                             // Whether to enable dynamic model discovery (default: true)
 }
 
 // New creates a new Wormhole instance using functional options
@@ -52,7 +60,9 @@ func New(opts ...Option) *Wormhole {
 	config := Config{
 		Providers:       make(map[string]types.ProviderConfig),
 		CustomFactories: make(map[string]types.ProviderFactory),
-		ModelValidation: true, // Enable model validation by default
+		ModelValidation: true,                   // Enable model validation by default
+		EnableDiscovery: true,                   // Enable model discovery by default
+		DiscoveryConfig: discovery.DefaultConfig(), // Use default discovery configuration
 	}
 
 	// Apply all provided options
@@ -65,6 +75,12 @@ func New(opts ...Option) *Wormhole {
 		providerFactories: make(map[string]types.ProviderFactory),
 		providers:         make(map[string]types.Provider),
 		config:            config,
+		toolRegistry:      NewToolRegistry(),
+	}
+
+	// Initialize model discovery service if enabled
+	if config.EnableDiscovery {
+		p.initializeDiscoveryService()
 	}
 
 	// Pre-register all built-in providers
@@ -232,4 +248,204 @@ func (p *Wormhole) createOpenAICompatibleProvider(config types.ProviderConfig) (
 	// Create temporary OpenAI provider with custom BaseURL
 	openAIProvider := openai.New(config)
 	return openAIProvider, nil
+}
+
+// ==================== Tool Registration API ====================
+
+// RegisterTool registers a new tool that can be called by LLMs.
+// Tools are registered globally at the client level and are available to all requests.
+//
+// Parameters:
+//   - name: The unique name of the tool (used by the LLM to call it)
+//   - description: A clear description of what the tool does (helps the LLM decide when to use it)
+//   - schema: The JSON schema for the tool's input parameters
+//   - handler: The function that executes when the LLM calls this tool
+//
+// Example:
+//
+//	client.RegisterTool(
+//	    "get_weather",
+//	    "Get the current weather for a given city",
+//	    types.ObjectSchema{
+//	        Type: "object",
+//	        Properties: map[string]types.Schema{
+//	            "city": types.StringSchema{Type: "string"},
+//	            "unit": types.StringSchema{Type: "string", Enum: []string{"celsius", "fahrenheit"}},
+//	        },
+//	        Required: []string{"city"},
+//	    },
+//	    func(ctx context.Context, args map[string]any) (any, error) {
+//	        city := args["city"].(string)
+//	        // ... fetch weather data ...
+//	        return map[string]any{"temp": 72, "condition": "sunny"}, nil
+//	    },
+//	)
+func (p *Wormhole) RegisterTool(name string, description string, schema types.Schema, handler types.ToolHandler) {
+	// Convert schema to map[string]any for Tool.InputSchema
+	var schemaMap map[string]any
+
+	// If schema is already a map, use it directly
+	if m, ok := schema.(map[string]any); ok {
+		schemaMap = m
+	} else {
+		// Otherwise, marshal and unmarshal to convert to map
+		// This handles our Schema types (ObjectSchema, StringSchema, etc.)
+		schemaJSON, err := json.Marshal(schema)
+		if err != nil {
+			// Fallback to empty map
+			schemaMap = make(map[string]any)
+		} else {
+			if err := json.Unmarshal(schemaJSON, &schemaMap); err != nil {
+				schemaMap = make(map[string]any)
+			}
+		}
+	}
+
+	tool := types.Tool{
+		Type:        "function",
+		Name:        name,
+		Description: description,
+		InputSchema: schemaMap,
+		Function: &types.ToolFunction{
+			Name:        name,
+			Description: description,
+			Parameters:  schemaMap,
+		},
+	}
+
+	definition := types.NewToolDefinition(tool, handler)
+	p.toolRegistry.Register(name, definition)
+}
+
+// UnregisterTool removes a tool from the registry.
+// Returns an error if the tool doesn't exist.
+func (p *Wormhole) UnregisterTool(name string) error {
+	return p.toolRegistry.Unregister(name)
+}
+
+// ListTools returns all registered tools (without their handlers).
+// This is useful for inspecting which tools are available.
+func (p *Wormhole) ListTools() []types.Tool {
+	return p.toolRegistry.List()
+}
+
+// HasTool checks if a tool with the given name is registered.
+func (p *Wormhole) HasTool(name string) bool {
+	return p.toolRegistry.Has(name)
+}
+
+// ToolCount returns the number of registered tools.
+func (p *Wormhole) ToolCount() int {
+	return p.toolRegistry.Count()
+}
+
+// ClearTools removes all registered tools.
+func (p *Wormhole) ClearTools() {
+	p.toolRegistry.Clear()
+}
+
+// ==================== Model Discovery API ====================
+
+// initializeDiscoveryService creates and configures the model discovery service
+func (p *Wormhole) initializeDiscoveryService() {
+	var modelFetchers []discovery.ModelFetcher
+
+	// Create fetchers for configured providers
+	for providerName, providerConfig := range p.config.Providers {
+		switch providerName {
+		case "openai":
+			if providerConfig.APIKey != "" {
+				modelFetchers = append(modelFetchers, fetchers.NewOpenAIFetcher(providerConfig.APIKey))
+			}
+		case "anthropic":
+			if providerConfig.APIKey != "" {
+				modelFetchers = append(modelFetchers, fetchers.NewAnthropicFetcher(providerConfig.APIKey))
+			}
+		case "ollama":
+			baseURL := providerConfig.BaseURL
+			if baseURL == "" {
+				baseURL = "http://localhost:11434"
+			}
+			modelFetchers = append(modelFetchers, fetchers.NewOllamaFetcher(baseURL))
+		}
+	}
+
+	// Always include OpenRouter (public endpoint, no auth required)
+	modelFetchers = append(modelFetchers, fetchers.NewOpenRouterFetcher())
+
+	// Create discovery service with fetchers
+	p.discoveryService = discovery.NewDiscoveryService(p.config.DiscoveryConfig, modelFetchers...)
+
+	// Start background refresh if not in offline mode
+	if !p.config.DiscoveryConfig.OfflineMode && p.config.DiscoveryConfig.RefreshInterval > 0 {
+		p.discoveryService.StartBackgroundRefresh(context.Background())
+	}
+}
+
+// ListAvailableModels returns all available models for a provider from the discovery cache.
+// If the cache is empty, it will fetch models from the provider's API.
+//
+// Parameters:
+//   - provider: The provider name (e.g., "openai", "anthropic", "openrouter")
+//
+// Returns:
+//   - A slice of ModelInfo containing all available models
+//   - An error if the provider is not configured or discovery fails
+//
+// Example:
+//
+//	models, err := client.ListAvailableModels("openai")
+//	if err != nil {
+//	    return err
+//	}
+//	for _, model := range models {
+//	    fmt.Printf("Model: %s (%s) - Capabilities: %v\n", model.Name, model.ID, model.Capabilities)
+//	}
+func (p *Wormhole) ListAvailableModels(provider string) ([]*types.ModelInfo, error) {
+	if p.discoveryService == nil {
+		return nil, fmt.Errorf("model discovery is not enabled")
+	}
+	return p.discoveryService.GetModels(context.Background(), provider)
+}
+
+// RefreshModels manually triggers a refresh of all provider model catalogs.
+// This bypasses the cache and fetches fresh data from all configured providers.
+//
+// Returns:
+//   - An error if any provider fails to refresh (partial failures are collected)
+//
+// Example:
+//
+//	if err := client.RefreshModels(); err != nil {
+//	    log.Printf("Some providers failed to refresh: %v", err)
+//	}
+func (p *Wormhole) RefreshModels() error {
+	if p.discoveryService == nil {
+		return fmt.Errorf("model discovery is not enabled")
+	}
+	return p.discoveryService.RefreshModels(context.Background())
+}
+
+// ClearModelCache clears all cached model data.
+// This will force fresh fetches on the next model lookup.
+//
+// Example:
+//
+//	client.ClearModelCache()
+func (p *Wormhole) ClearModelCache() {
+	if p.discoveryService != nil {
+		p.discoveryService.ClearCache()
+	}
+}
+
+// StopModelDiscovery stops the background model refresh goroutine.
+// Call this when shutting down the client to clean up resources.
+//
+// Example:
+//
+//	defer client.StopModelDiscovery()
+func (p *Wormhole) StopModelDiscovery() {
+	if p.discoveryService != nil {
+		p.discoveryService.Stop()
+	}
 }

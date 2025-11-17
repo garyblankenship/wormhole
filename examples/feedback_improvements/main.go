@@ -118,7 +118,7 @@ func main() {
 	// 6. Streaming with Error Handling
 	fmt.Println("\n=== Streaming Response ===")
 	stream, err := client.Text().
-		Model("gpt-4o-mini"). // Use a model we know works
+		Model("gpt-5-mini"). // Use a model we know works
 		Prompt("Count from 1 to 5, one number per response").
 		Stream(ctx)
 
@@ -178,7 +178,7 @@ func attemptWithErrorHandling(client *wormhole.Wormhole, ctx context.Context) (*
 	// Attempt with specific provider
 	response, err := client.Text().
 		Using("openai").
-		Model("gpt-4o-mini").
+		Model("gpt-5-mini").
 		Prompt("Hello from provider").
 		Generate(ctx)
 

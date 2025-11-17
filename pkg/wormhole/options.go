@@ -3,6 +3,7 @@ package wormhole
 import (
 	"time"
 
+	"github.com/garyblankenship/wormhole/pkg/discovery"
 	"github.com/garyblankenship/wormhole/pkg/middleware"
 	"github.com/garyblankenship/wormhole/pkg/providers/openai"
 	"github.com/garyblankenship/wormhole/pkg/types"
@@ -246,6 +247,55 @@ func WithModelValidation(enabled bool) Option {
 	}
 }
 
+// WithDiscoveryConfig configures the dynamic model discovery service.
+// This allows customization of caching behavior, refresh intervals, and offline mode.
+//
+// Example:
+//
+//	client := wormhole.New(
+//	    wormhole.WithOpenAI(apiKey),
+//	    wormhole.WithDiscoveryConfig(discovery.DiscoveryConfig{
+//	        CacheTTL:        12 * time.Hour,  // Cache models for 12 hours
+//	        RefreshInterval: 6 * time.Hour,   // Refresh every 6 hours
+//	        OfflineMode:     false,           // Allow network fetching
+//	    }),
+//	)
+func WithDiscoveryConfig(config discovery.DiscoveryConfig) Option {
+	return func(c *Config) {
+		c.DiscoveryConfig = config
+	}
+}
+
+// WithOfflineMode enables offline mode for model discovery.
+// When enabled, only cached and fallback models will be available (no network fetching).
+//
+// Example:
+//
+//	client := wormhole.New(
+//	    wormhole.WithOpenAI(apiKey),
+//	    wormhole.WithOfflineMode(true),
+//	)
+func WithOfflineMode(enabled bool) Option {
+	return func(c *Config) {
+		c.DiscoveryConfig.OfflineMode = enabled
+	}
+}
+
+// WithDiscovery enables or disables the dynamic model discovery system.
+// When disabled, only hardcoded fallback models will be available.
+//
+// Example:
+//
+//	client := wormhole.New(
+//	    wormhole.WithOpenAI(apiKey),
+//	    wormhole.WithDiscovery(false), // Disable discovery, use only fallback models
+//	)
+func WithDiscovery(enabled bool) Option {
+	return func(c *Config) {
+		c.EnableDiscovery = enabled
+	}
+}
+
 // registerOpenAIModels registers OpenAI models for validation and discovery
 func registerOpenAIModels() {
 	openAIModels := []*types.ModelInfo{
@@ -253,17 +303,6 @@ func registerOpenAIModels() {
 		{ID: "gpt-5", Name: "GPT-5", Provider: "openai", Capabilities: []types.ModelCapability{types.CapabilityText, types.CapabilityStructured, types.CapabilityFunctions}, MaxTokens: 128000, Cost: &types.ModelCost{InputTokens: 0.0050, OutputTokens: 0.0150, Currency: "USD"}},
 		{ID: "gpt-5-mini", Name: "GPT-5 Mini", Provider: "openai", Capabilities: []types.ModelCapability{types.CapabilityText, types.CapabilityStructured, types.CapabilityFunctions}, MaxTokens: 128000, Cost: &types.ModelCost{InputTokens: 0.0015, OutputTokens: 0.0060, Currency: "USD"}},
 		{ID: "gpt-5-turbo", Name: "GPT-5 Turbo", Provider: "openai", Capabilities: []types.ModelCapability{types.CapabilityText, types.CapabilityStructured, types.CapabilityFunctions}, MaxTokens: 128000, Cost: &types.ModelCost{InputTokens: 0.0100, OutputTokens: 0.0300, Currency: "USD"}},
-
-		// GPT-4 Series
-		{ID: "gpt-4o", Name: "GPT-4o", Provider: "openai", Capabilities: []types.ModelCapability{types.CapabilityText, types.CapabilityStructured, types.CapabilityFunctions}, MaxTokens: 128000, Cost: &types.ModelCost{InputTokens: 0.0025, OutputTokens: 0.0100, Currency: "USD"}},
-		{ID: "gpt-4o-mini", Name: "GPT-4o Mini", Provider: "openai", Capabilities: []types.ModelCapability{types.CapabilityText, types.CapabilityStructured, types.CapabilityFunctions}, MaxTokens: 128000, Cost: &types.ModelCost{InputTokens: 0.0001, OutputTokens: 0.0006, Currency: "USD"}},
-		{ID: "gpt-4.1", Name: "GPT-4.1", Provider: "openai", Capabilities: []types.ModelCapability{types.CapabilityText, types.CapabilityChat, types.CapabilityFunctions, types.CapabilityStructured}, MaxTokens: 128000, Cost: &types.ModelCost{InputTokens: 0.0025, OutputTokens: 0.0100, Currency: "USD"}},
-		{ID: "gpt-4.1-mini", Name: "GPT-4.1 Mini", Provider: "openai", Capabilities: []types.ModelCapability{types.CapabilityText, types.CapabilityChat, types.CapabilityFunctions, types.CapabilityStructured}, MaxTokens: 128000, Cost: &types.ModelCost{InputTokens: 0.0001, OutputTokens: 0.0006, Currency: "USD"}},
-		{ID: "gpt-4", Name: "GPT-4", Provider: "openai", Capabilities: []types.ModelCapability{types.CapabilityText, types.CapabilityStructured, types.CapabilityFunctions}, MaxTokens: 8192, Cost: &types.ModelCost{InputTokens: 0.0300, OutputTokens: 0.0600, Currency: "USD"}},
-		{ID: "gpt-4-turbo", Name: "GPT-4 Turbo", Provider: "openai", Capabilities: []types.ModelCapability{types.CapabilityText, types.CapabilityStructured, types.CapabilityFunctions}, MaxTokens: 128000, Cost: &types.ModelCost{InputTokens: 0.0100, OutputTokens: 0.0300, Currency: "USD"}},
-
-		// GPT-3.5 Series
-		{ID: "gpt-3.5-turbo", Name: "GPT-3.5 Turbo", Provider: "openai", Capabilities: []types.ModelCapability{types.CapabilityText, types.CapabilityStructured, types.CapabilityFunctions}, MaxTokens: 16384, Cost: &types.ModelCost{InputTokens: 0.0005, OutputTokens: 0.0015, Currency: "USD"}},
 
 		// Embeddings
 		{ID: "text-embedding-3-large", Name: "Text Embedding 3 Large", Provider: "openai", Capabilities: []types.ModelCapability{types.CapabilityEmbeddings}, MaxTokens: 8191, Cost: &types.ModelCost{InputTokens: 0.0001, OutputTokens: 0.0000, Currency: "USD"}},
@@ -404,51 +443,12 @@ func registerOpenRouterModels() {
 			},
 		},
 
-		// #8 - GPT-4o (Still popular for vision)
-		{
-			ID:       "openai/gpt-4o",
-			Name:     "GPT-4o",
-			Provider: "openrouter",
-			Capabilities: []types.ModelCapability{
-				types.CapabilityText,
-				types.CapabilityChat,
-				types.CapabilityFunctions,
-				types.CapabilityStream,
-				types.CapabilityVision,
-			},
-		},
-
 		// REQUESTED MODELS FOR TESTING
 
 		// GPT-OSS-120B (User requested test model)
 		{
 			ID:       "openai/gpt-oss-120b",
 			Name:     "GPT-OSS-120B",
-			Provider: "openrouter",
-			Capabilities: []types.ModelCapability{
-				types.CapabilityText,
-				types.CapabilityChat,
-				types.CapabilityFunctions,
-				types.CapabilityStream,
-			},
-		},
-
-		// GPT-4.1 Series
-		{
-			ID:       "openai/gpt-4.1",
-			Name:     "GPT-4.1",
-			Provider: "openrouter",
-			Capabilities: []types.ModelCapability{
-				types.CapabilityText,
-				types.CapabilityChat,
-				types.CapabilityFunctions,
-				types.CapabilityStream,
-				types.CapabilityVision,
-			},
-		},
-		{
-			ID:       "openai/gpt-4.1-mini",
-			Name:     "GPT-4.1 Mini",
 			Provider: "openrouter",
 			Capabilities: []types.ModelCapability{
 				types.CapabilityText,
@@ -481,19 +481,6 @@ func registerOpenRouterModels() {
 			},
 		},
 
-		// GPT-3.5 for OpenRouter
-		{
-			ID:       "openai/gpt-3.5-turbo",
-			Name:     "GPT-3.5 Turbo",
-			Provider: "openrouter",
-			Capabilities: []types.ModelCapability{
-				types.CapabilityText,
-				types.CapabilityChat,
-				types.CapabilityFunctions,
-				types.CapabilityStream,
-			},
-		},
-
 		// EXISTING MODELS (CONFIRMED WORKING)
 
 		// Claude 4.1 - Already confirmed by user
@@ -511,7 +498,7 @@ func registerOpenRouterModels() {
 
 		// Claude 3.5 Series - Popular fallbacks
 		{
-			ID:       "anthropic/claude-3-5-sonnet",
+			ID:       "anthropic/claude-sonnet-4-5",
 			Name:     "Claude 3.5 Sonnet",
 			Provider: "openrouter",
 			Capabilities: []types.ModelCapability{
@@ -522,7 +509,7 @@ func registerOpenRouterModels() {
 			},
 		},
 		{
-			ID:       "anthropic/claude-3-5-haiku",
+			ID:       "anthropic/claude-haiku-4-5",
 			Name:     "Claude 3.5 Haiku",
 			Provider: "openrouter",
 			Capabilities: []types.ModelCapability{

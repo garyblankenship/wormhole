@@ -172,19 +172,17 @@ func (a *WormholeToOrchestrationAdapter) EstimateCost(req OrchestrationCompletio
 	switch a.name {
 	case "openai":
 		switch model {
-		case "gpt-4":
-			costPer1kTokens = 0.03
-		case "gpt-3.5-turbo":
-			costPer1kTokens = 0.002
+		case "gpt-5":
+			costPer1kTokens = 0.0125 // $1.25/M input = $0.00125/1K
+		case "gpt-5-mini":
+			costPer1kTokens = 0.0001
 		default:
-			costPer1kTokens = 0.002
+			costPer1kTokens = 0.0001
 		}
 	case "anthropic":
 		switch model {
-		case "claude-3-opus":
-			costPer1kTokens = 0.015
-		case "claude-3-sonnet":
-			costPer1kTokens = 0.003
+		case "claude-sonnet-4-5":
+			costPer1kTokens = 0.003 // $3/M input tokens
 		default:
 			costPer1kTokens = 0.003
 		}

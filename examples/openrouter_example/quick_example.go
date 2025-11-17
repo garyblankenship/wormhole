@@ -31,7 +31,7 @@ func QuickExample() {
 	// Test model comparison as mentioned in user feedback
 	models := []string{
 		"openai/gpt-5-mini",
-		"anthropic/claude-3.5-sonnet",
+		"anthropic/claude-sonnet-4-5",
 		"meta-llama/llama-3.1-8b-instruct",
 	}
 

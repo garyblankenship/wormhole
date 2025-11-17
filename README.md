@@ -19,16 +19,18 @@ Listen *burp*, while other developers are building SDKs with the architectural s
 
 Here's what happens when real science meets software development:
 
-🧪 **67ns Response Time**: While others measure in *milliseconds* like cavemen  
-⚡ **Thread-Safe Architecture**: Concurrent map access fixed with actual engineering  
-🛸 **7+ Provider Support**: OpenAI, Anthropic, OpenRouter, Gemini + OpenAI-compatible (Groq, Mistral, Ollama)  
-🧬 **Vector Embeddings**: Semantic search, RAG, and recommendations with all major providers  
-💊 **Functional Options**: Laravel-inspired config that doesn't make me want to vomit  
-🔬 **Production Middleware**: Circuit breakers, rate limiting, retries, health checks  
-🌀 **Dynamic Provider Registration**: Add custom providers without touching my perfect code  
-🎯 **Automatic Model Constraints**: GPT-5 temperature=1.0? I handle it, you don't worry about it  
-💰 **Cost Estimation**: Token counting and budget planning because money matters  
-📊 **Comprehensive Logging**: Debug mode shows you exactly what's happening  
+🧪 **67ns Response Time**: While others measure in *milliseconds* like cavemen
+⚡ **Thread-Safe Architecture**: Concurrent map access fixed with actual engineering
+🛸 **7+ Provider Support**: OpenAI, Anthropic, OpenRouter, Gemini + OpenAI-compatible (Groq, Mistral, Ollama)
+🔮 **Dynamic Model Discovery**: Automatically fetches latest models from providers - no more hardcoded obsolete names!
+🛠️ **Native Tool Calling**: Register Go functions, AI calls them automatically - multi-turn magic!
+🧬 **Vector Embeddings**: Semantic search, RAG, and recommendations with all major providers
+💊 **Functional Options**: Laravel-inspired config that doesn't make me want to vomit
+🔬 **Production Middleware**: Circuit breakers, rate limiting, retries, health checks
+🌀 **Dynamic Provider Registration**: Add custom providers without touching my perfect code
+🎯 **Automatic Model Constraints**: GPT-5 temperature=1.0? I handle it, you don't worry about it
+💰 **Cost Estimation**: Token counting and budget planning because money matters
+📊 **Comprehensive Logging**: Debug mode shows you exactly what's happening
 🧬 **Backward Compatible**: v1.1.x code works unchanged because I'm not a monster  
 
 ## 📊 The Numbers Don't Lie (Unlike Your Previous SDK)
@@ -129,6 +131,77 @@ func main() {
 }
 ```
 
+### 🛠️ NEW: Native Tool Use / Function Calling (Agent Mode Activated)
+
+*BURP* Finally - **actual** function calling that doesn't require you to manually string together requests like a Jerry trying to build IKEA furniture. Register Go functions once, the AI calls them automatically. It's like having infinite Meeseeks, but they actually finish their tasks.
+
+```go
+// Step 1: Register tools the AI can use (just like teaching Morty, but successful)
+client.RegisterTool(
+    "get_weather",
+    "Get current weather for a city",
+    map[string]any{
+        "type": "object",
+        "properties": map[string]any{
+            "city": map[string]any{"type": "string"},
+            "unit": map[string]any{"type": "string", "enum": []string{"celsius", "fahrenheit"}},
+        },
+        "required": []string{"city"},
+    },
+    func(ctx context.Context, args map[string]any) (any, error) {
+        city := args["city"].(string)
+        // Your actual weather API call here
+        return map[string]any{"temp": 72, "condition": "sunny"}, nil
+    },
+)
+
+// Step 2: Use it. That's it. The SDK handles EVERYTHING.
+response, _ := client.Text().
+    Prompt("What's the weather in San Francisco?").
+    Generate(ctx)
+
+// Behind the scenes (you don't touch this):
+// 1. AI decides to call get_weather(city="San Francisco")
+// 2. SDK executes your function automatically
+// 3. SDK sends result back to AI
+// 4. AI generates final response
+// ALL IN ONE REQUEST. LIKE MAGIC, BUT SCIENCE.
+
+fmt.Println(response.Text)
+// Output: "The weather in San Francisco is 72°F and sunny."
+```
+
+**Why This Doesn't Suck (Unlike Other Implementations):**
+- ✅ **Automatic Execution** - Tools run automatically, no manual orchestration
+- ✅ **Multi-Turn Conversations** - SDK handles the back-and-forth for you
+- ✅ **Parallel Tool Calls** - Multiple tools execute concurrently (because I'm not an idiot)
+- ✅ **Error Recovery** - Tool errors get sent back to the AI to retry/adjust
+- ✅ **Infinite Loop Protection** - Max iteration limits prevent runaway execution
+- ✅ **Thread-Safe Registry** - Register tools from anywhere, anytime
+- ✅ **Manual Mode Available** - Opt-out of auto-execution if you want control
+
+**Pro Tips:**
+```go
+// Opt out of automatic execution if you're a control freak
+response, _ := client.Text().
+    Prompt("What's the weather?").
+    WithToolsDisabled().  // Manual mode
+    Generate(ctx)
+
+// Check what the AI wanted to call
+for _, toolCall := range response.ToolCalls {
+    fmt.Printf("AI wants to call: %s(%v)\n", toolCall.Name, toolCall.Arguments)
+    // Execute manually and send results back yourself
+}
+
+// Set max iterations to prevent infinite loops
+response, _ := client.Text().
+    WithMaxToolIterations(5).  // Default is 10
+    Generate(ctx)
+```
+
+📚 **Full Example:** See [`examples/tool_calling/`](examples/tool_calling/) for weather, calculator, and multi-tool examples.
+
 ### 🚀 NEW: Super Simple BaseURL Approach
 
 *BURP* Got tired of maintaining separate provider packages, so I did what any genius would do - **eliminated the complexity**:
@@ -140,7 +213,7 @@ client := wormhole.New(wormhole.WithOpenAI("your-api-key"))
 // OpenRouter - just add BaseURL
 response, _ := client.Text().
     BaseURL("https://openrouter.ai/api/v1").
-    Model("anthropic/claude-3.5-sonnet").
+    Model("anthropic/claude-sonnet-4-5").
     Generate(ctx)
 
 // LM Studio - just add BaseURL  
@@ -271,7 +344,7 @@ client := wormhole.New(
 
 // Still faster than your current setup
 response, err := client.Text().
-    Model("claude-3-opus").
+    Model("claude-sonnet-4-5").
     Messages(
         types.NewSystemMessage("You're talking through a wormhole"),
         types.NewUserMessage("Tell me I'm using the best SDK"),
@@ -331,9 +404,9 @@ for _, model := range models {
 // Use cheap models for simple tasks, premium for complex ones
 func smartModelSelection(complexity string) string {
     if complexity == "simple" {
-        return "openai/gpt-4o-mini"        // Cheap and cheerful
+        return "openai/gpt-5-mini"         // Cheap and cheerful
     }
-    return "anthropic/claude-3.5-sonnet"   // Premium intelligence
+    return "anthropic/claude-sonnet-4-5"   // Premium intelligence
 }
 
 // Streaming with model comparison
@@ -355,10 +428,10 @@ for chunk := range stream {
 // Before: Registry bottleneck (manual registration required)
 ❌ "gpt-unknown-model" → BLOCKED by local registry
 
-// After: Provider-aware validation (intelligent routing)  
+// After: Provider-aware validation (intelligent routing)
 ✅ "any-openrouter-model" → Reaches OpenRouter API
 ✅ "user-loaded-ollama-model" → Reaches Ollama
-✅ "gpt-4o" → Registry validated for type safety
+✅ "gpt-5" → Registry validated for type safety
 
 // This means you can literally use ANY model name with OpenRouter:
 client.Text().Model("totally/made-up-model-name").Generate(ctx)
@@ -437,6 +510,7 @@ client := wormhole.New(
 - 💪 **Respects Retry-After Headers** - Automatically honors server-requested delays
 
 ### 🎯 **Actually Working Features (Unlike Other SDKs)**
+- ✅ **Native Tool Use / Function Calling** - Register Go functions, AI calls them automatically (multi-turn magic!)
 - ✅ **Real-Time Streaming** - Already works across ALL providers with proper error handling
 - ✅ **Typed Error System** - Full error taxonomy with retryability detection
 - ✅ **Model Discovery** - Built-in model registry with capabilities and constraints
@@ -764,17 +838,17 @@ client := wormhole.New().
 // All requests will be logged with full details:
 // - Request payload
 // - Response data
-// - Timing information 
+// - Timing information
 // - Error details
 // - Model constraints applied
 // - Cost calculations
 response, err := client.Text().
-    Model("claude-3-opus").
+    Model("claude-sonnet-4-5").
     Prompt("Debug this request").
     Generate(ctx)
 
 // Output includes:
-// [DEBUG] Request to anthropic/claude-3-opus: {...}
+// [DEBUG] Request to anthropic/claude-sonnet-4-5: {...}
 // [DEBUG] Response received in 234ms: {...}
 // [DEBUG] Cost: $0.0045 (150 input + 89 output tokens)
 ```
@@ -948,7 +1022,7 @@ if err != nil {
             return fmt.Errorf("fix your API key: %w", wormholeErr)
         case types.ErrorCodeModel:
             // Model not found - try fallback
-            return client.Text().Model("gpt-4o").Generate(ctx)
+            return client.Text().Model("gpt-5").Generate(ctx)
         case types.ErrorCodeTimeout:
             // Timeout - increase context timeout
             ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
@@ -1174,10 +1248,13 @@ go get github.com/garyblankenship/wormhole@latest
 ```
 
 ### 📚 **Learn More**
-- **[Documentation](https://github.com/garyblankenship/wormhole/blob/main/docs/)** - Complete guides and examples
-- **[Migration Guide](https://github.com/garyblankenship/wormhole/blob/main/docs/migration-guide.md)** - Upgrade from v1.1.x  
+- **[Architecture](https://github.com/garyblankenship/wormhole/blob/main/docs/ARCHITECTURE.md)** - Technical design, components, and patterns
+- **[Knowledge Base](https://github.com/garyblankenship/wormhole/blob/main/docs/KNOWLEDGE.md)** - Domain knowledge, operations, and troubleshooting
+- **[Model Discovery](https://github.com/garyblankenship/wormhole/blob/main/docs/MODEL_DISCOVERY.md)** - Dynamic model fetching and caching (no more hardcoded names!)
+- **[Tool Calling](https://github.com/garyblankenship/wormhole/blob/main/docs/TOOL_CALLING.md)** - Native function calling and multi-turn conversations
 - **[Examples](https://github.com/garyblankenship/wormhole/tree/main/examples)** - Working code for every use case
-- **[Benchmarks](https://github.com/garyblankenship/wormhole/blob/main/docs/performance-benchmarks.md)** - See the numbers for yourself
+- **[Migration Guide](https://github.com/garyblankenship/wormhole/blob/main/docs/migration-guide.md)** - Upgrade from v1.1.x (coming soon)
+- **[Benchmarks](https://github.com/garyblankenship/wormhole/blob/main/docs/performance-benchmarks.md)** - Performance metrics (coming soon)
 
 ### 🐛 **Support & Issues**
 Found a bug? Your first mistake was doubting my code. Your second mistake was not reading the docs.

@@ -40,7 +40,7 @@ func main() {
 	fmt.Println("Testing rate limiting...")
 	for i := 0; i < 3; i++ {
 		resp, err := client.Text().
-			Model("gpt-3.5-turbo").
+			Model("gpt-5").
 			Prompt(fmt.Sprintf("Say 'Response %d'", i+1)).
 			MaxTokens(10).
 			Generate(context.Background())
@@ -127,7 +127,7 @@ func main() {
 	// Make a request to collect metrics
 	ctx := context.Background()
 	_, _ = metricsClient.Text().
-		Model("gpt-3.5-turbo").
+		Model("gpt-5").
 		Prompt("Hello").
 		MaxTokens(5).
 		Generate(ctx)
@@ -145,7 +145,7 @@ func main() {
 	)
 
 	_, err := debugClient.Text().
-		Model("gpt-3.5-turbo").
+		Model("gpt-5").
 		Prompt("Test debug logging").
 		MaxTokens(5).
 		Generate(ctx)
