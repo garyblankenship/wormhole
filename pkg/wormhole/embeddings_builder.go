@@ -24,62 +24,36 @@ func (b *EmbeddingsRequestBuilder) Using(provider string) *EmbeddingsRequestBuil
 	return b
 }
 
-// Provider sets the provider to use (alias for Using)
-func (b *EmbeddingsRequestBuilder) Provider(provider string) *EmbeddingsRequestBuilder {
-	b.setProvider(provider)
-	return b
-}
-
 // BaseURL sets a custom base URL for OpenAI-compatible APIs
 func (b *EmbeddingsRequestBuilder) BaseURL(url string) *EmbeddingsRequestBuilder {
 	b.setBaseURL(url)
 	return b
 }
 
-// Model sets the model to use
+// Model sets the model to use.
+// Returns the builder for chaining. Validation errors are returned by Generate().
 func (b *EmbeddingsRequestBuilder) Model(model string) *EmbeddingsRequestBuilder {
-	// Early validation for better error detection
-	if model == "" {
-		panic("embeddings model cannot be empty")
-	}
 	b.request.Model = model
 	return b
 }
 
-// Input sets the input text(s) to generate embeddings for
+// Input sets the input text(s) to generate embeddings for.
+// Returns the builder for chaining. Validation errors are returned by Generate().
 func (b *EmbeddingsRequestBuilder) Input(inputs ...string) *EmbeddingsRequestBuilder {
-	// Early validation for better error detection
-	if len(inputs) == 0 {
-		panic("embeddings input cannot be empty")
-	}
-	for i, input := range inputs {
-		if input == "" {
-			panic(fmt.Sprintf("embeddings input[%d] cannot be empty string", i))
-		}
-	}
 	b.request.Input = inputs
 	return b
 }
 
-// AddInput adds input text to generate embeddings for
+// AddInput adds input text to generate embeddings for.
+// Returns the builder for chaining. Validation errors are returned by Generate().
 func (b *EmbeddingsRequestBuilder) AddInput(input string) *EmbeddingsRequestBuilder {
-	// Early validation for better error detection
-	if input == "" {
-		panic("embeddings input cannot be empty string")
-	}
 	b.request.Input = append(b.request.Input, input)
 	return b
 }
 
-// Dimensions sets the desired dimensions for the embeddings
+// Dimensions sets the desired dimensions for the embeddings.
+// Returns the builder for chaining. Validation errors are returned by Generate().
 func (b *EmbeddingsRequestBuilder) Dimensions(dims int) *EmbeddingsRequestBuilder {
-	// Early validation for better error detection
-	if dims <= 0 {
-		panic("embeddings dimensions must be positive")
-	}
-	if dims > 10000 {
-		panic("embeddings dimensions too large (>10000)")
-	}
 	b.request.Dimensions = &dims
 	return b
 }
@@ -87,6 +61,86 @@ func (b *EmbeddingsRequestBuilder) Dimensions(dims int) *EmbeddingsRequestBuilde
 // ProviderOptions sets provider-specific options
 func (b *EmbeddingsRequestBuilder) ProviderOptions(options map[string]any) *EmbeddingsRequestBuilder {
 	b.request.ProviderOptions = options
+	return b
+}
+
+// Clone creates a deep copy of the builder with all settings preserved.
+// This allows you to create variations from a base configuration.
+//
+// Example:
+//
+//	base := client.Embeddings().Model("text-embedding-3-small").Dimensions(512)
+//	resp1, _ := base.Clone().Input("First text").Generate(ctx)
+//	resp2, _ := base.Clone().Input("Second text").Generate(ctx)
+func (b *EmbeddingsRequestBuilder) Clone() *EmbeddingsRequestBuilder {
+	clonedRequest := getEmbeddingsRequest()
+	clonedRequest.Model = b.request.Model
+
+	// Clone pointer fields
+	if b.request.Dimensions != nil {
+		dims := *b.request.Dimensions
+		clonedRequest.Dimensions = &dims
+	}
+
+	// Clone slices
+	if len(b.request.Input) > 0 {
+		clonedRequest.Input = make([]string, len(b.request.Input))
+		copy(clonedRequest.Input, b.request.Input)
+	}
+	if len(b.request.ProviderOptions) > 0 {
+		clonedRequest.ProviderOptions = make(map[string]any)
+		for k, v := range b.request.ProviderOptions {
+			clonedRequest.ProviderOptions[k] = v
+		}
+	}
+
+	return &EmbeddingsRequestBuilder{
+		CommonBuilder: CommonBuilder{
+			wormhole: b.wormhole,
+			provider: b.provider,
+			baseURL:  b.baseURL,
+		},
+		request: clonedRequest,
+	}
+}
+
+// Validate checks the request configuration for errors before calling Generate().
+// This enables fail-fast behavior to catch configuration issues early.
+//
+// Validates:
+//   - Model is specified
+//   - Input is provided
+//   - Dimensions is positive if specified
+//
+// Example:
+//
+//	builder := client.Embeddings().Model("text-embedding-3-small").Input("text")
+//	if err := builder.Validate(); err != nil {
+//	    log.Fatal("Invalid configuration:", err)
+//	}
+func (b *EmbeddingsRequestBuilder) Validate() error {
+	var errs types.ValidationErrors
+
+	if b.request.Model == "" {
+		errs.Add("model", "required", nil, "model must be specified")
+	}
+
+	if len(b.request.Input) == 0 {
+		errs.Add("input", "required", nil, "at least one input text must be provided")
+	}
+
+	if b.request.Dimensions != nil && *b.request.Dimensions <= 0 {
+		errs.Add("dimensions", "positive", *b.request.Dimensions, "must be a positive integer")
+	}
+
+	return errs.Error()
+}
+
+// MustValidate calls Validate() and panics if validation fails.
+func (b *EmbeddingsRequestBuilder) MustValidate() *EmbeddingsRequestBuilder {
+	if err := b.Validate(); err != nil {
+		panic(err)
+	}
 	return b
 }
 
@@ -102,10 +156,10 @@ func (b *EmbeddingsRequestBuilder) Generate(ctx context.Context) (*types.Embeddi
 
 	// Validate request
 	if len(b.request.Input) == 0 {
-		return nil, fmt.Errorf("no input provided")
+		return nil, types.NewValidationError("input", "required", nil, "no input provided")
 	}
 	if b.request.Model == "" {
-		return nil, fmt.Errorf("no model specified")
+		return nil, types.NewValidationError("model", "required", nil, "no model specified")
 	}
 
 	// Apply type-safe middleware chain if configured

@@ -79,7 +79,7 @@ func main() {
 
 	// Generate embeddings in batch for efficiency
 	response, err := client.Embeddings().
-		Provider("openai").
+		Using("openai").
 		Model("text-embedding-3-small").
 		Input(contents...).
 		Dimensions(384). // Smaller dimensions for faster processing
@@ -112,7 +112,7 @@ func main() {
 
 		// Generate embedding for the search query
 		queryResponse, err := client.Embeddings().
-			Provider("openai").
+			Using("openai").
 			Model("text-embedding-3-small").
 			Input(query).
 			Dimensions(384). // Match document embedding dimensions
@@ -166,7 +166,7 @@ func main() {
 		fmt.Printf("\nSemantic search: '%s'\n", query)
 
 		queryResponse, err := client.Embeddings().
-			Provider("openai").
+			Using("openai").
 			Model("text-embedding-3-small").
 			Input(query).
 			Dimensions(384).

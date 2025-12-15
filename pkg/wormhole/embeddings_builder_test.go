@@ -31,9 +31,6 @@ func TestEmbeddingsRequestBuilder(t *testing.T) {
 		result = builder.Using("openai")
 		assert.Equal(t, builder, result, "Using() should return the same builder instance")
 
-		result = builder.Provider("openai")
-		assert.Equal(t, builder, result, "Provider() should return the same builder instance")
-
 		result = builder.BaseURL("https://api.openai.com/v1")
 		assert.Equal(t, builder, result, "BaseURL() should return the same builder instance")
 
@@ -48,11 +45,12 @@ func TestEmbeddingsRequestBuilder(t *testing.T) {
 			assert.Equal(t, "text-embedding-3-small", result.request.Model)
 		})
 
-		t.Run("empty model panics", func(t *testing.T) {
+		t.Run("empty model allowed at build time, error at generate", func(t *testing.T) {
 			builder := client.Embeddings()
-			assert.Panics(t, func() {
-				builder.Model("")
-			}, "Empty model should panic")
+			// Empty model is allowed at build time (Go idiom: validate at execution)
+			result := builder.Model("")
+			assert.Equal(t, "", result.request.Model)
+			// Error will be returned by Generate() - tested in integration tests
 		})
 	})
 
@@ -69,18 +67,19 @@ func TestEmbeddingsRequestBuilder(t *testing.T) {
 			assert.Equal(t, []string{"input1", "input2", "input3"}, builder.request.Input)
 		})
 
-		t.Run("empty input slice panics", func(t *testing.T) {
+		t.Run("empty input slice allowed at build time", func(t *testing.T) {
 			builder := client.Embeddings()
-			assert.Panics(t, func() {
-				builder.Input()
-			}, "Empty input slice should panic")
+			// Empty input is allowed at build time (Go idiom: validate at execution)
+			builder.Input()
+			assert.Empty(t, builder.request.Input)
+			// Error will be returned by Generate()
 		})
 
-		t.Run("empty string in input panics", func(t *testing.T) {
+		t.Run("empty string in input allowed at build time", func(t *testing.T) {
 			builder := client.Embeddings()
-			assert.Panics(t, func() {
-				builder.Input("valid", "", "also valid")
-			}, "Empty string in input should panic")
+			// Empty strings allowed at build time (validation at Generate())
+			builder.Input("valid", "", "also valid")
+			assert.Equal(t, []string{"valid", "", "also valid"}, builder.request.Input)
 		})
 	})
 
@@ -100,11 +99,11 @@ func TestEmbeddingsRequestBuilder(t *testing.T) {
 			assert.Equal(t, []string{"first", "second", "third"}, builder.request.Input)
 		})
 
-		t.Run("empty input panics", func(t *testing.T) {
+		t.Run("empty input allowed at build time", func(t *testing.T) {
 			builder := client.Embeddings()
-			assert.Panics(t, func() {
-				builder.AddInput("")
-			}, "Empty string to AddInput should panic")
+			// Empty strings allowed at build time (validation at Generate())
+			builder.AddInput("")
+			assert.Equal(t, []string{""}, builder.request.Input)
 		})
 	})
 
@@ -116,25 +115,28 @@ func TestEmbeddingsRequestBuilder(t *testing.T) {
 			assert.Equal(t, 512, *builder.request.Dimensions)
 		})
 
-		t.Run("zero dimensions panics", func(t *testing.T) {
+		t.Run("zero dimensions allowed at build time", func(t *testing.T) {
 			builder := client.Embeddings()
-			assert.Panics(t, func() {
-				builder.Dimensions(0)
-			}, "Zero dimensions should panic")
+			// Zero is allowed at build time - provider may have defaults
+			builder.Dimensions(0)
+			require.NotNil(t, builder.request.Dimensions)
+			assert.Equal(t, 0, *builder.request.Dimensions)
 		})
 
-		t.Run("negative dimensions panics", func(t *testing.T) {
+		t.Run("negative dimensions allowed at build time", func(t *testing.T) {
 			builder := client.Embeddings()
-			assert.Panics(t, func() {
-				builder.Dimensions(-1)
-			}, "Negative dimensions should panic")
+			// Negative values allowed at build time (validation at Generate())
+			builder.Dimensions(-1)
+			require.NotNil(t, builder.request.Dimensions)
+			assert.Equal(t, -1, *builder.request.Dimensions)
 		})
 
-		t.Run("too large dimensions panics", func(t *testing.T) {
+		t.Run("large dimensions allowed at build time", func(t *testing.T) {
 			builder := client.Embeddings()
-			assert.Panics(t, func() {
-				builder.Dimensions(20000)
-			}, "Too large dimensions should panic")
+			// Large values allowed at build time (provider validates)
+			builder.Dimensions(20000)
+			require.NotNil(t, builder.request.Dimensions)
+			assert.Equal(t, 20000, *builder.request.Dimensions)
 		})
 	})
 

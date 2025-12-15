@@ -1,6 +1,7 @@
 package types
 
 import (
+	"encoding/json"
 	"time"
 )
 
@@ -34,6 +35,28 @@ type TextResponse struct {
 	Metadata     map[string]any `json:"metadata,omitempty"`
 }
 
+// Content returns the text content of the response.
+// This provides a unified accessor pattern across all response types.
+func (r *TextResponse) Content() string {
+	return r.Text
+}
+
+// HasToolCalls returns true if the response contains tool calls.
+// Use this to check if the model wants to invoke tools before accessing ToolCalls.
+func (r *TextResponse) HasToolCalls() bool {
+	return len(r.ToolCalls) > 0
+}
+
+// IsComplete returns true if generation finished normally (not truncated).
+func (r *TextResponse) IsComplete() bool {
+	return r.FinishReason == FinishReasonStop
+}
+
+// WasTruncated returns true if the response was cut off due to length limits.
+func (r *TextResponse) WasTruncated() bool {
+	return r.FinishReason == FinishReasonLength
+}
+
 // StructuredResponse represents a structured output response
 type StructuredResponse struct {
 	ID       string         `json:"id"`
@@ -43,6 +66,36 @@ type StructuredResponse struct {
 	Usage    *Usage         `json:"usage,omitempty"`
 	Created  time.Time      `json:"created"`
 	Metadata map[string]any `json:"metadata,omitempty"`
+}
+
+// Content returns the parsed data from the response.
+// This provides a unified accessor pattern across all response types.
+// Use type assertion or json.Unmarshal for type-safe access.
+func (r *StructuredResponse) Content() any {
+	return r.Data
+}
+
+// ContentAs unmarshals the response data into the provided target.
+// This is a convenience method equivalent to json.Unmarshal(json.Marshal(r.Data), target).
+//
+// Example:
+//
+//	var person struct { Name string `json:"name"` }
+//	if err := resp.ContentAs(&person); err != nil {
+//	    log.Fatal(err)
+//	}
+func (r *StructuredResponse) ContentAs(target any) error {
+	// Fast path: if Data is already the target type
+	if r.Data == nil {
+		return nil
+	}
+
+	// Marshal and unmarshal for type conversion
+	jsonBytes, err := json.Marshal(r.Data)
+	if err != nil {
+		return err
+	}
+	return json.Unmarshal(jsonBytes, target)
 }
 
 // StreamChunk represents a streaming response chunk (alias for TextChunk)
@@ -61,6 +114,33 @@ type TextChunk struct {
 	Error        error         `json:"-"`
 }
 
+// Content returns the text content of the chunk.
+// Handles both direct Text field and Delta.Content for provider compatibility.
+func (c *TextChunk) Content() string {
+	if c.Text != "" {
+		return c.Text
+	}
+	if c.Delta != nil {
+		return c.Delta.Content
+	}
+	return ""
+}
+
+// IsDone returns true if this is the final chunk in the stream.
+func (c *TextChunk) IsDone() bool {
+	return c.FinishReason != nil && *c.FinishReason != ""
+}
+
+// HasError returns true if the chunk contains an error.
+func (c *TextChunk) HasError() bool {
+	return c.Error != nil
+}
+
+// HasToolCalls returns true if the chunk contains tool calls.
+func (c *TextChunk) HasToolCalls() bool {
+	return c.ToolCall != nil || len(c.ToolCalls) > 0
+}
+
 // ChunkDelta represents streaming delta content
 type ChunkDelta struct {
 	Content   string     `json:"content,omitempty"`
@@ -75,6 +155,29 @@ type EmbeddingsResponse struct {
 	Usage      *Usage         `json:"usage,omitempty"`
 	Created    time.Time      `json:"created"`
 	Metadata   map[string]any `json:"metadata,omitempty"`
+}
+
+// Content returns the first embedding vector, or nil if empty.
+// For multiple embeddings, use Embeddings directly.
+func (r *EmbeddingsResponse) Content() []float64 {
+	if len(r.Embeddings) == 0 {
+		return nil
+	}
+	return r.Embeddings[0].Embedding
+}
+
+// Vector returns the embedding vector at the given index.
+// Returns nil if index is out of bounds.
+func (r *EmbeddingsResponse) Vector(index int) []float64 {
+	if index < 0 || index >= len(r.Embeddings) {
+		return nil
+	}
+	return r.Embeddings[index].Embedding
+}
+
+// Count returns the number of embeddings in the response.
+func (r *EmbeddingsResponse) Count() int {
+	return len(r.Embeddings)
 }
 
 // Embedding represents a single embedding vector

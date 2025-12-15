@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"sort"
 	"sync"
 	"time"
 
@@ -92,6 +93,14 @@ func New(opts ...Option) *Wormhole {
 		p.providerFactories[name] = factory
 	}
 
+	// Validate configuration and log warnings
+	if config.DebugLogging && config.Logger != nil {
+		warnings := validateConfig(&config)
+		for _, warning := range warnings {
+			config.Logger.Warn("Config warning: " + warning)
+		}
+	}
+
 	// Initialize type-safe provider middleware chain
 	var providerMiddlewares []types.ProviderMiddleware
 
@@ -173,6 +182,22 @@ func (p *Wormhole) Audio() *AudioRequestBuilder {
 	}
 }
 
+// Batch creates a new batch request builder for concurrent execution.
+//
+// Example:
+//
+//	results := client.Batch().
+//	    Add(client.Text().Model("gpt-4o").Prompt("Q1")).
+//	    Add(client.Text().Model("gpt-4o").Prompt("Q2")).
+//	    Concurrency(5).
+//	    Execute(ctx)
+func (p *Wormhole) Batch() *BatchBuilder {
+	return &BatchBuilder{
+		wormhole:    p,
+		concurrency: 10, // Default concurrency
+	}
+}
+
 // Provider returns a specific provider instance
 func (p *Wormhole) Provider(name string) (types.Provider, error) {
 	// First, try to read with read lock
@@ -202,14 +227,18 @@ func (p *Wormhole) Provider(name string) (types.Provider, error) {
 				return openai.New(c), nil
 			}
 		} else {
-			return nil, fmt.Errorf("unknown or unregistered provider: %s", name)
+			return nil, types.ErrProviderNotFound.
+				WithProvider(name).
+				WithDetails(p.formatProviderHint(name))
 		}
 	}
 
 	// Get provider config
 	config, exists := p.config.Providers[name]
 	if !exists {
-		return nil, fmt.Errorf("provider %s not configured", name)
+		return nil, types.ErrProviderNotFound.
+			WithProvider(name).
+			WithDetails(p.formatProviderHint(name))
 	}
 
 	// Apply DefaultTimeout if provider config doesn't have explicit timeout
@@ -249,6 +278,85 @@ func (p *Wormhole) createOpenAICompatibleProvider(config types.ProviderConfig) (
 	// Create temporary OpenAI provider with custom BaseURL
 	openAIProvider := openai.New(config)
 	return openAIProvider, nil
+}
+
+// formatProviderHint returns a helpful error message with configured providers listed
+func (p *Wormhole) formatProviderHint(requested string) string {
+	configured := p.getConfiguredProviders()
+	if len(configured) == 0 {
+		return fmt.Sprintf("provider '%s' not configured. No providers are configured - use wormhole.WithOpenAI(), wormhole.WithAnthropic(), etc.", requested)
+	}
+	return fmt.Sprintf("provider '%s' not configured. Available providers: %s. Use wormhole.With%s() to configure it.",
+		requested,
+		formatList(configured),
+		capitalize(requested),
+	)
+}
+
+// getConfiguredProviders returns a sorted list of configured provider names
+func (p *Wormhole) getConfiguredProviders() []string {
+	providers := make([]string, 0, len(p.config.Providers))
+	for name := range p.config.Providers {
+		providers = append(providers, name)
+	}
+	sort.Strings(providers)
+	return providers
+}
+
+// formatList formats a slice as a comma-separated list
+func formatList(items []string) string {
+	if len(items) == 0 {
+		return ""
+	}
+	if len(items) == 1 {
+		return items[0]
+	}
+	return fmt.Sprintf("%s", items)
+}
+
+// capitalize returns a string with the first letter capitalized
+func capitalize(s string) string {
+	if s == "" {
+		return s
+	}
+	return string(s[0]-32) + s[1:] // Simple ASCII uppercase for first char
+}
+
+// validateConfig checks the configuration for common mistakes and returns warnings.
+// These are non-fatal issues that developers should be aware of.
+func validateConfig(c *Config) []string {
+	var warnings []string
+
+	// Check if default provider is set but not configured
+	if c.DefaultProvider != "" {
+		if _, exists := c.Providers[c.DefaultProvider]; !exists {
+			warnings = append(warnings, fmt.Sprintf(
+				"DefaultProvider '%s' is set but not configured. Use wormhole.With%s() to configure it.",
+				c.DefaultProvider, capitalize(c.DefaultProvider),
+			))
+		}
+	}
+
+	// Check for providers configured without API keys (excluding local providers)
+	localProviders := map[string]bool{"ollama": true, "lmstudio": true, "vllm": true}
+	for name, cfg := range c.Providers {
+		if !localProviders[name] && cfg.APIKey == "" {
+			warnings = append(warnings, fmt.Sprintf(
+				"Provider '%s' is configured but has no API key. Requests will likely fail.",
+				name,
+			))
+		}
+	}
+
+	// Check if no default provider is set with multiple providers configured
+	if c.DefaultProvider == "" && len(c.Providers) > 1 {
+		warnings = append(warnings, fmt.Sprintf(
+			"No DefaultProvider set but %d providers configured. Use WithDefaultProvider() or specify .Using() on each request.",
+			len(c.Providers),
+		))
+	}
+
+	return warnings
 }
 
 // ==================== Tool Registration API ====================
@@ -449,4 +557,146 @@ func (p *Wormhole) StopModelDiscovery() {
 	if p.discoveryService != nil {
 		p.discoveryService.Stop()
 	}
+}
+
+// ==================== Provider Capability Helpers ====================
+
+// Capability represents a provider/model capability
+type Capability string
+
+const (
+	CapabilityText         Capability = "text"
+	CapabilityStructured   Capability = "structured"
+	CapabilityEmbeddings   Capability = "embeddings"
+	CapabilityImages       Capability = "images"
+	CapabilityAudio        Capability = "audio"
+	CapabilityToolCalling  Capability = "tool_calling"
+	CapabilityStreaming    Capability = "streaming"
+	CapabilityVision       Capability = "vision"
+	CapabilityCodeExecution Capability = "code_execution"
+)
+
+// ProviderCapabilities returns the capabilities supported by a provider.
+// This is a static lookup based on known provider features.
+//
+// Example:
+//
+//	caps := client.ProviderCapabilities("openai")
+//	if caps.Has(wormhole.CapabilityToolCalling) {
+//	    // Use tool calling
+//	}
+func (p *Wormhole) ProviderCapabilities(provider string) *Capabilities {
+	caps := &Capabilities{
+		provider: provider,
+		caps:     make(map[Capability]bool),
+	}
+
+	switch provider {
+	case "openai":
+		caps.caps[CapabilityText] = true
+		caps.caps[CapabilityStructured] = true
+		caps.caps[CapabilityEmbeddings] = true
+		caps.caps[CapabilityImages] = true
+		caps.caps[CapabilityAudio] = true
+		caps.caps[CapabilityToolCalling] = true
+		caps.caps[CapabilityStreaming] = true
+		caps.caps[CapabilityVision] = true
+	case "anthropic":
+		caps.caps[CapabilityText] = true
+		caps.caps[CapabilityStructured] = true
+		caps.caps[CapabilityToolCalling] = true
+		caps.caps[CapabilityStreaming] = true
+		caps.caps[CapabilityVision] = true
+		caps.caps[CapabilityCodeExecution] = true
+	case "gemini":
+		caps.caps[CapabilityText] = true
+		caps.caps[CapabilityStructured] = true
+		caps.caps[CapabilityEmbeddings] = true
+		caps.caps[CapabilityImages] = true
+		caps.caps[CapabilityToolCalling] = true
+		caps.caps[CapabilityStreaming] = true
+		caps.caps[CapabilityVision] = true
+		caps.caps[CapabilityCodeExecution] = true
+	case "ollama":
+		caps.caps[CapabilityText] = true
+		caps.caps[CapabilityEmbeddings] = true
+		caps.caps[CapabilityStreaming] = true
+	case "openrouter":
+		// OpenRouter proxies to multiple providers, so it has broad capabilities
+		caps.caps[CapabilityText] = true
+		caps.caps[CapabilityStructured] = true
+		caps.caps[CapabilityToolCalling] = true
+		caps.caps[CapabilityStreaming] = true
+		caps.caps[CapabilityVision] = true
+	}
+
+	return caps
+}
+
+// Capabilities holds the capabilities of a provider
+type Capabilities struct {
+	provider string
+	caps     map[Capability]bool
+}
+
+// Has returns true if the capability is supported
+func (c *Capabilities) Has(cap Capability) bool {
+	if c == nil || c.caps == nil {
+		return false
+	}
+	return c.caps[cap]
+}
+
+// All returns all supported capabilities
+func (c *Capabilities) All() []Capability {
+	if c == nil || c.caps == nil {
+		return nil
+	}
+	var result []Capability
+	for cap, supported := range c.caps {
+		if supported {
+			result = append(result, cap)
+		}
+	}
+	return result
+}
+
+// SupportsText returns true if the provider supports text generation
+func (c *Capabilities) SupportsText() bool {
+	return c.Has(CapabilityText)
+}
+
+// SupportsStructured returns true if the provider supports structured output
+func (c *Capabilities) SupportsStructured() bool {
+	return c.Has(CapabilityStructured)
+}
+
+// SupportsEmbeddings returns true if the provider supports embeddings
+func (c *Capabilities) SupportsEmbeddings() bool {
+	return c.Has(CapabilityEmbeddings)
+}
+
+// SupportsToolCalling returns true if the provider supports function/tool calling
+func (c *Capabilities) SupportsToolCalling() bool {
+	return c.Has(CapabilityToolCalling)
+}
+
+// SupportsStreaming returns true if the provider supports streaming responses
+func (c *Capabilities) SupportsStreaming() bool {
+	return c.Has(CapabilityStreaming)
+}
+
+// SupportsVision returns true if the provider supports image/vision inputs
+func (c *Capabilities) SupportsVision() bool {
+	return c.Has(CapabilityVision)
+}
+
+// SupportsImages returns true if the provider supports image generation
+func (c *Capabilities) SupportsImages() bool {
+	return c.Has(CapabilityImages)
+}
+
+// SupportsAudio returns true if the provider supports audio generation/transcription
+func (c *Capabilities) SupportsAudio() bool {
+	return c.Has(CapabilityAudio)
 }

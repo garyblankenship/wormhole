@@ -3,6 +3,7 @@ package types
 import (
 	"fmt"
 	"net/http"
+	"time"
 )
 
 // Error types for better debugging and error handling
@@ -118,6 +119,26 @@ func (e *WormholeError) WithCause(cause error) *WormholeError {
 	return &newErr
 }
 
+// WithOperation adds operation context to the error, prepending to Details.
+// This helps identify WHERE the error occurred in the call chain.
+//
+// Example:
+//
+//	return types.ErrInvalidRequest.
+//	    WithOperation("TextRequestBuilder.Generate").
+//	    WithDetails("no messages provided")
+//
+// Results in: "REQUEST_ERROR: invalid request parameters (TextRequestBuilder.Generate: no messages provided)"
+func (e *WormholeError) WithOperation(operation string) *WormholeError {
+	newErr := *e
+	if newErr.Details != "" {
+		newErr.Details = operation + ": " + newErr.Details
+	} else {
+		newErr.Details = operation
+	}
+	return &newErr
+}
+
 // NewWormholeError creates a new WormholeError
 func NewWormholeError(code ErrorCode, message string, retryable bool) *WormholeError {
 	return &WormholeError{
@@ -134,6 +155,108 @@ func WrapError(code ErrorCode, message string, retryable bool, cause error) *Wor
 		Message:   message,
 		Retryable: retryable,
 		Cause:     cause,
+	}
+}
+
+// ==================== Error Type Checking Helpers ====================
+
+// IsAuthError checks if an error is authentication-related (invalid key, missing key).
+// Use this to detect when credentials need to be checked or refreshed.
+//
+// Example:
+//
+//	if types.IsAuthError(err) {
+//	    return fmt.Errorf("check your API key: %w", err)
+//	}
+func IsAuthError(err error) bool {
+	if wormholeErr, ok := AsWormholeError(err); ok {
+		return wormholeErr.Code == ErrorCodeAuth
+	}
+	return false
+}
+
+// IsRateLimitError checks if an error is due to rate limiting.
+// When true, you should back off and retry after a delay.
+//
+// Example:
+//
+//	if types.IsRateLimitError(err) {
+//	    time.Sleep(types.GetRetryAfter(err))
+//	    // retry request
+//	}
+func IsRateLimitError(err error) bool {
+	if wormholeErr, ok := AsWormholeError(err); ok {
+		return wormholeErr.Code == ErrorCodeRateLimit
+	}
+	return false
+}
+
+// IsModelError checks if an error is model-related (not found, not supported).
+// Use this to detect invalid model names or provider capability mismatches.
+func IsModelError(err error) bool {
+	if wormholeErr, ok := AsWormholeError(err); ok {
+		return wormholeErr.Code == ErrorCodeModel
+	}
+	return false
+}
+
+// IsProviderConfigError checks if an error is provider configuration-related
+// (not configured, constraint violation). For general provider errors, use IsProviderError.
+func IsProviderConfigError(err error) bool {
+	if wormholeErr, ok := AsWormholeError(err); ok {
+		return wormholeErr.Code == ErrorCodeProvider
+	}
+	return false
+}
+
+// IsNetworkError checks if an error is network-related (connection failed, service unavailable).
+// Network errors are typically retryable after a delay.
+func IsNetworkError(err error) bool {
+	if wormholeErr, ok := AsWormholeError(err); ok {
+		return wormholeErr.Code == ErrorCodeNetwork
+	}
+	return false
+}
+
+// IsTimeoutError checks if an error is a timeout.
+func IsTimeoutError(err error) bool {
+	if wormholeErr, ok := AsWormholeError(err); ok {
+		return wormholeErr.Code == ErrorCodeTimeout
+	}
+	return false
+}
+
+// IsValidationError checks if an error is a validation error.
+func IsValidationError(err error) bool {
+	if wormholeErr, ok := AsWormholeError(err); ok {
+		return wormholeErr.Code == ErrorCodeValidation
+	}
+	return false
+}
+
+// GetRetryAfter returns a suggested retry delay for retryable errors.
+// Returns 0 if the error is not retryable or has no retry hint.
+//
+// The delay is based on the error type:
+//   - Rate limit errors: 30 seconds (provider-specific may vary)
+//   - Network errors: 5 seconds
+//   - Timeout errors: 10 seconds
+//   - Other retryable: 1 second
+func GetRetryAfter(err error) time.Duration {
+	wormholeErr, ok := AsWormholeError(err)
+	if !ok || !wormholeErr.IsRetryable() {
+		return 0
+	}
+
+	switch wormholeErr.Code {
+	case ErrorCodeRateLimit:
+		return 30 * time.Second
+	case ErrorCodeNetwork:
+		return 5 * time.Second
+	case ErrorCodeTimeout:
+		return 10 * time.Second
+	default:
+		return 1 * time.Second
 	}
 }
 
@@ -242,4 +365,112 @@ func NewModelConstraintError(model, constraint string, expected, actual any) *Mo
 		Expected:      expected,
 		Actual:        actual,
 	}
+}
+
+// ==================== Validation Error ====================
+
+// ValidationError represents a field-level validation failure with details about
+// which field failed and why. Use Validate() on builders to catch these errors
+// before calling Generate().
+//
+// Example:
+//
+//	if err := builder.Validate(); err != nil {
+//	    if vErr, ok := types.AsValidationError(err); ok {
+//	        fmt.Printf("Field %s: %s\n", vErr.Field, vErr.Message)
+//	    }
+//	}
+type ValidationError struct {
+	*WormholeError
+	Field      string `json:"field"`                // The field that failed validation
+	Constraint string `json:"constraint,omitempty"` // The constraint that was violated (e.g., "required", "range")
+	Value      any    `json:"value,omitempty"`      // The invalid value (if safe to include)
+}
+
+// NewValidationError creates a validation error for a specific field.
+//
+// Example:
+//
+//	NewValidationError("model", "required", nil, "model is required")
+//	NewValidationError("temperature", "range", 3.0, "must be between 0.0 and 2.0")
+func NewValidationError(field, constraint string, value any, message string) *ValidationError {
+	return &ValidationError{
+		WormholeError: ErrValidation.WithDetails(fmt.Sprintf("%s: %s", field, message)),
+		Field:         field,
+		Constraint:    constraint,
+		Value:         value,
+	}
+}
+
+// AsValidationError extracts a ValidationError from an error if present.
+//
+// Example:
+//
+//	if vErr, ok := types.AsValidationError(err); ok {
+//	    log.Printf("Validation failed for field: %s", vErr.Field)
+//	}
+func AsValidationError(err error) (*ValidationError, bool) {
+	if vErr, ok := err.(*ValidationError); ok {
+		return vErr, true
+	}
+	return nil, false
+}
+
+// ==================== Multi-Field Validation ====================
+
+// ValidationErrors collects multiple validation errors for batch reporting.
+// Use this when validating multiple fields at once.
+//
+// Example:
+//
+//	var errs types.ValidationErrors
+//	if model == "" {
+//	    errs.Add("model", "required", nil, "model is required")
+//	}
+//	if temp < 0 || temp > 2 {
+//	    errs.Add("temperature", "range", temp, "must be between 0.0 and 2.0")
+//	}
+//	if errs.HasErrors() {
+//	    return errs.Error()
+//	}
+type ValidationErrors struct {
+	Errors []*ValidationError `json:"errors"`
+}
+
+// Add appends a new validation error.
+func (ve *ValidationErrors) Add(field, constraint string, value any, message string) {
+	ve.Errors = append(ve.Errors, NewValidationError(field, constraint, value, message))
+}
+
+// HasErrors returns true if any validation errors were collected.
+func (ve *ValidationErrors) HasErrors() bool {
+	return len(ve.Errors) > 0
+}
+
+// Error returns a combined error if there are validation errors, nil otherwise.
+func (ve *ValidationErrors) Error() error {
+	if !ve.HasErrors() {
+		return nil
+	}
+	if len(ve.Errors) == 1 {
+		return ve.Errors[0]
+	}
+	// Combine into summary
+	details := fmt.Sprintf("%d validation errors: ", len(ve.Errors))
+	for i, e := range ve.Errors {
+		if i > 0 {
+			details += "; "
+		}
+		details += e.Field + " - " + e.WormholeError.Details
+	}
+	return ErrValidation.WithDetails(details)
+}
+
+// Fields returns a list of fields that failed validation.
+func (ve *ValidationErrors) Fields() []string {
+	fields := make([]string, len(ve.Errors))
+	for i, e := range ve.Errors {
+		fields[i] = e.Field
+	}
+	return fields
 }

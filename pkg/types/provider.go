@@ -151,6 +151,111 @@ type ProviderConfig struct {
 	RetryMaxDelay *time.Duration `json:"retry_max_delay,omitempty"`
 }
 
+// ==================== ProviderConfig Builder Methods ====================
+// These methods provide a fluent API for constructing ProviderConfig,
+// eliminating the need for pointer arithmetic with optional fields.
+
+// NewProviderConfig creates a new ProviderConfig with the given API key.
+// Use the builder methods to add optional configuration.
+//
+// Example:
+//
+//	config := types.NewProviderConfig("sk-...").
+//	    WithRetries(3, 500*time.Millisecond).
+//	    WithTimeout(30)
+func NewProviderConfig(apiKey string) ProviderConfig {
+	return ProviderConfig{APIKey: apiKey}
+}
+
+// WithBaseURL sets a custom base URL for the provider.
+// Use this for self-hosted models or alternative endpoints.
+func (c ProviderConfig) WithBaseURL(url string) ProviderConfig {
+	c.BaseURL = url
+	return c
+}
+
+// WithHeaders adds custom HTTP headers to all requests.
+// Headers are merged with any existing headers.
+func (c ProviderConfig) WithHeaders(headers map[string]string) ProviderConfig {
+	if c.Headers == nil {
+		c.Headers = make(map[string]string)
+	}
+	for k, v := range headers {
+		c.Headers[k] = v
+	}
+	return c
+}
+
+// WithHeader adds a single custom HTTP header.
+func (c ProviderConfig) WithHeader(key, value string) ProviderConfig {
+	if c.Headers == nil {
+		c.Headers = make(map[string]string)
+	}
+	c.Headers[key] = value
+	return c
+}
+
+// WithTimeout sets the request timeout in seconds.
+func (c ProviderConfig) WithTimeout(seconds int) ProviderConfig {
+	c.Timeout = seconds
+	return c
+}
+
+// WithTimeoutDuration sets the request timeout using a time.Duration.
+func (c ProviderConfig) WithTimeoutDuration(d time.Duration) ProviderConfig {
+	c.Timeout = int(d.Seconds())
+	return c
+}
+
+// WithRetries configures retry behavior for failed requests.
+// maxRetries is the maximum number of retry attempts.
+// delay is the initial delay between retries.
+//
+// Example:
+//
+//	config := types.NewProviderConfig(apiKey).
+//	    WithRetries(3, 500*time.Millisecond)
+func (c ProviderConfig) WithRetries(maxRetries int, delay time.Duration) ProviderConfig {
+	c.MaxRetries = &maxRetries
+	c.RetryDelay = &delay
+	return c
+}
+
+// WithMaxRetryDelay sets the maximum delay between retries.
+// This caps exponential backoff to prevent excessive wait times.
+func (c ProviderConfig) WithMaxRetryDelay(maxDelay time.Duration) ProviderConfig {
+	c.RetryMaxDelay = &maxDelay
+	return c
+}
+
+// WithDynamicModels enables dynamic model discovery for this provider.
+// When enabled, the provider can use any model name without local validation.
+func (c ProviderConfig) WithDynamicModels() ProviderConfig {
+	c.DynamicModels = true
+	return c
+}
+
+// WithParam adds a provider-specific parameter.
+// These are passed through to the underlying provider implementation.
+func (c ProviderConfig) WithParam(key string, value any) ProviderConfig {
+	if c.Params == nil {
+		c.Params = make(map[string]any)
+	}
+	c.Params[key] = value
+	return c
+}
+
+// WithParams sets multiple provider-specific parameters at once.
+func (c ProviderConfig) WithParams(params map[string]any) ProviderConfig {
+	if c.Params == nil {
+		c.Params = make(map[string]any)
+	}
+	for k, v := range params {
+		c.Params[k] = v
+	}
+	return c
+}
+
 // ProviderFactory defines the function signature for creating a new provider instance.
 // This enables dynamic provider registration without modifying core code.
 type ProviderFactory func(config ProviderConfig) (Provider, error)

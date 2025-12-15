@@ -1019,7 +1019,7 @@ func TestIntegration_OpenRouter(t *testing.T) {
 
 		// This will fail due to auth, but proves the model isn't pre-validated
 		_, err := client.Text().
-			Provider("openrouter").
+			Using("openrouter").
 			Model("any-model-name-works"). // No pre-registration needed!
 			Prompt("test").
 			MaxTokens(5).

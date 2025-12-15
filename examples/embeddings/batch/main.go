@@ -47,7 +47,7 @@ func main() {
 
 	start := time.Now()
 	response, err := client.Embeddings().
-		Provider("openai").
+		Using("openai").
 		Model("text-embedding-3-small").
 		Input(largeBatch...).
 		Dimensions(256). // Smaller dimensions for faster processing
@@ -134,7 +134,7 @@ func main() {
 
 			batch := sampleTexts[i:end]
 			response, err := client.Embeddings().
-				Provider("openai").
+				Using("openai").
 				Model("text-embedding-3-small").
 				Input(batch...).
 				Dimensions(256).
@@ -203,7 +203,7 @@ func main() {
 		fmt.Printf("Testing: %s... ", tc.name)
 
 		_, err := client.Embeddings().
-			Provider(tc.provider).
+			Using(tc.provider).
 			Model(tc.model).
 			Input(tc.input...).
 			Generate(context.Background())
@@ -237,7 +237,7 @@ func processBatchesConcurrently(client *wormhole.Wormhole, jobs []EmbeddingJob) 
 
 			start := time.Now()
 			response, err := client.Embeddings().
-				Provider("openai").
+				Using("openai").
 				Model("text-embedding-3-small").
 				Input(j.Texts...).
 				Dimensions(256).

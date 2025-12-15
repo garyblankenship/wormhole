@@ -39,7 +39,7 @@ func runConcurrentEmbeddingRequests(t *testing.T, client *Wormhole, ctx context.
 			defer wg.Done()
 
 			resp, err := client.Embeddings().
-				Provider("openai").
+				Using("openai").
 				Model("text-embedding-3-small").
 				Input(fmt.Sprintf("Concurrent test %d", index)).
 				Generate(ctx)
@@ -112,7 +112,7 @@ func TestEmbeddingsIntegration(t *testing.T) {
 func testOpenAIEmbeddings(t *testing.T, client *Wormhole, ctx context.Context) {
 	t.Run("single input", func(t *testing.T) {
 		resp, err := client.Embeddings().
-			Provider("openai").
+			Using("openai").
 			Model("text-embedding-3-small").
 			Input("Hello, world!").
 			Generate(ctx)
@@ -141,7 +141,7 @@ func testOpenAIEmbeddings(t *testing.T, client *Wormhole, ctx context.Context) {
 		}
 
 		resp, err := client.Embeddings().
-			Provider("openai").
+			Using("openai").
 			Model("text-embedding-3-small").
 			Input(inputs...).
 			Generate(ctx)
@@ -161,7 +161,7 @@ func testOpenAIEmbeddings(t *testing.T, client *Wormhole, ctx context.Context) {
 		dimensions := 512
 
 		resp, err := client.Embeddings().
-			Provider("openai").
+			Using("openai").
 			Model("text-embedding-3-small").
 			Input("Test with custom dimensions").
 			Dimensions(dimensions).
@@ -177,7 +177,7 @@ func testOpenAIEmbeddings(t *testing.T, client *Wormhole, ctx context.Context) {
 
 	t.Run("large model", func(t *testing.T) {
 		resp, err := client.Embeddings().
-			Provider("openai").
+			Using("openai").
 			Model("text-embedding-3-large").
 			Input("Test with large embedding model").
 			Generate(ctx)
@@ -201,7 +201,7 @@ func testOpenAIEmbeddings(t *testing.T, client *Wormhole, ctx context.Context) {
 
 		// Get embeddings for all texts
 		resp, err := client.Embeddings().
-			Provider("openai").
+			Using("openai").
 			Model("text-embedding-3-small").
 			Input(append(similarTexts, dissimilarText)...).
 			Generate(ctx)
@@ -228,7 +228,7 @@ func testGeminiEmbeddings(t *testing.T, client *Wormhole, ctx context.Context) {
 
 	t.Run("basic embedding", func(t *testing.T) {
 		resp, err := client.Embeddings().
-			Provider("gemini").
+			Using("gemini").
 			Model("embedding-001").
 			Input("Test Gemini embeddings").
 			Generate(ctx)
@@ -247,7 +247,7 @@ func testGeminiEmbeddings(t *testing.T, client *Wormhole, ctx context.Context) {
 
 	t.Run("invalid model should fail", func(t *testing.T) {
 		_, err := client.Embeddings().
-			Provider("gemini").
+			Using("gemini").
 			Model("invalid-model"). // Should be an embedding model
 			Input("Test").
 			Generate(ctx)
@@ -260,7 +260,7 @@ func testGeminiEmbeddings(t *testing.T, client *Wormhole, ctx context.Context) {
 func testOllamaEmbeddings(t *testing.T, client *Wormhole, ctx context.Context) {
 	t.Run("basic embedding", func(t *testing.T) {
 		resp, err := client.Embeddings().
-			Provider("ollama").
+			Using("ollama").
 			Model("nomic-embed-text").
 			Input("Test Ollama embeddings").
 			Generate(ctx)
@@ -285,7 +285,7 @@ func testOllamaEmbeddings(t *testing.T, client *Wormhole, ctx context.Context) {
 		}
 
 		resp, err := client.Embeddings().
-			Provider("ollama").
+			Using("ollama").
 			Model("nomic-embed-text").
 			Input(inputs...).
 			Generate(ctx)
@@ -306,7 +306,7 @@ func testOllamaEmbeddings(t *testing.T, client *Wormhole, ctx context.Context) {
 
 func testAnthropicEmbeddingsFailure(t *testing.T, client *Wormhole, ctx context.Context) {
 	_, err := client.Embeddings().
-		Provider("anthropic").
+		Using("anthropic").
 		Model("any-model").
 		Input("This should fail").
 		Generate(ctx)
@@ -324,7 +324,7 @@ func TestEmbeddingsValidation(t *testing.T) {
 		// This test needs a configured provider to reach the validation logic
 		testClient := New(WithOpenAI("test-key"))
 		_, err := testClient.Embeddings().
-			Provider("openai").
+			Using("openai").
 			Model("text-embedding-3-small").
 			Generate(ctx)
 
@@ -336,7 +336,7 @@ func TestEmbeddingsValidation(t *testing.T) {
 		// This test needs a configured provider to reach the validation logic
 		testClient := New(WithOpenAI("test-key"))
 		_, err := testClient.Embeddings().
-			Provider("openai").
+			Using("openai").
 			Input("Test").
 			Generate(ctx)
 
@@ -346,7 +346,7 @@ func TestEmbeddingsValidation(t *testing.T) {
 
 	t.Run("unsupported provider should fail", func(t *testing.T) {
 		_, err := client.Embeddings().
-			Provider("nonexistent").
+			Using("nonexistent").
 			Model("any-model").
 			Input("Test").
 			Generate(ctx)
@@ -374,7 +374,7 @@ func TestEmbeddingsEdgeCases(t *testing.T) {
 		longText := strings.Repeat("This is a very long text for embedding generation. ", 1000)
 
 		resp, err := client.Embeddings().
-			Provider("openai").
+			Using("openai").
 			Model("text-embedding-3-small").
 			Input(longText).
 			Generate(ctx)
@@ -397,7 +397,7 @@ func TestEmbeddingsEdgeCases(t *testing.T) {
 		}
 
 		resp, err := client.Embeddings().
-			Provider("openai").
+			Using("openai").
 			Model("text-embedding-3-small").
 			Input(inputs...).
 			Generate(ctx)
@@ -421,7 +421,7 @@ func TestEmbeddingsEdgeCases(t *testing.T) {
 		}
 
 		resp, err := client.Embeddings().
-			Provider("openai").
+			Using("openai").
 			Model("text-embedding-3-small").
 			Input(specialTexts...).
 			Generate(ctx)
@@ -440,7 +440,7 @@ func TestEmbeddingsEdgeCases(t *testing.T) {
 		defer cancel()
 
 		_, err := client.Embeddings().
-			Provider("openai").
+			Using("openai").
 			Model("text-embedding-3-small").
 			Input("Timeout test").
 			Generate(shortCtx)
@@ -466,7 +466,7 @@ func TestEmbeddingsEdgeCases(t *testing.T) {
 		for _, tc := range testCases {
 			t.Run(fmt.Sprintf("%s_dims_%d", tc.model, tc.dimensions), func(t *testing.T) {
 				resp, err := client.Embeddings().
-					Provider("openai").
+					Using("openai").
 					Model(tc.model).
 					Input("Dimension test").
 					Dimensions(tc.dimensions).
@@ -486,7 +486,7 @@ func TestEmbeddingsEdgeCases(t *testing.T) {
 	t.Run("provider options usage", func(t *testing.T) {
 		// Test that ProviderOptions can be set and don't cause errors
 		resp, err := client.Embeddings().
-			Provider("openai").
+			Using("openai").
 			Model("text-embedding-3-small").
 			Input("Provider options test").
 			ProviderOptions(map[string]any{
@@ -512,7 +512,7 @@ func TestEmbeddingsBuilder(t *testing.T) {
 
 	t.Run("builder pattern", func(t *testing.T) {
 		builder := client.Embeddings().
-			Provider("openai").
+			Using("openai").
 			Model("text-embedding-3-small").
 			Input("First input").
 			AddInput("Second input").
@@ -527,9 +527,6 @@ func TestEmbeddingsBuilder(t *testing.T) {
 		builder := client.Embeddings()
 
 		result := builder.Using("openai")
-		assert.Equal(t, builder, result)
-
-		result = builder.Provider("openai")
 		assert.Equal(t, builder, result)
 
 		result = builder.Model("text-embedding-3-small")
@@ -566,7 +563,7 @@ func TestEmbeddingsMiddleware(t *testing.T) {
 	defer cancel()
 
 	_, _ = client.Embeddings().
-		Provider("openai").
+		Using("openai").
 		Model("text-embedding-3-small").
 		Input("Middleware test").
 		Generate(ctx)

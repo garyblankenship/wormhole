@@ -1,6 +1,8 @@
 package wormhole
 
 import (
+	"os"
+	"strings"
 	"time"
 
 	"github.com/garyblankenship/wormhole/pkg/discovery"
@@ -293,5 +295,92 @@ func WithOfflineMode(enabled bool) Option {
 func WithDiscovery(enabled bool) Option {
 	return func(c *Config) {
 		c.EnableDiscovery = enabled
+	}
+}
+
+// WithProviderFromEnv configures a provider using environment variables.
+// It automatically looks for <PROVIDER>_API_KEY and optionally <PROVIDER>_BASE_URL.
+//
+// Supported provider names:
+//   - "openai" -> OPENAI_API_KEY, OPENAI_BASE_URL
+//   - "anthropic" -> ANTHROPIC_API_KEY, ANTHROPIC_BASE_URL
+//   - "gemini" -> GEMINI_API_KEY, GEMINI_BASE_URL
+//   - "groq" -> GROQ_API_KEY
+//   - "openrouter" -> OPENROUTER_API_KEY
+//
+// Example:
+//
+//	// Set environment variables:
+//	// export OPENAI_API_KEY=sk-...
+//	// export ANTHROPIC_API_KEY=sk-ant-...
+//
+//	client := wormhole.New(
+//	    wormhole.WithProviderFromEnv("openai"),
+//	    wormhole.WithProviderFromEnv("anthropic"),
+//	    wormhole.WithDefaultProvider("openai"),
+//	)
+//
+// Returns a no-op option if the API key environment variable is not set.
+// This allows safe composition without runtime errors for unconfigured providers.
+func WithProviderFromEnv(provider string) Option {
+	return func(c *Config) {
+		envPrefix := strings.ToUpper(provider)
+		apiKey := os.Getenv(envPrefix + "_API_KEY")
+
+		// Skip if no API key found (silent skip for flexibility)
+		if apiKey == "" {
+			return
+		}
+
+		baseURL := os.Getenv(envPrefix + "_BASE_URL")
+
+		cfg := types.ProviderConfig{
+			APIKey:  apiKey,
+			BaseURL: baseURL,
+		}
+
+		// Route to appropriate provider configuration
+		switch strings.ToLower(provider) {
+		case "openai":
+			WithOpenAI(apiKey, cfg)(c)
+		case "anthropic":
+			WithAnthropic(apiKey, cfg)(c)
+		case "gemini":
+			WithGemini(apiKey, cfg)(c)
+		case "groq":
+			WithGroq(apiKey, cfg)(c)
+		case "mistral":
+			WithMistral(cfg)(c)
+		case "ollama":
+			WithOllama(cfg)(c)
+		case "openrouter":
+			cfg.BaseURL = "https://openrouter.ai/api/v1"
+			WithOpenAICompatible("openrouter", cfg.BaseURL, cfg)(c)
+		default:
+			// For unknown providers, assume OpenAI-compatible if base URL is provided
+			if baseURL != "" {
+				WithOpenAICompatible(provider, baseURL, cfg)(c)
+			}
+		}
+	}
+}
+
+// WithAllProvidersFromEnv configures all known providers from environment variables.
+// This is a convenience function for applications that want to auto-configure
+// all available providers based on which API keys are present in the environment.
+//
+// Example:
+//
+//	// All providers with API keys in env will be configured
+//	client := wormhole.New(
+//	    wormhole.WithAllProvidersFromEnv(),
+//	    wormhole.WithDefaultProvider("openai"),
+//	)
+func WithAllProvidersFromEnv() Option {
+	return func(c *Config) {
+		providers := []string{"openai", "anthropic", "gemini", "groq", "mistral", "openrouter"}
+		for _, p := range providers {
+			WithProviderFromEnv(p)(c)
+		}
 	}
 }

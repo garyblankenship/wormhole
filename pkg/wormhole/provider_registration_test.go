@@ -75,7 +75,9 @@ func TestProviderRegistration(t *testing.T) {
 
 		_, err := wormhole.Provider("nonexistent")
 		assert.Error(t, err)
-		assert.Contains(t, err.Error(), "unknown or unregistered provider")
+		// DX improvement: error now includes helpful hint about which providers are configured
+		assert.Contains(t, err.Error(), "provider not configured")
+		assert.Contains(t, err.Error(), "nonexistent")
 	})
 
 	t.Run("custom provider with auto-config works", func(t *testing.T) {

@@ -19,12 +19,6 @@ func (b *ImageRequestBuilder) Using(provider string) *ImageRequestBuilder {
 	return b
 }
 
-// Provider sets the provider to use (alias for Using)
-func (b *ImageRequestBuilder) Provider(provider string) *ImageRequestBuilder {
-	b.setProvider(provider)
-	return b
-}
-
 // BaseURL sets a custom base URL for OpenAI-compatible APIs
 func (b *ImageRequestBuilder) BaseURL(url string) *ImageRequestBuilder {
 	b.setBaseURL(url)

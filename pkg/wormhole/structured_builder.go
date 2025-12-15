@@ -20,12 +20,6 @@ func (b *StructuredRequestBuilder) Using(provider string) *StructuredRequestBuil
 	return b
 }
 
-// Provider sets the provider to use (alias for Using)
-func (b *StructuredRequestBuilder) Provider(provider string) *StructuredRequestBuilder {
-	b.setProvider(provider)
-	return b
-}
-
 // BaseURL sets a custom base URL for OpenAI-compatible APIs
 func (b *StructuredRequestBuilder) BaseURL(url string) *StructuredRequestBuilder {
 	b.setBaseURL(url)
@@ -165,4 +159,52 @@ func (b *StructuredRequestBuilder) GenerateAs(ctx context.Context, result any) e
 	}
 
 	return nil
+}
+
+// Validate checks the request configuration for errors before calling Generate().
+// This enables fail-fast behavior to catch configuration issues early.
+//
+// Validates:
+//   - Model is specified
+//   - Schema is provided
+//   - Temperature is in valid range (0.0-2.0) if specified
+//   - MaxTokens is positive if specified
+//
+// Example:
+//
+//	builder := client.Structured().Model("gpt-4o").Schema(mySchema)
+//	if err := builder.Validate(); err != nil {
+//	    log.Fatal("Invalid configuration:", err)
+//	}
+func (b *StructuredRequestBuilder) Validate() error {
+	var errs types.ValidationErrors
+
+	if b.request.Model == "" {
+		errs.Add("model", "required", nil, "model must be specified")
+	}
+
+	if b.request.Schema == nil {
+		errs.Add("schema", "required", nil, "schema must be specified for structured output")
+	}
+
+	if b.request.Temperature != nil {
+		temp := *b.request.Temperature
+		if temp < 0 || temp > 2 {
+			errs.Add("temperature", "range", temp, "must be between 0.0 and 2.0")
+		}
+	}
+
+	if b.request.MaxTokens != nil && *b.request.MaxTokens <= 0 {
+		errs.Add("max_tokens", "positive", *b.request.MaxTokens, "must be a positive integer")
+	}
+
+	return errs.Error()
+}
+
+// MustValidate calls Validate() and panics if validation fails.
+func (b *StructuredRequestBuilder) MustValidate() *StructuredRequestBuilder {
+	if err := b.Validate(); err != nil {
+		panic(err)
+	}
+	return b
 }

@@ -99,14 +99,24 @@ bin/
 
 ### Project Specific ###
 # Example binaries - users should build these themselves
-examples/*/wormhole-cli
-examples/*/main
-examples/*/*_example
+# Note: Use exact names without extensions to avoid matching .go files
+examples/wormhole-cli/wormhole-cli
 examples/basic/basic
 examples/comprehensive/comprehensive
 examples/streaming-demo/streaming-demo
 examples/interactive-chat/interactive-chat
 examples/concurrent-analysis/concurrent-analysis
+examples/multi_provider/multi_provider
+examples/middleware_example/middleware_example
+examples/custom_provider_example/custom_provider_example
+examples/ollama_example/ollama_example
+examples/openrouter_example/openrouter_example
+examples/openai_compatible_example/openai_compatible_example
+examples/lmstudio_example/lmstudio_example
+examples/mistral_example/mistral_example
+examples/user_feedback_demo/user_feedback_demo
+examples/feedback_improvements/feedback_improvements
+examples/dx_improvements/dx_improvements
 
 # Prevent clutter in base directory
 basic
