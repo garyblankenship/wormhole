@@ -118,24 +118,24 @@ examples/user_feedback_demo/user_feedback_demo
 examples/feedback_improvements/feedback_improvements
 examples/dx_improvements/dx_improvements
 
-# Prevent clutter in base directory
-basic
-comprehensive
-concurrent-analysis
-custom_provider_example
-dx_improvements
-feedback_improvements
-interactive-chat
-lmstudio_example
-middleware_example
-mistral_example
-multi_provider
-ollama_example
-openai_compatible_example
-openrouter_example
-streaming-demo
-user_feedback_demo
-wormhole-cli
+# Prevent clutter in base directory (anchored to root)
+/basic
+/comprehensive
+/concurrent-analysis
+/custom_provider_example
+/dx_improvements
+/feedback_improvements
+/interactive-chat
+/lmstudio_example
+/middleware_example
+/mistral_example
+/multi_provider
+/ollama_example
+/openai_compatible_example
+/openrouter_example
+/streaming-demo
+/user_feedback_demo
+/wormhole-cli
 
 # repomix artifacts
 .repomixignore
