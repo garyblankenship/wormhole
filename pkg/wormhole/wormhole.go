@@ -17,38 +17,39 @@ import (
 	"github.com/garyblankenship/wormhole/pkg/types"
 )
 
-// Global sync.Once for thread-safe model registration
-var (
-	modelsRegisteredOnce sync.Once
+// Provider name constants
+const (
+	providerOpenAI    = "openai"
+	providerAnthropic = "anthropic"
 )
 
 // Wormhole is the main client for interacting with LLM providers
 type Wormhole struct {
-	providerFactories   map[string]types.ProviderFactory // Factory functions for creating providers
-	providers           map[string]types.Provider        // Cached provider instances
-	providersMutex      sync.RWMutex
-	config              Config
-	providerMiddleware  *types.ProviderMiddlewareChain   // Type-safe middleware chain
-	middlewareChain     *middleware.Chain                // DEPRECATED: use providerMiddleware instead
-	toolRegistry        *ToolRegistry                    // Registry of available tools for function calling
-	discoveryService    *discovery.DiscoveryService      // Dynamic model discovery service
+	providerFactories  map[string]types.ProviderFactory // Factory functions for creating providers
+	providers          map[string]types.Provider        // Cached provider instances
+	providersMutex     sync.RWMutex
+	config             Config
+	providerMiddleware *types.ProviderMiddlewareChain // Type-safe middleware chain
+	middlewareChain    *middleware.Chain              // DEPRECATED: use providerMiddleware instead
+	toolRegistry       *ToolRegistry                  // Registry of available tools for function calling
+	discoveryService   *discovery.DiscoveryService    // Dynamic model discovery service
 }
 
 // Config holds the configuration for Wormhole
 type Config struct {
-	DefaultProvider      string
-	Providers            map[string]types.ProviderConfig
-	CustomFactories      map[string]types.ProviderFactory
-	ProviderMiddlewares  []types.ProviderMiddleware       // Type-safe middleware
-	Middleware           []middleware.Middleware          // DEPRECATED: use ProviderMiddlewares instead
-	DebugLogging         bool
-	Logger               types.Logger
-	DefaultTimeout       time.Duration
-	DefaultRetries       int
-	DefaultRetryDelay    time.Duration
-	ModelValidation      bool                             // Whether to validate models against registry (default: true)
-	DiscoveryConfig      discovery.DiscoveryConfig        // Dynamic model discovery configuration
-	EnableDiscovery      bool                             // Whether to enable dynamic model discovery (default: true)
+	DefaultProvider     string
+	Providers           map[string]types.ProviderConfig
+	CustomFactories     map[string]types.ProviderFactory
+	ProviderMiddlewares []types.ProviderMiddleware // Type-safe middleware
+	Middleware          []middleware.Middleware    // DEPRECATED: use ProviderMiddlewares instead
+	DebugLogging        bool
+	Logger              types.Logger
+	DefaultTimeout      time.Duration
+	DefaultRetries      int
+	DefaultRetryDelay   time.Duration
+	ModelValidation     bool                      // Whether to validate models against registry (default: true)
+	DiscoveryConfig     discovery.DiscoveryConfig // Dynamic model discovery configuration
+	EnableDiscovery     bool                      // Whether to enable dynamic model discovery (default: true)
 }
 
 // New creates a new Wormhole instance using functional options
@@ -60,8 +61,8 @@ func New(opts ...Option) *Wormhole {
 	config := Config{
 		Providers:       make(map[string]types.ProviderConfig),
 		CustomFactories: make(map[string]types.ProviderFactory),
-		ModelValidation: true,                   // Enable model validation by default
-		EnableDiscovery: true,                   // Enable model discovery by default
+		ModelValidation: true,                      // Enable model validation by default
+		EnableDiscovery: true,                      // Enable model discovery by default
 		DiscoveryConfig: discovery.DefaultConfig(), // Use default discovery configuration
 	}
 
@@ -353,11 +354,11 @@ func (p *Wormhole) initializeDiscoveryService() {
 	// Create fetchers for configured providers
 	for providerName, providerConfig := range p.config.Providers {
 		switch providerName {
-		case "openai":
+		case providerOpenAI:
 			if providerConfig.APIKey != "" {
 				modelFetchers = append(modelFetchers, fetchers.NewOpenAIFetcher(providerConfig.APIKey))
 			}
-		case "anthropic":
+		case providerAnthropic:
 			if providerConfig.APIKey != "" {
 				modelFetchers = append(modelFetchers, fetchers.NewAnthropicFetcher(providerConfig.APIKey))
 			}

@@ -16,6 +16,68 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// verifyGeminiRequestFormat validates the captured request against the expected format
+func verifyGeminiRequestFormat(t *testing.T, capturedRequest map[string]any, request types.TextRequest) {
+	require.NotNil(t, capturedRequest)
+
+	// Check contents
+	contents, ok := capturedRequest["contents"].([]any)
+	require.True(t, ok)
+	require.Len(t, contents, len(request.Messages))
+
+	// Check system instruction
+	if request.SystemPrompt != "" {
+		systemInstr, ok := capturedRequest["systemInstruction"].(map[string]any)
+		require.True(t, ok)
+		parts, ok := systemInstr["parts"].([]any)
+		require.True(t, ok)
+		require.Len(t, parts, 1)
+		part := parts[0].(map[string]any)
+		assert.Equal(t, request.SystemPrompt, part["text"])
+	}
+
+	// Check generation config
+	verifyGenerationConfig(t, capturedRequest, request)
+
+	// Check tools
+	verifyRequestTools(t, capturedRequest, request)
+}
+
+// verifyGenerationConfig validates generation config fields
+func verifyGenerationConfig(t *testing.T, capturedRequest map[string]any, request types.TextRequest) {
+	if request.MaxTokens == nil && request.Temperature == nil && request.TopP == nil && len(request.Stop) == 0 {
+		return
+	}
+
+	genConfig, ok := capturedRequest["generationConfig"].(map[string]any)
+	require.True(t, ok)
+
+	if request.MaxTokens != nil {
+		assert.Equal(t, float64(*request.MaxTokens), genConfig["maxOutputTokens"])
+	}
+	if request.Temperature != nil {
+		assert.InDelta(t, float64(*request.Temperature), genConfig["temperature"], 0.001)
+	}
+	if request.TopP != nil {
+		assert.InDelta(t, float64(*request.TopP), genConfig["topP"], 0.001)
+	}
+	if len(request.Stop) > 0 {
+		stopSeqs := genConfig["stopSequences"].([]any)
+		assert.Len(t, stopSeqs, len(request.Stop))
+	}
+}
+
+// verifyRequestTools validates tools in the request
+func verifyRequestTools(t *testing.T, capturedRequest map[string]any, request types.TextRequest) {
+	if len(request.Tools) == 0 {
+		return
+	}
+
+	tools, ok := capturedRequest["tools"].([]any)
+	require.True(t, ok)
+	require.NotEmpty(t, tools)
+}
+
 func TestGeminiProvider_New(t *testing.T) {
 	testCases := []struct {
 		name        string
@@ -59,7 +121,7 @@ func TestGeminiProvider_New(t *testing.T) {
 			require.NotNil(t, provider)
 			assert.Equal(t, "gemini", provider.Name())
 			assert.Equal(t, tc.expectedURL, provider.GetBaseURL())
-			
+
 			// Verify that API key is not set in headers (Gemini uses it in URL)
 			assert.Empty(t, provider.Config.APIKey)
 		})
@@ -295,11 +357,11 @@ func TestGeminiProvider_Text(t *testing.T) {
 			// Create mock server
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				capturedURL = r.URL.String()
-				
+
 				// Verify request method and headers
 				assert.Equal(t, "POST", r.Method)
 				assert.Equal(t, "application/json", r.Header.Get("Content-Type"))
-				
+
 				// Capture request body
 				if tc.verifyRequestFormat {
 					var reqBody map[string]any
@@ -315,7 +377,7 @@ func TestGeminiProvider_Text(t *testing.T) {
 				} else {
 					w.WriteHeader(http.StatusOK)
 				}
-				
+
 				err := json.NewEncoder(w).Encode(tc.mockResponse)
 				require.NoError(t, err)
 			}))
@@ -361,59 +423,7 @@ func TestGeminiProvider_Text(t *testing.T) {
 
 			// Verify request format
 			if tc.verifyRequestFormat {
-				require.NotNil(t, capturedRequest)
-				
-				// Check contents
-				contents, ok := capturedRequest["contents"].([]any)
-				require.True(t, ok)
-				require.Len(t, contents, len(tc.request.Messages))
-
-				// Check system instruction
-				if tc.request.SystemPrompt != "" {
-					systemInstr, ok := capturedRequest["systemInstruction"].(map[string]any)
-					require.True(t, ok)
-					parts, ok := systemInstr["parts"].([]any)
-					require.True(t, ok)
-					require.Len(t, parts, 1)
-					part := parts[0].(map[string]any)
-					assert.Equal(t, tc.request.SystemPrompt, part["text"])
-				}
-
-				// Check generation config
-				if tc.request.MaxTokens != nil || tc.request.Temperature != nil || tc.request.TopP != nil || len(tc.request.Stop) > 0 {
-					genConfig, ok := capturedRequest["generationConfig"].(map[string]any)
-					require.True(t, ok)
-					
-					if tc.request.MaxTokens != nil {
-						assert.Equal(t, float64(*tc.request.MaxTokens), genConfig["maxOutputTokens"])
-					}
-					if tc.request.Temperature != nil {
-						assert.InDelta(t, float64(*tc.request.Temperature), genConfig["temperature"], 0.001)
-					}
-					if tc.request.TopP != nil {
-						assert.InDelta(t, float64(*tc.request.TopP), genConfig["topP"], 0.001)
-					}
-					if len(tc.request.Stop) > 0 {
-						stopSeqs := genConfig["stopSequences"].([]any)
-						assert.Len(t, stopSeqs, len(tc.request.Stop))
-					}
-				}
-
-				// Check tools
-				if len(tc.request.Tools) > 0 {
-					tools, ok := capturedRequest["tools"].([]any)
-					require.True(t, ok)
-					require.Len(t, tools, 1)
-					
-					tool := tools[0].(map[string]any)
-					funcDecls, ok := tool["functionDeclarations"].([]any)
-					require.True(t, ok)
-					require.Len(t, funcDecls, len(tc.request.Tools))
-					
-					funcDecl := funcDecls[0].(map[string]any)
-					assert.Equal(t, tc.request.Tools[0].Name, funcDecl["name"])
-					assert.Equal(t, tc.request.Tools[0].Description, funcDecl["description"])
-				}
+				verifyGeminiRequestFormat(t, capturedRequest, tc.request)
 
 				// Check tool config
 				if tc.request.ToolChoice != nil {
@@ -430,12 +440,12 @@ func TestGeminiProvider_Text(t *testing.T) {
 
 func TestGeminiProvider_Structured(t *testing.T) {
 	testCases := []struct {
-		name             string
-		request          types.StructuredRequest
-		mockResponse     map[string]any
-		expectedError    string
-		expectedData     any
-		verifySchema     bool
+		name          string
+		request       types.StructuredRequest
+		mockResponse  map[string]any
+		expectedError string
+		expectedData  any
+		verifySchema  bool
 	}{
 		{
 			name: "basic structured output",
@@ -521,7 +531,7 @@ func TestGeminiProvider_Structured(t *testing.T) {
 				// Return mock response
 				w.Header().Set("Content-Type", "application/json")
 				w.WriteHeader(http.StatusOK)
-				
+
 				err := json.NewEncoder(w).Encode(tc.mockResponse)
 				require.NoError(t, err)
 			}))
@@ -553,11 +563,11 @@ func TestGeminiProvider_Structured(t *testing.T) {
 			// Verify schema setup in request
 			if tc.verifySchema {
 				require.NotNil(t, capturedRequest)
-				
+
 				genConfig, ok := capturedRequest["generationConfig"].(map[string]any)
 				require.True(t, ok)
 				assert.Equal(t, "application/json", genConfig["responseMimeType"])
-				
+
 				responseSchema := genConfig["responseSchema"]
 				assert.NotNil(t, responseSchema)
 			}
@@ -628,10 +638,10 @@ func TestGeminiProvider_Embeddings(t *testing.T) {
 			if tc.expectedError == "model must be an embedding model" {
 				config := types.ProviderConfig{}
 				provider := gemini.New("test-api-key", config)
-				
+
 				ctx := context.Background()
 				_, err := provider.Embeddings(ctx, tc.request)
-				
+
 				require.Error(t, err)
 				assert.Contains(t, err.Error(), tc.expectedError)
 				return
@@ -646,7 +656,7 @@ func TestGeminiProvider_Embeddings(t *testing.T) {
 				// Return mock response
 				w.Header().Set("Content-Type", "application/json")
 				w.WriteHeader(http.StatusOK)
-				
+
 				err := json.NewEncoder(w).Encode(tc.mockResponse)
 				require.NoError(t, err)
 			}))
@@ -689,7 +699,7 @@ func TestGeminiProvider_UnsupportedMethods(t *testing.T) {
 		audioReq := types.AudioRequest{
 			Model: "gemini-pro",
 		}
-		
+
 		_, err := provider.Audio(ctx, audioReq)
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "gemini provider does not support Audio")
@@ -699,7 +709,7 @@ func TestGeminiProvider_UnsupportedMethods(t *testing.T) {
 		imagesReq := types.ImagesRequest{
 			Model: "gemini-pro",
 		}
-		
+
 		_, err := provider.Images(ctx, imagesReq)
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "gemini provider does not support images")
@@ -708,10 +718,10 @@ func TestGeminiProvider_UnsupportedMethods(t *testing.T) {
 
 func TestGeminiProvider_MessageTransformation(t *testing.T) {
 	testCases := []struct {
-		name            string
-		messages        []types.Message
+		name             string
+		messages         []types.Message
 		expectedContents int
-		expectedRoles   []string
+		expectedRoles    []string
 	}{
 		{
 			name: "user and assistant messages",
@@ -791,7 +801,7 @@ func TestGeminiProvider_MessageTransformation(t *testing.T) {
 
 				w.Header().Set("Content-Type", "application/json")
 				w.WriteHeader(http.StatusOK)
-				json.NewEncoder(w).Encode(response)
+				_ = json.NewEncoder(w).Encode(response)
 			}))
 			defer server.Close()
 
@@ -811,7 +821,7 @@ func TestGeminiProvider_MessageTransformation(t *testing.T) {
 
 			// Verify message transformation
 			require.NotNil(t, capturedRequest)
-			
+
 			contents, ok := capturedRequest["contents"].([]any)
 			require.True(t, ok)
 			assert.Len(t, contents, tc.expectedContents)
@@ -835,7 +845,7 @@ func TestGeminiProvider_ErrorHandling(t *testing.T) {
 			name: "HTTP 401 Unauthorized",
 			serverResponse: func(w http.ResponseWriter, r *http.Request) {
 				w.WriteHeader(http.StatusUnauthorized)
-				json.NewEncoder(w).Encode(map[string]any{
+				_ = json.NewEncoder(w).Encode(map[string]any{
 					"error": map[string]any{
 						"code":    401,
 						"message": "Invalid API key",
@@ -849,7 +859,7 @@ func TestGeminiProvider_ErrorHandling(t *testing.T) {
 			name: "HTTP 429 Rate Limit",
 			serverResponse: func(w http.ResponseWriter, r *http.Request) {
 				w.WriteHeader(http.StatusTooManyRequests)
-				json.NewEncoder(w).Encode(map[string]any{
+				_ = json.NewEncoder(w).Encode(map[string]any{
 					"error": map[string]any{
 						"code":    429,
 						"message": "Rate limit exceeded",
@@ -863,7 +873,7 @@ func TestGeminiProvider_ErrorHandling(t *testing.T) {
 			name: "HTTP 500 Internal Server Error",
 			serverResponse: func(w http.ResponseWriter, r *http.Request) {
 				w.WriteHeader(http.StatusInternalServerError)
-				json.NewEncoder(w).Encode(map[string]any{
+				_ = json.NewEncoder(w).Encode(map[string]any{
 					"error": map[string]any{
 						"code":    500,
 						"message": "Internal server error",
@@ -919,7 +929,7 @@ func TestGeminiProvider_ErrorHandling(t *testing.T) {
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			time.Sleep(100 * time.Millisecond)
 			w.WriteHeader(http.StatusOK)
-			json.NewEncoder(w).Encode(map[string]any{
+			_ = json.NewEncoder(w).Encode(map[string]any{
 				"candidates": []map[string]any{
 					{
 						"content": map[string]any{
@@ -949,9 +959,9 @@ func TestGeminiProvider_ErrorHandling(t *testing.T) {
 
 		_, err := provider.Text(ctx, request)
 		require.Error(t, err)
-		assert.True(t, 
+		assert.True(t,
 			strings.Contains(err.Error(), "context deadline exceeded") ||
-			strings.Contains(err.Error(), "timeout"),
+				strings.Contains(err.Error(), "timeout"),
 		)
 	})
 }
@@ -990,7 +1000,7 @@ func TestGeminiProvider_FinishReasonMapping(t *testing.T) {
 
 				w.Header().Set("Content-Type", "application/json")
 				w.WriteHeader(http.StatusOK)
-				json.NewEncoder(w).Encode(response)
+				_ = json.NewEncoder(w).Encode(response)
 			}))
 			defer server.Close()
 

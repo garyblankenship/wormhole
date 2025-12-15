@@ -7,16 +7,16 @@ import (
 
 // ModelInfo contains metadata about a model
 type ModelInfo struct {
-	ID            string                 `json:"id"`
-	Name          string                 `json:"name"`
-	Provider      string                 `json:"provider"`
-	Description   string                 `json:"description,omitempty"`
-	ContextLength int                    `json:"context_length,omitempty"`
-	MaxTokens     int                    `json:"max_tokens,omitempty"`
-	Cost          *ModelCost             `json:"cost,omitempty"`
-	Capabilities  []ModelCapability      `json:"capabilities"`
-	Constraints   map[string]any `json:"constraints,omitempty"`
-	Deprecated    bool                   `json:"deprecated,omitempty"`
+	ID            string            `json:"id"`
+	Name          string            `json:"name"`
+	Provider      string            `json:"provider"`
+	Description   string            `json:"description,omitempty"`
+	ContextLength int               `json:"context_length,omitempty"`
+	MaxTokens     int               `json:"max_tokens,omitempty"`
+	Cost          *ModelCost        `json:"cost,omitempty"`
+	Capabilities  []ModelCapability `json:"capabilities"`
+	Constraints   map[string]any    `json:"constraints,omitempty"`
+	Deprecated    bool              `json:"deprecated,omitempty"`
 }
 
 // ModelCost represents the cost of using a model
@@ -88,7 +88,7 @@ func (r *ModelRegistry) GetByCapability(capability ModelCapability) []*ModelInfo
 
 // List returns all registered models
 func (r *ModelRegistry) List() []*ModelInfo {
-	var models []*ModelInfo
+	models := make([]*ModelInfo, 0, len(r.models))
 	for _, model := range r.models {
 		models = append(models, model)
 	}

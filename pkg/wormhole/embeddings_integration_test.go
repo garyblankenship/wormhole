@@ -11,9 +11,62 @@ import (
 	"time"
 
 	"github.com/garyblankenship/wormhole/pkg/middleware"
+	"github.com/garyblankenship/wormhole/pkg/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+// verifyEmbeddingsResponse validates an embeddings response
+func verifyEmbeddingsResponse(t *testing.T, resp *types.EmbeddingsResponse, expectedCount int, checkDimensions bool, expectedDims int) {
+	require.NotNil(t, resp)
+	require.Len(t, resp.Embeddings, expectedCount)
+	for i, embedding := range resp.Embeddings {
+		assert.NotEmpty(t, embedding.Embedding, "Embedding %d should not be empty", i)
+		if checkDimensions {
+			assert.Equal(t, expectedDims, len(embedding.Embedding), "Should have requested number of dimensions")
+		}
+	}
+}
+
+// runConcurrentEmbeddingRequests runs embedding requests concurrently and returns success count
+func runConcurrentEmbeddingRequests(t *testing.T, client *Wormhole, ctx context.Context, numConcurrent int) int {
+	var wg sync.WaitGroup
+	results := make(chan error, numConcurrent)
+
+	for i := 0; i < numConcurrent; i++ {
+		wg.Add(1)
+		go func(index int) {
+			defer wg.Done()
+
+			resp, err := client.Embeddings().
+				Provider("openai").
+				Model("text-embedding-3-small").
+				Input(fmt.Sprintf("Concurrent test %d", index)).
+				Generate(ctx)
+
+			if err != nil {
+				results <- err
+			} else if resp == nil || len(resp.Embeddings) != 1 {
+				results <- fmt.Errorf("invalid response for concurrent request %d", index)
+			} else {
+				results <- nil // Success
+			}
+		}(i)
+	}
+
+	wg.Wait()
+	close(results)
+
+	successCount := 0
+	for err := range results {
+		if err != nil {
+			t.Logf("Concurrent request error: %v", err)
+		} else {
+			successCount++
+		}
+	}
+	return successCount
+}
 
 func TestEmbeddingsIntegration(t *testing.T) {
 	if testing.Short() {
@@ -331,12 +384,9 @@ func TestEmbeddingsEdgeCases(t *testing.T) {
 			t.Logf("Long text failed as expected: %v", err)
 			assert.Contains(t, strings.ToLower(err.Error()), "token",
 				"Error should mention tokens for very long input")
-		} else {
-			// If it succeeds, verify the response
-			require.NotNil(t, resp)
-			require.Len(t, resp.Embeddings, 1)
-			assert.NotEmpty(t, resp.Embeddings[0].Embedding)
+			return
 		}
+		verifyEmbeddingsResponse(t, resp, 1, false, 0)
 	})
 
 	t.Run("maximum batch size", func(t *testing.T) {
@@ -357,11 +407,9 @@ func TestEmbeddingsEdgeCases(t *testing.T) {
 			t.Logf("Large batch failed as expected: %v", err)
 			assert.Contains(t, strings.ToLower(err.Error()), "batch",
 				"Error should mention batch size limits")
-		} else {
-			// If it succeeds, verify all embeddings were generated
-			require.NotNil(t, resp)
-			assert.Len(t, resp.Embeddings, len(inputs))
+			return
 		}
+		verifyEmbeddingsResponse(t, resp, len(inputs), false, 0)
 	})
 
 	t.Run("special characters and unicode", func(t *testing.T) {
@@ -379,11 +427,9 @@ func TestEmbeddingsEdgeCases(t *testing.T) {
 			Generate(ctx)
 
 		require.NoError(t, err)
-		require.NotNil(t, resp)
-		require.Len(t, resp.Embeddings, len(specialTexts))
+		verifyEmbeddingsResponse(t, resp, len(specialTexts), false, 0)
 
 		for i, embedding := range resp.Embeddings {
-			assert.NotEmpty(t, embedding.Embedding, "Embedding %d should not be empty", i)
 			assert.Equal(t, i, embedding.Index, "Embedding %d should have correct index", i)
 		}
 	})
@@ -426,16 +472,13 @@ func TestEmbeddingsEdgeCases(t *testing.T) {
 					Dimensions(tc.dimensions).
 					Generate(ctx)
 
-				if tc.shouldWork {
-					if err != nil {
+				if !tc.shouldWork || err != nil {
+					if tc.shouldWork && err != nil {
 						t.Logf("Expected success but got error: %v", err)
-					} else {
-						require.NotNil(t, resp)
-						require.Len(t, resp.Embeddings, 1)
-						assert.Equal(t, tc.dimensions, len(resp.Embeddings[0].Embedding),
-							"Should have requested number of dimensions")
 					}
+					return
 				}
+				verifyEmbeddingsResponse(t, resp, 1, true, tc.dimensions)
 			})
 		}
 	})
@@ -452,49 +495,12 @@ func TestEmbeddingsEdgeCases(t *testing.T) {
 			Generate(ctx)
 
 		require.NoError(t, err)
-		require.NotNil(t, resp)
-		require.Len(t, resp.Embeddings, 1)
-		assert.NotEmpty(t, resp.Embeddings[0].Embedding)
+		verifyEmbeddingsResponse(t, resp, 1, false, 0)
 	})
 
 	t.Run("concurrent requests", func(t *testing.T) {
 		const numConcurrent = 5
-		var wg sync.WaitGroup
-		results := make(chan error, numConcurrent)
-
-		for i := 0; i < numConcurrent; i++ {
-			wg.Add(1)
-			go func(index int) {
-				defer wg.Done()
-
-				resp, err := client.Embeddings().
-					Provider("openai").
-					Model("text-embedding-3-small").
-					Input(fmt.Sprintf("Concurrent test %d", index)).
-					Generate(ctx)
-
-				if err != nil {
-					results <- err
-				} else if resp == nil || len(resp.Embeddings) != 1 {
-					results <- fmt.Errorf("invalid response for concurrent request %d", index)
-				} else {
-					results <- nil // Success
-				}
-			}(i)
-		}
-
-		wg.Wait()
-		close(results)
-
-		successCount := 0
-		for err := range results {
-			if err != nil {
-				t.Logf("Concurrent request error: %v", err)
-			} else {
-				successCount++
-			}
-		}
-
+		successCount := runConcurrentEmbeddingRequests(t, client, ctx, numConcurrent)
 		// At least half should succeed (accounting for rate limits)
 		assert.GreaterOrEqual(t, successCount, numConcurrent/2,
 			"At least half of concurrent requests should succeed")

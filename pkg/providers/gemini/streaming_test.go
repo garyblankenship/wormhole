@@ -18,14 +18,14 @@ import (
 
 func TestGeminiProvider_Stream(t *testing.T) {
 	testCases := []struct {
-		name              string
-		request           types.TextRequest
-		mockStreamData    string
-		expectedChunks    int
-		expectedTexts     []string
-		expectedError     string
-		expectedFinish    *types.FinishReason
-		verifyURL         bool
+		name           string
+		request        types.TextRequest
+		mockStreamData string
+		expectedChunks int
+		expectedTexts  []string
+		expectedError  string
+		expectedFinish *types.FinishReason
+		verifyURL      bool
 	}{
 		{
 			name: "basic streaming response",
@@ -250,6 +250,7 @@ data: [DONE]
 				if chunk.ToolCall != nil {
 					toolCalls = append(toolCalls, *chunk.ToolCall)
 				}
+				_ = toolCalls // collected for potential future assertions
 
 				if chunk.FinishReason != nil {
 					finalFinishReason = chunk.FinishReason
@@ -355,7 +356,7 @@ func TestGeminiProvider_StreamContext(t *testing.T) {
 		config := types.ProviderConfig{BaseURL: server.URL}
 		provider := gemini.New("test-api-key", config)
 
-		// Create already-cancelled context
+		// Create already-canceled context
 		ctx, cancel := context.WithCancel(context.Background())
 		cancel() // Cancel immediately
 
@@ -521,7 +522,7 @@ func TestGeminiProvider_StreamErrorScenarios(t *testing.T) {
 			// Send partial response then close
 			fmt.Fprintf(w, `data: {"candidates":[{"content":{"parts":[{"text":"Partial"}]`)
 			flusher.Flush()
-			
+
 			// Abruptly close connection
 			if hijacker, ok := w.(http.Hijacker); ok {
 				conn, _, err := hijacker.Hijack()
@@ -549,7 +550,7 @@ func TestGeminiProvider_StreamErrorScenarios(t *testing.T) {
 		// Collect chunks - should get an error
 		var chunks []types.TextChunk
 		var streamError error
-		
+
 		for chunk := range stream {
 			chunks = append(chunks, chunk)
 			if chunk.Error != nil {
@@ -560,6 +561,7 @@ func TestGeminiProvider_StreamErrorScenarios(t *testing.T) {
 
 		// Should have received an error due to connection closure/invalid JSON
 		require.Error(t, streamError)
+		_ = chunks // collected for debugging
 	})
 
 	t.Run("Empty stream response", func(t *testing.T) {

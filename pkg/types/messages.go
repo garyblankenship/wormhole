@@ -22,8 +22,8 @@ type Message interface {
 
 // BaseMessage provides common message functionality
 type BaseMessage struct {
-	Role    Role        `json:"role"`
-	Content any `json:"content"`
+	Role    Role `json:"role"`
+	Content any  `json:"content"`
 }
 
 func (m BaseMessage) GetRole() Role {
@@ -36,8 +36,8 @@ func (m BaseMessage) GetContent() any {
 
 func (m BaseMessage) MarshalJSON() ([]byte, error) {
 	return json.Marshal(struct {
-		Role    Role        `json:"role"`
-		Content any `json:"content"`
+		Role    Role `json:"role"`
+		Content any  `json:"content"`
 	}{
 		Role:    m.Role,
 		Content: m.Content,
@@ -179,9 +179,9 @@ func NewToolResultMessage(toolCallID string, content string) *ToolResultMessage 
 
 // MessagePart represents a part of a multi-modal message
 type MessagePart struct {
-	Type string      `json:"type"`
-	Text string      `json:"text,omitempty"`
-	Data any `json:"data,omitempty"`
+	Type string `json:"type"`
+	Text string `json:"text,omitempty"`
+	Data any    `json:"data,omitempty"`
 }
 
 // TextPart creates a text message part

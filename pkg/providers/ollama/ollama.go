@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"github.com/garyblankenship/wormhole/internal/utils"
-	"github.com/garyblankenship/wormhole/pkg/config"
 	"github.com/garyblankenship/wormhole/pkg/providers"
 	"github.com/garyblankenship/wormhole/pkg/types"
 )
@@ -60,15 +59,7 @@ func (p *Provider) Stream(ctx context.Context, request types.TextRequest) (<-cha
 		return nil, err
 	}
 
-	chunks := make(chan types.TextChunk, 100)
-
-	go func() {
-		defer body.Close()
-		processor := utils.NewStreamProcessor(body, p.parseStreamChunk)
-		processor.Process(chunks)
-	}()
-
-	return chunks, nil
+	return utils.ProcessStream(body, p.parseStreamChunk, 100), nil
 }
 
 // Structured generates a structured response using JSON mode
@@ -194,7 +185,7 @@ func (p *Provider) processEmbeddingsConcurrently(ctx context.Context, request ty
 	// Start concurrent workers
 	for i, input := range request.Input {
 		go func(idx int, txt string) {
-			semaphore <- struct{}{} // Acquire semaphore
+			semaphore <- struct{}{}        // Acquire semaphore
 			defer func() { <-semaphore }() // Release semaphore
 
 			payload := &embeddingsRequest{
@@ -206,7 +197,7 @@ func (p *Provider) processEmbeddingsConcurrently(ctx context.Context, request ty
 
 			var response embeddingsResponse
 			err := p.doOllamaRequest(ctx, http.MethodPost, url, payload, &response)
-			
+
 			if err != nil {
 				results <- result{index: idx, err: fmt.Errorf("failed to get embedding for input %d: %w", idx, err)}
 			} else {
@@ -255,7 +246,7 @@ func (p *Provider) Audio(ctx context.Context, request types.AudioRequest) (*type
 }
 
 // handleSpeechToText handles speech-to-text requests
-func (p *Provider) handleSpeechToText(_ context.Context, request types.AudioRequest) (*types.AudioResponse, error) {
+func (p *Provider) handleSpeechToText(_ context.Context, _ types.AudioRequest) (*types.AudioResponse, error) {
 	// Ollama doesn't support speech-to-text directly
 	return nil, p.NotImplementedError("SpeechToText - Ollama does not support speech-to-text")
 }
@@ -357,22 +348,14 @@ func (p *Provider) doOllamaRequest(ctx context.Context, method, url string, body
 	}
 
 	// Set headers - Ollama doesn't require authentication by default
-	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set(types.HeaderContentType, types.ContentTypeJSON)
 
 	// Set custom headers from config
 	for k, v := range p.Config.Headers {
 		req.Header.Set(k, v)
 	}
 
-	timeout := config.GetDefaultHTTPTimeout()
-	if p.Config.Timeout == 0 {
-		timeout = 0 // Unlimited timeout
-	} else if p.Config.Timeout > 0 {
-		timeout = time.Duration(p.Config.Timeout) * time.Second
-	}
-	client := &http.Client{Timeout: timeout}
-
-	resp, err := client.Do(req)
+	resp, err := p.GetHTTPClient().Do(req)
 	if err != nil {
 		return fmt.Errorf("request failed: %w", err)
 	}
@@ -414,24 +397,16 @@ func (p *Provider) streamOllamaRequest(ctx context.Context, method, url string, 
 	}
 
 	// Set headers
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Accept", "text/event-stream")
-	req.Header.Set("Cache-Control", "no-cache")
+	req.Header.Set(types.HeaderContentType, types.ContentTypeJSON)
+	req.Header.Set(types.HeaderAccept, types.ContentTypeEventStream)
+	req.Header.Set(types.HeaderCacheControl, "no-cache")
 
 	// Set custom headers from config
 	for k, v := range p.Config.Headers {
 		req.Header.Set(k, v)
 	}
 
-	timeout := config.GetDefaultHTTPTimeout()
-	if p.Config.Timeout == 0 {
-		timeout = 0 // Unlimited timeout
-	} else if p.Config.Timeout > 0 {
-		timeout = time.Duration(p.Config.Timeout) * time.Second
-	}
-	client := &http.Client{Timeout: timeout}
-
-	resp, err := client.Do(req)
+	resp, err := p.GetHTTPClient().Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("request failed: %w", err)
 	}

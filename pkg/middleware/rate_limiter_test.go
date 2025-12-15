@@ -15,7 +15,7 @@ func TestRateLimitMiddleware(t *testing.T) {
 		mw := RateLimitMiddleware(10) // 10 requests per second
 
 		handler := func(ctx context.Context, req any) (any, error) {
-			return "response", nil
+			return testResponse, nil
 		}
 
 		wrapped := mw(handler)
@@ -35,7 +35,7 @@ func TestRateLimitMiddleware(t *testing.T) {
 	// 	var count int
 	// 	handler := func(ctx context.Context, req any) (any, error) {
 	// 		count++
-	// 		return "response", nil
+	// 		return testResponse, nil
 	// 	}
 	//
 	// 	wrapped := mw(handler)
@@ -78,7 +78,7 @@ func TestAdaptiveRateLimitMiddleware(t *testing.T) {
 		var handlerLatency time.Duration
 		handler := func(ctx context.Context, req any) (any, error) {
 			time.Sleep(handlerLatency)
-			return "response", nil
+			return testResponse, nil
 		}
 
 		wrapped := mw(handler)
@@ -107,7 +107,7 @@ func TestConcurrentRateLimiting(t *testing.T) {
 			mu.Lock()
 			count++
 			mu.Unlock()
-			return "response", nil
+			return testResponse, nil
 		}
 
 		wrapped := mw(handler)

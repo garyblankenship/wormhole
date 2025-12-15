@@ -109,7 +109,7 @@ func (g *Gemini) Embeddings(ctx context.Context, request types.EmbeddingsRequest
 		request.Model == "models/embedding-001" ||
 		request.Model == "embedding-001" ||
 		strings.HasSuffix(request.Model, ":embedding")
-	
+
 	if !isEmbeddingModel {
 		return nil, fmt.Errorf("model '%s' does not appear to be an embedding model. Expected models containing 'embedding' or known embedding models", request.Model)
 	}
@@ -180,10 +180,7 @@ func (g *Gemini) buildTextPayload(request types.TextRequest) (map[string]any, er
 
 	// Add tools if provided
 	if len(request.Tools) > 0 {
-		tools, err := g.transformTools(request.Tools)
-		if err != nil {
-			return nil, err
-		}
+		tools := g.transformTools(request.Tools)
 		payload["tools"] = tools
 
 		// Add tool config if specified

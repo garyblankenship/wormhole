@@ -114,7 +114,7 @@ func TestAnthropicProvider_IntegrationTextGeneration(t *testing.T) {
 				}
 
 				w.Header().Set("Content-Type", "application/json")
-				json.NewEncoder(w).Encode(response)
+				_ = json.NewEncoder(w).Encode(response)
 			}))
 			defer server.Close()
 
@@ -173,7 +173,7 @@ func TestAnthropicProvider_IntegrationStreaming(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// Verify streaming request
 		var reqBody map[string]any
-		json.NewDecoder(r.Body).Decode(&reqBody)
+		_ = json.NewDecoder(r.Body).Decode(&reqBody)
 		assert.Equal(t, true, reqBody["stream"])
 
 		// Set up SSE headers
@@ -245,7 +245,7 @@ func TestAnthropicProvider_IntegrationStreaming(t *testing.T) {
 	require.NoError(t, err)
 
 	// Collect streaming chunks
-	var chunks []types.StreamChunk
+	chunks := make([]types.StreamChunk, 0, 10)
 	for chunk := range stream {
 		chunks = append(chunks, chunk)
 	}
@@ -283,7 +283,7 @@ func TestAnthropicProvider_IntegrationStructuredOutput(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// Verify tools in request
 		var reqBody map[string]any
-		json.NewDecoder(r.Body).Decode(&reqBody)
+		_ = json.NewDecoder(r.Body).Decode(&reqBody)
 
 		tools, ok := reqBody["tools"].([]any)
 		require.True(t, ok, "Request should include tools")
@@ -324,7 +324,7 @@ func TestAnthropicProvider_IntegrationStructuredOutput(t *testing.T) {
 		}
 
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(response)
+		_ = json.NewEncoder(w).Encode(response)
 	}))
 	defer server.Close()
 
@@ -439,7 +439,7 @@ func TestAnthropicProvider_ErrorHandling(t *testing.T) {
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				w.Header().Set("Content-Type", "application/json")
 				w.WriteHeader(tc.statusCode)
-				w.Write([]byte(tc.responseBody))
+				_, _ = w.Write([]byte(tc.responseBody))
 			}))
 			defer server.Close()
 
@@ -521,7 +521,7 @@ func TestAnthropicProvider_Authentication(t *testing.T) {
 			}
 
 			w.Header().Set("Content-Type", "application/json")
-			json.NewEncoder(w).Encode(response)
+			_ = json.NewEncoder(w).Encode(response)
 		}))
 		defer server.Close()
 
@@ -554,7 +554,7 @@ func TestAnthropicProvider_ToolCalling(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// Verify tools in request
 		var reqBody map[string]any
-		json.NewDecoder(r.Body).Decode(&reqBody)
+		_ = json.NewDecoder(r.Body).Decode(&reqBody)
 
 		tools, ok := reqBody["tools"].([]any)
 		require.True(t, ok, "Request should include tools")
@@ -593,7 +593,7 @@ func TestAnthropicProvider_ToolCalling(t *testing.T) {
 		}
 
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(response)
+		_ = json.NewEncoder(w).Encode(response)
 	}))
 	defer server.Close()
 
@@ -654,7 +654,7 @@ func TestAnthropicProvider_MultimodalMessages(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// Verify multimodal content in request
 		var reqBody map[string]any
-		json.NewDecoder(r.Body).Decode(&reqBody)
+		_ = json.NewDecoder(r.Body).Decode(&reqBody)
 
 		messages, ok := reqBody["messages"].([]any)
 		require.True(t, ok)
@@ -692,7 +692,7 @@ func TestAnthropicProvider_MultimodalMessages(t *testing.T) {
 		}
 
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(response)
+		_ = json.NewEncoder(w).Encode(response)
 	}))
 	defer server.Close()
 

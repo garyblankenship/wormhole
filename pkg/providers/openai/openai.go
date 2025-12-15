@@ -6,10 +6,8 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"time"
 
 	"github.com/garyblankenship/wormhole/internal/utils"
-	"github.com/garyblankenship/wormhole/pkg/config"
 	"github.com/garyblankenship/wormhole/pkg/providers"
 	"github.com/garyblankenship/wormhole/pkg/types"
 )
@@ -68,15 +66,7 @@ func (p *Provider) Stream(ctx context.Context, request types.TextRequest) (<-cha
 		return nil, err
 	}
 
-	chunks := make(chan types.TextChunk, 100)
-
-	go func() {
-		defer body.Close()
-		processor := utils.NewStreamProcessor(body, p.parseStreamChunk)
-		processor.Process(chunks)
-	}()
-
-	return chunks, nil
+	return utils.ProcessStream(body, p.parseStreamChunk, 100), nil
 }
 
 // Structured generates a structured response
@@ -261,18 +251,11 @@ func (p *Provider) handleSpeechToText(ctx context.Context, request types.AudioRe
 	}
 
 	// Set headers
-	req.Header.Set("Authorization", "Bearer "+p.Config.APIKey)
-	req.Header.Set("Content-Type", contentType)
+	req.Header.Set(types.HeaderAuthorization, "Bearer "+p.Config.APIKey)
+	req.Header.Set(types.HeaderContentType, contentType)
 
 	// Execute request
-	timeout := config.GetDefaultHTTPTimeout()
-	if p.Config.Timeout == 0 {
-		timeout = 0 // Unlimited timeout
-	} else if p.Config.Timeout > 0 {
-		timeout = time.Duration(p.Config.Timeout) * time.Second
-	}
-	client := &http.Client{Timeout: timeout}
-	resp, err := client.Do(req)
+	resp, err := p.GetHTTPClient().Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("request failed: %w", err)
 	}
@@ -281,7 +264,7 @@ func (p *Provider) handleSpeechToText(ctx context.Context, request types.AudioRe
 	// Parse response
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return nil, fmt.Errorf("failed to read response: %w", err)
+		return nil, types.Errorf("read response", err)
 	}
 
 	if resp.StatusCode != http.StatusOK {
@@ -295,7 +278,7 @@ func (p *Provider) handleSpeechToText(ctx context.Context, request types.AudioRe
 	}
 
 	if err := json.Unmarshal(body, &sttResponse); err != nil {
-		return nil, fmt.Errorf("failed to parse response: %w", err)
+		return nil, types.Errorf("parse response", err)
 	}
 
 	return &types.AudioResponse{

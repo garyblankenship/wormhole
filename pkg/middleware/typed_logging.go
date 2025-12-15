@@ -33,36 +33,63 @@ func NewDebugTypedLoggingMiddleware(logger types.Logger) *TypedLoggingMiddleware
 	return NewTypedLoggingMiddleware(config)
 }
 
+// withLogging wraps a handler with logging using generics to reduce duplication
+func withLogging[Req any, Resp any](
+	ctx context.Context,
+	config LoggingConfig,
+	requestType string,
+	request Req,
+	logRequest func(Req),
+	logResponse func(Resp, time.Duration),
+	handler func(context.Context, Req) (Resp, error),
+) (Resp, error) {
+	start := time.Now()
+
+	// Log request if enabled
+	if config.LogRequests && logRequest != nil {
+		logRequest(request)
+	}
+
+	// Execute request
+	resp, err := handler(ctx, request)
+	duration := time.Since(start)
+
+	// Log timing if enabled
+	if config.LogTiming {
+		config.Logger.Debug(fmt.Sprintf("%s request completed in %v", requestType, duration))
+	}
+
+	// Log response if enabled (need to check for nil with type assertion)
+	if config.LogResponses && logResponse != nil {
+		// Use reflection to check if resp is non-nil pointer
+		if !isNilResponse(resp) {
+			logResponse(resp, duration)
+		}
+	}
+
+	// Log error if enabled and error occurred
+	if config.LogErrors && err != nil {
+		logError(config, err, duration)
+	}
+
+	return resp, err
+}
+
+// isNilResponse checks if a response value is nil (handles both pointer and non-pointer types)
+func isNilResponse[T any](resp T) bool {
+	// For pointer types, we can use interface comparison
+	var zero T
+	return any(resp) == any(zero)
+}
+
 // ApplyText wraps text generation calls with logging
 func (m *TypedLoggingMiddleware) ApplyText(next types.TextHandler) types.TextHandler {
 	return func(ctx context.Context, request types.TextRequest) (*types.TextResponse, error) {
-		start := time.Now()
-
-		// Log request if enabled
-		if m.config.LogRequests {
-			m.logTextRequest(request)
-		}
-
-		// Execute request
-		resp, err := next(ctx, request)
-		duration := time.Since(start)
-
-		// Log timing if enabled
-		if m.config.LogTiming {
-			m.config.Logger.Debug(fmt.Sprintf("Text request completed in %v", duration))
-		}
-
-		// Log response if enabled
-		if m.config.LogResponses && resp != nil {
-			m.logTextResponse(*resp, duration)
-		}
-
-		// Log error if enabled and error occurred
-		if m.config.LogErrors && err != nil {
-			logError(m.config, err, duration)
-		}
-
-		return resp, err
+		return withLogging(ctx, m.config, "Text", request,
+			m.logTextRequest,
+			func(resp *types.TextResponse, d time.Duration) { m.logTextResponse(*resp, d) },
+			next,
+		)
 	}
 }
 
@@ -118,132 +145,44 @@ func (m *TypedLoggingMiddleware) ApplyStream(next types.StreamHandler) types.Str
 // ApplyStructured wraps structured output calls with logging
 func (m *TypedLoggingMiddleware) ApplyStructured(next types.StructuredHandler) types.StructuredHandler {
 	return func(ctx context.Context, request types.StructuredRequest) (*types.StructuredResponse, error) {
-		start := time.Now()
-
-		// Log request if enabled
-		if m.config.LogRequests {
-			m.logStructuredRequest(request)
-		}
-
-		// Execute request
-		resp, err := next(ctx, request)
-		duration := time.Since(start)
-
-		// Log timing if enabled
-		if m.config.LogTiming {
-			m.config.Logger.Debug(fmt.Sprintf("Structured request completed in %v", duration))
-		}
-
-		// Log response if enabled
-		if m.config.LogResponses && resp != nil {
-			m.logStructuredResponse(*resp, duration)
-		}
-
-		// Log error if enabled and error occurred
-		if m.config.LogErrors && err != nil {
-			logError(m.config, err, duration)
-		}
-
-		return resp, err
+		return withLogging(ctx, m.config, "Structured", request,
+			m.logStructuredRequest,
+			func(resp *types.StructuredResponse, d time.Duration) { m.logStructuredResponse(*resp, d) },
+			next,
+		)
 	}
 }
 
 // ApplyEmbeddings wraps embeddings calls with logging
 func (m *TypedLoggingMiddleware) ApplyEmbeddings(next types.EmbeddingsHandler) types.EmbeddingsHandler {
 	return func(ctx context.Context, request types.EmbeddingsRequest) (*types.EmbeddingsResponse, error) {
-		start := time.Now()
-
-		// Log request if enabled
-		if m.config.LogRequests {
-			m.logEmbeddingsRequest(request)
-		}
-
-		// Execute request
-		resp, err := next(ctx, request)
-		duration := time.Since(start)
-
-		// Log timing if enabled
-		if m.config.LogTiming {
-			m.config.Logger.Debug(fmt.Sprintf("Embeddings request completed in %v", duration))
-		}
-
-		// Log response if enabled
-		if m.config.LogResponses && resp != nil {
-			m.logEmbeddingsResponse(*resp, duration)
-		}
-
-		// Log error if enabled and error occurred
-		if m.config.LogErrors && err != nil {
-			logError(m.config, err, duration)
-		}
-
-		return resp, err
+		return withLogging(ctx, m.config, "Embeddings", request,
+			m.logEmbeddingsRequest,
+			func(resp *types.EmbeddingsResponse, d time.Duration) { m.logEmbeddingsResponse(*resp, d) },
+			next,
+		)
 	}
 }
 
 // ApplyAudio wraps audio calls with logging
 func (m *TypedLoggingMiddleware) ApplyAudio(next types.AudioHandler) types.AudioHandler {
 	return func(ctx context.Context, request types.AudioRequest) (*types.AudioResponse, error) {
-		start := time.Now()
-
-		// Log request if enabled
-		if m.config.LogRequests {
-			m.logAudioRequest(request)
-		}
-
-		// Execute request
-		resp, err := next(ctx, request)
-		duration := time.Since(start)
-
-		// Log timing if enabled
-		if m.config.LogTiming {
-			m.config.Logger.Debug(fmt.Sprintf("Audio request completed in %v", duration))
-		}
-
-		// Log response if enabled
-		if m.config.LogResponses && resp != nil {
-			m.logAudioResponse(*resp, duration)
-		}
-
-		// Log error if enabled and error occurred
-		if m.config.LogErrors && err != nil {
-			logError(m.config, err, duration)
-		}
-
-		return resp, err
+		return withLogging(ctx, m.config, "Audio", request,
+			m.logAudioRequest,
+			func(resp *types.AudioResponse, d time.Duration) { m.logAudioResponse(*resp, d) },
+			next,
+		)
 	}
 }
 
 // ApplyImage wraps image generation calls with logging
 func (m *TypedLoggingMiddleware) ApplyImage(next types.ImageHandler) types.ImageHandler {
 	return func(ctx context.Context, request types.ImageRequest) (*types.ImageResponse, error) {
-		start := time.Now()
-
-		// Log request if enabled
-		if m.config.LogRequests {
-			m.logImageRequest(request)
-		}
-
-		// Execute request
-		resp, err := next(ctx, request)
-		duration := time.Since(start)
-
-		// Log timing if enabled
-		if m.config.LogTiming {
-			m.config.Logger.Debug(fmt.Sprintf("Image request completed in %v", duration))
-		}
-
-		// Log response if enabled
-		if m.config.LogResponses && resp != nil {
-			m.logImageResponse(*resp, duration)
-		}
-
-		// Log error if enabled and error occurred
-		if m.config.LogErrors && err != nil {
-			logError(m.config, err, duration)
-		}
-
-		return resp, err
+		return withLogging(ctx, m.config, "Image", request,
+			m.logImageRequest,
+			func(resp *types.ImageResponse, d time.Duration) { m.logImageResponse(*resp, d) },
+			next,
+		)
 	}
 }
 
@@ -348,7 +287,7 @@ func (m *TypedLoggingMiddleware) logAudioRequest(request types.AudioRequest) {
 func (m *TypedLoggingMiddleware) logAudioResponse(response types.AudioResponse, duration time.Duration) {
 	m.config.Logger.Debug(fmt.Sprintf("Audio response received in %v:", duration))
 	m.config.Logger.Debug(fmt.Sprintf("  Model: %s", response.Model))
-	
+
 	if response.Text != "" {
 		m.config.Logger.Debug(fmt.Sprintf("  Text: %s", truncateString(response.Text, 100)))
 	}
@@ -378,7 +317,7 @@ func (m *TypedLoggingMiddleware) logImageResponse(response types.ImageResponse, 
 	m.config.Logger.Debug(fmt.Sprintf("Image response received in %v:", duration))
 	m.config.Logger.Debug(fmt.Sprintf("  Model: %s", response.Model))
 	m.config.Logger.Debug(fmt.Sprintf("  Images generated: %d", len(response.Images)))
-	
+
 	for i, img := range response.Images {
 		if img.URL != "" {
 			m.config.Logger.Debug(fmt.Sprintf("    [%d] URL provided", i))

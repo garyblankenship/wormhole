@@ -15,7 +15,7 @@ func TestGetDefaultHTTPTimeout(t *testing.T) {
 		{
 			name:     "no environment variable",
 			envValue: "",
-			expected: FALLBACK_DefaultHTTPTimeout,
+			expected: FallbackHTTPTimeout,
 		},
 		{
 			name:     "valid environment variable - seconds",
@@ -35,7 +35,7 @@ func TestGetDefaultHTTPTimeout(t *testing.T) {
 		{
 			name:     "invalid environment variable",
 			envValue: "invalid",
-			expected: FALLBACK_DefaultHTTPTimeout,
+			expected: FallbackHTTPTimeout,
 		},
 		{
 			name:     "valid environment variable - milliseconds",
@@ -74,7 +74,7 @@ func TestGetDefaultMaxRetries(t *testing.T) {
 		{
 			name:     "no environment variable",
 			envValue: "",
-			expected: FALLBACK_DefaultMaxRetries,
+			expected: FallbackMaxRetries,
 		},
 		{
 			name:     "valid environment variable - positive",
@@ -89,12 +89,12 @@ func TestGetDefaultMaxRetries(t *testing.T) {
 		{
 			name:     "invalid environment variable - non-numeric",
 			envValue: "invalid",
-			expected: FALLBACK_DefaultMaxRetries,
+			expected: FallbackMaxRetries,
 		},
 		{
 			name:     "invalid environment variable - negative",
 			envValue: "-1",
-			expected: FALLBACK_DefaultMaxRetries,
+			expected: FallbackMaxRetries,
 		},
 		{
 			name:     "valid environment variable - large number",
@@ -133,7 +133,7 @@ func TestGetDefaultMaxDelay(t *testing.T) {
 		{
 			name:     "no environment variable",
 			envValue: "",
-			expected: FALLBACK_DefaultMaxDelay,
+			expected: FallbackMaxDelay,
 		},
 		{
 			name:     "valid environment variable - seconds",
@@ -153,7 +153,7 @@ func TestGetDefaultMaxDelay(t *testing.T) {
 		{
 			name:     "invalid environment variable",
 			envValue: "invalid",
-			expected: FALLBACK_DefaultMaxDelay,
+			expected: FallbackMaxDelay,
 		},
 	}
 
@@ -187,7 +187,7 @@ func TestGetDefaultInitialDelay(t *testing.T) {
 		{
 			name:     "no environment variable",
 			envValue: "",
-			expected: FALLBACK_DefaultInitialDelay,
+			expected: FallbackInitialDelay,
 		},
 		{
 			name:     "valid environment variable - seconds",
@@ -207,7 +207,7 @@ func TestGetDefaultInitialDelay(t *testing.T) {
 		{
 			name:     "invalid environment variable",
 			envValue: "invalid",
-			expected: FALLBACK_DefaultInitialDelay,
+			expected: FallbackInitialDelay,
 		},
 	}
 
@@ -241,7 +241,7 @@ func TestGetDefaultCircuitBreakerTimeout(t *testing.T) {
 		{
 			name:     "no environment variable",
 			envValue: "",
-			expected: FALLBACK_DefaultCircuitBreakerTimeout,
+			expected: FallbackCircuitBreakerTimeout,
 		},
 		{
 			name:     "valid environment variable - seconds",
@@ -256,7 +256,7 @@ func TestGetDefaultCircuitBreakerTimeout(t *testing.T) {
 		{
 			name:     "invalid environment variable",
 			envValue: "invalid",
-			expected: FALLBACK_DefaultCircuitBreakerTimeout,
+			expected: FallbackCircuitBreakerTimeout,
 		},
 	}
 
@@ -290,7 +290,7 @@ func TestGetDefaultHealthCheckInterval(t *testing.T) {
 		{
 			name:     "no environment variable",
 			envValue: "",
-			expected: FALLBACK_DefaultHealthCheckInterval,
+			expected: FallbackHealthCheckInterval,
 		},
 		{
 			name:     "valid environment variable - seconds",
@@ -305,7 +305,7 @@ func TestGetDefaultHealthCheckInterval(t *testing.T) {
 		{
 			name:     "invalid environment variable",
 			envValue: "invalid",
-			expected: FALLBACK_DefaultHealthCheckInterval,
+			expected: FallbackHealthCheckInterval,
 		},
 	}
 
@@ -332,20 +332,20 @@ func TestGetDefaultHealthCheckInterval(t *testing.T) {
 
 func TestConstants(t *testing.T) {
 	// Verify that critical constants are properly defined
-	if FALLBACK_DefaultHTTPTimeout != 300*time.Second {
-		t.Errorf("FALLBACK_DefaultHTTPTimeout = %v, expected 300s", FALLBACK_DefaultHTTPTimeout)
+	if FallbackHTTPTimeout != 300*time.Second {
+		t.Errorf("FallbackHTTPTimeout = %v, expected 300s", FallbackHTTPTimeout)
 	}
 
-	if FALLBACK_DefaultMaxRetries != 3 {
-		t.Errorf("FALLBACK_DefaultMaxRetries = %v, expected 3", FALLBACK_DefaultMaxRetries)
+	if FallbackMaxRetries != 3 {
+		t.Errorf("FallbackMaxRetries = %v, expected 3", FallbackMaxRetries)
 	}
 
-	if FALLBACK_DefaultInitialDelay != 1*time.Second {
-		t.Errorf("FALLBACK_DefaultInitialDelay = %v, expected 1s", FALLBACK_DefaultInitialDelay)
+	if FallbackInitialDelay != 1*time.Second {
+		t.Errorf("FallbackInitialDelay = %v, expected 1s", FallbackInitialDelay)
 	}
 
-	if FALLBACK_DefaultMaxDelay != 30*time.Second {
-		t.Errorf("FALLBACK_DefaultMaxDelay = %v, expected 30s", FALLBACK_DefaultMaxDelay)
+	if FallbackMaxDelay != 30*time.Second {
+		t.Errorf("FallbackMaxDelay = %v, expected 30s", FallbackMaxDelay)
 	}
 
 	if DefaultBackoffMultiple != 2.0 {
@@ -363,19 +363,19 @@ func TestConstants(t *testing.T) {
 
 func TestBackwardsCompatibilityAliases(t *testing.T) {
 	// Verify backwards compatibility constants
-	if DefaultMaxRetries != FALLBACK_DefaultMaxRetries {
-		t.Errorf("DefaultMaxRetries = %v, should equal FALLBACK_DefaultMaxRetries = %v", 
-			DefaultMaxRetries, FALLBACK_DefaultMaxRetries)
+	if DefaultMaxRetries != FallbackMaxRetries {
+		t.Errorf("DefaultMaxRetries = %v, should equal FallbackMaxRetries = %v",
+			DefaultMaxRetries, FallbackMaxRetries)
 	}
 
-	if DefaultInitialDelay != FALLBACK_DefaultInitialDelay {
-		t.Errorf("DefaultInitialDelay = %v, should equal FALLBACK_DefaultInitialDelay = %v",
-			DefaultInitialDelay, FALLBACK_DefaultInitialDelay)
+	if DefaultInitialDelay != FallbackInitialDelay {
+		t.Errorf("DefaultInitialDelay = %v, should equal FallbackInitialDelay = %v",
+			DefaultInitialDelay, FallbackInitialDelay)
 	}
 
-	if DefaultMaxDelay != FALLBACK_DefaultMaxDelay {
-		t.Errorf("DefaultMaxDelay = %v, should equal FALLBACK_DefaultMaxDelay = %v",
-			DefaultMaxDelay, FALLBACK_DefaultMaxDelay)
+	if DefaultMaxDelay != FallbackMaxDelay {
+		t.Errorf("DefaultMaxDelay = %v, should equal FallbackMaxDelay = %v",
+			DefaultMaxDelay, FallbackMaxDelay)
 	}
 }
 

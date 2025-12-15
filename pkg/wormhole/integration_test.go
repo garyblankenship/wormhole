@@ -133,7 +133,7 @@ func TestOpenAIIntegration_TextGeneration(t *testing.T) {
 			}
 
 			w.Header().Set("Content-Type", "application/json")
-			json.NewEncoder(w).Encode(response)
+			_ = json.NewEncoder(w).Encode(response)
 		})
 
 		// Create Wormhole client with mock server
@@ -209,7 +209,7 @@ func TestOpenAIIntegration_TextGeneration(t *testing.T) {
 			}
 
 			w.Header().Set("Content-Type", "application/json")
-			json.NewEncoder(w).Encode(response)
+			_ = json.NewEncoder(w).Encode(response)
 		})
 
 		client := wormhole.New(
@@ -276,7 +276,7 @@ func TestOpenAIIntegration_TextGeneration(t *testing.T) {
 			}
 
 			w.Header().Set("Content-Type", "application/json")
-			json.NewEncoder(w).Encode(response)
+			_ = json.NewEncoder(w).Encode(response)
 		})
 
 		client := wormhole.New(
@@ -365,7 +365,7 @@ func TestOpenAIIntegration_FunctionCalling(t *testing.T) {
 			}
 
 			w.Header().Set("Content-Type", "application/json")
-			json.NewEncoder(w).Encode(response)
+			_ = json.NewEncoder(w).Encode(response)
 		})
 
 		client := wormhole.New(
@@ -503,7 +503,7 @@ func TestIntegration_ErrorHandling(t *testing.T) {
 		server := MockOpenAIServer(t, func(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(http.StatusUnauthorized)
 			w.Header().Set("Content-Type", "application/json")
-			json.NewEncoder(w).Encode(map[string]any{
+			_ = json.NewEncoder(w).Encode(map[string]any{
 				"error": map[string]any{
 					"message": "Invalid API key",
 					"type":    "invalid_request_error",
@@ -539,7 +539,7 @@ func TestIntegration_ErrorHandling(t *testing.T) {
 		server := MockOpenAIServer(t, func(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(http.StatusTooManyRequests)
 			w.Header().Set("Content-Type", "application/json")
-			json.NewEncoder(w).Encode(map[string]any{
+			_ = json.NewEncoder(w).Encode(map[string]any{
 				"error": map[string]any{
 					"message": "Rate limit exceeded",
 					"type":    "rate_limit_error",
@@ -575,7 +575,7 @@ func TestIntegration_ErrorHandling(t *testing.T) {
 		server := MockOpenAIServer(t, func(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(http.StatusInternalServerError)
 			w.Header().Set("Content-Type", "application/json")
-			json.NewEncoder(w).Encode(map[string]any{
+			_ = json.NewEncoder(w).Encode(map[string]any{
 				"error": map[string]any{
 					"message": "Internal server error",
 					"type":    "server_error",
@@ -630,7 +630,7 @@ func TestIntegration_ErrorHandling(t *testing.T) {
 			}
 
 			w.Header().Set("Content-Type", "application/json")
-			json.NewEncoder(w).Encode(response)
+			_ = json.NewEncoder(w).Encode(response)
 		})
 
 		client := wormhole.New(
@@ -714,7 +714,7 @@ func TestIntegration_MultipleProviders(t *testing.T) {
 			}
 
 			w.Header().Set("Content-Type", "application/json")
-			json.NewEncoder(w).Encode(response)
+			_ = json.NewEncoder(w).Encode(response)
 		})
 
 		// Anthropic-style server (different format)
@@ -737,7 +737,7 @@ func TestIntegration_MultipleProviders(t *testing.T) {
 			}
 
 			w.Header().Set("Content-Type", "application/json")
-			json.NewEncoder(w).Encode(response)
+			_ = json.NewEncoder(w).Encode(response)
 		})
 
 		client := wormhole.New(
@@ -805,7 +805,7 @@ func TestIntegration_Middleware(t *testing.T) {
 			}
 
 			w.Header().Set("Content-Type", "application/json")
-			json.NewEncoder(w).Encode(response)
+			_ = json.NewEncoder(w).Encode(response)
 		})
 
 		// Create metrics middleware
@@ -860,7 +860,7 @@ func TestIntegration_Middleware(t *testing.T) {
 			}
 
 			w.Header().Set("Content-Type", "application/json")
-			json.NewEncoder(w).Encode(response)
+			_ = json.NewEncoder(w).Encode(response)
 		})
 
 		// Create custom middleware that captures request/response
@@ -970,7 +970,7 @@ func TestIntegration_OpenRouter(t *testing.T) {
 			}
 
 			w.Header().Set("Content-Type", "application/json")
-			json.NewEncoder(w).Encode(response)
+			_ = json.NewEncoder(w).Encode(response)
 		})
 
 		// Create Wormhole client with OpenRouter provider
@@ -1054,7 +1054,7 @@ func TestIntegration_OpenRouter(t *testing.T) {
 			}
 
 			w.Header().Set("Content-Type", "application/json")
-			json.NewEncoder(w).Encode(response)
+			_ = json.NewEncoder(w).Encode(response)
 		})
 
 		t.Run("with explicit timeout should succeed", func(t *testing.T) {

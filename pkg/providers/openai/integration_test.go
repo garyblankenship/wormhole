@@ -100,7 +100,7 @@ func TestOpenAIProvider_IntegrationTextGeneration(t *testing.T) {
 				}
 
 				w.Header().Set("Content-Type", "application/json")
-				json.NewEncoder(w).Encode(response)
+				_ = json.NewEncoder(w).Encode(response)
 			}))
 			defer server.Close()
 
@@ -155,7 +155,7 @@ func TestOpenAIProvider_IntegrationStreaming(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// Verify streaming request
 		var reqBody map[string]any
-		json.NewDecoder(r.Body).Decode(&reqBody)
+		_ = json.NewDecoder(r.Body).Decode(&reqBody)
 		assert.Equal(t, true, reqBody["stream"])
 
 		// Set up SSE headers
@@ -203,7 +203,7 @@ func TestOpenAIProvider_IntegrationStreaming(t *testing.T) {
 	require.NoError(t, err)
 
 	// Collect streaming chunks
-	var chunks []types.TextChunk
+	chunks := make([]types.TextChunk, 0, 8) // Pre-allocate for typical stream size
 	for chunk := range stream {
 		chunks = append(chunks, chunk)
 	}
@@ -293,7 +293,7 @@ func TestOpenAIProvider_ErrorHandling(t *testing.T) {
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				w.Header().Set("Content-Type", "application/json")
 				w.WriteHeader(tc.statusCode)
-				w.Write([]byte(tc.responseBody))
+				_, _ = w.Write([]byte(tc.responseBody))
 			}))
 			defer server.Close()
 
@@ -386,7 +386,7 @@ func TestOpenAIProvider_Authentication(t *testing.T) {
 			}
 
 			w.Header().Set("Content-Type", "application/json")
-			json.NewEncoder(w).Encode(response)
+			_ = json.NewEncoder(w).Encode(response)
 		}))
 		defer server.Close()
 
@@ -418,7 +418,7 @@ func TestOpenAIProvider_ToolCalling(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// Verify tools in request
 		var reqBody map[string]any
-		json.NewDecoder(r.Body).Decode(&reqBody)
+		_ = json.NewDecoder(r.Body).Decode(&reqBody)
 
 		tools, ok := reqBody["tools"].([]any)
 		require.True(t, ok, "Request should include tools")
@@ -453,7 +453,7 @@ func TestOpenAIProvider_ToolCalling(t *testing.T) {
 		}
 
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(response)
+		_ = json.NewEncoder(w).Encode(response)
 	}))
 	defer server.Close()
 

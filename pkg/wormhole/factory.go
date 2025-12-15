@@ -127,7 +127,6 @@ func (f *SimpleFactory) WithRateLimit(requestsPerSecond int) Option {
 	return WithMiddleware(middleware.RateLimitMiddleware(requestsPerSecond))
 }
 
-
 // WithCircuitBreaker returns an option to add circuit breaker middleware
 func (f *SimpleFactory) WithCircuitBreaker(threshold int, timeout time.Duration) Option {
 	return WithMiddleware(middleware.CircuitBreakerMiddleware(threshold, timeout))

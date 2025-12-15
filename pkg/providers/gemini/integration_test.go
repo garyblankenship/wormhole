@@ -181,8 +181,13 @@ func TestGeminiProvider_IntegrationTextGeneration(t *testing.T) {
 			maxTokens := tc.maxTokens
 			request := types.TextRequest{
 				BaseRequest: types.BaseRequest{
-					Model:     tc.model,
-					MaxTokens: func() *int { if maxTokens > 0 { return &maxTokens }; return nil }(),
+					Model: tc.model,
+					MaxTokens: func() *int {
+						if maxTokens > 0 {
+							return &maxTokens
+						}
+						return nil
+					}(),
 				},
 				Messages:     []types.Message{types.NewUserMessage(tc.userMsg)},
 				SystemPrompt: tc.systemMsg,
@@ -231,7 +236,7 @@ func TestGeminiProvider_IntegrationToolCalling(t *testing.T) {
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var reqBody map[string]any
-		json.NewDecoder(r.Body).Decode(&reqBody)
+		_ = json.NewDecoder(r.Body).Decode(&reqBody)
 		capturedRequests = append(capturedRequests, reqBody)
 
 		w.Header().Set("Content-Type", "application/json")
@@ -265,7 +270,7 @@ func TestGeminiProvider_IntegrationToolCalling(t *testing.T) {
 			},
 		}
 
-		json.NewEncoder(w).Encode(response)
+		_ = json.NewEncoder(w).Encode(response)
 	}))
 	defer server.Close()
 
@@ -321,9 +326,9 @@ func TestGeminiProvider_IntegrationToolCalling(t *testing.T) {
 
 	// Verify tool call details
 	toolCall := response.ToolCalls[0]
-	assert.Equal(t, "get_weather", toolCall.ID)   // Gemini uses function name as ID
+	assert.Equal(t, "get_weather", toolCall.ID) // Gemini uses function name as ID
 	assert.Equal(t, "get_weather", toolCall.Name)
-	
+
 	assert.Equal(t, "San Francisco", toolCall.Arguments["location"])
 	assert.Equal(t, "celsius", toolCall.Arguments["units"])
 
@@ -366,7 +371,7 @@ func TestGeminiProvider_IntegrationMultimodalMessage(t *testing.T) {
 	// Create mock server
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var reqBody map[string]any
-		json.NewDecoder(r.Body).Decode(&reqBody)
+		_ = json.NewDecoder(r.Body).Decode(&reqBody)
 		capturedRequest = reqBody
 
 		// Return mock response
@@ -385,7 +390,7 @@ func TestGeminiProvider_IntegrationMultimodalMessage(t *testing.T) {
 		}
 
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(response)
+		_ = json.NewEncoder(w).Encode(response)
 	}))
 	defer server.Close()
 
@@ -442,7 +447,7 @@ func TestGeminiProvider_IntegrationMultimodalMessage(t *testing.T) {
 	// Check image part
 	imagePart := parts[1].(map[string]any)
 	require.Contains(t, imagePart, "inlineData")
-	
+
 	inlineData := imagePart["inlineData"].(map[string]any)
 	assert.Equal(t, "image/jpeg", inlineData["mimeType"])
 	assert.NotEmpty(t, inlineData["data"]) // Should be base64 encoded
@@ -454,7 +459,7 @@ func TestGeminiProvider_IntegrationStructuredOutput(t *testing.T) {
 	// Create mock server
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var reqBody map[string]any
-		json.NewDecoder(r.Body).Decode(&reqBody)
+		_ = json.NewDecoder(r.Body).Decode(&reqBody)
 		capturedRequest = reqBody
 
 		// Return structured JSON response
@@ -478,7 +483,7 @@ func TestGeminiProvider_IntegrationStructuredOutput(t *testing.T) {
 		}
 
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(response)
+		_ = json.NewEncoder(w).Encode(response)
 	}))
 	defer server.Close()
 
@@ -564,7 +569,7 @@ func TestGeminiProvider_IntegrationEmbeddings(t *testing.T) {
 	// Create mock server
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var reqBody map[string]any
-		json.NewDecoder(r.Body).Decode(&reqBody)
+		_ = json.NewDecoder(r.Body).Decode(&reqBody)
 		capturedRequest = reqBody
 
 		// Verify URL
@@ -580,7 +585,7 @@ func TestGeminiProvider_IntegrationEmbeddings(t *testing.T) {
 		}
 
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(response)
+		_ = json.NewEncoder(w).Encode(response)
 	}))
 	defer server.Close()
 
@@ -612,11 +617,11 @@ func TestGeminiProvider_IntegrationEmbeddings(t *testing.T) {
 
 	// Verify embeddings
 	require.Len(t, response.Embeddings, 3)
-	
+
 	for i, embedding := range response.Embeddings {
 		assert.Equal(t, i, embedding.Index)
 		assert.Len(t, embedding.Embedding, 5)
-		
+
 		// Verify embedding values
 		expectedStart := float64(i)*0.5 + 0.1
 		assert.Equal(t, expectedStart, embedding.Embedding[0])
@@ -636,7 +641,7 @@ func TestGeminiProvider_IntegrationEmbeddings(t *testing.T) {
 	content := firstReq["content"].(map[string]any)
 	parts := content["parts"].([]any)
 	require.Len(t, parts, 1)
-	
+
 	textPart := parts[0].(map[string]any)
 	assert.Equal(t, "Hello world", textPart["text"])
 
@@ -663,7 +668,7 @@ func TestGeminiProvider_IntegrationErrorHandling(t *testing.T) {
 						"status":  "UNAUTHENTICATED",
 					},
 				}
-				json.NewEncoder(w).Encode(response)
+				_ = json.NewEncoder(w).Encode(response)
 			},
 			expectedError: "API key not valid",
 			expectStatus:  401,
@@ -679,7 +684,7 @@ func TestGeminiProvider_IntegrationErrorHandling(t *testing.T) {
 						"status":  "RESOURCE_EXHAUSTED",
 					},
 				}
-				json.NewEncoder(w).Encode(response)
+				_ = json.NewEncoder(w).Encode(response)
 			},
 			expectedError: "Rate limit exceeded",
 			expectStatus:  429,
@@ -695,7 +700,7 @@ func TestGeminiProvider_IntegrationErrorHandling(t *testing.T) {
 						"status":  "NOT_FOUND",
 					},
 				}
-				json.NewEncoder(w).Encode(response)
+				_ = json.NewEncoder(w).Encode(response)
 			},
 			expectedError: "Model 'invalid-model' not found",
 			expectStatus:  404,
@@ -711,7 +716,7 @@ func TestGeminiProvider_IntegrationErrorHandling(t *testing.T) {
 						"status":  "INVALID_ARGUMENT",
 					},
 				}
-				json.NewEncoder(w).Encode(response)
+				_ = json.NewEncoder(w).Encode(response)
 			},
 			expectedError: "Request payload too large",
 			expectStatus:  400,
@@ -727,7 +732,7 @@ func TestGeminiProvider_IntegrationErrorHandling(t *testing.T) {
 						"status":  "INTERNAL",
 					},
 				}
-				json.NewEncoder(w).Encode(response)
+				_ = json.NewEncoder(w).Encode(response)
 			},
 			expectedError: "Internal server error",
 			expectStatus:  500,
@@ -794,7 +799,7 @@ func TestGeminiProvider_IntegrationTimeout(t *testing.T) {
 	// Create server that delays response
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		time.Sleep(200 * time.Millisecond)
-		
+
 		response := map[string]any{
 			"candidates": []map[string]any{
 				{
@@ -806,9 +811,9 @@ func TestGeminiProvider_IntegrationTimeout(t *testing.T) {
 				},
 			},
 		}
-		
+
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(response)
+		_ = json.NewEncoder(w).Encode(response)
 	}))
 	defer server.Close()
 
@@ -830,9 +835,9 @@ func TestGeminiProvider_IntegrationTimeout(t *testing.T) {
 
 	_, err := provider.Text(ctx, request)
 	require.Error(t, err)
-	assert.True(t, 
+	assert.True(t,
 		strings.Contains(err.Error(), "context deadline exceeded") ||
-		strings.Contains(err.Error(), "timeout"),
+			strings.Contains(err.Error(), "timeout"),
 	)
 }
 
@@ -843,7 +848,7 @@ func TestGeminiProvider_IntegrationConversation(t *testing.T) {
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var reqBody map[string]any
-		json.NewDecoder(r.Body).Decode(&reqBody)
+		_ = json.NewDecoder(r.Body).Decode(&reqBody)
 		capturedRequests = append(capturedRequests, reqBody)
 
 		var response map[string]any
@@ -890,7 +895,7 @@ func TestGeminiProvider_IntegrationConversation(t *testing.T) {
 
 		requestCount++
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(response)
+		_ = json.NewEncoder(w).Encode(response)
 	}))
 	defer server.Close()
 

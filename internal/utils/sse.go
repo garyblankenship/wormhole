@@ -6,6 +6,13 @@ import (
 	"strings"
 )
 
+// SSE field names
+const (
+	sseFieldEvent = "event"
+	sseFieldData  = "data"
+	sseFieldID    = "id"
+)
+
 // SSEScanner provides a simple interface for reading Server-Sent Events
 type SSEScanner struct {
 	scanner *bufio.Scanner
@@ -57,16 +64,16 @@ func (s *SSEScanner) Scan() bool {
 			value := strings.TrimSpace(line[colonIndex+1:])
 
 			switch field {
-			case "event":
+			case sseFieldEvent:
 				event.Event = value
 				hasDataOrEvent = true
-			case "data":
+			case sseFieldData:
 				if event.Data != "" {
 					event.Data += "\n"
 				}
 				event.Data += value
 				hasDataOrEvent = true
-			case "id":
+			case sseFieldID:
 				event.ID = value
 				// ID field doesn't make an event valid by itself
 			}

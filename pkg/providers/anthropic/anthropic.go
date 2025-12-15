@@ -70,15 +70,7 @@ func (p *Provider) Stream(ctx context.Context, request types.TextRequest) (<-cha
 		return nil, err
 	}
 
-	chunks := make(chan types.StreamChunk, 100)
-
-	go func() {
-		defer body.Close()
-		processor := utils.NewStreamProcessor(body, p.parseStreamChunk)
-		processor.Process(chunks)
-	}()
-
-	return chunks, nil
+	return utils.ProcessStream(body, p.parseStreamChunk, 100), nil
 }
 
 // Structured generates a structured response
@@ -166,7 +158,7 @@ func (p *Provider) doAnthropicRequest(ctx context.Context, method, url string, b
 	}
 
 	// Set headers
-	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set(types.HeaderContentType, types.ContentTypeJSON)
 	req.Header.Set(headerAPIKey, p.Config.APIKey)
 	req.Header.Set("anthropic-version", anthropicVersion)
 
@@ -176,8 +168,7 @@ func (p *Provider) doAnthropicRequest(ctx context.Context, method, url string, b
 		}
 	}
 
-	client := &http.Client{}
-	resp, err := client.Do(req)
+	resp, err := p.GetHTTPClient().Do(req)
 	if err != nil {
 		return fmt.Errorf("request failed: %w", err)
 	}
@@ -218,11 +209,11 @@ func (p *Provider) streamAnthropicRequest(ctx context.Context, method, url strin
 	}
 
 	// Set headers
-	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set(types.HeaderContentType, types.ContentTypeJSON)
 	req.Header.Set(headerAPIKey, p.Config.APIKey)
 	req.Header.Set("anthropic-version", anthropicVersion)
-	req.Header.Set("Accept", "text/event-stream")
-	req.Header.Set("Cache-Control", "no-cache")
+	req.Header.Set(types.HeaderAccept, types.ContentTypeEventStream)
+	req.Header.Set(types.HeaderCacheControl, "no-cache")
 
 	for k, v := range p.Config.Headers {
 		if k != headerAPIKey && k != headerVersion {
@@ -230,8 +221,7 @@ func (p *Provider) streamAnthropicRequest(ctx context.Context, method, url strin
 		}
 	}
 
-	client := &http.Client{}
-	resp, err := client.Do(req)
+	resp, err := p.GetHTTPClient().Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("request failed: %w", err)
 	}

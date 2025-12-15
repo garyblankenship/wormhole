@@ -13,6 +13,79 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// openAIStreamTransformer transforms OpenAI streaming responses
+func openAIStreamTransformer(data []byte) (*types.TextChunk, error) {
+	if string(data) == streamDoneMarker {
+		return nil, nil
+	}
+
+	var response struct {
+		ID      string `json:"id"`
+		Choices []struct {
+			Delta struct {
+				Content string `json:"content"`
+			} `json:"delta"`
+			FinishReason *string `json:"finish_reason"`
+		} `json:"choices"`
+	}
+
+	if err := json.Unmarshal(data, &response); err != nil {
+		return nil, err
+	}
+
+	chunk := &types.TextChunk{
+		ID: response.ID,
+	}
+
+	if len(response.Choices) > 0 {
+		choice := response.Choices[0]
+		chunk.Text = choice.Delta.Content
+
+		if choice.FinishReason != nil {
+			reason := types.FinishReason(*choice.FinishReason)
+			chunk.FinishReason = &reason
+		}
+	}
+
+	return chunk, nil
+}
+
+// anthropicStreamTransformer transforms Anthropic streaming responses
+func anthropicStreamTransformer(data []byte) (*types.TextChunk, error) {
+	var event struct {
+		Type    string `json:"type"`
+		Message *struct {
+			ID string `json:"id"`
+		} `json:"message,omitempty"`
+		Delta *struct {
+			Type string `json:"type"`
+			Text string `json:"text"`
+		} `json:"delta,omitempty"`
+	}
+
+	if err := json.Unmarshal(data, &event); err != nil {
+		return nil, err
+	}
+
+	chunk := &types.TextChunk{}
+
+	switch event.Type {
+	case "message_start":
+		if event.Message != nil {
+			chunk.ID = event.Message.ID
+		}
+	case "content_block_delta":
+		if event.Delta != nil && event.Delta.Type == "text_delta" {
+			chunk.Text = event.Delta.Text
+		}
+	case "message_stop":
+		reason := types.FinishReasonStop
+		chunk.FinishReason = &reason
+	}
+
+	return chunk, nil
+}
+
 func TestSSEParser_Creation(t *testing.T) {
 	reader := strings.NewReader("test")
 	parser := NewSSEParser(reader)
@@ -130,7 +203,7 @@ data: [DONE]
 `
 
 		transformer := func(data []byte) (*types.TextChunk, error) {
-			if string(data) == "[DONE]" {
+			if string(data) == streamDoneMarker {
 				return nil, nil
 			}
 
@@ -217,7 +290,7 @@ data: [DONE]
 `
 
 		transformer := func(data []byte) (*types.TextChunk, error) {
-			if string(data) == "[DONE]" {
+			if string(data) == streamDoneMarker {
 				return nil, nil
 			}
 			return &types.TextChunk{Text: "processed"}, nil
@@ -254,7 +327,7 @@ data: {"text": "World"}
 			var parsed struct {
 				Text string `json:"text"`
 			}
-			json.Unmarshal(data, &parsed)
+			_ = json.Unmarshal(data, &parsed)
 			return &types.TextChunk{Text: parsed.Text}, nil
 		}
 
@@ -501,43 +574,7 @@ data: [DONE]
 
 `
 
-		transformer := func(data []byte) (*types.TextChunk, error) {
-			if string(data) == "[DONE]" {
-				return nil, nil
-			}
-
-			var response struct {
-				ID      string `json:"id"`
-				Choices []struct {
-					Delta struct {
-						Content string `json:"content"`
-					} `json:"delta"`
-					FinishReason *string `json:"finish_reason"`
-				} `json:"choices"`
-			}
-
-			if err := json.Unmarshal(data, &response); err != nil {
-				return nil, err
-			}
-
-			chunk := &types.TextChunk{
-				ID: response.ID,
-			}
-
-			if len(response.Choices) > 0 {
-				choice := response.Choices[0]
-				chunk.Text = choice.Delta.Content
-
-				if choice.FinishReason != nil {
-					reason := types.FinishReason(*choice.FinishReason)
-					chunk.FinishReason = &reason
-				}
-			}
-
-			return chunk, nil
-		}
-
-		processor := NewStreamProcessor(strings.NewReader(input), transformer)
+		processor := NewStreamProcessor(strings.NewReader(input), openAIStreamTransformer)
 		chunks := make(chan types.TextChunk, 10)
 
 		go processor.Process(chunks)
@@ -578,42 +615,7 @@ data: {"type":"message_stop"}
 
 `
 
-		transformer := func(data []byte) (*types.TextChunk, error) {
-			var event struct {
-				Type    string `json:"type"`
-				Message *struct {
-					ID string `json:"id"`
-				} `json:"message,omitempty"`
-				Delta *struct {
-					Type string `json:"type"`
-					Text string `json:"text"`
-				} `json:"delta,omitempty"`
-			}
-
-			if err := json.Unmarshal(data, &event); err != nil {
-				return nil, err
-			}
-
-			chunk := &types.TextChunk{}
-
-			switch event.Type {
-			case "message_start":
-				if event.Message != nil {
-					chunk.ID = event.Message.ID
-				}
-			case "content_block_delta":
-				if event.Delta != nil && event.Delta.Type == "text_delta" {
-					chunk.Text = event.Delta.Text
-				}
-			case "message_stop":
-				reason := types.FinishReasonStop
-				chunk.FinishReason = &reason
-			}
-
-			return chunk, nil
-		}
-
-		processor := NewStreamProcessor(strings.NewReader(input), transformer)
+		processor := NewStreamProcessor(strings.NewReader(input), anthropicStreamTransformer)
 		chunks := make(chan types.TextChunk, 10)
 
 		go processor.Process(chunks)

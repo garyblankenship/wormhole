@@ -35,7 +35,7 @@ func NewRateLimiter(requestsPerSecond int) *RateLimiter {
 	}
 }
 
-// Wait blocks until a token is available or context is cancelled
+// Wait blocks until a token is available or context is canceled
 func (rl *RateLimiter) Wait(ctx context.Context) error {
 	if err := rl.TryAcquire(); err == nil {
 		return nil

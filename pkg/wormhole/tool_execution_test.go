@@ -10,6 +10,9 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// Test constants
+const testResultKey = "result"
+
 // mockToolProvider simulates a provider that returns tool calls
 type mockToolProvider struct {
 	callCount int
@@ -302,7 +305,7 @@ func TestToolExecutor_ExecuteWithTools_MaxIterations(t *testing.T) {
 	}
 
 	handler := func(ctx context.Context, args map[string]any) (any, error) {
-		return map[string]any{"result": "ok"}, nil
+		return map[string]any{testResultKey: "ok"}, nil
 	}
 
 	registry.Register("test_tool", types.NewToolDefinition(tool, handler))
@@ -410,7 +413,7 @@ func TestWormhole_RegisterAndListTools(t *testing.T) {
 		"A test tool",
 		schema,
 		func(ctx context.Context, args map[string]any) (any, error) {
-			return "result", nil
+			return testResultKey, nil
 		},
 	)
 

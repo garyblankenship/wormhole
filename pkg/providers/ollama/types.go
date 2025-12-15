@@ -15,16 +15,9 @@ type chatRequest struct {
 
 // message represents an Ollama message
 type message struct {
-	Role    string      `json:"role"`
-	Content any `json:"content"`          // string or []contentPart for multimodal
-	Images  []string    `json:"images,omitempty"` // base64 encoded images
-}
-
-// contentPart represents part of multimodal content
-type contentPart struct {
-	Type string `json:"type"` // "text" or "image"
-	Text string `json:"text,omitempty"`
-	// Images are handled separately in the images field
+	Role    string   `json:"role"`
+	Content any      `json:"content"`          // string or []contentPart for multimodal
+	Images  []string `json:"images,omitempty"` // base64 encoded images
 }
 
 // options represents Ollama model options
@@ -77,29 +70,6 @@ type embeddingsRequest struct {
 // embeddingsResponse represents an Ollama embeddings response
 type embeddingsResponse struct {
 	Embedding []float64 `json:"embedding"`
-}
-
-// generateRequest represents an Ollama generate request (legacy API)
-type generateRequest struct {
-	Model   string   `json:"model"`
-	Prompt  string   `json:"prompt"`
-	Stream  bool     `json:"stream,omitempty"`
-	Format  string   `json:"format,omitempty"`
-	Options *options `json:"options,omitempty"`
-}
-
-// generateResponse represents an Ollama generate response
-type generateResponse struct {
-	Model              string    `json:"model"`
-	CreatedAt          time.Time `json:"created_at"`
-	Response           string    `json:"response"`
-	Done               bool      `json:"done"`
-	TotalDuration      int64     `json:"total_duration,omitempty"`
-	LoadDuration       int64     `json:"load_duration,omitempty"`
-	PromptEvalCount    int       `json:"prompt_eval_count,omitempty"`
-	PromptEvalDuration int64     `json:"prompt_eval_duration,omitempty"`
-	EvalCount          int       `json:"eval_count,omitempty"`
-	EvalDuration       int64     `json:"eval_duration,omitempty"`
 }
 
 // modelsResponse represents the Ollama models list response

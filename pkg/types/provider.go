@@ -138,17 +138,17 @@ type LegacyImageProvider interface {
 
 // ProviderConfig holds provider configuration
 type ProviderConfig struct {
-	APIKey        string                 `json:"api_key"`
-	BaseURL       string                 `json:"base_url,omitempty"`
-	Headers       map[string]string      `json:"headers,omitempty"`
-	Timeout       int                    `json:"timeout,omitempty"`
-	DynamicModels bool                   `json:"dynamic_models,omitempty"` // Skip local registry validation for providers with dynamic model catalogs
-	Params        map[string]any `json:"params,omitempty"`         // Provider-specific parameters for customization
+	APIKey        string            `json:"api_key"`
+	BaseURL       string            `json:"base_url,omitempty"`
+	Headers       map[string]string `json:"headers,omitempty"`
+	Timeout       int               `json:"timeout,omitempty"`
+	DynamicModels bool              `json:"dynamic_models,omitempty"` // Skip local registry validation for providers with dynamic model catalogs
+	Params        map[string]any    `json:"params,omitempty"`         // Provider-specific parameters for customization
 
 	// NEW: Per-provider retry configuration (pointers allow differentiation between not set vs explicitly set to 0)
-	MaxRetries      *int           `json:"max_retries,omitempty"`
-	RetryDelay      *time.Duration `json:"retry_delay,omitempty"`
-	RetryMaxDelay   *time.Duration `json:"retry_max_delay,omitempty"`
+	MaxRetries    *int           `json:"max_retries,omitempty"`
+	RetryDelay    *time.Duration `json:"retry_delay,omitempty"`
+	RetryMaxDelay *time.Duration `json:"retry_max_delay,omitempty"`
 }
 
 // ProviderFactory defines the function signature for creating a new provider instance.
@@ -168,8 +168,8 @@ func IsNotSupportedError(err error) bool {
 	if err == nil {
 		return false
 	}
-	return errors.Is(err, errors.New("not supported")) || 
-		   (err.Error() != "" && 
-			(len(err.Error()) > 20 && 
-			 err.Error()[len(err.Error())-20:] == "does not support"))
+	return errors.Is(err, errors.New("not supported")) ||
+		(err.Error() != "" &&
+			(len(err.Error()) > 20 &&
+				err.Error()[len(err.Error())-20:] == "does not support"))
 }

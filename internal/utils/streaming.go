@@ -10,6 +10,9 @@ import (
 	"github.com/garyblankenship/wormhole/pkg/types"
 )
 
+// Stream sentinel value
+const streamDoneMarker = "[DONE]"
+
 // SSEParser parses Server-Sent Events streams
 type SSEParser struct {
 	reader *bufio.Reader
@@ -172,7 +175,7 @@ func (p *StreamProcessor) Process(chunks chan<- types.TextChunk) {
 		}
 
 		// Handle [DONE] marker
-		if event.Data == "[DONE]" {
+		if event.Data == streamDoneMarker {
 			return
 		}
 
@@ -187,6 +190,22 @@ func (p *StreamProcessor) Process(chunks chan<- types.TextChunk) {
 			chunks <- *chunk
 		}
 	}
+}
+
+// ProcessStream creates and processes a stream in a goroutine, returning the channel
+// This is a convenience function that combines channel creation, goroutine launch, and processing
+func ProcessStream(
+	body io.ReadCloser,
+	transformer func([]byte) (*types.TextChunk, error),
+	bufferSize int,
+) <-chan types.TextChunk {
+	chunks := make(chan types.TextChunk, bufferSize)
+	go func() {
+		defer body.Close()
+		processor := NewStreamProcessor(body, transformer)
+		processor.Process(chunks)
+	}()
+	return chunks
 }
 
 // MergeTextChunks merges text chunks into a complete response

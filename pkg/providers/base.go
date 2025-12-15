@@ -28,22 +28,38 @@ type BaseProvider struct {
 	retryClient *utils.RetryableHTTPClient
 }
 
+// GetHTTPTimeout returns the configured HTTP timeout for this provider
+// - 0 = unlimited timeout (no timeout)
+// - >0 = timeout in seconds
+// - default = configured default timeout
+func (p *BaseProvider) GetHTTPTimeout() time.Duration {
+	if p.Config.Timeout == 0 {
+		return 0 // Unlimited timeout
+	} else if p.Config.Timeout > 0 {
+		return time.Duration(p.Config.Timeout) * time.Second
+	}
+	return config.GetDefaultHTTPTimeout()
+}
+
+// GetHTTPClient returns an HTTP client with the configured timeout
+// Reuses the existing httpClient if available, otherwise creates a new one
+func (p *BaseProvider) GetHTTPClient() *http.Client {
+	if p.httpClient != nil {
+		return p.httpClient
+	}
+	return &http.Client{Timeout: p.GetHTTPTimeout()}
+}
+
 // NewBaseProvider creates a new base provider
 func NewBaseProvider(name string, providerConfig types.ProviderConfig) *BaseProvider {
-	// Handle timeout configuration:
-	// - 0 = unlimited timeout (no timeout)
-	// - >0 = timeout in seconds
-	// - default = configured default timeout
-	timeout := config.GetDefaultHTTPTimeout()
-	if providerConfig.Timeout == 0 {
-		// Unlimited timeout - set to 0 to disable HTTP client timeout
-		timeout = 0
-	} else if providerConfig.Timeout > 0 {
-		timeout = time.Duration(providerConfig.Timeout) * time.Second
+	bp := &BaseProvider{
+		BaseProvider: types.NewBaseProvider(name),
+		Config:       providerConfig,
 	}
 
-	httpClient := &http.Client{
-		Timeout: timeout,
+	// Create HTTP client with configured timeout
+	bp.httpClient = &http.Client{
+		Timeout: bp.GetHTTPTimeout(),
 	}
 
 	// Configure retry logic based on per-provider settings
@@ -60,16 +76,10 @@ func NewBaseProvider(name string, providerConfig types.ProviderConfig) *BaseProv
 		retryConfig.MaxDelay = *providerConfig.RetryMaxDelay
 	}
 
-	retryClient := utils.NewRetryableHTTPClient(httpClient, retryConfig)
+	bp.retryClient = utils.NewRetryableHTTPClient(bp.httpClient, retryConfig)
 
-	return &BaseProvider{
-		BaseProvider: types.NewBaseProvider(name),
-		Config:       providerConfig,
-		httpClient:   httpClient,
-		retryClient:  retryClient,
-	}
+	return bp
 }
-
 
 // DoRequest performs an HTTP request with common error handling
 func (p *BaseProvider) DoRequest(ctx context.Context, method, url string, body any, result any) error {
@@ -89,7 +99,7 @@ func (p *BaseProvider) DoRequest(ctx context.Context, method, url string, body a
 	// Read response
 	respBody, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return fmt.Errorf("failed to read response body: %w", err)
+		return types.Errorf("read response body", err)
 	}
 
 	// Handle error responses
@@ -112,7 +122,7 @@ func (p *BaseProvider) buildRequest(ctx context.Context, method, url string, bod
 	// Create request
 	req, err := http.NewRequestWithContext(ctx, method, url, reqBody)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create request: %w", err)
+		return nil, types.Errorf("create request", err)
 	}
 
 	// Set headers
@@ -129,7 +139,7 @@ func (p *BaseProvider) marshalRequestBody(body any) (io.Reader, error) {
 
 	jsonBody, err := json.Marshal(body)
 	if err != nil {
-		return nil, fmt.Errorf("failed to marshal request body: %w", err)
+		return nil, types.Errorf("marshal request body", err)
 	}
 
 	return bytes.NewReader(jsonBody), nil
@@ -137,8 +147,8 @@ func (p *BaseProvider) marshalRequestBody(body any) (io.Reader, error) {
 
 // setRequestHeaders sets common and custom headers
 func (p *BaseProvider) setRequestHeaders(req *http.Request) {
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer "+p.Config.APIKey)
+	req.Header.Set(types.HeaderContentType, types.ContentTypeJSON)
+	req.Header.Set(types.HeaderAuthorization, "Bearer "+p.Config.APIKey)
 
 	// Set custom headers
 	for k, v := range p.Config.Headers {
@@ -218,7 +228,7 @@ func (p *BaseProvider) parseResponse(respBody []byte, result any) error {
 	}
 
 	if err := json.Unmarshal(respBody, result); err != nil {
-		return fmt.Errorf("failed to unmarshal response: %w", err)
+		return types.Errorf("unmarshal response", err)
 	}
 
 	return nil
@@ -260,21 +270,21 @@ func (p *BaseProvider) StreamRequest(ctx context.Context, method, url string, bo
 	if body != nil {
 		jsonBody, err := json.Marshal(body)
 		if err != nil {
-			return nil, fmt.Errorf("failed to marshal request body: %w", err)
+			return nil, types.Errorf("marshal request body", err)
 		}
 		reqBody = bytes.NewReader(jsonBody)
 	}
 
 	req, err := http.NewRequestWithContext(ctx, method, url, reqBody)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create request: %w", err)
+		return nil, types.Errorf("create request", err)
 	}
 
 	// Set common headers
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer "+p.Config.APIKey)
-	req.Header.Set("Accept", "text/event-stream")
-	req.Header.Set("Cache-Control", "no-cache")
+	req.Header.Set(types.HeaderContentType, types.ContentTypeJSON)
+	req.Header.Set(types.HeaderAuthorization, "Bearer "+p.Config.APIKey)
+	req.Header.Set(types.HeaderAccept, types.ContentTypeEventStream)
+	req.Header.Set(types.HeaderCacheControl, "no-cache")
 
 	// Set custom headers
 	for k, v := range p.Config.Headers {
@@ -319,7 +329,7 @@ func (p *BaseProvider) maskAPIKeyInURL(rawURL string) string {
 	if err != nil {
 		return rawURL // Return original if parsing fails
 	}
-	
+
 	// Mask API keys in query parameters
 	query := parsed.Query()
 	for key, values := range query {
@@ -334,7 +344,7 @@ func (p *BaseProvider) maskAPIKeyInURL(rawURL string) string {
 		}
 	}
 	parsed.RawQuery = query.Encode()
-	
+
 	return parsed.String()
 }
 

@@ -1,5 +1,5 @@
 // Package config provides centralized configuration defaults for the Wormhole SDK.
-// 
+//
 // ⚠️  CRITICAL: THIS IS THE ONLY FILE WITH HARDCODED DEFAULT VALUES ⚠️
 // All other files MUST use the Get*() functions from this file only.
 // These defaults exist ONLY as environment variable fallbacks.
@@ -18,45 +18,43 @@ const (
 	UnlimitedTimeout = 0
 )
 
-// ONLY_HARDCODED_DEFAULTS_IN_CODEBASE - Environment variable fallbacks
-// ⚠️  These are the ONLY hardcoded values allowed anywhere in the codebase ⚠️
+// Environment variable fallbacks - the ONLY hardcoded values allowed in codebase
 const (
-	// FALLBACK_DefaultHTTPTimeout - Used only if WORMHOLE_DEFAULT_TIMEOUT not set
-	FALLBACK_DefaultHTTPTimeout = 300 * time.Second // 5 minutes
+	// FallbackHTTPTimeout is used only if WORMHOLE_DEFAULT_TIMEOUT not set
+	FallbackHTTPTimeout = 300 * time.Second // 5 minutes
 
-	// FALLBACK_DefaultMaxRetries - Used only if WORMHOLE_MAX_RETRIES not set  
-	FALLBACK_DefaultMaxRetries = 3
+	// FallbackMaxRetries is used only if WORMHOLE_MAX_RETRIES not set
+	FallbackMaxRetries = 3
 
-	// FALLBACK_DefaultInitialDelay - Used only if WORMHOLE_INITIAL_RETRY_DELAY not set
-	FALLBACK_DefaultInitialDelay = 1 * time.Second
+	// FallbackInitialDelay is used only if WORMHOLE_INITIAL_RETRY_DELAY not set
+	FallbackInitialDelay = 1 * time.Second
 
-	// FALLBACK_DefaultMaxDelay - Used only if WORMHOLE_MAX_RETRY_DELAY not set
-	FALLBACK_DefaultMaxDelay = 30 * time.Second
+	// FallbackMaxDelay is used only if WORMHOLE_MAX_RETRY_DELAY not set
+	FallbackMaxDelay = 30 * time.Second
 
 	// DefaultBackoffMultiple is the multiplier for exponential backoff.
-	// Each retry delay is multiplied by this factor.
 	DefaultBackoffMultiple = 2.0
 
 	// DefaultJitterEnabled controls whether random jitter is added to retry delays.
 	DefaultJitterEnabled = true
 
-	// FALLBACK_DefaultCircuitBreakerTimeout - Used only if WORMHOLE_CIRCUIT_BREAKER_TIMEOUT not set
-	FALLBACK_DefaultCircuitBreakerTimeout = 30 * time.Second
+	// FallbackCircuitBreakerTimeout is used only if WORMHOLE_CIRCUIT_BREAKER_TIMEOUT not set
+	FallbackCircuitBreakerTimeout = 30 * time.Second
 
-	// FALLBACK_DefaultHealthCheckInterval - Used only if WORMHOLE_HEALTH_CHECK_INTERVAL not set
-	FALLBACK_DefaultHealthCheckInterval = 30 * time.Second
+	// FallbackHealthCheckInterval is used only if WORMHOLE_HEALTH_CHECK_INTERVAL not set
+	FallbackHealthCheckInterval = 30 * time.Second
 
-	// FALLBACK_DefaultLoadBalancerHealthInterval - Used only if env var not set
-	FALLBACK_DefaultLoadBalancerHealthInterval = 30 * time.Second
+	// FallbackLoadBalancerHealthInterval is used only if env var not set
+	FallbackLoadBalancerHealthInterval = 30 * time.Second
 )
 
 // Backwards compatibility aliases - DO NOT USE DIRECTLY
 // Use Get*() functions instead
 const (
-	DefaultMaxRetries                     = FALLBACK_DefaultMaxRetries
-	DefaultInitialDelay                   = FALLBACK_DefaultInitialDelay  
-	DefaultMaxDelay                       = FALLBACK_DefaultMaxDelay
-	DefaultLoadBalancerHealthInterval     = FALLBACK_DefaultLoadBalancerHealthInterval
+	DefaultMaxRetries                 = FallbackMaxRetries
+	DefaultInitialDelay               = FallbackInitialDelay
+	DefaultMaxDelay                   = FallbackMaxDelay
+	DefaultLoadBalancerHealthInterval = FallbackLoadBalancerHealthInterval
 )
 
 // Runtime Configuration Support
@@ -71,7 +69,7 @@ func GetDefaultHTTPTimeout() time.Duration {
 			return duration
 		}
 	}
-	return FALLBACK_DefaultHTTPTimeout
+	return FallbackHTTPTimeout
 }
 
 // GetDefaultMaxRetries returns the max retries with environment variable override.
@@ -83,7 +81,7 @@ func GetDefaultMaxRetries() int {
 			return retries
 		}
 	}
-	return FALLBACK_DefaultMaxRetries
+	return FallbackMaxRetries
 }
 
 // GetDefaultMaxDelay returns the max retry delay with environment variable override.
@@ -95,7 +93,7 @@ func GetDefaultMaxDelay() time.Duration {
 			return duration
 		}
 	}
-	return FALLBACK_DefaultMaxDelay
+	return FallbackMaxDelay
 }
 
 // GetDefaultInitialDelay returns the initial retry delay with environment variable override.
@@ -107,7 +105,7 @@ func GetDefaultInitialDelay() time.Duration {
 			return duration
 		}
 	}
-	return FALLBACK_DefaultInitialDelay
+	return FallbackInitialDelay
 }
 
 // GetDefaultCircuitBreakerTimeout returns the circuit breaker timeout with environment variable override.
@@ -119,7 +117,7 @@ func GetDefaultCircuitBreakerTimeout() time.Duration {
 			return duration
 		}
 	}
-	return FALLBACK_DefaultCircuitBreakerTimeout
+	return FallbackCircuitBreakerTimeout
 }
 
 // GetDefaultHealthCheckInterval returns the health check interval with environment variable override.
@@ -131,5 +129,5 @@ func GetDefaultHealthCheckInterval() time.Duration {
 			return duration
 		}
 	}
-	return FALLBACK_DefaultHealthCheckInterval
+	return FallbackHealthCheckInterval
 }

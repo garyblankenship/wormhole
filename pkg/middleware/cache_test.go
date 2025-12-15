@@ -7,12 +7,18 @@ import (
 	"time"
 )
 
+// Test constants
+const (
+	testValue1   = "value1"
+	testResponse = "response"
+)
+
 func TestMemoryCache(t *testing.T) {
 	cache := NewMemoryCache(3)
 
 	// Test Set and Get
-	cache.Set("key1", "value1", 1*time.Hour)
-	if value, found := cache.Get("key1"); !found || value != "value1" {
+	cache.Set("key1", testValue1, 1*time.Hour)
+	if value, found := cache.Get("key1"); !found || value != testValue1 {
 		t.Errorf("Expected to find 'value1', got %v, found: %t", value, found)
 	}
 
@@ -265,16 +271,16 @@ func TestCacheMiddlewareWithCacheableFunc(t *testing.T) {
 
 	// Non-cacheable request should not be cached
 	req1 := map[string]any{"cacheable": false, "data": "test1"}
-	wrappedHandler(ctx, req1)
-	wrappedHandler(ctx, req1) // Second call
+	_, _ = wrappedHandler(ctx, req1)
+	_, _ = wrappedHandler(ctx, req1) // Second call
 	if callCount != 2 {
 		t.Errorf("Expected non-cacheable request to call handler twice, got %d", callCount)
 	}
 
 	// Cacheable request should be cached
 	req2 := map[string]any{"cacheable": true, "data": "test2"}
-	wrappedHandler(ctx, req2)
-	wrappedHandler(ctx, req2) // Second call should use cache
+	_, _ = wrappedHandler(ctx, req2)
+	_, _ = wrappedHandler(ctx, req2) // Second call should use cache
 	if callCount != 3 {
 		t.Errorf("Expected cacheable request to call handler once more (total 3), got %d", callCount)
 	}
@@ -323,7 +329,7 @@ func TestCacheMiddlewareKeyGeneratorError(t *testing.T) {
 	callCount := 0
 	mockHandler := func(ctx context.Context, req any) (any, error) {
 		callCount++
-		return "response", nil
+		return testResponse, nil
 	}
 
 	middleware := CacheMiddleware(config)
@@ -337,7 +343,7 @@ func TestCacheMiddlewareKeyGeneratorError(t *testing.T) {
 	if err1 != nil {
 		t.Fatalf("Expected no error, got %v", err1)
 	}
-	if resp1 != "response" {
+	if resp1 != testResponse {
 		t.Errorf("Expected 'response', got %v", resp1)
 	}
 	if callCount != 1 {

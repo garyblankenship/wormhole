@@ -33,7 +33,7 @@ func (f *AnthropicFetcher) Name() string {
 // FetchModels retrieves all available models from Anthropic
 func (f *AnthropicFetcher) FetchModels(ctx context.Context) ([]*types.ModelInfo, error) {
 	if f.apiKey == "" {
-		return nil, fmt.Errorf("Anthropic API key not configured")
+		return nil, fmt.Errorf("anthropic API key not configured")
 	}
 
 	// Create request

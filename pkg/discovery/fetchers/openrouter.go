@@ -10,6 +10,9 @@ import (
 	"github.com/garyblankenship/wormhole/pkg/types"
 )
 
+// Provider name constant
+const providerOpenRouter = "openrouter"
+
 // OpenRouterFetcher fetches models from OpenRouter API
 type OpenRouterFetcher struct {
 	baseURL string
@@ -26,7 +29,7 @@ func NewOpenRouterFetcher() *OpenRouterFetcher {
 
 // Name returns the provider name
 func (f *OpenRouterFetcher) Name() string {
-	return "openrouter"
+	return providerOpenRouter
 }
 
 // FetchModels retrieves all available models from OpenRouter
@@ -150,5 +153,5 @@ func extractProvider(modelID string) string {
 	if len(parts) == 2 {
 		return parts[0]
 	}
-	return "openrouter" // Fallback
+	return providerOpenRouter // Fallback
 }

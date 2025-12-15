@@ -109,7 +109,7 @@ func TestRetryableHTTPClient_Do_Success(t *testing.T) {
 	// Mock server that succeeds immediately
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte("success"))
+		_, _ = w.Write([]byte("success"))
 	}))
 	defer server.Close()
 
@@ -143,10 +143,10 @@ func TestRetryableHTTPClient_Do_RetryableErrors(t *testing.T) {
 		attempt++
 		if attempt < 3 {
 			w.WriteHeader(http.StatusServiceUnavailable) // 503 - retryable
-			w.Write([]byte("service unavailable"))
+			_, _ = w.Write([]byte("service unavailable"))
 		} else {
 			w.WriteHeader(http.StatusOK)
-			w.Write([]byte("success"))
+			_, _ = w.Write([]byte("success"))
 		}
 	}))
 	defer server.Close()
@@ -181,7 +181,7 @@ func TestRetryableHTTPClient_Do_RetryableErrors(t *testing.T) {
 func TestRetryableHTTPClient_Do_NonRetryableError(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusBadRequest) // 400 - not retryable
-		w.Write([]byte("bad request"))
+		_, _ = w.Write([]byte("bad request"))
 	}))
 	defer server.Close()
 
@@ -227,6 +227,9 @@ func TestRetryableHTTPClient_Do_ExceedMaxRetries(t *testing.T) {
 	require.NoError(t, err)
 
 	resp, err := client.Do(req)
+	if resp != nil {
+		defer resp.Body.Close()
+	}
 
 	assert.Error(t, err)
 	assert.Nil(t, resp)
@@ -258,6 +261,9 @@ func TestRetryableHTTPClient_Do_ContextCancellation(t *testing.T) {
 
 	start := time.Now()
 	resp, err := client.Do(req)
+	if resp != nil {
+		defer resp.Body.Close()
+	}
 	duration := time.Since(start)
 
 	assert.Error(t, err)
@@ -277,7 +283,7 @@ func TestRetryableHTTPClient_Do_RetryAfterHeader(t *testing.T) {
 			w.WriteHeader(http.StatusTooManyRequests)
 		} else {
 			w.WriteHeader(http.StatusOK)
-			w.Write([]byte("success"))
+			_, _ = w.Write([]byte("success"))
 		}
 	}))
 	defer server.Close()
@@ -509,6 +515,9 @@ func TestRetryableHTTPClient_NetworkError(t *testing.T) {
 	require.NoError(t, err)
 
 	resp, err := client.Do(req)
+	if resp != nil {
+		defer resp.Body.Close()
+	}
 
 	assert.Error(t, err)
 	assert.Nil(t, resp)
@@ -570,15 +579,15 @@ func TestRetryableHTTPClient_RealWorldScenario(t *testing.T) {
 			// First request: rate limited with Retry-After
 			w.Header().Set("Retry-After", "1")
 			w.WriteHeader(http.StatusTooManyRequests)
-			w.Write([]byte(`{"error": "rate limited"}`))
+			_, _ = w.Write([]byte(`{"error": "rate limited"}`))
 		case 2:
 			// Second request: server error
 			w.WriteHeader(http.StatusInternalServerError)
-			w.Write([]byte(`{"error": "internal server error"}`))
+			_, _ = w.Write([]byte(`{"error": "internal server error"}`))
 		case 3:
 			// Third request: success
 			w.WriteHeader(http.StatusOK)
-			w.Write([]byte(`{"result": "success"}`))
+			_, _ = w.Write([]byte(`{"result": "success"}`))
 		}
 	}))
 	defer server.Close()

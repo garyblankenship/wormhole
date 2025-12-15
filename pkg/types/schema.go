@@ -53,36 +53,63 @@ func (s *ObjectSchema) Validate(data any) error {
 	}
 
 	// Convert to map for unified processing
+	dataMap := toDataMap(value)
+
+	// Check required fields
+	if err := s.validateRequired(dataMap); err != nil {
+		return err
+	}
+
+	// Validate properties
+	return s.validateProperties(dataMap)
+}
+
+// toDataMap converts a reflect.Value (map or struct) to map[string]any
+func toDataMap(value reflect.Value) map[string]any {
 	dataMap := make(map[string]any)
+
 	if value.Kind() == reflect.Map {
 		for _, key := range value.MapKeys() {
 			dataMap[fmt.Sprintf("%v", key.Interface())] = value.MapIndex(key).Interface()
 		}
-	} else {
-		// Struct to map conversion
-		valueType := value.Type()
-		for i := 0; i < value.NumField(); i++ {
-			field := valueType.Field(i)
-			jsonTag := field.Tag.Get("json")
-			fieldName := field.Name
-			if jsonTag != "" && jsonTag != "-" {
-				parts := strings.Split(jsonTag, ",")
-				if parts[0] != "" {
-					fieldName = parts[0]
-				}
-			}
-			dataMap[fieldName] = value.Field(i).Interface()
-		}
+		return dataMap
 	}
 
-	// Check required fields
+	// Struct to map conversion
+	valueType := value.Type()
+	for i := 0; i < value.NumField(); i++ {
+		field := valueType.Field(i)
+		fieldName := getFieldName(field)
+		dataMap[fieldName] = value.Field(i).Interface()
+	}
+	return dataMap
+}
+
+// getFieldName extracts the field name from struct field, preferring json tag
+func getFieldName(field reflect.StructField) string {
+	jsonTag := field.Tag.Get("json")
+	if jsonTag == "" || jsonTag == "-" {
+		return field.Name
+	}
+	parts := strings.Split(jsonTag, ",")
+	if parts[0] != "" {
+		return parts[0]
+	}
+	return field.Name
+}
+
+// validateRequired checks that all required fields are present
+func (s *ObjectSchema) validateRequired(dataMap map[string]any) error {
 	for _, req := range s.Required {
 		if _, exists := dataMap[req]; !exists {
 			return NewWormholeError(ErrorCodeValidation, fmt.Sprintf("required field '%s' is missing", req), false)
 		}
 	}
+	return nil
+}
 
-	// Validate properties
+// validateProperties validates each property against its schema
+func (s *ObjectSchema) validateProperties(dataMap map[string]any) error {
 	for propName, propSchema := range s.Properties {
 		if propValue, exists := dataMap[propName]; exists {
 			if err := propSchema.Validate(propValue); err != nil {
@@ -90,7 +117,6 @@ func (s *ObjectSchema) Validate(data any) error {
 			}
 		}
 	}
-
 	return nil
 }
 

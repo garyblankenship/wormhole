@@ -130,6 +130,7 @@ func (lb *LoadBalancer) selectRoundRobin(providers []*ProviderHandler) *Provider
 }
 
 func (lb *LoadBalancer) selectRandom(providers []*ProviderHandler) *ProviderHandler {
+	// #nosec G404 - math/rand is acceptable for load balancing (not security-critical)
 	return providers[rand.Intn(len(providers))]
 }
 

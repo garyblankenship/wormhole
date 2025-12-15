@@ -9,6 +9,14 @@ import (
 	"github.com/garyblankenship/wormhole/pkg/types"
 )
 
+// Role mapping constants
+const (
+	roleSystem    = "system"
+	roleUser      = "user"
+	roleAssistant = "assistant"
+	roleTool      = "tool"
+)
+
 // buildChatPayload builds the Ollama chat completion payload
 func (p *Provider) buildChatPayload(request *types.TextRequest) *chatRequest {
 	payload := &chatRequest{
@@ -82,62 +90,69 @@ func (p *Provider) buildOptions(request *types.TextRequest) *options {
 	return opts
 }
 
+// extractImageData extracts base64 image data from data URLs or raw strings
+func extractImageData(data any) string {
+	imageData, ok := data.(string)
+	if !ok {
+		return fmt.Sprintf("%v", data)
+	}
+	// Extract base64 part from data URL if present
+	if strings.HasPrefix(imageData, "data:image/") {
+		if idx := strings.Index(imageData, ","); idx != -1 {
+			return imageData[idx+1:]
+		}
+	}
+	return imageData
+}
+
+// convertMultimodalParts processes message parts into text and images
+func convertMultimodalParts(parts []types.MessagePart) (string, []string) {
+	textParts := make([]string, 0, len(parts))
+	images := make([]string, 0)
+
+	for _, part := range parts {
+		switch part.Type {
+		case "text":
+			textParts = append(textParts, part.Text)
+		case "image":
+			images = append(images, extractImageData(part.Data))
+		}
+	}
+
+	return strings.Join(textParts, "\n"), images
+}
+
 // transformMessages converts internal messages to Ollama format
 func (p *Provider) transformMessages(messages []types.Message, systemPrompt string) []message {
-	var result []message
+	capacity := len(messages)
+	if systemPrompt != "" {
+		capacity++
+	}
+	result := make([]message, 0, capacity)
 
-	// Add system prompt as first message if provided
 	if systemPrompt != "" {
 		result = append(result, message{
-			Role:    "system",
+			Role:    roleSystem,
 			Content: systemPrompt,
 		})
 	}
 
 	for _, msg := range messages {
-		ollamaMsg := message{
-			Role: p.mapRole(msg.GetRole()),
-		}
+		ollamaMsg := message{Role: p.mapRole(msg.GetRole())}
 
-		// Handle content based on type
-		content := msg.GetContent()
-		switch c := content.(type) {
+		switch c := msg.GetContent().(type) {
 		case string:
 			ollamaMsg.Content = c
 		case []types.MessagePart:
-			// Handle multimodal content
-			textParts := []string{}
-			images := []string{}
-
-			for _, part := range c {
-				if part.Type == "text" {
-					textParts = append(textParts, part.Text)
-				} else if part.Type == "image" {
-					// Extract base64 data from data URL if needed
-					imageData, ok := part.Data.(string)
-					if !ok {
-						imageData = fmt.Sprintf("%v", part.Data)
-					}
-					if strings.HasPrefix(imageData, "data:image/") {
-						// Extract base64 part from data URL
-						if idx := strings.Index(imageData, ","); idx != -1 {
-							imageData = imageData[idx+1:]
-						}
-					}
-					images = append(images, imageData)
-				}
-			}
-
-			// Combine text parts
-			if len(textParts) > 0 {
-				ollamaMsg.Content = strings.Join(textParts, "\n")
+			text, images := convertMultimodalParts(c)
+			if text != "" {
+				ollamaMsg.Content = text
 			}
 			if len(images) > 0 {
 				ollamaMsg.Images = images
 			}
 		default:
-			// Try to convert to string
-			ollamaMsg.Content = fmt.Sprintf("%v", content)
+			ollamaMsg.Content = fmt.Sprintf("%v", c)
 		}
 
 		result = append(result, ollamaMsg)
@@ -150,15 +165,15 @@ func (p *Provider) transformMessages(messages []types.Message, systemPrompt stri
 func (p *Provider) mapRole(role types.Role) string {
 	switch role {
 	case types.RoleSystem:
-		return "system"
+		return roleSystem
 	case types.RoleUser:
-		return "user"
+		return roleUser
 	case types.RoleAssistant:
-		return "assistant"
+		return roleAssistant
 	case types.RoleTool:
-		return "tool" // Ollama may not support this, treat as user
+		return roleTool // Ollama may not support this, treat as user
 	default:
-		return "user"
+		return roleUser
 	}
 }
 
@@ -182,23 +197,6 @@ func (p *Provider) transformTextResponse(response *chatResponse) *types.TextResp
 		FinishReason: p.mapFinishReason(response.Done),
 		Usage:        p.convertUsage(response),
 		Created:      response.CreatedAt,
-	}
-}
-
-// transformEmbeddingsResponse converts Ollama embeddings response
-func (p *Provider) transformEmbeddingsResponse(response *embeddingsResponse, model string) *types.EmbeddingsResponse {
-	embeddings := []types.Embedding{
-		{
-			Index:     0,
-			Embedding: response.Embedding,
-		},
-	}
-
-	return &types.EmbeddingsResponse{
-		Model:      model,
-		Embeddings: embeddings,
-		Usage:      nil, // Ollama doesn't provide usage info for embeddings
-		Created:    time.Now(),
 	}
 }
 
@@ -252,11 +250,9 @@ func (p *Provider) parseStreamChunk(data []byte) (*types.TextChunk, error) {
 // Helper functions
 
 // mapFinishReason maps Ollama's done status to finish reason
-func (p *Provider) mapFinishReason(done bool) types.FinishReason {
-	if done {
-		return types.FinishReasonStop
-	}
-	return types.FinishReasonStop // Default to stop
+// Note: Ollama currently only reports "stop" finish reason
+func (p *Provider) mapFinishReason(_ bool) types.FinishReason {
+	return types.FinishReasonStop
 }
 
 // convertUsage converts Ollama response to usage info
@@ -275,20 +271,5 @@ func (p *Provider) convertUsage(response *chatResponse) *types.Usage {
 		PromptTokens:     promptTokens,
 		CompletionTokens: completionTokens,
 		TotalTokens:      totalTokens,
-	}
-}
-
-// buildEmbeddingsPayload builds the Ollama embeddings payload
-func (p *Provider) buildEmbeddingsPayload(request *types.EmbeddingsRequest) *embeddingsRequest {
-	// Ollama embeddings API takes a single string prompt
-	// If multiple inputs, we'll process them individually
-	var prompt string
-	if len(request.Input) > 0 {
-		prompt = request.Input[0] // Use first input for now
-	}
-
-	return &embeddingsRequest{
-		Model:  request.Model,
-		Prompt: prompt,
 	}
 }

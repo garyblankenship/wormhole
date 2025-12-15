@@ -12,9 +12,15 @@ import (
 	"github.com/garyblankenship/wormhole/pkg/types"
 )
 
+// Stream sentinel value
+const streamDoneMarker = "[DONE]"
+
+// Gemini role mappings
+const geminiRoleModel = "model"
+
 // transformMessages converts types.Message to Gemini format
 func (g *Gemini) transformMessages(messages []types.Message) ([]map[string]any, error) {
-	var contents []map[string]any
+	contents := make([]map[string]any, 0, len(messages))
 
 	for _, msg := range messages {
 		content := map[string]any{
@@ -37,9 +43,9 @@ func (g *Gemini) transformMessages(messages []types.Message) ([]map[string]any, 
 func (g *Gemini) mapRole(role string) string {
 	switch role {
 	case "system":
-		return "model"
+		return geminiRoleModel
 	case "assistant":
-		return "model"
+		return geminiRoleModel
 	case "tool":
 		return "function"
 	default:
@@ -131,10 +137,10 @@ func (g *Gemini) transformMedia(media types.Media) (map[string]any, error) {
 }
 
 // transformTools converts tools to Gemini format
-func (g *Gemini) transformTools(tools []types.Tool) ([]map[string]any, error) {
+func (g *Gemini) transformTools(tools []types.Tool) []map[string]any {
 	var geminiTools []map[string]any
 
-	var functions []map[string]any
+	functions := make([]map[string]any, 0, len(tools))
 	for _, tool := range tools {
 		schema := g.transformToolSchema(tool.InputSchema)
 		functions = append(functions, map[string]any{
@@ -150,7 +156,7 @@ func (g *Gemini) transformTools(tools []types.Tool) ([]map[string]any, error) {
 		})
 	}
 
-	return geminiTools, nil
+	return geminiTools
 }
 
 // transformToolSchema converts tool schema to Gemini format
@@ -216,57 +222,77 @@ func (g *Gemini) schemaToMap(schema types.Schema) map[string]any {
 
 	// Handle schema interface
 	if schemaIface, ok := schema.(types.SchemaInterface); ok {
-		result := map[string]any{
-			"type": schemaIface.GetType(),
-		}
-
-		if desc := schemaIface.GetDescription(); desc != "" {
-			result["description"] = desc
-		}
-		return result
+		return g.schemaInterfaceToMap(schemaIface)
 	}
 
-	// Default empty result
+	// Handle specific schema types
+	return g.schemaTypeToMap(schema)
+}
+
+// schemaInterfaceToMap converts a SchemaInterface to map
+func (g *Gemini) schemaInterfaceToMap(schemaIface types.SchemaInterface) map[string]any {
+	result := map[string]any{
+		"type": schemaIface.GetType(),
+	}
+	if desc := schemaIface.GetDescription(); desc != "" {
+		result["description"] = desc
+	}
+	return result
+}
+
+// schemaTypeToMap handles specific schema types
+func (g *Gemini) schemaTypeToMap(schema types.Schema) map[string]any {
 	result := map[string]any{}
 
 	switch s := schema.(type) {
 	case *types.ObjectSchema:
-		properties := make(map[string]any)
-		for name, prop := range s.Properties {
-			properties[name] = g.schemaToMap(prop)
-		}
-		result["properties"] = properties
-		if len(s.Required) > 0 {
-			result["required"] = s.Required
-		}
-
+		g.objectSchemaToMap(s, result)
 	case *types.ArraySchema:
 		result["items"] = g.schemaToMap(s.Items)
-
 	case *types.EnumSchema:
 		result["enum"] = s.Enum
-
 	case *types.NumberSchema:
-		if s.Minimum != nil {
-			result["minimum"] = *s.Minimum
-		}
-		if s.Maximum != nil {
-			result["maximum"] = *s.Maximum
-		}
-
+		g.numberSchemaToMap(s, result)
 	case *types.StringSchema:
-		if s.MinLength != nil {
-			result["minLength"] = *s.MinLength
-		}
-		if s.MaxLength != nil {
-			result["maxLength"] = *s.MaxLength
-		}
-		if s.Pattern != "" {
-			result["pattern"] = s.Pattern
-		}
+		g.stringSchemaToMap(s, result)
 	}
 
 	return result
+}
+
+// objectSchemaToMap populates result map from ObjectSchema
+func (g *Gemini) objectSchemaToMap(s *types.ObjectSchema, result map[string]any) {
+	properties := make(map[string]any)
+	for name, prop := range s.Properties {
+		properties[name] = g.schemaToMap(prop)
+	}
+	result["properties"] = properties
+	if len(s.Required) > 0 {
+		result["required"] = s.Required
+	}
+}
+
+// numberSchemaToMap populates result map from NumberSchema
+func (g *Gemini) numberSchemaToMap(s *types.NumberSchema, result map[string]any) {
+	if s.Minimum != nil {
+		result["minimum"] = *s.Minimum
+	}
+	if s.Maximum != nil {
+		result["maximum"] = *s.Maximum
+	}
+}
+
+// stringSchemaToMap populates result map from StringSchema
+func (g *Gemini) stringSchemaToMap(s *types.StringSchema, result map[string]any) {
+	if s.MinLength != nil {
+		result["minLength"] = *s.MinLength
+	}
+	if s.MaxLength != nil {
+		result["maxLength"] = *s.MaxLength
+	}
+	if s.Pattern != "" {
+		result["pattern"] = s.Pattern
+	}
 }
 
 // transformTextResponse converts Gemini response to types.TextResponse
@@ -387,7 +413,7 @@ func (g *Gemini) transformStructuredResponse(response *geminiTextResponse, schem
 
 // transformEmbeddingsResponse converts Gemini response to types.EmbeddingsResponse
 func (g *Gemini) transformEmbeddingsResponse(response *geminiEmbeddingsResponse) (*types.EmbeddingsResponse, error) {
-	var embeddings []types.Embedding
+	embeddings := make([]types.Embedding, 0, len(response.Embeddings))
 
 	for i, emb := range response.Embeddings {
 		embeddings = append(embeddings, types.Embedding{
@@ -404,6 +430,66 @@ func (g *Gemini) transformEmbeddingsResponse(response *geminiEmbeddingsResponse)
 	}, nil
 }
 
+// processStreamCandidate extracts chunks from a candidate response
+func (g *Gemini) processStreamCandidate(candidate candidate) []types.TextChunk {
+	chunks := make([]types.TextChunk, 0, len(candidate.Content.Parts)+1)
+
+	for _, part := range candidate.Content.Parts {
+		if part.Text != "" {
+			chunks = append(chunks, types.TextChunk{
+				Text:  part.Text,
+				Model: "gemini",
+			})
+		}
+		if part.FunctionCall != nil {
+			chunks = append(chunks, types.TextChunk{
+				ToolCall: &types.ToolCall{
+					ID:        part.FunctionCall.Name,
+					Name:      part.FunctionCall.Name,
+					Arguments: part.FunctionCall.Args,
+				},
+				Model: "gemini",
+			})
+		}
+	}
+
+	if candidate.FinishReason != "" {
+		finishReason := types.FinishReasonStop
+		if mapped, ok := finishReasonMap[candidate.FinishReason]; ok {
+			finishReason = mapped
+		}
+		chunks = append(chunks, types.TextChunk{
+			FinishReason: &finishReason,
+			Model:        "gemini",
+		})
+	}
+
+	return chunks
+}
+
+// parseStreamEvent parses an SSE event and returns chunks or an error
+func (g *Gemini) parseStreamEvent(data string) ([]types.TextChunk, bool, error) {
+	if data == "" {
+		return nil, false, nil
+	}
+	if strings.TrimSpace(data) == streamDoneMarker {
+		return nil, true, nil // done
+	}
+
+	var response geminiTextResponse
+	if err := json.Unmarshal([]byte(data), &response); err != nil {
+		return nil, false, err
+	}
+	if response.Error != nil {
+		return nil, false, errors.New(response.Error.Message)
+	}
+	if len(response.Candidates) == 0 {
+		return nil, false, nil
+	}
+
+	return g.processStreamCandidate(response.Candidates[0]), false, nil
+}
+
 // handleStream processes streaming responses
 func (g *Gemini) handleStream(stream io.ReadCloser) <-chan types.TextChunk {
 	ch := make(chan types.TextChunk)
@@ -414,61 +500,16 @@ func (g *Gemini) handleStream(stream io.ReadCloser) <-chan types.TextChunk {
 
 		scanner := utils.NewSSEScanner(stream)
 		for scanner.Scan() {
-			event := scanner.Event()
-			if event.Data == "" {
-				continue
-			}
-
-			// Skip [DONE] message
-			if strings.TrimSpace(event.Data) == "[DONE]" {
-				return
-			}
-
-			var response geminiTextResponse
-			if err := json.Unmarshal([]byte(event.Data), &response); err != nil {
+			chunks, done, err := g.parseStreamEvent(scanner.Event().Data)
+			if err != nil {
 				ch <- types.TextChunk{Error: err}
 				return
 			}
-
-			if response.Error != nil {
-				ch <- types.TextChunk{Error: errors.New(response.Error.Message)}
+			if done {
 				return
 			}
-
-			if len(response.Candidates) > 0 {
-				candidate := response.Candidates[0]
-
-				for _, part := range candidate.Content.Parts {
-					if part.Text != "" {
-						ch <- types.TextChunk{
-							Text:  part.Text,
-							Model: "gemini",
-						}
-					}
-
-					if part.FunctionCall != nil {
-						ch <- types.TextChunk{
-							ToolCall: &types.ToolCall{
-								ID:        part.FunctionCall.Name,
-								Name:      part.FunctionCall.Name,
-								Arguments: part.FunctionCall.Args,
-							},
-							Model: "gemini",
-						}
-					}
-				}
-
-				// Send finish reason if present
-				if candidate.FinishReason != "" {
-					finishReason := types.FinishReasonStop
-					if mapped, ok := finishReasonMap[candidate.FinishReason]; ok {
-						finishReason = mapped
-					}
-					ch <- types.TextChunk{
-						FinishReason: &finishReason,
-						Model:        "gemini",
-					}
-				}
+			for _, chunk := range chunks {
+				ch <- chunk
 			}
 		}
 

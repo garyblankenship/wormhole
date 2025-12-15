@@ -121,8 +121,8 @@ func (c *ModelCache) saveToFile(provider string, models []*types.ModelInfo) {
 	var fileCache FileCache
 	data, err := os.ReadFile(c.filePath)
 	if err == nil {
-		// File exists, parse it
-		json.Unmarshal(data, &fileCache)
+		// File exists, parse it (ignore unmarshal errors, will reinitialize)
+		_ = json.Unmarshal(data, &fileCache)
 	}
 
 	// Initialize if needed
@@ -147,14 +147,20 @@ func (c *ModelCache) saveToFile(provider string, models []*types.ModelInfo) {
 
 	// Ensure directory exists
 	dir := filepath.Dir(c.filePath)
-	os.MkdirAll(dir, 0755)
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		return // Can't create directory, skip save
+	}
 
 	// Write atomically (write to temp, then rename)
+	// Use 0600 for security (cache may contain API-related metadata)
 	tempPath := c.filePath + ".tmp"
-	if err := os.WriteFile(tempPath, data, 0644); err != nil {
+	if err := os.WriteFile(tempPath, data, 0600); err != nil {
 		return // Can't write, skip
 	}
-	os.Rename(tempPath, c.filePath) // Atomic on Unix
+	if err := os.Rename(tempPath, c.filePath); err != nil {
+		// Cleanup temp file on rename failure
+		_ = os.Remove(tempPath)
+	}
 }
 
 // Clear removes all cached entries

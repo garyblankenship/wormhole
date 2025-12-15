@@ -9,6 +9,18 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+// Test constants for SSE event inputs
+const (
+	testSSECompleteEvent = `event: message
+data: Hello World
+id: 123
+
+`
+	testSSEDataOnlyEvent = `data: Just data
+
+`
+)
+
 func TestSSEEvent_Structure(t *testing.T) {
 	event := &SSEEvent{
 		Event: "message",
@@ -33,12 +45,7 @@ func TestSSEScanner_Creation(t *testing.T) {
 
 func TestSSEScanner_BasicEventParsing(t *testing.T) {
 	t.Run("complete event", func(t *testing.T) {
-		input := `event: message
-data: Hello World
-id: 123
-
-`
-		scanner := NewSSEScanner(strings.NewReader(input))
+		scanner := NewSSEScanner(strings.NewReader(testSSECompleteEvent))
 
 		assert.True(t, scanner.Scan())
 		event := scanner.Event()
@@ -51,10 +58,7 @@ id: 123
 	})
 
 	t.Run("data only event", func(t *testing.T) {
-		input := `data: Just data
-
-`
-		scanner := NewSSEScanner(strings.NewReader(input))
+		scanner := NewSSEScanner(strings.NewReader(testSSEDataOnlyEvent))
 
 		assert.True(t, scanner.Scan())
 		event := scanner.Event()

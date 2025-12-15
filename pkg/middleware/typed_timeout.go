@@ -19,38 +19,51 @@ func NewTypedTimeoutMiddleware(timeout time.Duration) *TypedTimeoutMiddleware {
 	}
 }
 
+// withTimeout executes a function with timeout enforcement using generics
+// This eliminates the duplicate timeout pattern across all Apply* methods
+func withTimeout[Req any, Resp any](
+	ctx context.Context,
+	timeout time.Duration,
+	request Req,
+	fn func(context.Context, Req) (Resp, error),
+) (Resp, error) {
+	ctx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+
+	type result struct {
+		resp Resp
+		err  error
+	}
+
+	done := make(chan result, 1)
+
+	go func() {
+		resp, err := fn(ctx, request)
+		done <- result{resp, err}
+	}()
+
+	select {
+	case <-ctx.Done():
+		var zero Resp
+		return zero, ctx.Err()
+	case res := <-done:
+		return res.resp, res.err
+	}
+}
+
 // ApplyText wraps text generation calls with timeout enforcement
 func (m *TypedTimeoutMiddleware) ApplyText(next types.TextHandler) types.TextHandler {
 	return func(ctx context.Context, request types.TextRequest) (*types.TextResponse, error) {
-		ctx, cancel := context.WithTimeout(ctx, m.timeout)
-		defer cancel()
-
-		type result struct {
-			resp *types.TextResponse
-			err  error
-		}
-
-		done := make(chan result, 1)
-
-		go func() {
-			resp, err := next(ctx, request)
-			done <- result{resp, err}
-		}()
-
-		select {
-		case <-ctx.Done():
-			return nil, ctx.Err()
-		case res := <-done:
-			return res.resp, res.err
-		}
+		return withTimeout(ctx, m.timeout, request, next)
 	}
 }
 
 // ApplyStream wraps streaming calls with timeout enforcement
+// Note: Streaming requires special handling to maintain timeout during the stream
 func (m *TypedTimeoutMiddleware) ApplyStream(next types.StreamHandler) types.StreamHandler {
 	return func(ctx context.Context, request types.TextRequest) (<-chan types.StreamChunk, error) {
 		ctx, cancel := context.WithTimeout(ctx, m.timeout)
-		
+
 		type result struct {
 			stream <-chan types.StreamChunk
 			err    error
@@ -65,43 +78,41 @@ func (m *TypedTimeoutMiddleware) ApplyStream(next types.StreamHandler) types.Str
 
 		select {
 		case <-ctx.Done():
-			cancel() // Clean up the timeout context
+			cancel()
 			return nil, ctx.Err()
 		case res := <-done:
-			// For streaming, we keep the timeout context alive for the duration of the stream
-			// The context will be cancelled when the stream completes or times out
 			if res.err != nil {
 				cancel()
 				return res.stream, res.err
 			}
-			
-			// Wrap the stream to handle timeout during streaming
+
+			// Wrap stream to handle timeout during streaming
 			wrappedStream := make(chan types.StreamChunk)
 			go func() {
 				defer close(wrappedStream)
-				defer cancel() // Clean up when stream completes
-				
+				defer cancel()
+
 				if res.stream == nil {
 					return
 				}
-				
+
 				for {
 					select {
 					case chunk, ok := <-res.stream:
 						if !ok {
-							return // Stream closed normally
+							return
 						}
 						select {
 						case wrappedStream <- chunk:
 						case <-ctx.Done():
-							return // Context timeout during streaming
+							return
 						}
 					case <-ctx.Done():
-						return // Context timeout while waiting for chunk
+						return
 					}
 				}
 			}()
-			
+
 			return wrappedStream, nil
 		}
 	}
@@ -110,107 +121,27 @@ func (m *TypedTimeoutMiddleware) ApplyStream(next types.StreamHandler) types.Str
 // ApplyStructured wraps structured output calls with timeout enforcement
 func (m *TypedTimeoutMiddleware) ApplyStructured(next types.StructuredHandler) types.StructuredHandler {
 	return func(ctx context.Context, request types.StructuredRequest) (*types.StructuredResponse, error) {
-		ctx, cancel := context.WithTimeout(ctx, m.timeout)
-		defer cancel()
-
-		type result struct {
-			resp *types.StructuredResponse
-			err  error
-		}
-
-		done := make(chan result, 1)
-
-		go func() {
-			resp, err := next(ctx, request)
-			done <- result{resp, err}
-		}()
-
-		select {
-		case <-ctx.Done():
-			return nil, ctx.Err()
-		case res := <-done:
-			return res.resp, res.err
-		}
+		return withTimeout(ctx, m.timeout, request, next)
 	}
 }
 
 // ApplyEmbeddings wraps embeddings calls with timeout enforcement
 func (m *TypedTimeoutMiddleware) ApplyEmbeddings(next types.EmbeddingsHandler) types.EmbeddingsHandler {
 	return func(ctx context.Context, request types.EmbeddingsRequest) (*types.EmbeddingsResponse, error) {
-		ctx, cancel := context.WithTimeout(ctx, m.timeout)
-		defer cancel()
-
-		type result struct {
-			resp *types.EmbeddingsResponse
-			err  error
-		}
-
-		done := make(chan result, 1)
-
-		go func() {
-			resp, err := next(ctx, request)
-			done <- result{resp, err}
-		}()
-
-		select {
-		case <-ctx.Done():
-			return nil, ctx.Err()
-		case res := <-done:
-			return res.resp, res.err
-		}
+		return withTimeout(ctx, m.timeout, request, next)
 	}
 }
 
 // ApplyAudio wraps audio calls with timeout enforcement
 func (m *TypedTimeoutMiddleware) ApplyAudio(next types.AudioHandler) types.AudioHandler {
 	return func(ctx context.Context, request types.AudioRequest) (*types.AudioResponse, error) {
-		ctx, cancel := context.WithTimeout(ctx, m.timeout)
-		defer cancel()
-
-		type result struct {
-			resp *types.AudioResponse
-			err  error
-		}
-
-		done := make(chan result, 1)
-
-		go func() {
-			resp, err := next(ctx, request)
-			done <- result{resp, err}
-		}()
-
-		select {
-		case <-ctx.Done():
-			return nil, ctx.Err()
-		case res := <-done:
-			return res.resp, res.err
-		}
+		return withTimeout(ctx, m.timeout, request, next)
 	}
 }
 
 // ApplyImage wraps image generation calls with timeout enforcement
 func (m *TypedTimeoutMiddleware) ApplyImage(next types.ImageHandler) types.ImageHandler {
 	return func(ctx context.Context, request types.ImageRequest) (*types.ImageResponse, error) {
-		ctx, cancel := context.WithTimeout(ctx, m.timeout)
-		defer cancel()
-
-		type result struct {
-			resp *types.ImageResponse
-			err  error
-		}
-
-		done := make(chan result, 1)
-
-		go func() {
-			resp, err := next(ctx, request)
-			done <- result{resp, err}
-		}()
-
-		select {
-		case <-ctx.Done():
-			return nil, ctx.Err()
-		case res := <-done:
-			return res.resp, res.err
-		}
+		return withTimeout(ctx, m.timeout, request, next)
 	}
 }

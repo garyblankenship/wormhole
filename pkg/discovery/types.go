@@ -58,7 +58,7 @@ type CacheEntry struct {
 
 // FileCache represents the structure of the persisted cache file
 type FileCache struct {
-	Version string                  `json:"version"`
-	Updated time.Time               `json:"updated"`
-	Entries map[string]*CacheEntry  `json:"entries"` // provider -> CacheEntry
+	Version string                 `json:"version"`
+	Updated time.Time              `json:"updated"`
+	Entries map[string]*CacheEntry `json:"entries"` // provider -> CacheEntry
 }

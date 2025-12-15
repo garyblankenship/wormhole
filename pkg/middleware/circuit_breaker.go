@@ -86,7 +86,7 @@ func (cb *CircuitBreaker) Execute(ctx context.Context, fn func() (any, error)) (
 		return cb.handleError(result, err)
 	}
 
-	return cb.handleSuccess(result)
+	return cb.handleSuccess(result), nil
 }
 
 func (cb *CircuitBreaker) handleError(result any, err error) (any, error) {
@@ -107,7 +107,7 @@ func (cb *CircuitBreaker) handleError(result any, err error) (any, error) {
 	return result, err
 }
 
-func (cb *CircuitBreaker) handleSuccess(result any) (any, error) {
+func (cb *CircuitBreaker) handleSuccess(result any) any {
 	cb.failures = 0
 
 	switch cb.state {
@@ -119,7 +119,7 @@ func (cb *CircuitBreaker) handleSuccess(result any) (any, error) {
 		}
 	}
 
-	return result, nil
+	return result
 }
 
 // GetState returns the current state of the circuit breaker

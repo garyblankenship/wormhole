@@ -137,6 +137,27 @@ func WrapError(code ErrorCode, message string, retryable bool, cause error) *Wor
 	}
 }
 
+// Errorf creates a wrapped error with formatted message
+// Usage: types.Errorf("marshal request body", err)
+// Result: "failed to marshal request body: <original error>"
+func Errorf(operation string, err error) error {
+	if err == nil {
+		return nil
+	}
+	return fmt.Errorf("failed to %s: %w", operation, err)
+}
+
+// Errorff creates a wrapped error with formatted operation string
+// Usage: types.Errorff("read %s", err, filename)
+// Result: "failed to read <filename>: <original error>"
+func Errorff(format string, err error, args ...any) error {
+	if err == nil {
+		return nil
+	}
+	operation := fmt.Sprintf(format, args...)
+	return fmt.Errorf("failed to %s: %w", operation, err)
+}
+
 // HTTPStatusToError converts HTTP status codes to appropriate WormholeErrors
 func HTTPStatusToError(statusCode int, body string) *WormholeError {
 	switch statusCode {
@@ -204,9 +225,9 @@ func IsRetryableError(err error) bool {
 // ModelConstraintError represents a model-specific constraint violation
 type ModelConstraintError struct {
 	*WormholeError
-	Constraint string      `json:"constraint"`
-	Expected   any `json:"expected"`
-	Actual     any `json:"actual"`
+	Constraint string `json:"constraint"`
+	Expected   any    `json:"expected"`
+	Actual     any    `json:"actual"`
 }
 
 // NewModelConstraintError creates a new model constraint error

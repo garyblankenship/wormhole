@@ -6,8 +6,12 @@ import (
 	"strings"
 	"time"
 
+	"github.com/garyblankenship/wormhole/internal/utils"
 	"github.com/garyblankenship/wormhole/pkg/types"
 )
+
+// Tool choice options
+const toolChoiceAuto = "auto"
 
 // buildChatPayload builds the OpenAI chat completion payload
 func (p *Provider) buildChatPayload(request *types.TextRequest) map[string]any {
@@ -16,7 +20,27 @@ func (p *Provider) buildChatPayload(request *types.TextRequest) map[string]any {
 		"messages": p.transformMessages(request.Messages),
 	}
 
-	// Optional parameters
+	// Add generation parameters
+	p.addGenerationParams(payload, request)
+
+	// Add tools if present
+	p.addToolsParams(payload, request)
+
+	// Add response format if specified
+	if request.ResponseFormat != nil {
+		payload["response_format"] = request.ResponseFormat
+	}
+
+	// Merge provider-specific options (allows overriding any parameter)
+	for k, v := range request.ProviderOptions {
+		payload[k] = v
+	}
+
+	return payload
+}
+
+// addGenerationParams adds temperature, top_p, max_tokens, and stop sequences to payload
+func (p *Provider) addGenerationParams(payload map[string]any, request *types.TextRequest) {
 	if request.Temperature != nil {
 		payload["temperature"] = *request.Temperature
 	}
@@ -24,59 +48,37 @@ func (p *Provider) buildChatPayload(request *types.TextRequest) map[string]any {
 		payload["top_p"] = *request.TopP
 	}
 	if request.MaxTokens != nil && *request.MaxTokens > 0 {
-		// Use configurable parameter name for max tokens (default: "max_tokens")
-		maxTokensParam := "max_tokens"
-		
-		// Check for provider-specific parameter configuration
-		if p.Config.Params != nil {
-			if param, ok := p.Config.Params["max_tokens_param"].(string); ok {
-				maxTokensParam = param
-			}
-		}
-		
-		// GPT-5 models require max_completion_tokens instead of deprecated max_tokens
-		// This fallback remains for backward compatibility when no explicit config is provided
-		if maxTokensParam == "max_tokens" && isGPT5Model(request.Model) {
-			maxTokensParam = "max_completion_tokens"
-		}
-		
-		payload[maxTokensParam] = *request.MaxTokens
+		payload[p.getMaxTokensParam(request.Model)] = *request.MaxTokens
 	}
 	if len(request.Stop) > 0 {
 		payload["stop"] = request.Stop
 	}
-	// Provider-specific options from ProviderOptions
-	if request.ProviderOptions != nil {
-		if pp, ok := request.ProviderOptions["presence_penalty"].(float32); ok {
-			payload["presence_penalty"] = pp
-		}
-		if fp, ok := request.ProviderOptions["frequency_penalty"].(float32); ok {
-			payload["frequency_penalty"] = fp
-		}
-		if seed, ok := request.ProviderOptions["seed"].(int); ok {
-			payload["seed"] = seed
+}
+
+// getMaxTokensParam returns the appropriate max tokens parameter name for the model
+func (p *Provider) getMaxTokensParam(model string) string {
+	// Check for provider-specific parameter configuration
+	if p.Config.Params != nil {
+		if param, ok := p.Config.Params["max_tokens_param"].(string); ok {
+			return param
 		}
 	}
-
-	// Tools
-	if len(request.Tools) > 0 {
-		payload["tools"] = p.transformTools(request.Tools)
-		if request.ToolChoice != nil {
-			payload["tool_choice"] = p.transformToolChoice(request.ToolChoice)
-		}
+	// GPT-5 models require max_completion_tokens instead of deprecated max_tokens
+	if isGPT5Model(model) {
+		return "max_completion_tokens"
 	}
+	return "max_tokens"
+}
 
-	// Response format
-	if request.ResponseFormat != nil {
-		payload["response_format"] = request.ResponseFormat
+// addToolsParams adds tools and tool_choice to payload if tools are present
+func (p *Provider) addToolsParams(payload map[string]any, request *types.TextRequest) {
+	if len(request.Tools) == 0 {
+		return
 	}
-
-	// Provider options
-	for k, v := range request.ProviderOptions {
-		payload[k] = v
+	payload["tools"] = p.transformTools(request.Tools)
+	if request.ToolChoice != nil {
+		payload["tool_choice"] = p.transformToolChoice(request.ToolChoice)
 	}
-
-	return payload
 }
 
 // transformMessages converts internal messages to OpenAI format
@@ -169,33 +171,9 @@ func (p *Provider) transformToolCalls(toolCalls []types.ToolCall) []map[string]a
 }
 
 // cleanJSONResponse removes markdown code blocks from JSON responses
+// Delegates to shared utility for consistent behavior across providers
 func cleanJSONResponse(content string) string {
-	if !strings.Contains(content, "```") {
-		return content
-	}
-
-	if strings.Contains(content, "```json") {
-		// Extract JSON from markdown code blocks
-		start := strings.Index(content, "```json") + 7
-		end := strings.LastIndex(content, "```")
-		if start < end {
-			return strings.TrimSpace(content[start:end])
-		}
-	} else if strings.Contains(content, "```") {
-		// Extract JSON from generic code blocks
-		start := strings.Index(content, "```") + 3
-		end := strings.LastIndex(content, "```")
-		if start < end {
-			cleaned := strings.TrimSpace(content[start:end])
-			// Only return cleaned version if it looks like JSON
-			if (strings.HasPrefix(cleaned, "{") && strings.HasSuffix(cleaned, "}")) ||
-				(strings.HasPrefix(cleaned, "[") && strings.HasSuffix(cleaned, "]")) {
-				return cleaned
-			}
-		}
-	}
-
-	return content
+	return utils.ExtractJSONFromMarkdown(content)
 }
 
 // transformTextResponse converts OpenAI response to internal format
@@ -366,14 +344,14 @@ func (p *Provider) mapFinishReason(reason string) types.FinishReason {
 // transformToolChoice converts tool choice to OpenAI format
 func (p *Provider) transformToolChoice(choice *types.ToolChoice) any {
 	if choice == nil {
-		return "auto"
+		return toolChoiceAuto
 	}
 
 	switch choice.Type {
 	case types.ToolChoiceTypeNone:
 		return "none"
 	case types.ToolChoiceTypeAuto:
-		return "auto"
+		return toolChoiceAuto
 	case types.ToolChoiceTypeAny:
 		return "required"
 	case types.ToolChoiceTypeSpecific:
@@ -384,7 +362,7 @@ func (p *Provider) transformToolChoice(choice *types.ToolChoice) any {
 			},
 		}
 	default:
-		return "auto"
+		return toolChoiceAuto
 	}
 }
 

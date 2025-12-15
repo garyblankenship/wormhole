@@ -5,6 +5,9 @@ import (
 	"testing"
 )
 
+// Test constants
+const testJSONWithPatterns = `{"pattern": "\\\\d+", "text": "some text with \\\\s+ patterns"}`
+
 func TestLenientUnmarshal(t *testing.T) {
 	tests := []struct {
 		name    string
@@ -144,22 +147,20 @@ func TestUnmarshalAnthropicToolArgs_RealWorld(t *testing.T) {
 
 // Benchmark to ensure our functions don't significantly impact performance
 func BenchmarkLenientUnmarshal(b *testing.B) {
-	validJSON := `{"pattern": "\\\\d+", "text": "some text with \\\\s+ patterns"}`
 	var result map[string]any
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		LenientUnmarshal([]byte(validJSON), &result)
+		_ = LenientUnmarshal([]byte(testJSONWithPatterns), &result)
 	}
 }
 
 func BenchmarkStandardUnmarshal(b *testing.B) {
-	validJSON := `{"pattern": "\\\\d+", "text": "some text with \\\\s+ patterns"}`
 	var result map[string]any
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		json.Unmarshal([]byte(validJSON), &result)
+		_ = json.Unmarshal([]byte(testJSONWithPatterns), &result)
 	}
 }
 
@@ -169,6 +170,6 @@ func BenchmarkUnmarshalAnthropicToolArgs(b *testing.B) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		UnmarshalAnthropicToolArgs(toolArgs, &result)
+		_ = UnmarshalAnthropicToolArgs(toolArgs, &result)
 	}
 }

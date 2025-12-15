@@ -26,7 +26,7 @@ func TestConcurrentProviderAccess(t *testing.T) {
 	// Launch multiple goroutines that simultaneously call Provider
 	for i := 0; i < numGoroutines; i++ {
 		wg.Add(1)
-		go func(routineID int) {
+		go func(_ int) {
 			defer wg.Done()
 			for j := 0; j < numIterations; j++ {
 				provider, err := w.Provider("openai")
@@ -173,7 +173,7 @@ func TestRaceConditionScenario(t *testing.T) {
 	// Simulate the exact scenario: multiple goroutines making text generation requests
 	for i := 0; i < numGoroutines; i++ {
 		wg.Add(1)
-		go func(routineID int) {
+		go func(_ int) {
 			defer wg.Done()
 
 			// This simulates the exact call pattern that caused the bug

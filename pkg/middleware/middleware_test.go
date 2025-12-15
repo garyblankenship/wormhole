@@ -34,7 +34,7 @@ func TestChain(t *testing.T) {
 
 		handler := func(ctx context.Context, req any) (any, error) {
 			order = append(order, "handler")
-			return "response", nil
+			return testResponse, nil
 		}
 
 		chain := NewChain(mw1, mw2)
@@ -81,7 +81,7 @@ func TestMetricsMiddleware(t *testing.T) {
 
 		handler := func(ctx context.Context, req any) (any, error) {
 			time.Sleep(10 * time.Millisecond)
-			return "response", nil
+			return testResponse, nil
 		}
 
 		wrapped := mw(handler)
@@ -120,7 +120,7 @@ func TestTimeoutMiddleware(t *testing.T) {
 		mw := TimeoutMiddleware(100 * time.Millisecond)
 
 		handler := func(ctx context.Context, req any) (any, error) {
-			return "response", nil
+			return testResponse, nil
 		}
 
 		wrapped := mw(handler)
@@ -135,7 +135,7 @@ func TestTimeoutMiddleware(t *testing.T) {
 
 		handler := func(ctx context.Context, req any) (any, error) {
 			time.Sleep(50 * time.Millisecond)
-			return "response", nil
+			return testResponse, nil
 		}
 
 		wrapped := mw(handler)

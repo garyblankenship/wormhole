@@ -9,6 +9,9 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// Test constants
+const gpt5Prefix = "gpt-5"
+
 func TestOpenAIProvider(t *testing.T) {
 	config := types.ProviderConfig{
 		APIKey:  "test-key",
@@ -133,7 +136,7 @@ func TestIsGPT5Model(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.model, func(t *testing.T) {
 			// Test the detection logic directly
-			actual := len(tc.model) >= 5 && tc.model[:5] == "gpt-5"
+			actual := len(tc.model) >= 5 && tc.model[:5] == gpt5Prefix
 			if !actual && len(tc.model) >= 5 {
 				// Also check uppercase
 				actual = tc.model[:5] == "GPT-5"
@@ -213,10 +216,10 @@ func TestGPT5MaxTokensParameter(t *testing.T) {
 			// by making the buildChatPayload method public or adding a test helper
 			// For now, we verify the model detection logic would work correctly
 			if tc.expectedUsesNewParam {
-				assert.True(t, len(tc.model) >= 5 && tc.model[:5] == "gpt-5",
+				assert.True(t, len(tc.model) >= 5 && tc.model[:5] == gpt5Prefix,
 					"Model should be detected as GPT-5 variant")
 			} else {
-				assert.False(t, len(tc.model) >= 5 && tc.model[:5] == "gpt-5",
+				assert.False(t, len(tc.model) >= 5 && tc.model[:5] == gpt5Prefix,
 					"Model should not be detected as GPT-5 variant")
 			}
 		})

@@ -24,24 +24,24 @@ type Usage struct {
 
 // TextResponse represents a text generation response
 type TextResponse struct {
-	ID           string                 `json:"id"`
-	Model        string                 `json:"model"`
-	Text         string                 `json:"text"`
-	ToolCalls    []ToolCall             `json:"tool_calls,omitempty"`
-	FinishReason FinishReason           `json:"finish_reason"`
-	Usage        *Usage                 `json:"usage,omitempty"`
-	Created      time.Time              `json:"created"`
+	ID           string         `json:"id"`
+	Model        string         `json:"model"`
+	Text         string         `json:"text"`
+	ToolCalls    []ToolCall     `json:"tool_calls,omitempty"`
+	FinishReason FinishReason   `json:"finish_reason"`
+	Usage        *Usage         `json:"usage,omitempty"`
+	Created      time.Time      `json:"created"`
 	Metadata     map[string]any `json:"metadata,omitempty"`
 }
 
 // StructuredResponse represents a structured output response
 type StructuredResponse struct {
-	ID       string                 `json:"id"`
-	Model    string                 `json:"model"`
+	ID       string         `json:"id"`
+	Model    string         `json:"model"`
 	Data     any            `json:"data"`
-	Raw      string                 `json:"raw,omitempty"`
-	Usage    *Usage                 `json:"usage,omitempty"`
-	Created  time.Time              `json:"created"`
+	Raw      string         `json:"raw,omitempty"`
+	Usage    *Usage         `json:"usage,omitempty"`
+	Created  time.Time      `json:"created"`
 	Metadata map[string]any `json:"metadata,omitempty"`
 }
 
@@ -69,11 +69,11 @@ type ChunkDelta struct {
 
 // EmbeddingsResponse represents an embeddings response
 type EmbeddingsResponse struct {
-	ID         string                 `json:"id"`
-	Model      string                 `json:"model"`
-	Embeddings []Embedding            `json:"embeddings"`
-	Usage      *Usage                 `json:"usage,omitempty"`
-	Created    time.Time              `json:"created"`
+	ID         string         `json:"id"`
+	Model      string         `json:"model"`
+	Embeddings []Embedding    `json:"embeddings"`
+	Usage      *Usage         `json:"usage,omitempty"`
+	Created    time.Time      `json:"created"`
 	Metadata   map[string]any `json:"metadata,omitempty"`
 }
 
@@ -85,11 +85,11 @@ type Embedding struct {
 
 // ImagesResponse represents an image generation response
 type ImagesResponse struct {
-	ID       string                 `json:"id"`
-	Model    string                 `json:"model"`
-	Images   []GeneratedImage       `json:"images"`
-	Created  time.Time              `json:"created"`
-	Metadata map[string]any `json:"metadata,omitempty"`
+	ID       string           `json:"id"`
+	Model    string           `json:"model"`
+	Images   []GeneratedImage `json:"images"`
+	Created  time.Time        `json:"created"`
+	Metadata map[string]any   `json:"metadata,omitempty"`
 }
 
 // GeneratedImage represents a generated image
@@ -103,33 +103,33 @@ type ImageResponse = ImagesResponse
 
 // SpeechToTextResponse represents a speech-to-text response
 type SpeechToTextResponse struct {
-	ID       string                 `json:"id,omitempty"`
-	Model    string                 `json:"model,omitempty"`
-	Text     string                 `json:"text"`
-	Language string                 `json:"language,omitempty"`
-	Duration *float64               `json:"duration,omitempty"`
-	Created  time.Time              `json:"created,omitempty"`
+	ID       string         `json:"id,omitempty"`
+	Model    string         `json:"model,omitempty"`
+	Text     string         `json:"text"`
+	Language string         `json:"language,omitempty"`
+	Duration *float64       `json:"duration,omitempty"`
+	Created  time.Time      `json:"created,omitempty"`
 	Metadata map[string]any `json:"metadata,omitempty"`
 }
 
 // TextToSpeechResponse represents a text-to-speech response
 type TextToSpeechResponse struct {
-	ID       string                 `json:"id,omitempty"`
-	Model    string                 `json:"model,omitempty"`
-	Audio    []byte                 `json:"audio"`
-	Format   string                 `json:"format,omitempty"`
-	Created  time.Time              `json:"created,omitempty"`
+	ID       string         `json:"id,omitempty"`
+	Model    string         `json:"model,omitempty"`
+	Audio    []byte         `json:"audio"`
+	Format   string         `json:"format,omitempty"`
+	Created  time.Time      `json:"created,omitempty"`
 	Metadata map[string]any `json:"metadata,omitempty"`
 }
 
 // AudioResponse represents an audio response
 type AudioResponse struct {
-	ID       string                 `json:"id,omitempty"`
-	Model    string                 `json:"model,omitempty"`
-	Audio    []byte                 `json:"audio,omitempty"` // For TTS
-	Text     string                 `json:"text,omitempty"`  // For STT
-	Format   string                 `json:"format,omitempty"`
-	Created  time.Time              `json:"created,omitempty"`
+	ID       string         `json:"id,omitempty"`
+	Model    string         `json:"model,omitempty"`
+	Audio    []byte         `json:"audio,omitempty"` // For TTS
+	Text     string         `json:"text,omitempty"`  // For STT
+	Format   string         `json:"format,omitempty"`
+	Created  time.Time      `json:"created,omitempty"`
 	Metadata map[string]any `json:"metadata,omitempty"`
 }
 
@@ -147,9 +147,9 @@ func (e WormholeProviderError) Error() string {
 
 // OCRResponse represents an OCR (Optical Character Recognition) response
 type OCRResponse struct {
-	ID       string                 `json:"id"`
-	Model    string                 `json:"model"`
-	Text     string                 `json:"text"`
-	Created  int64                  `json:"created"`
+	ID       string         `json:"id"`
+	Model    string         `json:"model"`
+	Text     string         `json:"text"`
+	Created  int64          `json:"created"`
 	Metadata map[string]any `json:"metadata,omitempty"`
 }

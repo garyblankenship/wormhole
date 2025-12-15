@@ -2,14 +2,14 @@ package types
 
 // BaseRequest contains common request fields
 type BaseRequest struct {
-	Model            string                 `json:"model"`
-	Temperature      *float32               `json:"temperature,omitempty"`
-	TopP             *float32               `json:"top_p,omitempty"`
-	MaxTokens        *int                   `json:"max_tokens,omitempty"`
-	Stop             []string               `json:"stop,omitempty"`
-	PresencePenalty  *float32               `json:"presence_penalty,omitempty"`
-	FrequencyPenalty *float32               `json:"frequency_penalty,omitempty"`
-	Seed             *int                   `json:"seed,omitempty"`
+	Model            string         `json:"model"`
+	Temperature      *float32       `json:"temperature,omitempty"`
+	TopP             *float32       `json:"top_p,omitempty"`
+	MaxTokens        *int           `json:"max_tokens,omitempty"`
+	Stop             []string       `json:"stop,omitempty"`
+	PresencePenalty  *float32       `json:"presence_penalty,omitempty"`
+	FrequencyPenalty *float32       `json:"frequency_penalty,omitempty"`
+	Seed             *int           `json:"seed,omitempty"`
 	ProviderOptions  map[string]any `json:"-"`
 }
 
@@ -20,7 +20,7 @@ type TextRequest struct {
 	SystemPrompt   string      `json:"-"`
 	Tools          []Tool      `json:"tools,omitempty"`
 	ToolChoice     *ToolChoice `json:"tool_choice,omitempty"`
-	ResponseFormat any `json:"response_format,omitempty"`
+	ResponseFormat any         `json:"response_format,omitempty"`
 }
 
 // StructuredRequest represents a structured output request
@@ -44,21 +44,21 @@ const (
 
 // EmbeddingsRequest represents an embeddings request
 type EmbeddingsRequest struct {
-	Model           string                 `json:"model"`
-	Input           []string               `json:"input"`
-	Dimensions      *int                   `json:"dimensions,omitempty"`
+	Model           string         `json:"model"`
+	Input           []string       `json:"input"`
+	Dimensions      *int           `json:"dimensions,omitempty"`
 	ProviderOptions map[string]any `json:"-"`
 }
 
 // ImagesRequest represents an image generation request
 type ImagesRequest struct {
-	Model           string                 `json:"model"`
-	Prompt          string                 `json:"prompt"`
-	Size            string                 `json:"size,omitempty"`
-	Quality         string                 `json:"quality,omitempty"`
-	Style           string                 `json:"style,omitempty"`
-	N               int                    `json:"n,omitempty"`
-	ResponseFormat  string                 `json:"response_format,omitempty"`
+	Model           string         `json:"model"`
+	Prompt          string         `json:"prompt"`
+	Size            string         `json:"size,omitempty"`
+	Quality         string         `json:"quality,omitempty"`
+	Style           string         `json:"style,omitempty"`
+	N               int            `json:"n,omitempty"`
+	ResponseFormat  string         `json:"response_format,omitempty"`
 	ProviderOptions map[string]any `json:"-"`
 }
 
@@ -82,11 +82,11 @@ const (
 
 // TextToSpeechRequest represents a text-to-speech request
 type TextToSpeechRequest struct {
-	Model           string                 `json:"model"`
-	Input           string                 `json:"input"`
-	Voice           string                 `json:"voice,omitempty"`
-	Speed           float32                `json:"speed,omitempty"`
-	ResponseFormat  string                 `json:"response_format,omitempty"`
+	Model           string         `json:"model"`
+	Input           string         `json:"input"`
+	Voice           string         `json:"voice,omitempty"`
+	Speed           float32        `json:"speed,omitempty"`
+	ResponseFormat  string         `json:"response_format,omitempty"`
 	ProviderOptions map[string]any `json:"-"`
 }
 
@@ -95,14 +95,14 @@ type ImageRequest = ImagesRequest
 
 // AudioRequest represents a unified audio request
 type AudioRequest struct {
-	Type            AudioRequestType       `json:"type"`
-	Model           string                 `json:"model"`
-	Input           any            `json:"input,omitempty"`    // string for TTS, []byte for STT
-	Voice           string                 `json:"voice,omitempty"`    // TTS only
-	Speed           float32                `json:"speed,omitempty"`    // TTS only
-	Language        string                 `json:"language,omitempty"` // STT only
-	Prompt          string                 `json:"prompt,omitempty"`   // STT only
-	Temperature     *float32               `json:"temperature,omitempty"`
-	ResponseFormat  string                 `json:"response_format,omitempty"`
-	ProviderOptions map[string]any `json:"-"`
+	Type            AudioRequestType `json:"type"`
+	Model           string           `json:"model"`
+	Input           any              `json:"input,omitempty"`    // string for TTS, []byte for STT
+	Voice           string           `json:"voice,omitempty"`    // TTS only
+	Speed           float32          `json:"speed,omitempty"`    // TTS only
+	Language        string           `json:"language,omitempty"` // STT only
+	Prompt          string           `json:"prompt,omitempty"`   // STT only
+	Temperature     *float32         `json:"temperature,omitempty"`
+	ResponseFormat  string           `json:"response_format,omitempty"`
+	ProviderOptions map[string]any   `json:"-"`
 }

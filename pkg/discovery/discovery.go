@@ -53,7 +53,7 @@ func (s *DiscoveryService) GetModels(ctx context.Context, provider string) ([]*t
 	if models, fresh := s.cache.Get(provider); len(models) > 0 {
 		if !fresh {
 			// Using fallback/stale cache, trigger background refresh
-			go s.refreshProvider(context.Background(), provider)
+			go s.refreshProvider(provider)
 		}
 		return models, nil
 	}
@@ -92,8 +92,8 @@ func (s *DiscoveryService) RefreshModels(ctx context.Context) error {
 	wg.Wait()
 	close(errCh)
 
-	// Collect errors
-	var errors []error
+	// Collect errors (pre-allocate for expected capacity)
+	errors := make([]error, 0, len(providers))
 	for err := range errCh {
 		errors = append(errors, err)
 	}
@@ -116,8 +116,8 @@ func (s *DiscoveryService) StartBackgroundRefresh(ctx context.Context) {
 		for {
 			select {
 			case <-ticker.C:
-				// Refresh all providers (ignore errors in background)
-				s.RefreshModels(context.Background())
+				// Refresh all providers (errors logged but not returned in background)
+				_ = s.RefreshModels(ctx)
 			case <-s.stopCh:
 				ticker.Stop()
 				return
@@ -164,13 +164,13 @@ func (s *DiscoveryService) fetchModels(ctx context.Context, provider string) ([]
 }
 
 // refreshProvider refreshes a single provider in background
-func (s *DiscoveryService) refreshProvider(ctx context.Context, provider string) {
+func (s *DiscoveryService) refreshProvider(provider string) {
 	// Use background context with timeout
 	refreshCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	s.fetchModels(refreshCtx, provider)
-	// Ignore errors in background refresh
+	// Ignore errors in background refresh (best effort)
+	_, _ = s.fetchModels(refreshCtx, provider)
 }
 
 // ClearCache clears all cached models

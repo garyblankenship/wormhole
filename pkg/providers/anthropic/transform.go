@@ -9,6 +9,15 @@ import (
 	"github.com/garyblankenship/wormhole/pkg/types"
 )
 
+// Content type constants
+const (
+	contentTypeText    = "text"
+	contentTypeToolUse = "tool_use"
+)
+
+// Role constant
+const roleUser = "user"
+
 // buildMessagePayload builds the Anthropic messages API payload
 func (p *Provider) buildMessagePayload(request *types.TextRequest) map[string]any {
 	payload := map[string]any{
@@ -57,7 +66,7 @@ func (p *Provider) buildMessagePayload(request *types.TextRequest) map[string]an
 
 // transformMessages converts internal messages to Anthropic format
 func (p *Provider) transformMessages(messages []types.Message) []map[string]any {
-	var result []map[string]any
+	result := make([]map[string]any, 0, len(messages))
 
 	for _, msg := range messages {
 		// Skip system messages as they go in a separate field
@@ -88,14 +97,14 @@ func (p *Provider) buildContent(msg types.Message) []map[string]any {
 	switch c := content.(type) {
 	case string:
 		contentParts = append(contentParts, map[string]any{
-			"type": "text",
+			"type": contentTypeText,
 			"text": c,
 		})
 	case []types.MessagePart:
 		for _, part := range c {
-			if part.Type == "text" {
+			if part.Type == contentTypeText {
 				contentParts = append(contentParts, map[string]any{
-					"type": "text",
+					"type": contentTypeText,
 					"text": part.Text,
 				})
 			} else if part.Type == "image" {
@@ -108,7 +117,7 @@ func (p *Provider) buildContent(msg types.Message) []map[string]any {
 	default:
 		// Try to convert to string
 		contentParts = append(contentParts, map[string]any{
-			"type": "text",
+			"type": contentTypeText,
 			"text": fmt.Sprintf("%v", content),
 		})
 	}
@@ -125,7 +134,7 @@ func (p *Provider) buildContent(msg types.Message) []map[string]any {
 	if assistantMsg, ok := msg.(*types.AssistantMessage); ok && len(assistantMsg.ToolCalls) > 0 {
 		for _, toolCall := range assistantMsg.ToolCalls {
 			var input map[string]any
-			utils.UnmarshalAnthropicToolArgs(toolCall.Function.Arguments, &input)
+			_ = utils.UnmarshalAnthropicToolArgs(toolCall.Function.Arguments, &input)
 			contentParts = append(contentParts, map[string]any{
 				"type":  "tool_use",
 				"id":    toolCall.ID,
@@ -142,11 +151,11 @@ func (p *Provider) buildContent(msg types.Message) []map[string]any {
 func (p *Provider) mapRole(role types.Role) string {
 	switch role {
 	case types.RoleUser:
-		return "user"
+		return roleUser
 	case types.RoleAssistant:
 		return "assistant"
 	case types.RoleTool:
-		return "user" // Anthropic uses 'user' role for tool results
+		return roleUser // Anthropic uses 'user' role for tool results
 	default:
 		return string(role)
 	}
@@ -175,9 +184,9 @@ func (p *Provider) transformTextResponse(response *messageResponse) *types.TextR
 
 	// Extract content from response
 	for _, content := range response.Content {
-		if content.Type == "text" {
+		if content.Type == contentTypeText {
 			text += content.Text
-		} else if content.Type == "tool_use" {
+		} else if content.Type == contentTypeToolUse {
 			args, _ := json.Marshal(content.Input)
 			toolCalls = append(toolCalls, types.ToolCall{
 				ID:   content.ID,

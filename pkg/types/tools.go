@@ -37,27 +37,27 @@ func (tc *ToolChoice) MarshalJSON() ([]byte, error) {
 
 // Tool represents a function that can be called by the model
 type Tool struct {
-	Type        string                 `json:"type,omitempty"` // For OpenAI compatibility ("function")
-	Name        string                 `json:"name"`
-	Description string                 `json:"description"`
+	Type        string         `json:"type,omitempty"` // For OpenAI compatibility ("function")
+	Name        string         `json:"name"`
+	Description string         `json:"description"`
 	InputSchema map[string]any `json:"input_schema"`
-	Function    *ToolFunction          `json:"function,omitempty"` // For OpenAI compatibility
+	Function    *ToolFunction  `json:"function,omitempty"` // For OpenAI compatibility
 }
 
 // ToolFunction represents the function definition for OpenAI tools
 type ToolFunction struct {
-	Name        string                 `json:"name"`
-	Description string                 `json:"description"`
+	Name        string         `json:"name"`
+	Description string         `json:"description"`
 	Parameters  map[string]any `json:"parameters"`
 }
 
 // ToolCall represents a tool call made by the model
 type ToolCall struct {
-	Type      string                 `json:"type,omitempty"` // For OpenAI compatibility ("function")
-	ID        string                 `json:"id"`
-	Name      string                 `json:"name"`
-	Arguments map[string]any `json:"arguments"`
-	Function  *ToolCallFunction      `json:"function,omitempty"` // For OpenAI compatibility
+	Type      string            `json:"type,omitempty"` // For OpenAI compatibility ("function")
+	ID        string            `json:"id"`
+	Name      string            `json:"name"`
+	Arguments map[string]any    `json:"arguments"`
+	Function  *ToolCallFunction `json:"function,omitempty"` // For OpenAI compatibility
 }
 
 // ToolCallFunction represents the function call details for OpenAI
@@ -68,9 +68,9 @@ type ToolCallFunction struct {
 
 // ToolResult represents the result of a tool execution
 type ToolResult struct {
-	ToolCallID string      `json:"tool_call_id"`
-	Result     any `json:"result"`
-	Error      string      `json:"error,omitempty"`
+	ToolCallID string `json:"tool_call_id"`
+	Result     any    `json:"result"`
+	Error      string `json:"error,omitempty"`
 }
 
 // NewTool creates a new tool definition

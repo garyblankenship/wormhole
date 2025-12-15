@@ -212,21 +212,39 @@ func NewProviderLoggingMiddleware(providerName string, logger types.Logger) *Pro
 	}
 }
 
+// withProviderLogging wraps a handler with provider-level logging using generics
+func withProviderLogging[Req any, Resp any](
+	ctx context.Context,
+	logger types.Logger,
+	providerName string,
+	requestType string,
+	requestInfo string,
+	getSuccessInfo func(Resp) string,
+	handler func(context.Context, Req) (Resp, error),
+	request Req,
+) (Resp, error) {
+	logger.Info(fmt.Sprintf("[%s] %s request: %s", providerName, requestType, requestInfo))
+
+	resp, err := handler(ctx, request)
+
+	if err != nil {
+		logger.Info(fmt.Sprintf("[%s] %s request failed: %v", providerName, requestType, err))
+	} else {
+		logger.Info(fmt.Sprintf("[%s] %s request succeeded: %s", providerName, requestType, getSuccessInfo(resp)))
+	}
+
+	return resp, err
+}
+
 func (m *ProviderLoggingMiddleware) ApplyText(next types.TextHandler) types.TextHandler {
 	return func(ctx context.Context, request types.TextRequest) (*types.TextResponse, error) {
-		m.logger.Info(fmt.Sprintf("[%s] Text request: model=%s, messages=%d",
-			m.providerName, request.Model, len(request.Messages)))
-
-		resp, err := next(ctx, request)
-
-		if err != nil {
-			m.logger.Info(fmt.Sprintf("[%s] Text request failed: %v", m.providerName, err))
-		} else {
-			m.logger.Info(fmt.Sprintf("[%s] Text request succeeded: %d tokens",
-				m.providerName, resp.Usage.TotalTokens))
-		}
-
-		return resp, err
+		return withProviderLogging(ctx, m.logger, m.providerName, "Text",
+			fmt.Sprintf("model=%s, messages=%d", request.Model, len(request.Messages)),
+			func(resp *types.TextResponse) string {
+				return fmt.Sprintf("%d tokens", resp.Usage.TotalTokens)
+			},
+			next, request,
+		)
 	}
 }
 
@@ -249,72 +267,47 @@ func (m *ProviderLoggingMiddleware) ApplyStream(next types.StreamHandler) types.
 
 func (m *ProviderLoggingMiddleware) ApplyStructured(next types.StructuredHandler) types.StructuredHandler {
 	return func(ctx context.Context, request types.StructuredRequest) (*types.StructuredResponse, error) {
-		m.logger.Info(fmt.Sprintf("[%s] Structured request: model=%s, schema=%s",
-			m.providerName, request.Model, request.SchemaName))
-
-		resp, err := next(ctx, request)
-
-		if err != nil {
-			m.logger.Info(fmt.Sprintf("[%s] Structured request failed: %v", m.providerName, err))
-		} else {
-			m.logger.Info(fmt.Sprintf("[%s] Structured request succeeded: %d chars",
-				m.providerName, len(resp.Raw)))
-		}
-
-		return resp, err
+		return withProviderLogging(ctx, m.logger, m.providerName, "Structured",
+			fmt.Sprintf("model=%s, schema=%s", request.Model, request.SchemaName),
+			func(resp *types.StructuredResponse) string {
+				return fmt.Sprintf("%d chars", len(resp.Raw))
+			},
+			next, request,
+		)
 	}
 }
 
 func (m *ProviderLoggingMiddleware) ApplyEmbeddings(next types.EmbeddingsHandler) types.EmbeddingsHandler {
 	return func(ctx context.Context, request types.EmbeddingsRequest) (*types.EmbeddingsResponse, error) {
-		m.logger.Info(fmt.Sprintf("[%s] Embeddings request: model=%s, inputs=%d",
-			m.providerName, request.Model, len(request.Input)))
-
-		resp, err := next(ctx, request)
-
-		if err != nil {
-			m.logger.Info(fmt.Sprintf("[%s] Embeddings request failed: %v", m.providerName, err))
-		} else {
-			m.logger.Info(fmt.Sprintf("[%s] Embeddings request succeeded: %d embeddings",
-				m.providerName, len(resp.Embeddings)))
-		}
-
-		return resp, err
+		return withProviderLogging(ctx, m.logger, m.providerName, "Embeddings",
+			fmt.Sprintf("model=%s, inputs=%d", request.Model, len(request.Input)),
+			func(resp *types.EmbeddingsResponse) string {
+				return fmt.Sprintf("%d embeddings", len(resp.Embeddings))
+			},
+			next, request,
+		)
 	}
 }
 
 func (m *ProviderLoggingMiddleware) ApplyAudio(next types.AudioHandler) types.AudioHandler {
 	return func(ctx context.Context, request types.AudioRequest) (*types.AudioResponse, error) {
-		m.logger.Info(fmt.Sprintf("[%s] Audio request: model=%s",
-			m.providerName, request.Model))
-
-		resp, err := next(ctx, request)
-
-		if err != nil {
-			m.logger.Info(fmt.Sprintf("[%s] Audio request failed: %v", m.providerName, err))
-		} else {
-			m.logger.Info(fmt.Sprintf("[%s] Audio request succeeded", m.providerName))
-		}
-
-		return resp, err
+		return withProviderLogging(ctx, m.logger, m.providerName, "Audio",
+			fmt.Sprintf("model=%s", request.Model),
+			func(_ *types.AudioResponse) string { return "completed" },
+			next, request,
+		)
 	}
 }
 
 func (m *ProviderLoggingMiddleware) ApplyImage(next types.ImageHandler) types.ImageHandler {
 	return func(ctx context.Context, request types.ImageRequest) (*types.ImageResponse, error) {
-		m.logger.Info(fmt.Sprintf("[%s] Image request: model=%s, prompt=%s",
-			m.providerName, request.Model, request.Prompt))
-
-		resp, err := next(ctx, request)
-
-		if err != nil {
-			m.logger.Info(fmt.Sprintf("[%s] Image request failed: %v", m.providerName, err))
-		} else {
-			m.logger.Info(fmt.Sprintf("[%s] Image request succeeded: %d images",
-				m.providerName, len(resp.Images)))
-		}
-
-		return resp, err
+		return withProviderLogging(ctx, m.logger, m.providerName, "Image",
+			fmt.Sprintf("model=%s, prompt=%s", request.Model, request.Prompt),
+			func(resp *types.ImageResponse) string {
+				return fmt.Sprintf("%d images", len(resp.Images))
+			},
+			next, request,
+		)
 	}
 }
 

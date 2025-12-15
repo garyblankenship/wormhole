@@ -3,6 +3,7 @@ package utils
 import (
 	"encoding/json"
 	"fmt"
+	"strings"
 )
 
 // LenientUnmarshal attempts to unmarshal JSON with fallback handling for common escape sequence issues
@@ -33,4 +34,38 @@ func UnmarshalAnthropicToolArgs(args string, v any) error {
 	}
 
 	return nil
+}
+
+// ExtractJSONFromMarkdown removes markdown code blocks from JSON responses.
+// This handles common patterns where LLMs return JSON wrapped in ```json or ``` blocks.
+// If no code blocks are present, returns the original content unchanged.
+func ExtractJSONFromMarkdown(content string) string {
+	if !strings.Contains(content, "```") {
+		return content
+	}
+
+	// Try to extract from ```json code blocks first
+	if strings.Contains(content, "```json") {
+		start := strings.Index(content, "```json") + 7
+		end := strings.LastIndex(content, "```")
+		if start < end {
+			return strings.TrimSpace(content[start:end])
+		}
+	}
+
+	// Try generic code blocks
+	if strings.Contains(content, "```") {
+		start := strings.Index(content, "```") + 3
+		end := strings.LastIndex(content, "```")
+		if start < end {
+			cleaned := strings.TrimSpace(content[start:end])
+			// Only return cleaned version if it looks like JSON
+			if (strings.HasPrefix(cleaned, "{") && strings.HasSuffix(cleaned, "}")) ||
+				(strings.HasPrefix(cleaned, "[") && strings.HasSuffix(cleaned, "]")) {
+				return cleaned
+			}
+		}
+	}
+
+	return content
 }

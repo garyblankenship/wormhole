@@ -7,6 +7,12 @@ import (
 	"github.com/garyblankenship/wormhole/pkg/types"
 )
 
+// Provider name constants
+const (
+	ProviderOpenAI    = "openai"
+	ProviderAnthropic = "anthropic"
+)
+
 // OrchestrationProvider interface - matches what orchestration package expects
 type OrchestrationProvider interface {
 	Name() string
@@ -170,7 +176,7 @@ func (a *WormholeToOrchestrationAdapter) EstimateCost(req OrchestrationCompletio
 	// Rough estimates based on typical pricing
 	var costPer1kTokens float64
 	switch a.name {
-	case "openai":
+	case ProviderOpenAI:
 		switch model {
 		case "gpt-5":
 			costPer1kTokens = 0.0125 // $1.25/M input = $0.00125/1K
@@ -179,7 +185,7 @@ func (a *WormholeToOrchestrationAdapter) EstimateCost(req OrchestrationCompletio
 		default:
 			costPer1kTokens = 0.0001
 		}
-	case "anthropic":
+	case ProviderAnthropic:
 		switch model {
 		case "claude-sonnet-4-5":
 			costPer1kTokens = 0.003 // $3/M input tokens
@@ -224,9 +230,9 @@ func (a *WormholeToOrchestrationAdapter) estimateCostFromUsage(usage types.Usage
 	var costPer1kTokens float64
 
 	switch a.name {
-	case "openai":
+	case ProviderOpenAI:
 		costPer1kTokens = 0.002
-	case "anthropic":
+	case ProviderAnthropic:
 		costPer1kTokens = 0.003
 	default:
 		costPer1kTokens = 0.001
