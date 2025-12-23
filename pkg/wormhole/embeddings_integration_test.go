@@ -352,7 +352,7 @@ func TestEmbeddingsValidation(t *testing.T) {
 			Generate(ctx)
 
 		assert.Error(t, err)
-		assert.Contains(t, err.Error(), "unknown or unregistered provider")
+		assert.Contains(t, err.Error(), "provider not configured")
 	})
 }
 

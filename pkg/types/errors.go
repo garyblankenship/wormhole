@@ -1,6 +1,7 @@
 package types
 
 import (
+	"errors"
 	"fmt"
 	"net/http"
 	"time"
@@ -324,13 +325,15 @@ func IsWormholeError(err error) bool {
 
 // AsWormholeError extracts a WormholeError from an error
 func AsWormholeError(err error) (*WormholeError, bool) {
-	// Direct WormholeError
-	if wormholeErr, ok := err.(*WormholeError); ok {
-		return wormholeErr, ok
+	// Use errors.As to properly unwrap error chains
+	var wormholeErr *WormholeError
+	if errors.As(err, &wormholeErr) {
+		return wormholeErr, true
 	}
 
-	// ModelConstraintError embeds WormholeError
-	if constraintErr, ok := err.(*ModelConstraintError); ok {
+	// Check for ModelConstraintError which embeds WormholeError
+	var constraintErr *ModelConstraintError
+	if errors.As(err, &constraintErr) {
 		return constraintErr.WormholeError, true
 	}
 

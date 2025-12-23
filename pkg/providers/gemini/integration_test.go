@@ -169,7 +169,7 @@ func TestGeminiProvider_IntegrationTextGeneration(t *testing.T) {
 				err = json.NewEncoder(w).Encode(tc.mockResponse)
 				require.NoError(t, err)
 			}))
-			defer server.Close()
+			t.Cleanup(func() { server.Close() })
 
 			// Create provider with mock server URL
 			config := types.ProviderConfig{
@@ -272,7 +272,7 @@ func TestGeminiProvider_IntegrationToolCalling(t *testing.T) {
 
 		_ = json.NewEncoder(w).Encode(response)
 	}))
-	defer server.Close()
+	t.Cleanup(func() { server.Close() })
 
 	// Create provider
 	config := types.ProviderConfig{BaseURL: server.URL}
@@ -392,7 +392,7 @@ func TestGeminiProvider_IntegrationMultimodalMessage(t *testing.T) {
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(response)
 	}))
-	defer server.Close()
+	t.Cleanup(func() { server.Close() })
 
 	// Create provider
 	config := types.ProviderConfig{BaseURL: server.URL}
@@ -485,7 +485,7 @@ func TestGeminiProvider_IntegrationStructuredOutput(t *testing.T) {
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(response)
 	}))
-	defer server.Close()
+	t.Cleanup(func() { server.Close() })
 
 	// Create provider
 	config := types.ProviderConfig{BaseURL: server.URL}
@@ -587,7 +587,7 @@ func TestGeminiProvider_IntegrationEmbeddings(t *testing.T) {
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(response)
 	}))
-	defer server.Close()
+	t.Cleanup(func() { server.Close() })
 
 	// Create provider
 	config := types.ProviderConfig{BaseURL: server.URL}
@@ -743,10 +743,16 @@ func TestGeminiProvider_IntegrationErrorHandling(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			// Create mock server
 			server := httptest.NewServer(http.HandlerFunc(tc.serverResponse))
-			defer server.Close()
+			t.Cleanup(func() { server.Close() })
+
+			// Disable retries for error handling tests to get immediate responses
+			noRetries := 0
 
 			// Create provider
-			config := types.ProviderConfig{BaseURL: server.URL}
+			config := types.ProviderConfig{
+				BaseURL:    server.URL,
+				MaxRetries: &noRetries,
+			}
 			provider := gemini.New("test-api-key", config)
 
 			// Test different methods
@@ -815,12 +821,16 @@ func TestGeminiProvider_IntegrationTimeout(t *testing.T) {
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(response)
 	}))
-	defer server.Close()
+	t.Cleanup(func() { server.Close() })
+
+	// Disable retries for timeout test
+	noRetries := 0
 
 	// Create provider with timeout
 	config := types.ProviderConfig{
-		BaseURL: server.URL,
-		Timeout: 1, // 1 second timeout
+		BaseURL:    server.URL,
+		Timeout:    1,           // 1 second timeout
+		MaxRetries: &noRetries,  // Disable retries
 	}
 	provider := gemini.New("test-api-key", config)
 
@@ -897,7 +907,7 @@ func TestGeminiProvider_IntegrationConversation(t *testing.T) {
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(response)
 	}))
-	defer server.Close()
+	t.Cleanup(func() { server.Close() })
 
 	// Create provider
 	config := types.ProviderConfig{BaseURL: server.URL}

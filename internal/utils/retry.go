@@ -42,6 +42,11 @@ func (e *RetryableError) Error() string {
 	return fmt.Sprintf("retryable error (status: %d, should_retry: %t): %v", e.StatusCode, e.ShouldRetry, e.Err)
 }
 
+// Unwrap returns the underlying error for error unwrapping
+func (e *RetryableError) Unwrap() error {
+	return e.Err
+}
+
 // IsRetryableStatusCode determines if an HTTP status code should be retried
 func IsRetryableStatusCode(statusCode int) bool {
 	switch statusCode {

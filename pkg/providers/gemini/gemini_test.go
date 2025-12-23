@@ -609,7 +609,7 @@ func TestGeminiProvider_Embeddings(t *testing.T) {
 				Model: "gemini-pro",
 				Input: []string{"test"},
 			},
-			expectedError: "model must be an embedding model",
+			expectedError: "does not appear to be an embedding model",
 		},
 		{
 			name: "with provider options",
@@ -635,7 +635,7 @@ func TestGeminiProvider_Embeddings(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			// Skip server creation for model validation errors
-			if tc.expectedError == "model must be an embedding model" {
+			if tc.expectedError == "does not appear to be an embedding model" {
 				config := types.ProviderConfig{}
 				provider := gemini.New("test-api-key", config)
 
@@ -901,10 +901,16 @@ func TestGeminiProvider_ErrorHandling(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			// Create mock server
 			server := httptest.NewServer(http.HandlerFunc(tc.serverResponse))
-			defer server.Close()
+			t.Cleanup(func() { server.Close() })
+
+			// Disable retries for error handling tests
+			noRetries := 0
 
 			// Create provider
-			config := types.ProviderConfig{BaseURL: server.URL}
+			config := types.ProviderConfig{
+				BaseURL:    server.URL,
+				MaxRetries: &noRetries,
+			}
 			provider := gemini.New("test-api-key", config)
 
 			// Make request
@@ -941,10 +947,16 @@ func TestGeminiProvider_ErrorHandling(t *testing.T) {
 				},
 			})
 		}))
-		defer server.Close()
+		t.Cleanup(func() { server.Close() })
+
+		// Disable retries for timeout test
+		noRetries := 0
 
 		// Create provider
-		config := types.ProviderConfig{BaseURL: server.URL}
+		config := types.ProviderConfig{
+			BaseURL:    server.URL,
+			MaxRetries: &noRetries,
+		}
 		provider := gemini.New("test-api-key", config)
 
 		// Create context with short timeout

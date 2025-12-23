@@ -583,11 +583,14 @@ func TestIntegration_ErrorHandling(t *testing.T) {
 			})
 		})
 
+		// Disable retries for this test to get immediate error
+		noRetries := 0
 		client := wormhole.New(
 			wormhole.WithDefaultProvider("openai"),
 			wormhole.WithProviderConfig("openai", types.ProviderConfig{
-				APIKey:  "test-key",
-				BaseURL: server.URL,
+				APIKey:     "test-key",
+				BaseURL:    server.URL,
+				MaxRetries: &noRetries,
 			}),
 		)
 
@@ -633,23 +636,30 @@ func TestIntegration_ErrorHandling(t *testing.T) {
 			_ = json.NewEncoder(w).Encode(response)
 		})
 
+		// Disable retries for this test to get immediate timeout error
+		noRetries := 0
 		client := wormhole.New(
 			wormhole.WithDefaultProvider("openai"),
 			wormhole.WithProviderConfig("openai", types.ProviderConfig{
-				APIKey:  "test-key",
-				BaseURL: server.URL,
-				Timeout: 1, // 1 second timeout (300ms server sleep should trigger this)
+				APIKey:     "test-key",
+				BaseURL:    server.URL,
+				Timeout:    1,     // 1 second timeout (2s server sleep should trigger this)
+				MaxRetries: &noRetries,
 			}),
 		)
+
+		// Use context with timeout to ensure test doesn't hang
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
 
 		_, err := client.Text().
 			Model("gpt-5").
 			Prompt("Hello").
-			Generate(context.Background())
+			Generate(ctx)
 
 		require.Error(t, err)
 
-		// Verify timeout error
+		// Verify timeout error - may be wrapped by retry logic
 		wormholeErr, ok := types.AsWormholeError(err)
 		require.True(t, ok, "Expected WormholeError, got: %v (type: %T)", err, err)
 		assert.Equal(t, types.ErrorCodeTimeout, wormholeErr.Code)
