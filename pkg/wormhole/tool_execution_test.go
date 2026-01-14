@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"testing"
+	"time"
 
 	"github.com/garyblankenship/wormhole/pkg/types"
 	"github.com/stretchr/testify/assert"
@@ -458,4 +459,262 @@ func TestWormhole_UnregisterAndClearTools(t *testing.T) {
 	// Clear all
 	client.ClearTools()
 	assert.Equal(t, 0, client.ToolCount())
+}
+
+// ==================== Tool Safety Tests ====================
+
+func TestToolExecutor_WithSafetyConfig(t *testing.T) {
+	registry := NewToolRegistry()
+
+	// Register a tool
+	tool := types.Tool{
+		Type:        "function",
+		Name:        "test_tool",
+		InputSchema: map[string]any{},
+	}
+
+	handler := func(ctx context.Context, args map[string]any) (any, error) {
+		return map[string]any{"result": "ok"}, nil
+	}
+
+	registry.Register("test_tool", types.NewToolDefinition(tool, handler))
+
+	// Create executor with custom safety config
+	config := DefaultToolSafetyConfig()
+	config.MaxConcurrentTools = 2 // Limit to 2 concurrent tools
+	config.ToolTimeout = 1 * time.Second
+
+	executor := NewToolExecutorWithConfig(registry, config)
+
+	// Create multiple tool calls
+	var toolCalls []types.ToolCall
+	for i := 1; i <= 5; i++ {
+		toolCalls = append(toolCalls, types.ToolCall{
+			ID:        fmt.Sprintf("call_%d", i),
+			Name:      "test_tool",
+			Arguments: map[string]any{},
+		})
+	}
+
+	// Execute all - should respect concurrency limit
+	results := executor.ExecuteAll(context.Background(), toolCalls)
+
+	assert.Len(t, results, 5)
+	for i, result := range results {
+		assert.Equal(t, fmt.Sprintf("call_%d", i+1), result.ToolCallID)
+		assert.Empty(t, result.Error)
+	}
+}
+
+func TestToolExecutor_CircuitBreaker(t *testing.T) {
+	registry := NewToolRegistry()
+
+	// Register a failing tool
+	tool := types.Tool{
+		Type:        "function",
+		Name:        "failing_tool",
+		InputSchema: map[string]any{},
+	}
+
+	failureCount := 0
+	handler := func(ctx context.Context, args map[string]any) (any, error) {
+		failureCount++
+		return nil, fmt.Errorf("intentional failure %d", failureCount)
+	}
+
+	registry.Register("failing_tool", types.NewToolDefinition(tool, handler))
+
+	// Create executor with circuit breaker enabled
+	config := DefaultToolSafetyConfig()
+	config.EnableCircuitBreaker = true
+	config.CircuitBreakerThreshold = 3 // Trip after 3 failures
+	config.CircuitBreakerResetTimeout = 100 * time.Millisecond
+
+	executor := NewToolExecutorWithConfig(registry, config)
+
+	// Execute enough times to trip the circuit breaker
+	var results []types.ToolResult
+	for i := 1; i <= 5; i++ {
+		toolCall := types.ToolCall{
+			ID:        fmt.Sprintf("call_%d", i),
+			Name:      "failing_tool",
+			Arguments: map[string]any{},
+		}
+		result := executor.Execute(context.Background(), toolCall)
+		results = append(results, result)
+	}
+
+	// First 3 should fail with tool errors, next 2 should fail with circuit breaker error
+	assert.Len(t, results, 5)
+	for i := 0; i < 3; i++ {
+		assert.Contains(t, results[i].Error, "intentional failure")
+	}
+	// Last 2 should be circuit breaker errors
+	for i := 3; i < 5; i++ {
+		assert.Contains(t, results[i].Error, "circuit breaker tripped")
+	}
+
+	// Wait for circuit breaker to reset
+	time.Sleep(150 * time.Millisecond)
+
+	// Try again - circuit breaker should have reset
+	toolCall := types.ToolCall{
+		ID:        "call_reset",
+		Name:      "failing_tool",
+		Arguments: map[string]any{},
+	}
+	result := executor.Execute(context.Background(), toolCall)
+	assert.Contains(t, result.Error, "intentional failure")
+}
+
+func TestToolExecutor_CircuitBreakerHalfOpenRecovery(t *testing.T) {
+	registry := NewToolRegistry()
+
+	// Register a tool that fails first, then succeeds
+	callCount := 0
+	tool := types.Tool{
+		Type:        "function",
+		Name:        "recovering_tool",
+		InputSchema: map[string]any{},
+	}
+
+	handler := func(ctx context.Context, args map[string]any) (any, error) {
+		callCount++
+		if callCount <= 3 {
+			return nil, fmt.Errorf("failure %d", callCount)
+		}
+		return map[string]any{"success": true}, nil
+	}
+
+	registry.Register("recovering_tool", types.NewToolDefinition(tool, handler))
+
+	// Create executor with circuit breaker enabled
+	config := DefaultToolSafetyConfig()
+	config.EnableCircuitBreaker = true
+	config.CircuitBreakerThreshold = 3 // Trip after 3 failures
+	config.CircuitBreakerResetTimeout = 100 * time.Millisecond
+
+	executor := NewToolExecutorWithConfig(registry, config)
+
+	// Execute 3 times to trip the circuit breaker
+	for i := 1; i <= 3; i++ {
+		toolCall := types.ToolCall{
+			ID:        fmt.Sprintf("call_%d", i),
+			Name:      "recovering_tool",
+			Arguments: map[string]any{},
+		}
+		result := executor.Execute(context.Background(), toolCall)
+		assert.Contains(t, result.Error, "failure")
+	}
+
+	// Next call should be blocked by circuit breaker (open state)
+	toolCall := types.ToolCall{
+		ID:        "call_blocked",
+		Name:      "recovering_tool",
+		Arguments: map[string]any{},
+	}
+	result := executor.Execute(context.Background(), toolCall)
+	assert.Contains(t, result.Error, "circuit breaker tripped")
+
+	// Wait for circuit breaker to enter half-open state
+	time.Sleep(150 * time.Millisecond)
+
+	// Next call should be allowed (half-open state), and should succeed
+	// This will transition circuit breaker back to closed state
+	toolCall = types.ToolCall{
+		ID:        "call_half_open",
+		Name:      "recovering_tool",
+		Arguments: map[string]any{},
+	}
+	result = executor.Execute(context.Background(), toolCall)
+	assert.Empty(t, result.Error)
+	assert.NotNil(t, result.Result)
+
+	// Circuit should now be closed, subsequent calls should work
+	toolCall = types.ToolCall{
+		ID:        "call_closed",
+		Name:      "recovering_tool",
+		Arguments: map[string]any{},
+	}
+	result = executor.Execute(context.Background(), toolCall)
+	assert.Empty(t, result.Error)
+}
+
+func TestToolExecutor_CircuitBreakerHalfOpenFailure(t *testing.T) {
+	registry := NewToolRegistry()
+
+	// Register a tool that always fails
+	tool := types.Tool{
+		Type:        "function",
+		Name:        "failing_tool",
+		InputSchema: map[string]any{},
+	}
+
+	handler := func(ctx context.Context, args map[string]any) (any, error) {
+		return nil, fmt.Errorf("always fails")
+	}
+
+	registry.Register("failing_tool", types.NewToolDefinition(tool, handler))
+
+	// Create executor with circuit breaker enabled, allow 2 test calls in half-open state
+	config := DefaultToolSafetyConfig()
+	config.EnableCircuitBreaker = true
+	config.CircuitBreakerThreshold = 2 // Trip after 2 failures
+	config.CircuitBreakerResetTimeout = 100 * time.Millisecond
+
+	executor := NewToolExecutorWithConfig(registry, config)
+
+	// Execute 2 times to trip the circuit breaker
+	for i := 1; i <= 2; i++ {
+		toolCall := types.ToolCall{
+			ID:        fmt.Sprintf("call_%d", i),
+			Name:      "failing_tool",
+			Arguments: map[string]any{},
+		}
+		result := executor.Execute(context.Background(), toolCall)
+		assert.Contains(t, result.Error, "always fails")
+	}
+
+	// Next call should be blocked by circuit breaker (open state)
+	toolCall := types.ToolCall{
+		ID:        "call_blocked",
+		Name:      "failing_tool",
+		Arguments: map[string]any{},
+	}
+	result := executor.Execute(context.Background(), toolCall)
+	assert.Contains(t, result.Error, "circuit breaker tripped")
+
+	// Wait for circuit breaker to enter half-open state
+	time.Sleep(150 * time.Millisecond)
+
+	// Next call should be allowed (half-open state), but will fail
+	// This should transition circuit breaker back to open state
+	toolCall = types.ToolCall{
+		ID:        "call_half_open",
+		Name:      "failing_tool",
+		Arguments: map[string]any{},
+	}
+	result = executor.Execute(context.Background(), toolCall)
+	assert.Contains(t, result.Error, "always fails")
+
+	// Circuit should now be open again, next call should be blocked
+	toolCall = types.ToolCall{
+		ID:        "call_reopened",
+		Name:      "failing_tool",
+		Arguments: map[string]any{},
+	}
+	result = executor.Execute(context.Background(), toolCall)
+	assert.Contains(t, result.Error, "circuit breaker tripped")
+
+	// Wait for another timeout period
+	time.Sleep(150 * time.Millisecond)
+
+	// Should be in half-open state again, allow test call
+	toolCall = types.ToolCall{
+		ID:        "call_half_open_again",
+		Name:      "failing_tool",
+		Arguments: map[string]any{},
+	}
+	result = executor.Execute(context.Background(), toolCall)
+	assert.Contains(t, result.Error, "always fails")
 }

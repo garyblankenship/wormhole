@@ -21,6 +21,7 @@ func BenchmarkTextGeneration(b *testing.B) {
 
 	// Create Wormhole client with mock provider
 	client := &Wormhole{
+		providerFactories: make(map[string]types.ProviderFactory),
 		providers: map[string]*cachedProvider{
 			"mock": {
 				provider: mockProvider,
@@ -28,7 +29,8 @@ func BenchmarkTextGeneration(b *testing.B) {
 				refCount: 1,
 			},
 		},
-		config: Config{DefaultProvider: "mock"},
+		config:        Config{DefaultProvider: "mock"},
+		toolRegistry: NewToolRegistry(),
 	}
 
 	ctx := context.Background()
@@ -183,6 +185,7 @@ func BenchmarkConcurrent(b *testing.B) {
 	})
 
 	client := &Wormhole{
+		providerFactories: make(map[string]types.ProviderFactory),
 		providers: map[string]*cachedProvider{
 			"mock": {
 				provider: mockProvider,
@@ -190,7 +193,8 @@ func BenchmarkConcurrent(b *testing.B) {
 				refCount: 1,
 			},
 		},
-		config: Config{DefaultProvider: "mock"},
+		config:        Config{DefaultProvider: "mock"},
+		toolRegistry: NewToolRegistry(),
 	}
 
 	ctx := context.Background()
