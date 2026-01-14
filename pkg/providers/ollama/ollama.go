@@ -23,14 +23,14 @@ type Provider struct {
 }
 
 // New creates a new Ollama provider
-func New(config types.ProviderConfig) *Provider {
+func New(config types.ProviderConfig) (*Provider, error) {
 	if config.BaseURL == "" {
-		panic("Ollama BaseURL is required: provide via config.BaseURL or environment variable")
+		return nil, fmt.Errorf("Ollama BaseURL is required: provide via config.BaseURL or environment variable")
 	}
 
 	return &Provider{
 		BaseProvider: providers.NewBaseProvider("ollama", config),
-	}
+	}, nil
 }
 
 // Text generates a text response using Ollama's chat API

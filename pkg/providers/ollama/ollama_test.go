@@ -1,6 +1,7 @@
 package ollama
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/garyblankenship/wormhole/pkg/types"
@@ -9,13 +10,13 @@ import (
 func TestNew_RequiresBaseURL(t *testing.T) {
 	config := types.ProviderConfig{}
 
-	defer func() {
-		if r := recover(); r == nil {
-			t.Error("Expected panic when BaseURL is not provided")
-		}
-	}()
-
-	New(config)
+	_, err := New(config)
+	if err == nil {
+		t.Error("Expected error when BaseURL is not provided")
+	}
+	if !strings.Contains(err.Error(), "BaseURL is required") {
+		t.Errorf("Expected error message about BaseURL, got: %v", err)
+	}
 }
 
 func TestNew_CustomConfig(t *testing.T) {
@@ -23,7 +24,10 @@ func TestNew_CustomConfig(t *testing.T) {
 	config := types.ProviderConfig{
 		BaseURL: customURL,
 	}
-	provider := New(config)
+	provider, err := New(config)
+	if err != nil {
+		t.Fatalf("Failed to create provider: %v", err)
+	}
 
 	if provider == nil {
 		t.Fatal("Expected provider to be created")
@@ -35,9 +39,12 @@ func TestNew_CustomConfig(t *testing.T) {
 }
 
 func TestBuildChatPayload(t *testing.T) {
-	provider := New(types.ProviderConfig{
+	provider, err := New(types.ProviderConfig{
 		BaseURL: "http://localhost:11434",
 	})
+	if err != nil {
+		t.Fatalf("Failed to create provider: %v", err)
+	}
 
 	request := &types.TextRequest{
 		BaseRequest: types.BaseRequest{
