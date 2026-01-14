@@ -77,38 +77,56 @@ func (b *BatchBuilder) Execute(ctx context.Context) []BatchResult {
 	}
 
 	results := make([]BatchResult, len(b.requests))
-	sem := make(chan struct{}, concurrency)
+	taskCh := make(chan int, len(b.requests)) // send indices to workers
+	resultCh := make(chan batchResult, len(b.requests))
 	var wg sync.WaitGroup
 
-	for i, req := range b.requests {
+	// Start worker goroutines
+	for w := 0; w < concurrency; w++ {
 		wg.Add(1)
-		go func(index int, request *TextRequestBuilder) {
+		go func() {
 			defer wg.Done()
-
-			// Acquire semaphore
-			select {
-			case sem <- struct{}{}:
-				defer func() { <-sem }()
-			case <-ctx.Done():
-				results[index] = BatchResult{
-					Index: index,
-					Error: ctx.Err(),
+			for index := range taskCh {
+				req := b.requests[index]
+				resp, err := req.Generate(ctx)
+				resultCh <- batchResult{
+					index:    index,
+					response: resp,
+					err:      err,
 				}
-				return
 			}
-
-			// Execute request
-			resp, err := request.Generate(ctx)
-			results[index] = BatchResult{
-				Index:    index,
-				Response: resp,
-				Error:    err,
-			}
-		}(i, req)
+		}()
 	}
 
-	wg.Wait()
+	// Send all tasks
+	for i := range b.requests {
+		taskCh <- i
+	}
+	close(taskCh)
+
+	// Wait for workers to finish and collect results
+	go func() {
+		wg.Wait()
+		close(resultCh)
+	}()
+
+	// Collect results (order doesn't matter, we store by index)
+	for r := range resultCh {
+		results[r.index] = BatchResult{
+			Index:    r.index,
+			Response: r.response,
+			Error:    r.err,
+		}
+	}
+
 	return results
+}
+
+// batchResult internal struct for worker results
+type batchResult struct {
+	index    int
+	response *types.TextResponse
+	err      error
 }
 
 // ExecuteCollect runs all requests and returns only successful responses.
@@ -138,22 +156,51 @@ func (b *BatchBuilder) ExecuteFirst(ctx context.Context) (*types.TextResponse, e
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
+	// Determine concurrency
+	concurrency := b.concurrency
+	if concurrency <= 0 {
+		concurrency = 10
+	}
+	if concurrency > len(b.requests) {
+		concurrency = len(b.requests)
+	}
+
 	type result struct {
 		resp *types.TextResponse
 		err  error
 	}
 
 	resultCh := make(chan result, len(b.requests))
+	taskCh := make(chan int, len(b.requests))
+	var wg sync.WaitGroup
 
-	for _, req := range b.requests {
-		go func(request *TextRequestBuilder) {
-			resp, err := request.Generate(ctx)
-			select {
-			case resultCh <- result{resp, err}:
-			case <-ctx.Done():
+	// Start workers
+	for w := 0; w < concurrency; w++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for index := range taskCh {
+				req := b.requests[index]
+				resp, err := req.Generate(ctx)
+				select {
+				case resultCh <- result{resp, err}:
+				case <-ctx.Done():
+				}
 			}
-		}(req)
+		}()
 	}
+
+	// Send all tasks
+	for i := range b.requests {
+		taskCh <- i
+	}
+	close(taskCh)
+
+	// Wait for workers to finish (in background)
+	go func() {
+		wg.Wait()
+		close(resultCh)
+	}()
 
 	// Wait for first success or all failures
 	var lastErr error
