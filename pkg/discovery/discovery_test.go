@@ -2,6 +2,8 @@ package discovery
 
 import (
 	"context"
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -278,4 +280,109 @@ func TestModelCache_TTL(t *testing.T) {
 	if len(fallback) == 0 {
 		t.Error("Expected fallback models for openai provider after cache expiration")
 	}
+}
+
+func BenchmarkModelCache_ShardedFiles(b *testing.B) {
+	// Create temporary directory for cache files
+	tmpDir, err := os.MkdirTemp("", "wormhole-cache-bench")
+	if err != nil {
+		b.Fatal(err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	config := DiscoveryConfig{
+		CacheTTL:        24 * time.Hour,
+		FileCachePath:   filepath.Join(tmpDir, "models.json"),
+		EnableFileCache: true,
+		FileCacheTTL:    7 * 24 * time.Hour,
+	}
+
+	cache := NewModelCache(config)
+	defer cache.Clear()
+
+	// Create mock models for multiple providers
+	providers := []string{"openai", "anthropic", "gemini", "openrouter", "ollama"}
+	modelsByProvider := make(map[string][]*types.ModelInfo)
+	for _, provider := range providers {
+		modelsByProvider[provider] = []*types.ModelInfo{
+			{
+				ID:       provider + "-model-1",
+				Name:     provider + " Model 1",
+				Provider: provider,
+				Capabilities: []types.ModelCapability{
+					types.CapabilityText,
+					types.CapabilityChat,
+				},
+				MaxTokens: 8192,
+			},
+			{
+				ID:       provider + "-model-2",
+				Name:     provider + " Model 2",
+				Provider: provider,
+				Capabilities: []types.ModelCapability{
+					types.CapabilityText,
+				},
+				MaxTokens: 4096,
+			},
+		}
+	}
+
+	b.ResetTimer()
+	b.ReportAllocs()
+
+	// Benchmark sequential Set operations
+	for i := 0; i < b.N; i++ {
+		for _, provider := range providers {
+			cache.Set(provider, modelsByProvider[provider])
+		}
+	}
+}
+
+func BenchmarkModelCache_ConcurrentShardedFiles(b *testing.B) {
+	tmpDir, err := os.MkdirTemp("", "wormhole-cache-concurrent")
+	if err != nil {
+		b.Fatal(err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	config := DiscoveryConfig{
+		CacheTTL:        24 * time.Hour,
+		FileCachePath:   filepath.Join(tmpDir, "models.json"),
+		EnableFileCache: true,
+		FileCacheTTL:    7 * 24 * time.Hour,
+	}
+
+	cache := NewModelCache(config)
+	defer cache.Clear()
+
+	providers := []string{"openai", "anthropic", "gemini", "openrouter", "ollama"}
+	modelsByProvider := make(map[string][]*types.ModelInfo)
+	for _, provider := range providers {
+		modelsByProvider[provider] = []*types.ModelInfo{
+			{
+				ID:       provider + "-model-1",
+				Name:     provider + " Model 1",
+				Provider: provider,
+				Capabilities: []types.ModelCapability{
+					types.CapabilityText,
+					types.CapabilityChat,
+				},
+				MaxTokens: 8192,
+			},
+		}
+	}
+
+	b.ResetTimer()
+	b.ReportAllocs()
+
+	b.RunParallel(func(pb *testing.PB) {
+		// Each goroutine picks a provider and calls Set
+		// Simulate concurrent updates to different providers
+		idx := 0
+		for pb.Next() {
+			provider := providers[idx%len(providers)]
+			cache.Set(provider, modelsByProvider[provider])
+			idx++
+		}
+	})
 }

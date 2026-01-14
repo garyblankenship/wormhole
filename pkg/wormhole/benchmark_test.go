@@ -25,7 +25,7 @@ func BenchmarkTextGeneration(b *testing.B) {
 		providers: map[string]*cachedProvider{
 			"mock": {
 				provider: mockProvider,
-				lastUsed: time.Now(),
+				lastUsed: time.Now().UnixNano(),
 				refCount: 1,
 			},
 		},
@@ -58,7 +58,7 @@ func BenchmarkEmbeddings(b *testing.B) {
 		providers: map[string]*cachedProvider{
 			"mock": {
 				provider: mockProvider,
-				lastUsed: time.Now(),
+				lastUsed: time.Now().UnixNano(),
 				refCount: 1,
 			},
 		},
@@ -90,7 +90,7 @@ func BenchmarkStructuredGeneration(b *testing.B) {
 		providers: map[string]*cachedProvider{
 			"mock": {
 				provider: mockProvider,
-				lastUsed: time.Now(),
+				lastUsed: time.Now().UnixNano(),
 				refCount: 1,
 			},
 		},
@@ -189,7 +189,7 @@ func BenchmarkConcurrent(b *testing.B) {
 		providers: map[string]*cachedProvider{
 			"mock": {
 				provider: mockProvider,
-				lastUsed: time.Now(),
+				lastUsed: time.Now().UnixNano(),
 				refCount: 1,
 			},
 		},

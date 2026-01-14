@@ -246,7 +246,7 @@ func TestLoadWithErrorInjection(t *testing.T) {
 					MockProvider: mockProvider,
 					errorRate:    0.2, // 20% error rate
 				},
-				lastUsed: time.Now(),
+				lastUsed: time.Now().UnixNano(),
 				refCount: 1,
 			},
 		},
@@ -365,17 +365,17 @@ func TestProviderPoolStress(t *testing.T) {
 		providers: map[string]*cachedProvider{
 			"mock1": {
 				provider: mockProvider1,
-				lastUsed: time.Now(),
+				lastUsed: time.Now().UnixNano(),
 				refCount: 1,
 			},
 			"mock2": {
 				provider: mockProvider2,
-				lastUsed: time.Now(),
+				lastUsed: time.Now().UnixNano(),
 				refCount: 1,
 			},
 			"mock3": {
 				provider: mockProvider3,
-				lastUsed: time.Now(),
+				lastUsed: time.Now().UnixNano(),
 				refCount: 1,
 			},
 		},
@@ -455,7 +455,7 @@ func TestMemoryLeakDetection(t *testing.T) {
 		providers: map[string]*cachedProvider{
 			"mock": {
 				provider: mockProvider,
-				lastUsed: time.Now(),
+				lastUsed: time.Now().UnixNano(),
 				refCount: 1,
 			},
 		},
@@ -526,7 +526,7 @@ func TestLoadWithMixedOperations(t *testing.T) {
 		providers: map[string]*cachedProvider{
 			"mock": {
 				provider: mockProvider,
-				lastUsed: time.Now(),
+				lastUsed: time.Now().UnixNano(),
 				refCount: 1,
 			},
 		},
@@ -709,7 +709,7 @@ func runLoadTest(t *testing.T, config LoadTestConfig, testName string) {
 		providers: map[string]*cachedProvider{
 			"mock": {
 				provider: mockProvider,
-				lastUsed: time.Now(),
+				lastUsed: time.Now().UnixNano(),
 				refCount: 1,
 			},
 		},
@@ -901,7 +901,7 @@ func BenchmarkLoadSustained(b *testing.B) {
 		providers: map[string]*cachedProvider{
 			"mock": {
 				provider: mockProvider,
-				lastUsed: time.Now(),
+				lastUsed: time.Now().UnixNano(),
 				refCount: 1,
 			},
 		},
