@@ -4,10 +4,27 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"strings"
 	"time"
 )
 
 // Error types for better debugging and error handling
+// ErrorCode represents different types of errors
+type ErrorCode string
+
+const (
+	ErrorCodeAuth       ErrorCode = "AUTH_ERROR"
+	ErrorCodeModel      ErrorCode = "MODEL_ERROR"
+	ErrorCodeRateLimit  ErrorCode = "RATE_LIMIT_ERROR"
+	ErrorCodeRequest    ErrorCode = "REQUEST_ERROR"
+	ErrorCodeTimeout    ErrorCode = "TIMEOUT_ERROR"
+	ErrorCodeProvider   ErrorCode = "PROVIDER_ERROR"
+	ErrorCodeNetwork    ErrorCode = "NETWORK_ERROR"
+	ErrorCodeValidation ErrorCode = "VALIDATION_ERROR"
+	ErrorCodeMiddleware ErrorCode = "MIDDLEWARE_ERROR"
+	ErrorCodeUnknown    ErrorCode = "UNKNOWN_ERROR"
+)
+
 var (
 	// Authentication errors
 	ErrInvalidAPIKey = NewWormholeError(ErrorCodeAuth, "invalid API key", true)
@@ -38,21 +55,11 @@ var (
 
 	// Validation errors
 	ErrValidation = NewWormholeError(ErrorCodeValidation, "validation failed", false)
-)
 
-// ErrorCode represents different types of errors
-type ErrorCode string
-
-const (
-	ErrorCodeAuth       ErrorCode = "AUTH_ERROR"
-	ErrorCodeModel      ErrorCode = "MODEL_ERROR"
-	ErrorCodeRateLimit  ErrorCode = "RATE_LIMIT_ERROR"
-	ErrorCodeRequest    ErrorCode = "REQUEST_ERROR"
-	ErrorCodeTimeout    ErrorCode = "TIMEOUT_ERROR"
-	ErrorCodeProvider   ErrorCode = "PROVIDER_ERROR"
-	ErrorCodeNetwork    ErrorCode = "NETWORK_ERROR"
-	ErrorCodeValidation ErrorCode = "VALIDATION_ERROR"
-	ErrorCodeUnknown    ErrorCode = "UNKNOWN_ERROR"
+	// Middleware errors
+	ErrCircuitOpen        = NewWormholeError(ErrorCodeMiddleware, "circuit breaker is open", true)
+	ErrRateLimitExceeded  = NewWormholeError(ErrorCodeMiddleware, "rate limit exceeded", true)
+	ErrNoHealthyProviders = NewWormholeError(ErrorCodeMiddleware, "no healthy providers available", true)
 )
 
 // WormholeError provides structured error information
@@ -231,6 +238,14 @@ func IsTimeoutError(err error) bool {
 func IsValidationError(err error) bool {
 	if wormholeErr, ok := AsWormholeError(err); ok {
 		return wormholeErr.Code == ErrorCodeValidation
+	}
+	return false
+}
+
+// IsMiddlewareError checks if an error is middleware-related.
+func IsMiddlewareError(err error) bool {
+	if wormholeErr, ok := AsWormholeError(err); ok {
+		return wormholeErr.Code == ErrorCodeMiddleware
 	}
 	return false
 }
@@ -458,15 +473,18 @@ func (ve *ValidationErrors) Error() error {
 	if len(ve.Errors) == 1 {
 		return ve.Errors[0]
 	}
-	// Combine into summary
-	details := fmt.Sprintf("%d validation errors: ", len(ve.Errors))
+	// Combine into summary using strings.Builder for efficiency
+	var builder strings.Builder
+	builder.WriteString(fmt.Sprintf("%d validation errors: ", len(ve.Errors)))
 	for i, e := range ve.Errors {
 		if i > 0 {
-			details += "; "
+			builder.WriteString("; ")
 		}
-		details += e.Field + " - " + e.WormholeError.Details
+		builder.WriteString(e.Field)
+		builder.WriteString(" - ")
+		builder.WriteString(e.WormholeError.Details)
 	}
-	return ErrValidation.WithDetails(details)
+	return ErrValidation.WithDetails(builder.String())
 }
 
 // Fields returns a list of fields that failed validation.

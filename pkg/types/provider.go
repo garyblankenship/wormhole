@@ -4,12 +4,15 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"time"
 )
 
 // Provider represents the unified LLM provider interface
 // All providers embed BaseProvider and override only the methods they support
 type Provider interface {
+	io.Closer
+
 	// Core provider info
 	Name() string
 
@@ -89,6 +92,12 @@ func (bp *BaseProvider) Images(ctx context.Context, request ImagesRequest) (*Ima
 
 func (bp *BaseProvider) GenerateImage(ctx context.Context, request ImageRequest) (*ImageResponse, error) {
 	return nil, bp.NotImplementedError("GenerateImage")
+}
+
+// Close implements io.Closer interface for BaseProvider
+func (bp *BaseProvider) Close() error {
+	// Base provider has no resources to clean up
+	return nil
 }
 
 // Legacy interfaces for backward compatibility - now simplified
