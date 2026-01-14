@@ -15,7 +15,10 @@ func main() {
 		BaseURL: "http://localhost:11434", // Default Ollama URL
 	}
 
-	provider := ollama.New(config)
+	provider, err := ollama.New(config)
+	if err != nil {
+		log.Fatalf("Failed to create Ollama provider: %v", err)
+	}
 
 	// Example 1: Simple text generation
 	fmt.Println("=== Text Generation Example ===")

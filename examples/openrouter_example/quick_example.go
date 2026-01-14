@@ -11,7 +11,11 @@ import (
 // QuickExample demonstrates the simplified QuickOpenRouter() API
 func QuickExample() {
 	// This is what the user requested - super simple setup
-	client := wormhole.QuickOpenRouter() // Uses OPENROUTER_API_KEY env var
+	client, err := wormhole.QuickOpenRouter() // Uses OPENROUTER_API_KEY env var
+	if err != nil {
+		log.Printf("Failed to create OpenRouter client: %v", err)
+		return
+	}
 
 	ctx := context.Background()
 

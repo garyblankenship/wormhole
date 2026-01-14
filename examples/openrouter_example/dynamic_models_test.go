@@ -21,7 +21,10 @@ func TestDynamicModelSupport(t *testing.T) {
 
 	t.Run("OpenRouter with DynamicModels enabled", func(t *testing.T) {
 		// Create client using factory (should have DynamicModels: true)
-		client := wormhole.Quick.OpenRouter(apiKey)
+		client, err := wormhole.Quick.OpenRouter(apiKey)
+		if err != nil {
+			t.Fatalf("Failed to create OpenRouter client: %v", err)
+		}
 
 		// Test with a model that's NOT in the registry
 		randomModels := []string{
@@ -88,7 +91,10 @@ func TestDynamicModelSupport(t *testing.T) {
 	})
 
 	t.Run("Demonstrate 200+ model support", func(t *testing.T) {
-		client := wormhole.Quick.OpenRouter(apiKey)
+		client, err := wormhole.Quick.OpenRouter(apiKey)
+		if err != nil {
+			t.Fatalf("Failed to create OpenRouter client: %v", err)
+		}
 
 		// Test a random model name that's not in our registry to prove it reaches OpenRouter
 		testModels := []string{
