@@ -91,7 +91,7 @@ func (lb *LoadBalancer) SelectProvider(ctx context.Context) (*ProviderHandler, e
 	// Get healthy providers
 	healthy := lb.getHealthyProviders()
 	if len(healthy) == 0 {
-		return nil, ErrNoHealthyProviders
+		return nil, wrapMiddlewareError("load_balancer", "select_provider", ErrNoHealthyProviders)
 	}
 
 	switch lb.strategy {
@@ -272,7 +272,7 @@ func (lb *LoadBalancer) Execute(ctx context.Context, req any) (any, error) {
 	// Update metrics
 	lb.updateProviderMetrics(provider, time.Since(start), err)
 
-	return resp, err
+	return resp, wrapIfNotWormholeError("load_balancer", "execute", err)
 }
 
 func (lb *LoadBalancer) updateProviderMetrics(provider *ProviderHandler, latency time.Duration, err error) {
@@ -401,7 +401,8 @@ func LoadBalancerMiddleware(strategy LoadBalanceStrategy, providers map[string]H
 
 	return func(next Handler) Handler {
 		return func(ctx context.Context, req any) (any, error) {
-			return lb.Execute(ctx, req)
+			result, err := lb.Execute(ctx, req)
+			return result, wrapIfNotWormholeError("load_balancer", "execute", err)
 		}
 	}
 }

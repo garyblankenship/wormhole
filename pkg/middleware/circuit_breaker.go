@@ -61,7 +61,7 @@ func (cb *CircuitBreaker) Execute(ctx context.Context, fn func() (any, error)) (
 			cb.successes = 0
 		} else {
 			cb.mu.Unlock()
-			return nil, ErrCircuitOpen
+			return nil, wrapMiddlewareError("circuit_breaker", "execute", ErrCircuitOpen)
 		}
 	}
 
@@ -69,7 +69,7 @@ func (cb *CircuitBreaker) Execute(ctx context.Context, fn func() (any, error)) (
 	if cb.state == StateHalfOpen {
 		if cb.halfOpenCalls >= cb.maxHalfOpenCalls {
 			cb.mu.Unlock()
-			return nil, ErrCircuitOpen
+			return nil, wrapMiddlewareError("circuit_breaker", "execute", ErrCircuitOpen)
 		}
 		cb.halfOpenCalls++
 	}
@@ -83,7 +83,7 @@ func (cb *CircuitBreaker) Execute(ctx context.Context, fn func() (any, error)) (
 	defer cb.mu.Unlock()
 
 	if err != nil {
-		return cb.handleError(result, err)
+		return cb.handleError(result, wrapIfNotWormholeError("circuit_breaker", "execute", err))
 	}
 
 	return cb.handleSuccess(result), nil
@@ -135,9 +135,10 @@ func CircuitBreakerMiddleware(threshold int, timeout time.Duration) Middleware {
 
 	return func(next Handler) Handler {
 		return func(ctx context.Context, req any) (any, error) {
-			return breaker.Execute(ctx, func() (any, error) {
+			result, err := breaker.Execute(ctx, func() (any, error) {
 				return next(ctx, req)
 			})
+			return result, wrapIfNotWormholeError("circuit_breaker", "execute", err)
 		}
 	}
 }

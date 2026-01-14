@@ -171,18 +171,12 @@ func (arl *AdaptiveRateLimiter) RecordLatency(latency time.Duration) {
 
 	// Adjust rate based on latency
 	if avgLatency > arl.targetLatency*120/100 { // 20% above target
-		// Decrease rate
-		newRate := arl.rate * 9 / 10
-		if newRate < arl.minRate {
-			newRate = arl.minRate
-		}
+		// Decrease rate, ensuring it doesn't go below minimum
+		newRate := max(arl.rate*9/10, arl.minRate)
 		arl.rate = newRate
 	} else if avgLatency < arl.targetLatency*80/100 { // 20% below target
-		// Increase rate
-		newRate := arl.rate * 11 / 10
-		if newRate > arl.maxRate {
-			newRate = arl.maxRate
-		}
+		// Increase rate, ensuring it doesn't go above maximum
+		newRate := min(arl.rate*11/10, arl.maxRate)
 		arl.rate = newRate
 	}
 
@@ -196,9 +190,13 @@ func RateLimitMiddleware(requestsPerSecond int) Middleware {
 	return func(next Handler) Handler {
 		return func(ctx context.Context, req any) (any, error) {
 			if err := limiter.Wait(ctx); err != nil {
-				return nil, err
+				if err == ErrRateLimitExceeded {
+					return nil, wrapMiddlewareError("rate_limiter", "wait", err)
+				}
+				return nil, wrapMiddlewareError("rate_limiter", "wait", err)
 			}
-			return next(ctx, req)
+			resp, err := next(ctx, req)
+			return resp, wrapIfNotWormholeError("rate_limiter", "execute", err)
 		}
 	}
 }
@@ -212,7 +210,10 @@ func AdaptiveRateLimitMiddleware(initialRate, minRate, maxRate int, targetLatenc
 			start := time.Now()
 
 			if err := limiter.Wait(ctx); err != nil {
-				return nil, err
+				if err == ErrRateLimitExceeded {
+					return nil, wrapMiddlewareError("adaptive_rate_limiter", "wait", err)
+				}
+				return nil, wrapMiddlewareError("adaptive_rate_limiter", "wait", err)
 			}
 
 			resp, err := next(ctx, req)
@@ -220,7 +221,7 @@ func AdaptiveRateLimitMiddleware(initialRate, minRate, maxRate int, targetLatenc
 			// Record latency for adaptation
 			limiter.RecordLatency(time.Since(start))
 
-			return resp, err
+			return resp, wrapIfNotWormholeError("adaptive_rate_limiter", "execute", err)
 		}
 	}
 }

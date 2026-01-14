@@ -15,6 +15,7 @@ type Cache interface {
 	Set(key string, value any, ttl time.Duration)
 	Delete(key string)
 	Clear()
+	Close() error
 }
 
 // MemoryCache implements an in-memory cache
@@ -22,6 +23,8 @@ type MemoryCache struct {
 	mu      sync.RWMutex
 	entries map[string]*cacheEntry
 	maxSize int
+	stopCh  chan struct{}
+	wg      sync.WaitGroup
 }
 
 type cacheEntry struct {
@@ -34,9 +37,11 @@ func NewMemoryCache(maxSize int) *MemoryCache {
 	cache := &MemoryCache{
 		entries: make(map[string]*cacheEntry),
 		maxSize: maxSize,
+		stopCh:  make(chan struct{}),
 	}
 
 	// Start cleanup goroutine
+	cache.wg.Add(1)
 	go cache.cleanup()
 
 	return cache
@@ -108,18 +113,24 @@ func (mc *MemoryCache) evictOldest() {
 }
 
 func (mc *MemoryCache) cleanup() {
+	defer mc.wg.Done()
 	ticker := time.NewTicker(5 * time.Minute)
 	defer ticker.Stop()
 
-	for range ticker.C {
-		mc.mu.Lock()
-		now := time.Now()
-		for key, entry := range mc.entries {
-			if now.After(entry.expiration) {
-				delete(mc.entries, key)
+	for {
+		select {
+		case <-ticker.C:
+			mc.mu.Lock()
+			now := time.Now()
+			for key, entry := range mc.entries {
+				if now.After(entry.expiration) {
+					delete(mc.entries, key)
+				}
 			}
+			mc.mu.Unlock()
+		case <-mc.stopCh:
+			return
 		}
-		mc.mu.Unlock()
 	}
 }
 
@@ -169,14 +180,16 @@ func CacheMiddleware(config CacheConfig) Middleware {
 		return func(ctx context.Context, req any) (any, error) {
 			// Check if request is cacheable
 			if config.CacheableFunc != nil && !config.CacheableFunc(req) {
-				return next(ctx, req)
+				resp, err := next(ctx, req)
+				return resp, wrapIfNotWormholeError("cache", "execute", err)
 			}
 
 			// Generate cache key
 			key, err := config.KeyGenerator(req)
 			if err != nil {
 				// If we can't generate a key, just proceed without caching
-				return next(ctx, req)
+				resp, err := next(ctx, req)
+				return resp, wrapIfNotWormholeError("cache", "execute", err)
 			}
 
 			// Check cache
@@ -187,13 +200,13 @@ func CacheMiddleware(config CacheConfig) Middleware {
 			// Execute request
 			resp, err := next(ctx, req)
 			if err != nil {
-				return nil, err
+				return nil, wrapIfNotWormholeError("cache", "execute", err)
 			}
 
 			// Cache successful response
 			config.Cache.Set(key, resp, config.TTL)
 
-			return resp, err
+			return resp, nil
 		}
 	}
 }
@@ -334,4 +347,20 @@ func (lru *LRUCache) evictLRU() {
 	node := lru.tail.prev
 	lru.removeNode(node)
 	delete(lru.cache, node.key)
+}
+
+// Close stops the cleanup goroutine and waits for it to finish
+func (mc *MemoryCache) Close() error {
+	close(mc.stopCh)
+	mc.wg.Wait()
+	return nil
+}
+
+// Close implements Cache interface for TTLCache (inherited from MemoryCache)
+// TTLCache.Close() calls the embedded MemoryCache.Close()
+
+// Close implements Cache interface for LRUCache
+func (lru *LRUCache) Close() error {
+	// LRUCache has no cleanup goroutines to stop
+	return nil
 }
