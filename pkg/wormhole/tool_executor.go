@@ -144,6 +144,20 @@ func (e *ToolExecutor) Execute(ctx context.Context, toolCall types.ToolCall) typ
 		}
 	}
 
+	// Apply output size limit if configured
+	if e.safetyConfig.HasOutputSizeLimit() && result != nil {
+		if err := e.validateOutputSize(result); err != nil {
+			// Record failure for circuit breaker
+			if e.circuitBreaker != nil {
+				e.circuitBreaker.RecordFailure()
+			}
+			return types.ToolResult{
+				ToolCallID: toolCall.ID,
+				Error:      fmt.Sprintf("output size limit exceeded: %v", err),
+			}
+		}
+	}
+
 	// Record success for circuit breaker
 	if e.circuitBreaker != nil {
 		e.circuitBreaker.RecordSuccess()
@@ -153,6 +167,27 @@ func (e *ToolExecutor) Execute(ctx context.Context, toolCall types.ToolCall) typ
 		ToolCallID: toolCall.ID,
 		Result:     result, // Result is any, not string
 	}
+}
+
+// validateOutputSize checks if the tool output exceeds configured size limits
+func (e *ToolExecutor) validateOutputSize(result any) error {
+	if result == nil {
+		return nil
+	}
+
+	// Try to estimate size by marshaling to JSON
+	jsonData, err := json.Marshal(result)
+	if err != nil {
+		// If we can't marshal, we can't validate - log warning but allow
+		// In production, you might want to handle this differently
+		return nil
+	}
+
+	if len(jsonData) > e.safetyConfig.MaxToolOutputSize {
+		return fmt.Errorf("output size %d bytes exceeds limit of %d bytes", len(jsonData), e.safetyConfig.MaxToolOutputSize)
+	}
+
+	return nil
 }
 
 // ExecuteAll executes all tool calls in parallel and returns the results

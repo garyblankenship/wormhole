@@ -2,6 +2,7 @@ package wormhole
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"time"
 
@@ -48,14 +49,14 @@ func (f *SimpleFactory) Gemini(apiKey ...string) *Wormhole {
 }
 
 // Ollama creates a Wormhole client configured for Ollama
-func (f *SimpleFactory) Ollama(baseURL ...string) *Wormhole {
+func (f *SimpleFactory) Ollama(baseURL ...string) (*Wormhole, error) {
 	var url string
 	if len(baseURL) > 0 && baseURL[0] != "" {
 		url = baseURL[0]
 	} else if envURL := os.Getenv("OLLAMA_BASE_URL"); envURL != "" {
 		url = envURL
 	} else {
-		panic("Ollama base URL is required: provide via parameter or OLLAMA_BASE_URL environment variable")
+		return nil, fmt.Errorf("Ollama base URL is required: provide via parameter or OLLAMA_BASE_URL environment variable")
 	}
 
 	return New(
@@ -64,7 +65,7 @@ func (f *SimpleFactory) Ollama(baseURL ...string) *Wormhole {
 			BaseURL:       url,
 			DynamicModels: true, // Users can load any model in Ollama
 		}),
-	)
+	), nil
 }
 
 // Groq creates a Wormhole client configured for Groq
@@ -88,14 +89,14 @@ func (f *SimpleFactory) Mistral(apiKey ...string) *Wormhole {
 }
 
 // LMStudio creates a Wormhole client configured for LMStudio
-func (f *SimpleFactory) LMStudio(baseURL ...string) *Wormhole {
+func (f *SimpleFactory) LMStudio(baseURL ...string) (*Wormhole, error) {
 	var url string
 	if len(baseURL) > 0 && baseURL[0] != "" {
 		url = baseURL[0]
 	} else if envURL := os.Getenv("LMSTUDIO_BASE_URL"); envURL != "" {
 		url = envURL
 	} else {
-		panic("LMStudio base URL is required: provide via parameter or LMSTUDIO_BASE_URL environment variable")
+		return nil, fmt.Errorf("LMStudio base URL is required: provide via parameter or LMSTUDIO_BASE_URL environment variable")
 	}
 
 	return New(
@@ -104,14 +105,14 @@ func (f *SimpleFactory) LMStudio(baseURL ...string) *Wormhole {
 			BaseURL:       url,
 			DynamicModels: true, // Users can load any model in LMStudio
 		}),
-	)
+	), nil
 }
 
 // OpenRouter creates a Wormhole client configured for OpenRouter (multi-provider gateway)
-func (f *SimpleFactory) OpenRouter(apiKey ...string) *Wormhole {
+func (f *SimpleFactory) OpenRouter(apiKey ...string) (*Wormhole, error) {
 	key := f.getAPIKey(apiKey, "OPENROUTER_API_KEY")
 	if key == "" {
-		panic("OpenRouter API key is required: provide via parameter or OPENROUTER_API_KEY environment variable")
+		return nil, fmt.Errorf("OpenRouter API key is required: provide via parameter or OPENROUTER_API_KEY environment variable")
 	}
 
 	return New(
@@ -120,7 +121,7 @@ func (f *SimpleFactory) OpenRouter(apiKey ...string) *Wormhole {
 			APIKey:        key,
 			DynamicModels: true, // Enable all 200+ OpenRouter models without registry validation
 		}),
-	)
+	), nil
 }
 
 // WithRateLimit returns an option to add rate limiting middleware
@@ -206,12 +207,12 @@ func QuickGemini(apiKey ...string) *Wormhole {
 }
 
 // QuickOllama creates an Ollama client with minimal configuration
-func QuickOllama(baseURL ...string) *Wormhole {
+func QuickOllama(baseURL ...string) (*Wormhole, error) {
 	return Quick.Ollama(baseURL...)
 }
 
 // QuickLMStudio creates an LMStudio client with minimal configuration
-func QuickLMStudio(baseURL ...string) *Wormhole {
+func QuickLMStudio(baseURL ...string) (*Wormhole, error) {
 	return Quick.LMStudio(baseURL...)
 }
 
@@ -228,7 +229,7 @@ func QuickMistral(apiKey ...string) *Wormhole {
 // QuickOpenRouter creates an OpenRouter client with minimal configuration
 // This provides INSTANT access to ALL 200+ OpenRouter models through dynamic model support
 // No manual registration required - any model name works immediately
-func QuickOpenRouter(apiKey ...string) *Wormhole {
+func QuickOpenRouter(apiKey ...string) (*Wormhole, error) {
 	return Quick.OpenRouter(apiKey...)
 }
 

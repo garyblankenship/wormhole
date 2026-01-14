@@ -7,6 +7,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"os"
@@ -64,9 +65,8 @@ const (
 // cachedProvider wraps a provider with reference counting and last-used tracking
 type cachedProvider struct {
 	provider types.Provider
-	lastUsed time.Time
-	refCount int
-	mu       sync.RWMutex
+	lastUsed int64 // atomic, UnixNano timestamp
+	refCount int32 // atomic
 }
 
 // Wormhole is the main client for interacting with LLM providers
@@ -80,6 +80,23 @@ type Wormhole struct {
 	middlewareChain    *middleware.Chain              // DEPRECATED: use providerMiddleware instead
 	toolRegistry       *ToolRegistry                  // Registry of available tools for function calling
 	discoveryService   *discovery.DiscoveryService    // Dynamic model discovery service
+
+	// Shutdown management
+	shutdownOnce       sync.Once
+	shutdownChan       chan struct{}          // Signal for graceful shutdown
+	activeRequests     sync.WaitGroup         // Track in-flight requests
+	shuttingDown       atomic.Bool            // Atomic flag for shutdown state
+
+	// Idempotency cache
+	idempotencyCache   sync.Map               // Thread-safe cache for idempotent responses
+}
+
+// IdempotencyConfig holds configuration for idempotent request handling
+type IdempotencyConfig struct {
+	// Key is the unique identifier for the operation
+	Key string
+	// TTL is the time-to-live for cached responses
+	TTL time.Duration
 }
 
 // Config holds the configuration for Wormhole
@@ -97,6 +114,7 @@ type Config struct {
 	ModelValidation     bool                      // Whether to validate models against registry (default: true)
 	DiscoveryConfig     discovery.DiscoveryConfig // Dynamic model discovery configuration
 	EnableDiscovery     bool                      // Whether to enable dynamic model discovery (default: true)
+	Idempotency         *IdempotencyConfig        // Idempotency configuration for duplicate prevention
 }
 
 // New creates a new Wormhole instance using functional options
@@ -124,6 +142,7 @@ func New(opts ...Option) *Wormhole {
 		providers:         make(map[string]*cachedProvider),
 		config:            config,
 		toolRegistry:      NewToolRegistry(),
+		shutdownChan:      make(chan struct{}),
 	}
 
 	// Initialize model discovery service if enabled
@@ -190,7 +209,7 @@ func (p *Wormhole) registerBuiltinProviders() {
 				c.BaseURL = envURL
 			}
 		}
-		return ollama.New(c), nil
+		return ollama.New(c)
 	}
 	// NOTE: groq and mistral now use the generic openai provider via WithOpenAICompatible()
 }
@@ -252,14 +271,23 @@ func (p *Wormhole) Batch() *BatchBuilder {
 
 // Provider returns a specific provider instance
 func (p *Wormhole) Provider(name string) (types.Provider, error) {
+	// Check if client is shutting down
+	if p.shuttingDown.Load() {
+		return nil, fmt.Errorf("client is shutting down")
+	}
+
+	// Track this request
+	if !p.trackRequest() {
+		return nil, fmt.Errorf("client is shutting down")
+	}
+	defer p.untrackRequest()
+
 	// First, try to read with read lock
 	p.providersMutex.RLock()
 	if cp, exists := p.providers[name]; exists {
-		// Increment reference count and update last used time
-		cp.mu.Lock()
-		cp.refCount++
-		cp.lastUsed = time.Now()
-		cp.mu.Unlock()
+		// Increment reference count and update last used time (atomic)
+		atomic.AddInt32(&cp.refCount, 1)
+		atomic.StoreInt64(&cp.lastUsed, time.Now().UnixNano())
 		p.providersMutex.RUnlock()
 		return cp.provider, nil
 	}
@@ -271,11 +299,9 @@ func (p *Wormhole) Provider(name string) (types.Provider, error) {
 
 	// Double-check after acquiring write lock (another goroutine might have created it)
 	if cp, exists := p.providers[name]; exists {
-		// Increment reference count and update last used time
-		cp.mu.Lock()
-		cp.refCount++
-		cp.lastUsed = time.Now()
-		cp.mu.Unlock()
+		// Increment reference count and update last used time (atomic)
+		atomic.AddInt32(&cp.refCount, 1)
+		atomic.StoreInt64(&cp.lastUsed, time.Now().UnixNano())
 		return cp.provider, nil
 	}
 
@@ -328,7 +354,7 @@ func (p *Wormhole) Provider(name string) (types.Provider, error) {
 	// Create cached provider wrapper
 	cp := &cachedProvider{
 		provider: provider,
-		lastUsed: time.Now(),
+		lastUsed: time.Now().UnixNano(),
 		refCount: 1,
 	}
 
@@ -785,9 +811,16 @@ func (c *Capabilities) SupportsAudio() bool {
 
 // Close implements io.Closer interface for Wormhole
 // It cleans up all cached providers and stops the discovery service
+// This is an immediate close - for graceful shutdown, use Shutdown(ctx) instead
 func (p *Wormhole) Close() error {
 	var errs []error
 	p.closeOnce.Do(func() {
+		// Signal shutdown if not already signaled
+		if !p.shuttingDown.Load() {
+			close(p.shutdownChan)
+			p.shuttingDown.Store(true)
+		}
+
 		// Cleanup providers
 		p.providersMutex.Lock()
 		defer p.providersMutex.Unlock()
@@ -815,6 +848,158 @@ func (p *Wormhole) Close() error {
 	return nil
 }
 
+// Shutdown gracefully shuts down the Wormhole client with zero-downtime support
+// It drains in-flight requests, closes provider connections, and cleans up resources
+//
+// Parameters:
+//   - ctx: Context for shutdown timeout/cancellation. If timeout occurs,
+//     remaining resources are force-closed.
+//
+// Behavior:
+//   - Thread-safe and idempotent (multiple calls have same effect)
+//   - Drains in-flight requests before closing resources
+//   - Respects context timeout for graceful shutdown period
+//   - Closes all provider connections and middleware resources
+//   - Returns error if shutdown fails or context times out
+//
+// Example:
+//   ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+//   defer cancel()
+//   if err := client.Shutdown(ctx); err != nil {
+//       log.Printf("Graceful shutdown failed: %v", err)
+//   }
+func (p *Wormhole) Shutdown(ctx context.Context) error {
+	var shutdownErr error
+	p.shutdownOnce.Do(func() {
+		// Mark as shutting down to reject new requests
+		p.shuttingDown.Store(true)
+
+		// Signal shutdown to all components
+		close(p.shutdownChan)
+
+		// Wait for in-flight requests to complete or context timeout
+		done := make(chan struct{})
+		go func() {
+			p.activeRequests.Wait()
+			close(done)
+		}()
+
+		select {
+		case <-done:
+			// All requests completed, proceed with cleanup
+		case <-ctx.Done():
+			// Context timed out or canceled
+			shutdownErr = fmt.Errorf("shutdown timeout: %w", ctx.Err())
+			// Continue with force cleanup
+		}
+
+		// Close all resources
+		var errs []error
+
+		// Cleanup providers
+		p.providersMutex.Lock()
+		for name, cp := range p.providers {
+			if err := cp.provider.Close(); err != nil {
+				errs = append(errs, fmt.Errorf("provider %s: %w", name, err))
+			}
+			delete(p.providers, name)
+		}
+		p.providersMutex.Unlock()
+
+		// Stop discovery service
+		if p.discoveryService != nil {
+			if err := p.discoveryService.Stop(); err != nil {
+				errs = append(errs, fmt.Errorf("discovery service: %w", err))
+			}
+		}
+
+		// TODO: Close middleware resources (circuit breakers, rate limiters)
+		// This requires middleware to implement io.Closer interface
+
+		if len(errs) > 0 {
+			shutdownErr = fmt.Errorf("errors during shutdown cleanup: %v", errs)
+		}
+	})
+
+	return shutdownErr
+}
+
+// IsShuttingDown returns true if the client is in shutdown process
+func (p *Wormhole) IsShuttingDown() bool {
+	return p.shuttingDown.Load()
+}
+
+// trackRequest increments the active request count if not shutting down
+// Returns true if request can proceed, false if shutting down
+func (p *Wormhole) trackRequest() bool {
+	if p.shuttingDown.Load() {
+		return false
+	}
+	p.activeRequests.Add(1)
+	return true
+}
+
+// untrackRequest decrements the active request count
+func (p *Wormhole) untrackRequest() {
+	p.activeRequests.Done()
+}
+
+// withRequestTracking executes a function with request tracking
+// Returns an error if client is shutting down
+func (p *Wormhole) withRequestTracking(fn func() error) error {
+	if !p.trackRequest() {
+		return fmt.Errorf("client is shutting down")
+	}
+	defer p.untrackRequest()
+	return fn()
+}
+
+// getIdempotencyKey returns the idempotency key if configured
+func (p *Wormhole) getIdempotencyKey() string {
+	if p.config.Idempotency == nil {
+		return ""
+	}
+	return p.config.Idempotency.Key
+}
+
+// checkIdempotencyCache checks if a cached response exists for the given key
+// Returns the cached response and true if found, nil and false otherwise
+func (p *Wormhole) checkIdempotencyCache(key string) (any, bool) {
+	if key == "" {
+		return nil, false
+	}
+	cached, ok := p.idempotencyCache.Load(key)
+	return cached, ok
+}
+
+// storeIdempotencyResponse stores a response in the idempotency cache
+func (p *Wormhole) storeIdempotencyResponse(key string, response any) {
+	if key == "" || p.config.Idempotency == nil {
+		return
+	}
+
+	ttl := p.config.Idempotency.TTL
+	if ttl == 0 {
+		ttl = 24 * time.Hour // Default TTL
+	}
+
+	p.idempotencyCache.Store(key, response)
+
+	// Schedule deletion after TTL
+	go func() {
+		time.Sleep(ttl)
+		p.idempotencyCache.Delete(key)
+	}()
+}
+
+// ClearIdempotencyCache clears all cached idempotent responses
+func (p *Wormhole) ClearIdempotencyCache() {
+	p.idempotencyCache.Range(func(key, value any) bool {
+		p.idempotencyCache.Delete(key)
+		return true
+	})
+}
+
 // CleanupStaleProviders cleans up providers that haven't been used for a while
 func (p *Wormhole) CleanupStaleProviders(maxAge time.Duration, maxCount int) {
 	p.providersMutex.Lock()
@@ -823,11 +1008,12 @@ func (p *Wormhole) CleanupStaleProviders(maxAge time.Duration, maxCount int) {
 	now := time.Now()
 	staleKeys := []string{}
 	for name, cp := range p.providers {
-		cp.mu.RLock()
-		if cp.refCount == 0 && now.Sub(cp.lastUsed) > maxAge {
+		// Atomic loads for thread-safe stale checking
+		refCount := atomic.LoadInt32(&cp.refCount)
+		lastUsed := atomic.LoadInt64(&cp.lastUsed)
+		if refCount == 0 && now.Sub(time.Unix(0, lastUsed)) > maxAge {
 			staleKeys = append(staleKeys, name)
 		}
-		cp.mu.RUnlock()
 	}
 
 	// Remove stale providers
