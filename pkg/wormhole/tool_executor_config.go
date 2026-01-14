@@ -56,6 +56,31 @@ type ToolSafetyConfig struct {
 	// CircuitBreakerResetTimeout is the time to wait before resetting the circuit breaker
 	// Default: 1 minute
 	CircuitBreakerResetTimeout time.Duration `json:"circuit_breaker_reset_timeout" yaml:"circuit_breaker_reset_timeout"`
+
+	// MaxMemoryMB limits the memory usage of tool execution in megabytes
+	// 0 means unlimited (not recommended for untrusted tools)
+	// Default: 0 (unlimited)
+	MaxMemoryMB int `json:"max_memory_mb" yaml:"max_memory_mb"`
+
+	// MaxCPUTime limits the CPU time for tool execution
+	// 0 means unlimited (not recommended for untrusted tools)
+	// Default: 0 (unlimited)
+	MaxCPUTime time.Duration `json:"max_cpu_time" yaml:"max_cpu_time"`
+
+	// EnableInputValidation enables strict validation of tool arguments against schemas
+	// When enabled, all tool arguments are validated against their JSON schemas
+	// Default: true (recommended for production)
+	EnableInputValidation bool `json:"enable_input_validation" yaml:"enable_input_validation"`
+
+	// EnableResourceIsolation enables basic resource isolation for tool execution
+	// This includes separate goroutine pools and memory tracking
+	// Default: false (enable only for untrusted tools)
+	EnableResourceIsolation bool `json:"enable_resource_isolation" yaml:"enable_resource_isolation"`
+
+	// MaxToolOutputSize limits the size of tool output in bytes
+	// Prevents memory exhaustion from large tool outputs
+	// Default: 10MB (10 * 1024 * 1024)
+	MaxToolOutputSize int `json:"max_tool_output_size" yaml:"max_tool_output_size"`
 }
 
 // DefaultToolSafetyConfig returns a safe default configuration
@@ -73,6 +98,11 @@ func DefaultToolSafetyConfig() ToolSafetyConfig {
 		MaxRetriesPerTool:         0,
 		CircuitBreakerThreshold:   5,
 		CircuitBreakerResetTimeout: time.Minute,
+		MaxMemoryMB:               0,                    // Unlimited by default
+		MaxCPUTime:                0,                    // Unlimited by default
+		EnableInputValidation:     true,                 // Enabled by default for safety
+		EnableResourceIsolation:   false,                // Disabled by default (performance)
+		MaxToolOutputSize:         10 * 1024 * 1024,     // 10MB default
 	}
 }
 
@@ -109,6 +139,18 @@ func (c *ToolSafetyConfig) Validate() error {
 	if c.AdaptiveLatencyWindowSize < 1 {
 		c.AdaptiveLatencyWindowSize = 100
 	}
+	// Validate new security fields
+	if c.MaxMemoryMB < 0 {
+		c.MaxMemoryMB = 0
+	}
+	if c.MaxCPUTime < 0 {
+		c.MaxCPUTime = 0
+	}
+	if c.MaxToolOutputSize < 0 {
+		c.MaxToolOutputSize = 0
+	} else if c.MaxToolOutputSize == 0 {
+		c.MaxToolOutputSize = 10 * 1024 * 1024 // Default to 10MB if 0
+	}
 	return nil
 }
 
@@ -132,4 +174,19 @@ func (c *ToolSafetyConfig) IsUnlimitedConcurrency() bool {
 // HasTimeout returns true if a timeout is configured
 func (c *ToolSafetyConfig) HasTimeout() bool {
 	return c.ToolTimeout > 0
+}
+
+// HasMemoryLimit returns true if a memory limit is configured
+func (c *ToolSafetyConfig) HasMemoryLimit() bool {
+	return c.MaxMemoryMB > 0
+}
+
+// HasCPULimit returns true if a CPU time limit is configured
+func (c *ToolSafetyConfig) HasCPULimit() bool {
+	return c.MaxCPUTime > 0
+}
+
+// HasOutputSizeLimit returns true if an output size limit is configured
+func (c *ToolSafetyConfig) HasOutputSizeLimit() bool {
+	return c.MaxToolOutputSize > 0
 }
