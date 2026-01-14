@@ -54,9 +54,11 @@ func TestBaseProvider_PerProviderRetryConfiguration(t *testing.T) {
 
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			count := atomic.AddInt64(&callCount, 1)
-			if count == 1 {
+			// Use explicit case labels for clarity
+			switch count {
+			case 1: // First call
 				firstCallTime = time.Now()
-			} else if count == 2 {
+			case 2: // Second call (first retry)
 				secondCallTime = time.Now()
 			}
 			w.WriteHeader(http.StatusServiceUnavailable)

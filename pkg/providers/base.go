@@ -368,3 +368,11 @@ func (p *BaseProvider) isTimeoutError(err error) bool {
 		strings.Contains(errMsg, "deadline exceeded") ||
 		strings.Contains(errMsg, "context deadline exceeded")
 }
+
+// Close implements io.Closer interface for BaseProvider
+func (p *BaseProvider) Close() error {
+	// No resources to clean up in BaseProvider
+	// httpClient is created as a pointer to http.Client, which has no Close() method
+	// retryClient doesn't need cleanup as it wraps http.Client
+	return nil
+}
