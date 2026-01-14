@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"log"
 	"os"
 	"path/filepath"
@@ -37,9 +38,16 @@ type ModelCache struct {
 
 // NewModelCache creates a new model cache
 func NewModelCache(config DiscoveryConfig) *ModelCache {
+	filePath, err := expandPath(config.FileCachePath)
+	if err != nil {
+		// Log error and use default path
+		log.Printf("warning: failed to expand cache path %q: %v, using default", config.FileCachePath, err)
+		filePath = "./wormhole-cache.json"
+	}
+
 	return &ModelCache{
 		memory:              make(map[string]*CacheEntry),
-		filePath:            expandPath(config.FileCachePath),
+		filePath:            filePath,
 		memoryTTL:           config.CacheTTL,
 		fileTTL:             config.FileCacheTTL,
 		enableFileCache:     config.EnableFileCache,
@@ -72,6 +80,61 @@ func (c *ModelCache) getProviderLock(provider string) *sync.RWMutex {
 	}
 
 	return lock
+}
+
+// getProviderFilePath returns the provider-specific cache file path
+func (c *ModelCache) getProviderFilePath(provider string) string {
+	// Sanitize provider name for file usage
+	safeProvider := strings.ReplaceAll(provider, "/", "_")
+	safeProvider = strings.ReplaceAll(safeProvider, "..", "_")
+	safeProvider = strings.ReplaceAll(safeProvider, "\\", "_")
+
+	// Extract directory and base name from original filePath
+	dir := filepath.Dir(c.filePath)
+	base := filepath.Base(c.filePath)
+	// Remove extension if present
+	ext := filepath.Ext(base)
+	if ext != "" {
+		base = strings.TrimSuffix(base, ext)
+	}
+	// Construct provider-specific filename: base-provider.ext
+	providerBase := fmt.Sprintf("%s-%s%s", base, safeProvider, ext)
+	return filepath.Join(dir, providerBase)
+}
+
+// migrateToSharded migrates a cache entry from monolithic file to provider-specific file
+func (c *ModelCache) migrateToSharded(provider string, entry *CacheEntry) {
+	// Use per-provider lock to prevent concurrent migration
+	lock := c.getProviderLock(provider)
+	lock.Lock()
+	defer lock.Unlock()
+
+	// Check if provider-specific file already exists (race condition)
+	providerPath := c.getProviderFilePath(provider)
+	if _, err := os.Stat(providerPath); err == nil {
+		return // Already migrated
+	}
+
+	// Marshal entry to JSON
+	data, err := json.MarshalIndent(entry, "", "  ")
+	if err != nil {
+		return // Can't marshal, skip migration
+	}
+
+	// Ensure directory exists
+	dir := filepath.Dir(providerPath)
+	if err := os.MkdirAll(dir, 0750); err != nil {
+		return // Can't create directory, skip
+	}
+
+	// Write atomically
+	tempPath := providerPath + ".tmp"
+	if err := os.WriteFile(tempPath, data, 0600); err != nil { // #nosec G304 - path validated via ValidatePath
+		return // Can't write, skip
+	}
+	if err := os.Rename(tempPath, providerPath); err != nil { // #nosec G304 - path validated via ValidatePath
+		_ = os.Remove(tempPath) // #nosec G304 - path validated via ValidatePath
+	}
 }
 
 // Get retrieves models from cache (L1 -> L2 -> L3)
@@ -136,8 +199,24 @@ func (c *ModelCache) loadFromFile(provider string) ([]*types.ModelInfo, bool) {
 	lock.RLock()
 	defer lock.RUnlock()
 
-	// Read file
-	data, err := os.ReadFile(c.filePath) // #nosec G304 - path validated via ValidatePath
+	// Try provider-specific file first
+	providerPath := c.getProviderFilePath(provider)
+	data, err := os.ReadFile(providerPath) // #nosec G304 - path validated via ValidatePath
+	if err == nil {
+		// Parse provider-specific JSON (single CacheEntry)
+		var entry CacheEntry
+		if err := json.Unmarshal(data, &entry); err != nil {
+			return nil, false // Invalid JSON
+		}
+		// Check TTL
+		if time.Since(entry.Timestamp) > c.fileTTL {
+			return nil, false // Expired
+		}
+		return entry.Models, true
+	}
+
+	// Fallback to monolithic file for backward compatibility
+	data, err = os.ReadFile(c.filePath) // #nosec G304 - path validated via ValidatePath
 	if err != nil {
 		return nil, false // File doesn't exist or can't be read
 	}
@@ -159,6 +238,9 @@ func (c *ModelCache) loadFromFile(provider string) ([]*types.ModelInfo, bool) {
 		return nil, false // Expired
 	}
 
+	// Migrate to provider-specific file for future reads
+	go c.migrateToSharded(provider, entry)
+
 	return entry.Models, true
 }
 
@@ -172,50 +254,36 @@ func (c *ModelCache) saveToFile(provider string, models []*types.ModelInfo) {
 	// Use append-based journaling if enabled (experimental)
 	if c.enableAppendJournal {
 		_ = c.appendToJournal(provider, models) // Ignore errors for backward compatibility
-		// Still update main cache file for backward compatibility
 	}
 
-	// Read existing cache
-	var fileCache FileCache
-	data, err := os.ReadFile(c.filePath) // #nosec G304 - path validated via ValidatePath
-	if err == nil {
-		// File exists, parse it (ignore unmarshal errors, will reinitialize)
-		_ = json.Unmarshal(data, &fileCache)
-	}
-
-	// Initialize if needed
-	if fileCache.Entries == nil {
-		fileCache.Entries = make(map[string]*CacheEntry)
-	}
-	fileCache.Version = "1.0"
-	fileCache.Updated = time.Now()
-
-	// Update entry
-	fileCache.Entries[provider] = &CacheEntry{
+	// Create entry
+	entry := &CacheEntry{
 		Models:    models,
 		Timestamp: time.Now(),
 		Provider:  provider,
 	}
 
 	// Marshal to JSON
-	data, err = json.MarshalIndent(fileCache, "", "  ")
+	data, err := json.MarshalIndent(entry, "", "  ")
 	if err != nil {
 		return // Can't marshal, skip save
 	}
 
+	// Write to provider-specific file
+	providerPath := c.getProviderFilePath(provider)
 	// Ensure directory exists
-	dir := filepath.Dir(c.filePath)
+	dir := filepath.Dir(providerPath)
 	if err := os.MkdirAll(dir, 0750); err != nil {
 		return // Can't create directory, skip save
 	}
 
 	// Write atomically (write to temp, then rename)
 	// Use 0600 for security (cache may contain API-related metadata)
-	tempPath := c.filePath + ".tmp"
+	tempPath := providerPath + ".tmp"
 	if err := os.WriteFile(tempPath, data, 0600); err != nil { // #nosec G304 - path validated via ValidatePath
 		return // Can't write, skip
 	}
-	if err := os.Rename(tempPath, c.filePath); err != nil { // #nosec G304 - path validated via ValidatePath
+	if err := os.Rename(tempPath, providerPath); err != nil { // #nosec G304 - path validated via ValidatePath
 		// Cleanup temp file on rename failure
 		_ = os.Remove(tempPath) // #nosec G304 - path validated via ValidatePath
 	}
@@ -376,9 +444,33 @@ func (c *ModelCache) Clear() {
 	}
 	c.memoryMu.Unlock()
 	if c.enableFileCache {
+		// Remove monolithic file for backward compatibility
 		if err := os.Remove(c.filePath); err != nil && !os.IsNotExist(err) {
 			// Log warning - file removal failed for unexpected reason
 			log.Printf("warning: failed to remove cache file %s: %v", c.filePath, err) // #nosec G304 - path validated via ValidatePath
+		}
+		// Remove provider-specific files
+		c.clearProviderFiles()
+	}
+}
+
+// clearProviderFiles removes all provider-specific cache files
+func (c *ModelCache) clearProviderFiles() {
+	dir := filepath.Dir(c.filePath)
+	base := filepath.Base(c.filePath)
+	ext := filepath.Ext(base)
+	if ext != "" {
+		base = strings.TrimSuffix(base, ext)
+	}
+	// Pattern: base-*.ext
+	pattern := filepath.Join(dir, base+"-*"+ext)
+	matches, err := filepath.Glob(pattern)
+	if err != nil {
+		return // No matches or error
+	}
+	for _, path := range matches {
+		if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
+			log.Printf("warning: failed to remove provider cache file %s: %v", path, err) // #nosec G304 - path validated via ValidatePath
 		}
 	}
 }
@@ -431,7 +523,7 @@ func (c *ModelCache) cleanupExpired() {
 
 // expandPath expands ~ to home directory and validates the path.
 // Returns a validated, safe path. If validation fails, returns a default safe path.
-func expandPath(path string) string {
+func expandPath(path string) (string, error) {
 	// Expand ~/ prefix
 	expanded := path
 	if strings.HasPrefix(path, "~/") {
@@ -450,12 +542,12 @@ func expandPath(path string) string {
 		defaultPath := "./wormhole-cache.json"
 		validated, err = utils.ValidatePath(defaultPath, "")
 		if err != nil {
-			// This should never happen, but if it does, panic
-			panic("failed to validate default cache path: " + err.Error())
+			// This should never happen, but if it does, return error
+			return "", fmt.Errorf("failed to validate default cache path: %w", err)
 		}
-		return validated
+		return validated, nil
 	}
-	return validated
+	return validated, nil
 }
 
 // getFallbackModels returns minimal hardcoded models for offline mode
