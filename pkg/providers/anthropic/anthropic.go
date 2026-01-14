@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"strings"
 
@@ -172,7 +173,11 @@ func (p *Provider) doAnthropicRequest(ctx context.Context, method, url string, b
 	if err != nil {
 		return fmt.Errorf("request failed: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			log.Printf("warning: failed to close response body: %v", err)
+		}
+	}()
 
 	respBody, err := io.ReadAll(resp.Body)
 	if err != nil {
@@ -227,7 +232,11 @@ func (p *Provider) streamAnthropicRequest(ctx context.Context, method, url strin
 	}
 
 	if resp.StatusCode >= 400 {
-		defer resp.Body.Close()
+		defer func() {
+		if err := resp.Body.Close(); err != nil {
+			log.Printf("warning: failed to close response body: %v", err)
+		}
+	}()
 		respBody, _ := io.ReadAll(resp.Body)
 		var apiError anthropicError
 		if err := json.Unmarshal(respBody, &apiError); err != nil {

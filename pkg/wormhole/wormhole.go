@@ -635,7 +635,9 @@ func (p *Wormhole) ClearModelCache() {
 //	defer client.StopModelDiscovery()
 func (p *Wormhole) StopModelDiscovery() {
 	if p.discoveryService != nil {
-		p.discoveryService.Stop()
+		if err := p.discoveryService.Stop(); err != nil && p.config.Logger != nil {
+			p.config.Logger.Warn("error stopping discovery service", "error", err)
+		}
 	}
 }
 
@@ -831,7 +833,9 @@ func (p *Wormhole) CleanupStaleProviders(maxAge time.Duration, maxCount int) {
 	// Remove stale providers
 	for _, name := range staleKeys {
 		if cp, ok := p.providers[name]; ok {
-			cp.provider.Close()
+			if err := cp.provider.Close(); err != nil && p.config.Logger != nil {
+				p.config.Logger.Warn("error closing stale provider", "provider", name, "error", err)
+			}
 			delete(p.providers, name)
 		}
 	}

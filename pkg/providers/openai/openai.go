@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 
 	"github.com/garyblankenship/wormhole/internal/utils"
@@ -259,7 +260,11 @@ func (p *Provider) handleSpeechToText(ctx context.Context, request types.AudioRe
 	if err != nil {
 		return nil, fmt.Errorf("request failed: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			log.Printf("warning: failed to close response body: %v", err)
+		}
+	}()
 
 	// Parse response
 	body, err := io.ReadAll(resp.Body)

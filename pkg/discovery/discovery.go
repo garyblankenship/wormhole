@@ -147,7 +147,7 @@ func (s *DiscoveryService) Stop() error {
 		close(s.stopCh) // Close stop channel
 		s.wg.Wait()     // Wait for all goroutines
 		// Close the model cache
-		s.cache.Close()
+		err = s.cache.Close()
 	})
 	return err
 }

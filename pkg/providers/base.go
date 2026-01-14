@@ -1,16 +1,17 @@
 package providers
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"net"
 	"net/http"
 	"net/url"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/garyblankenship/wormhole/internal/utils"
@@ -18,12 +19,95 @@ import (
 	"github.com/garyblankenship/wormhole/pkg/types"
 )
 
+// requestBodyPool pools byte slices for request bodies to reduce allocations
+var requestBodyPool = sync.Pool{
+	New: func() any {
+		// Start with 1KB buffer, will grow as needed
+		return make([]byte, 0, 1024)
+	},
+}
+
+// responseBodyPool pools byte slices for response bodies to reduce allocations
+var responseBodyPool = sync.Pool{
+	New: func() any {
+		// Start with 4KB buffer, typical response size
+		return make([]byte, 0, 4096)
+	},
+}
+
+// pooledBytesReader is an io.Reader that returns its underlying byte slice to the pool after reading
+type pooledBytesReader struct {
+	bytes   []byte
+	pos     int
+	returned bool
+}
+
+func (r *pooledBytesReader) Read(p []byte) (n int, err error) {
+	if r.pos >= len(r.bytes) {
+		if !r.returned {
+			// Return slice to pool, resetting length to 0 but keeping capacity
+			requestBodyPool.Put(r.bytes[:0])
+			r.returned = true
+		}
+		return 0, io.EOF
+	}
+	n = copy(p, r.bytes[r.pos:])
+	r.pos += n
+	return n, nil
+}
+
+
+// readAllPooled reads all data from r into a pooled byte slice.
+// The caller MUST call responseBodyPool.Put(buf[:0]) after using the slice.
+func readAllPooled(r io.Reader) ([]byte, error) {
+	// Get initial buffer from pool
+	buf := responseBodyPool.Get().([]byte)
+	buf = buf[:0] // reset length
+
+	// Temporary scratch buffer for reading chunks
+	scratch := make([]byte, 4096)
+
+	for {
+		n, err := r.Read(scratch)
+		if n > 0 {
+			// Ensure we have enough capacity
+			if cap(buf)-len(buf) < n {
+				// Need to grow buffer
+				newCap := cap(buf) * 2
+				if newCap == 0 {
+					newCap = 4096
+				}
+				// Ensure new capacity can hold existing data + new data
+				if newCap < len(buf)+n {
+					newCap = len(buf) + n
+				}
+				newBuf := make([]byte, len(buf), newCap)
+				copy(newBuf, buf)
+				// Return old buffer to pool
+				responseBodyPool.Put(buf[:0])
+				buf = newBuf
+			}
+			buf = append(buf, scratch[:n]...)
+		}
+		if err != nil {
+			if err == io.EOF {
+				break
+			}
+			// On error, return buffer to pool
+			responseBodyPool.Put(buf[:0])
+			return nil, err
+		}
+	}
+	return buf, nil
+}
+
 // BaseProvider provides common functionality for all providers
 // Embeds the types.BaseProvider for default method implementations
 // and adds HTTP functionality for making requests
 type BaseProvider struct {
 	*types.BaseProvider
 	Config      types.ProviderConfig
+	tlsConfig   *config.TLSConfig
 	httpClient  *http.Client
 	retryClient *utils.RetryableHTTPClient
 }
@@ -41,26 +125,39 @@ func (p *BaseProvider) GetHTTPTimeout() time.Duration {
 	return config.GetDefaultHTTPTimeout()
 }
 
-// GetHTTPClient returns an HTTP client with the configured timeout
+// GetHTTPClient returns an HTTP client with the configured timeout and TLS settings
 // Reuses the existing httpClient if available, otherwise creates a new one
 func (p *BaseProvider) GetHTTPClient() *http.Client {
 	if p.httpClient != nil {
 		return p.httpClient
 	}
-	return &http.Client{Timeout: p.GetHTTPTimeout()}
+
+	// Create HTTP client with TLS configuration
+	return NewSecureHTTPClient(p.GetHTTPTimeout(), p.tlsConfig, nil)
 }
 
-// NewBaseProvider creates a new base provider
+// NewBaseProvider creates a new base provider with default secure TLS configuration
 func NewBaseProvider(name string, providerConfig types.ProviderConfig) *BaseProvider {
+	return NewBaseProviderWithTLS(name, providerConfig, nil)
+}
+
+// NewBaseProviderWithTLS creates a new base provider with custom TLS configuration
+// If tlsConfig is nil, extracts TLS configuration from ProviderConfig.Params if available,
+// otherwise uses DefaultTLSConfig() for secure defaults
+func NewBaseProviderWithTLS(name string, providerConfig types.ProviderConfig, tlsConfig *config.TLSConfig) *BaseProvider {
+	// Extract TLS configuration from ProviderConfig if not explicitly provided
+	if tlsConfig == nil {
+		tlsConfig = ExtractTLSConfigFromProviderConfig(providerConfig)
+	}
+
 	bp := &BaseProvider{
 		BaseProvider: types.NewBaseProvider(name),
 		Config:       providerConfig,
+		tlsConfig:    tlsConfig,
 	}
 
-	// Create HTTP client with configured timeout
-	bp.httpClient = &http.Client{
-		Timeout: bp.GetHTTPTimeout(),
-	}
+	// Create HTTP client with configured timeout and TLS settings
+	bp.httpClient = NewSecureHTTPClient(bp.GetHTTPTimeout(), tlsConfig, nil)
 
 	// Configure retry logic based on per-provider settings
 	retryConfig := utils.DefaultRetryConfig() // Start with global defaults
@@ -81,6 +178,18 @@ func NewBaseProvider(name string, providerConfig types.ProviderConfig) *BaseProv
 	return bp
 }
 
+// NewInsecureBaseProvider creates a new base provider with insecure TLS configuration
+// WARNING: This should only be used for testing or legacy compatibility
+// The provider will allow TLS 1.0 and weak cipher suites
+func NewInsecureBaseProvider(name string, providerConfig types.ProviderConfig, skipVerify bool) *BaseProvider {
+	insecureTLS := config.InsecureTLSConfig()
+	if skipVerify {
+		insecureTLS = insecureTLS.WithInsecureSkipVerify(true)
+	}
+
+	return NewBaseProviderWithTLS(name, providerConfig, &insecureTLS)
+}
+
 // DoRequest performs an HTTP request with common error handling
 func (p *BaseProvider) DoRequest(ctx context.Context, method, url string, body any, result any) error {
 	// Build and execute request
@@ -94,13 +203,18 @@ func (p *BaseProvider) DoRequest(ctx context.Context, method, url string, body a
 	if err != nil {
 		return p.handleRequestError(ctx, err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			log.Printf("warning: failed to close response body: %v", err)
+		}
+	}()
 
-	// Read response
-	respBody, err := io.ReadAll(resp.Body)
+	// Read response using pooled buffer
+	respBody, err := readAllPooled(resp.Body)
 	if err != nil {
 		return types.Errorf("read response body", err)
 	}
+	defer responseBodyPool.Put(respBody[:0])
 
 	// Handle error responses
 	if resp.StatusCode >= 400 {
@@ -131,18 +245,29 @@ func (p *BaseProvider) buildRequest(ctx context.Context, method, url string, bod
 	return req, nil
 }
 
-// marshalRequestBody converts request body to io.Reader
+// marshalRequestBody converts request body to io.Reader using pooled byte slices
 func (p *BaseProvider) marshalRequestBody(body any) (io.Reader, error) {
 	if body == nil {
 		return nil, nil
 	}
 
+	// Marshal to temporary slice to determine size
 	jsonBody, err := json.Marshal(body)
 	if err != nil {
 		return nil, types.Errorf("marshal request body", err)
 	}
 
-	return bytes.NewReader(jsonBody), nil
+	// Get pooled slice with sufficient capacity
+	bytes := requestBodyPool.Get().([]byte)
+	if cap(bytes) < len(jsonBody) {
+		// Pooled slice too small, allocate new one
+		bytes = make([]byte, 0, len(jsonBody))
+	}
+	bytes = bytes[:0] // Reset length
+	bytes = append(bytes, jsonBody...) // Copy data
+
+	// Create pooled reader that will return slice to pool after reading
+	return &pooledBytesReader{bytes: bytes}, nil
 }
 
 // setRequestHeaders sets common and custom headers
@@ -268,11 +393,11 @@ func (p *BaseProvider) isRetryableStatus(statusCode int) bool {
 func (p *BaseProvider) StreamRequest(ctx context.Context, method, url string, body any) (io.ReadCloser, error) {
 	var reqBody io.Reader
 	if body != nil {
-		jsonBody, err := json.Marshal(body)
+		var err error
+		reqBody, err = p.marshalRequestBody(body)
 		if err != nil {
-			return nil, types.Errorf("marshal request body", err)
+			return nil, err
 		}
-		reqBody = bytes.NewReader(jsonBody)
 	}
 
 	req, err := http.NewRequestWithContext(ctx, method, url, reqBody)
@@ -297,8 +422,13 @@ func (p *BaseProvider) StreamRequest(ctx context.Context, method, url string, bo
 	}
 
 	if resp.StatusCode >= 400 {
-		defer resp.Body.Close()
-		respBody, _ := io.ReadAll(resp.Body)
+		defer func() {
+		if err := resp.Body.Close(); err != nil {
+			log.Printf("warning: failed to close response body: %v", err)
+		}
+	}()
+		respBody, _ := readAllPooled(resp.Body)
+		defer responseBodyPool.Put(respBody[:0])
 		var apiError types.WormholeProviderError
 		if err := json.Unmarshal(respBody, &apiError); err != nil {
 			return nil, fmt.Errorf("HTTP %d: %s", resp.StatusCode, string(respBody))

@@ -26,7 +26,7 @@ func getSeededRand() *rand.Rand {
 		}
 		// Create seeded random source
 		src := rand.NewSource(seed)
-		seededRand = rand.New(src)
+		seededRand = rand.New(src) // #nosec G404 - crypto/rand seeded source for non-cryptographic jitter
 	})
 	return seededRand
 }
@@ -101,7 +101,7 @@ func calculateRetryDelay(config RetryConfig, attempt int) time.Duration {
 	// Apply jitter to prevent thundering herd
 	if config.Jitter {
 		// Add ±25% jitter using properly seeded random generator
-		jitterFactor := 0.75 + getSeededRand().Float64()*0.5 // Random between 0.75 and 1.25
+		jitterFactor := 0.75 + getSeededRand().Float64()*0.5 // Random between 0.75 and 1.25 // #nosec G404 - non-cryptographic jitter
 		delay *= jitterFactor
 	}
 

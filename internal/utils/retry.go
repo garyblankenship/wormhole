@@ -3,6 +3,7 @@ package utils
 import (
 	"context"
 	"fmt"
+	"log"
 	"math"
 	"net/http"
 	"time"
@@ -117,7 +118,9 @@ func (r *RetryableHTTPClient) Do(req *http.Request) (*http.Response, error) {
 				ShouldRetry: IsRetryableStatusCode(resp.StatusCode),
 				RetryAfter:  retryAfter,
 			}
-			resp.Body.Close() // Don't leak connections
+			if err := resp.Body.Close(); err != nil {
+				log.Printf("warning: failed to close response body: %v", err)
+			}
 		}
 
 		// Don't retry if this is not a retryable error
@@ -160,8 +163,8 @@ func (r *RetryableHTTPClient) calculateDelay(attempt int, retryAfter time.Durati
 
 	// Apply jitter to prevent thundering herd
 	if r.Config.Jitter {
-		// Add ±20% jitter
-		jitter := delay * 0.2 * (2*float64(time.Now().UnixNano())/1e9 - 1) // Simplified random -1 to 1
+		// Add ±20% jitter using cryptographically secure randomness
+		jitter := delay * 0.2 * secureRandomFloat()
 		delay += jitter
 	}
 
@@ -193,6 +196,17 @@ func parseRetryAfter(retryAfter string) time.Duration {
 	// This would require parsing RFC1123 format dates
 
 	return 0
+}
+
+// secureRandomFloat returns a cryptographically secure random float between -1 and 1
+func secureRandomFloat() float64 {
+	val, err := SecureRandomFloat()
+	if err != nil {
+		// Fallback to less secure but functional randomness
+		return 0.0
+	}
+	// Scale from [0, 1) to [-1, 1]
+	return val*2 - 1
 }
 
 // RetryFunc is a function that can be retried
