@@ -48,7 +48,7 @@ func DetailedLoggingMiddleware(config LoggingConfig) Middleware {
 
 			// Log timing if enabled
 			if config.LogTiming {
-				config.Logger.Debug(fmt.Sprintf("Request completed in %v", duration))
+				config.Logger.Debug("Request completed", "duration", duration)
 			}
 
 			// Log response if enabled
@@ -86,37 +86,39 @@ func logRequest(config LoggingConfig, req any) {
 
 	switch r := req.(type) {
 	case *types.TextRequest:
-		config.Logger.Debug(fmt.Sprintf("Text request to model %s:", r.Model))
+		config.Logger.Debug("Text request", "model", r.Model)
 		if len(r.Messages) > 0 {
-			config.Logger.Debug(fmt.Sprintf("  Messages: %d", len(r.Messages)))
+			config.Logger.Debug("Messages", "count", len(r.Messages))
 			for i, msg := range r.Messages {
-				config.Logger.Debug(fmt.Sprintf("    [%d] %s: %s", i, msg.GetRole(), truncateString(getMessageContent(msg), 100)))
+				config.Logger.Debug("Message",
+					"index", i,
+					"role", msg.GetRole(),
+					"content", truncateString(getMessageContent(msg), 100))
 			}
 		}
 		if r.Temperature != nil {
-			config.Logger.Debug(fmt.Sprintf("  Temperature: %.2f", *r.Temperature))
+			config.Logger.Debug("Temperature", "value", *r.Temperature)
 		}
 		if r.MaxTokens != nil {
-			config.Logger.Debug(fmt.Sprintf("  Max tokens: %d", *r.MaxTokens))
+			config.Logger.Debug("Max tokens", "value", *r.MaxTokens)
 		}
 		if len(r.Tools) > 0 {
-			config.Logger.Debug(fmt.Sprintf("  Tools: %d available", len(r.Tools)))
+			config.Logger.Debug("Tools available", "count", len(r.Tools))
 		}
 
 	case *types.StructuredRequest:
-		config.Logger.Debug(fmt.Sprintf("Structured request to model %s", r.Model))
+		config.Logger.Debug("Structured request", "model", r.Model)
 		if r.Schema != nil {
-			config.Logger.Debug("  Schema provided for structured output")
+			config.Logger.Debug("Schema provided for structured output")
 		}
 
 	case *types.EmbeddingsRequest:
-		config.Logger.Debug(fmt.Sprintf("Embeddings request to model %s", r.Model))
-		config.Logger.Debug(fmt.Sprintf("  Input count: %d", len(r.Input)))
+		config.Logger.Debug("Embeddings request", "model", r.Model, "input_count", len(r.Input))
 
 	default:
 		// Generic logging for unknown request types
 		if jsonData, err := json.MarshalIndent(sanitized, "", "  "); err == nil {
-			config.Logger.Debug(fmt.Sprintf("Request: %s", jsonData))
+			config.Logger.Debug("Request", "data", string(jsonData))
 		}
 	}
 }
@@ -125,80 +127,82 @@ func logRequest(config LoggingConfig, req any) {
 func logResponse(config LoggingConfig, resp any, duration time.Duration) {
 	switch r := resp.(type) {
 	case *types.TextResponse:
-		config.Logger.Debug(fmt.Sprintf("Text response received in %v:", duration))
-		config.Logger.Debug(fmt.Sprintf("  Model: %s", r.Model))
-		config.Logger.Debug(fmt.Sprintf("  Text length: %d chars", len(r.Text)))
-		config.Logger.Debug(fmt.Sprintf("  Finish reason: %s", r.FinishReason))
+		config.Logger.Debug("Text response received", "duration", duration, "model", r.Model)
+		config.Logger.Debug("Text details", "length", len(r.Text), "finish_reason", r.FinishReason)
 
 		if r.Usage != nil {
-			config.Logger.Debug(fmt.Sprintf("  Usage: %d input + %d output = %d total tokens",
-				r.Usage.PromptTokens, r.Usage.CompletionTokens, r.Usage.TotalTokens))
+			config.Logger.Debug("Token usage",
+				"prompt_tokens", r.Usage.PromptTokens,
+				"completion_tokens", r.Usage.CompletionTokens,
+				"total_tokens", r.Usage.TotalTokens)
 
 			// Log cost if available
 			if cost, err := types.EstimateModelCost(r.Model, r.Usage.PromptTokens, r.Usage.CompletionTokens); err == nil && cost > 0 {
-				config.Logger.Debug(fmt.Sprintf("  Estimated cost: $%.4f", cost))
+				config.Logger.Debug("Estimated cost", "cost", cost)
 			}
 		}
 
 		if len(r.ToolCalls) > 0 {
-			config.Logger.Debug(fmt.Sprintf("  Tool calls: %d", len(r.ToolCalls)))
+			config.Logger.Debug("Tool calls", "count", len(r.ToolCalls))
 			for i, call := range r.ToolCalls {
-				config.Logger.Debug(fmt.Sprintf("    [%d] %s", i, call.Name))
+				config.Logger.Debug("Tool call", "index", i, "name", call.Name)
 			}
 		}
 
 		// Log preview of response text
 		preview := truncateString(r.Text, 200)
-		config.Logger.Debug(fmt.Sprintf("  Preview: %s", preview))
+		config.Logger.Debug("Preview", "text", preview)
 
 	case *types.StructuredResponse:
-		config.Logger.Debug(fmt.Sprintf("Structured response received in %v:", duration))
-		config.Logger.Debug(fmt.Sprintf("  Model: %s", r.Model))
-		config.Logger.Debug("  Structured data received")
+		config.Logger.Debug("Structured response received", "duration", duration, "model", r.Model)
+		config.Logger.Debug("Structured data received")
 
 		if r.Usage != nil {
-			config.Logger.Debug(fmt.Sprintf("  Usage: %d input + %d output = %d total tokens",
-				r.Usage.PromptTokens, r.Usage.CompletionTokens, r.Usage.TotalTokens))
+			config.Logger.Debug("Token usage",
+				"prompt_tokens", r.Usage.PromptTokens,
+				"completion_tokens", r.Usage.CompletionTokens,
+				"total_tokens", r.Usage.TotalTokens)
 		}
 
 	case *types.EmbeddingsResponse:
-		config.Logger.Debug(fmt.Sprintf("Embeddings response received in %v:", duration))
-		config.Logger.Debug(fmt.Sprintf("  Model: %s", r.Model))
-		config.Logger.Debug(fmt.Sprintf("  Embeddings count: %d", len(r.Embeddings)))
+		config.Logger.Debug("Embeddings response received", "duration", duration, "model", r.Model)
+		config.Logger.Debug("Embeddings details", "count", len(r.Embeddings))
 		if len(r.Embeddings) > 0 {
-			config.Logger.Debug(fmt.Sprintf("  Dimensions: %d", len(r.Embeddings[0].Embedding)))
+			config.Logger.Debug("Dimensions", "value", len(r.Embeddings[0].Embedding))
 		}
 
 		if r.Usage != nil {
-			config.Logger.Debug(fmt.Sprintf("  Usage: %d tokens", r.Usage.TotalTokens))
+			config.Logger.Debug("Token usage", "total_tokens", r.Usage.TotalTokens)
 		}
 
 	default:
-		config.Logger.Debug(fmt.Sprintf("Response received in %v", duration))
+		config.Logger.Debug("Response received", "duration", duration)
 	}
 }
 
 // logError logs error details
 func logError(config LoggingConfig, err error, duration time.Duration) {
 	if wormholeErr, ok := types.AsWormholeError(err); ok {
-		config.Logger.Error(fmt.Sprintf("Request failed in %v - %s: %s",
-			duration, wormholeErr.Code, wormholeErr.Message))
+		config.Logger.Error("Request failed",
+			"duration", duration,
+			"code", wormholeErr.Code,
+			"message", wormholeErr.Message)
 
 		if wormholeErr.Details != "" {
-			config.Logger.Error(fmt.Sprintf("  Details: %s", wormholeErr.Details))
+			config.Logger.Error("Error details", "details", wormholeErr.Details)
 		}
 		if wormholeErr.Provider != "" {
-			config.Logger.Error(fmt.Sprintf("  Provider: %s", wormholeErr.Provider))
+			config.Logger.Error("Provider", "provider", wormholeErr.Provider)
 		}
 		if wormholeErr.Model != "" {
-			config.Logger.Error(fmt.Sprintf("  Model: %s", wormholeErr.Model))
+			config.Logger.Error("Model", "model", wormholeErr.Model)
 		}
 		if wormholeErr.StatusCode > 0 {
-			config.Logger.Error(fmt.Sprintf("  HTTP Status: %d", wormholeErr.StatusCode))
+			config.Logger.Error("HTTP Status", "status_code", wormholeErr.StatusCode)
 		}
-		config.Logger.Error(fmt.Sprintf("  Retryable: %t", wormholeErr.Retryable))
+		config.Logger.Error("Retryable", "retryable", wormholeErr.Retryable)
 	} else {
-		config.Logger.Error(fmt.Sprintf("Request failed in %v: %v", duration, err))
+		config.Logger.Error("Request failed", "duration", duration, "error", err)
 	}
 }
 

@@ -2,7 +2,6 @@ package middleware
 
 import (
 	"context"
-	"fmt"
 	"time"
 
 	"github.com/garyblankenship/wormhole/pkg/types"
@@ -56,7 +55,7 @@ func withLogging[Req any, Resp any](
 
 	// Log timing if enabled
 	if config.LogTiming {
-		config.Logger.Debug(fmt.Sprintf("%s request completed in %v", requestType, duration))
+		config.Logger.Debug("Request completed", "request_type", requestType, "duration", duration)
 	}
 
 	// Log response if enabled (need to check for nil with type assertion)
@@ -109,7 +108,7 @@ func (m *TypedLoggingMiddleware) ApplyStream(next types.StreamHandler) types.Str
 
 		// Log timing for stream initiation
 		if m.config.LogTiming {
-			m.config.Logger.Debug(fmt.Sprintf("Stream initiated in %v", time.Since(start)))
+			m.config.Logger.Debug("Stream initiated", "duration", time.Since(start))
 		}
 
 		// Log error if stream creation failed
@@ -132,7 +131,7 @@ func (m *TypedLoggingMiddleware) ApplyStream(next types.StreamHandler) types.Str
 					wrappedStream <- chunk
 				}
 				if m.config.LogTiming {
-					m.config.Logger.Debug(fmt.Sprintf("Stream completed with %d chunks in %v", chunkCount, time.Since(start)))
+					m.config.Logger.Debug("Stream completed", "chunks", chunkCount, "duration", time.Since(start))
 				}
 			}()
 			return wrappedStream, nil
@@ -189,141 +188,141 @@ func (m *TypedLoggingMiddleware) ApplyImage(next types.ImageHandler) types.Image
 // Typed logging methods for each request type
 
 func (m *TypedLoggingMiddleware) logTextRequest(request types.TextRequest) {
-	m.config.Logger.Debug(fmt.Sprintf("Text request to model %s:", request.Model))
+	m.config.Logger.Debug("Text request", "model", request.Model)
 	if len(request.Messages) > 0 {
-		m.config.Logger.Debug(fmt.Sprintf("  Messages: %d", len(request.Messages)))
+		m.config.Logger.Debug("Messages", "count", len(request.Messages))
 		for i, msg := range request.Messages {
-			m.config.Logger.Debug(fmt.Sprintf("    [%d] %s: %s", i, msg.GetRole(), truncateString(getMessageContent(msg), 100)))
+			m.config.Logger.Debug("Message",
+				"index", i,
+				"role", msg.GetRole(),
+				"content", truncateString(getMessageContent(msg), 100))
 		}
 	}
 	if request.Temperature != nil {
-		m.config.Logger.Debug(fmt.Sprintf("  Temperature: %.2f", *request.Temperature))
+		m.config.Logger.Debug("Temperature", "value", *request.Temperature)
 	}
 	if request.MaxTokens != nil {
-		m.config.Logger.Debug(fmt.Sprintf("  Max tokens: %d", *request.MaxTokens))
+		m.config.Logger.Debug("Max tokens", "value", *request.MaxTokens)
 	}
 	if len(request.Tools) > 0 {
-		m.config.Logger.Debug(fmt.Sprintf("  Tools: %d available", len(request.Tools)))
+		m.config.Logger.Debug("Tools available", "count", len(request.Tools))
 	}
 }
 
 func (m *TypedLoggingMiddleware) logTextResponse(response types.TextResponse, duration time.Duration) {
-	m.config.Logger.Debug(fmt.Sprintf("Text response received in %v:", duration))
-	m.config.Logger.Debug(fmt.Sprintf("  Model: %s", response.Model))
-	m.config.Logger.Debug(fmt.Sprintf("  Text length: %d chars", len(response.Text)))
-	m.config.Logger.Debug(fmt.Sprintf("  Finish reason: %s", response.FinishReason))
+	m.config.Logger.Debug("Text response received", "duration", duration, "model", response.Model)
+	m.config.Logger.Debug("Text details", "length", len(response.Text), "finish_reason", response.FinishReason)
 
 	if response.Usage != nil {
-		m.config.Logger.Debug(fmt.Sprintf("  Usage: %d input + %d output = %d total tokens",
-			response.Usage.PromptTokens, response.Usage.CompletionTokens, response.Usage.TotalTokens))
+		m.config.Logger.Debug("Token usage",
+			"prompt_tokens", response.Usage.PromptTokens,
+			"completion_tokens", response.Usage.CompletionTokens,
+			"total_tokens", response.Usage.TotalTokens)
 
 		// Log cost if available
 		if cost, err := types.EstimateModelCost(response.Model, response.Usage.PromptTokens, response.Usage.CompletionTokens); err == nil && cost > 0 {
-			m.config.Logger.Debug(fmt.Sprintf("  Estimated cost: $%.4f", cost))
+			m.config.Logger.Debug("Estimated cost", "cost", cost)
 		}
 	}
 
 	if len(response.ToolCalls) > 0 {
-		m.config.Logger.Debug(fmt.Sprintf("  Tool calls: %d", len(response.ToolCalls)))
+		m.config.Logger.Debug("Tool calls", "count", len(response.ToolCalls))
 		for i, call := range response.ToolCalls {
-			m.config.Logger.Debug(fmt.Sprintf("    [%d] %s", i, call.Name))
+			m.config.Logger.Debug("Tool call", "index", i, "name", call.Name)
 		}
 	}
 
 	// Log preview of response text
 	preview := truncateString(response.Text, 200)
-	m.config.Logger.Debug(fmt.Sprintf("  Preview: %s", preview))
+	m.config.Logger.Debug("Preview", "text", preview)
 }
 
 func (m *TypedLoggingMiddleware) logStructuredRequest(request types.StructuredRequest) {
-	m.config.Logger.Debug(fmt.Sprintf("Structured request to model %s", request.Model))
+	m.config.Logger.Debug("Structured request", "model", request.Model)
 	if request.Schema != nil {
-		m.config.Logger.Debug("  Schema provided for structured output")
+		m.config.Logger.Debug("Schema provided for structured output")
 	}
 }
 
 func (m *TypedLoggingMiddleware) logStructuredResponse(response types.StructuredResponse, duration time.Duration) {
-	m.config.Logger.Debug(fmt.Sprintf("Structured response received in %v:", duration))
-	m.config.Logger.Debug(fmt.Sprintf("  Model: %s", response.Model))
-	m.config.Logger.Debug("  Structured data received")
+	m.config.Logger.Debug("Structured response received", "duration", duration, "model", response.Model)
+	m.config.Logger.Debug("Structured data received")
 
 	if response.Usage != nil {
-		m.config.Logger.Debug(fmt.Sprintf("  Usage: %d input + %d output = %d total tokens",
-			response.Usage.PromptTokens, response.Usage.CompletionTokens, response.Usage.TotalTokens))
+		m.config.Logger.Debug("Token usage",
+			"prompt_tokens", response.Usage.PromptTokens,
+			"completion_tokens", response.Usage.CompletionTokens,
+			"total_tokens", response.Usage.TotalTokens)
 	}
 }
 
 func (m *TypedLoggingMiddleware) logEmbeddingsRequest(request types.EmbeddingsRequest) {
-	m.config.Logger.Debug(fmt.Sprintf("Embeddings request to model %s", request.Model))
-	m.config.Logger.Debug(fmt.Sprintf("  Input count: %d", len(request.Input)))
+	m.config.Logger.Debug("Embeddings request", "model", request.Model, "input_count", len(request.Input))
 }
 
 func (m *TypedLoggingMiddleware) logEmbeddingsResponse(response types.EmbeddingsResponse, duration time.Duration) {
-	m.config.Logger.Debug(fmt.Sprintf("Embeddings response received in %v:", duration))
-	m.config.Logger.Debug(fmt.Sprintf("  Model: %s", response.Model))
-	m.config.Logger.Debug(fmt.Sprintf("  Embeddings count: %d", len(response.Embeddings)))
+	m.config.Logger.Debug("Embeddings response received", "duration", duration, "model", response.Model)
+	m.config.Logger.Debug("Embeddings details", "count", len(response.Embeddings))
 	if len(response.Embeddings) > 0 {
-		m.config.Logger.Debug(fmt.Sprintf("  Dimensions: %d", len(response.Embeddings[0].Embedding)))
+		m.config.Logger.Debug("Dimensions", "value", len(response.Embeddings[0].Embedding))
 	}
 
 	if response.Usage != nil {
-		m.config.Logger.Debug(fmt.Sprintf("  Usage: %d tokens", response.Usage.TotalTokens))
+		m.config.Logger.Debug("Token usage", "total_tokens", response.Usage.TotalTokens)
 	}
 }
 
 func (m *TypedLoggingMiddleware) logAudioRequest(request types.AudioRequest) {
-	m.config.Logger.Debug(fmt.Sprintf("Audio request to model %s", request.Model))
+	m.config.Logger.Debug("Audio request", "model", request.Model)
 	switch request.Type {
 	case types.AudioRequestTypeSTT:
-		m.config.Logger.Debug("  Type: Speech to Text")
+		m.config.Logger.Debug("Type", "value", "Speech to Text")
 	case types.AudioRequestTypeTTS:
-		m.config.Logger.Debug("  Type: Text to Speech")
+		m.config.Logger.Debug("Type", "value", "Text to Speech")
 		if request.Voice != "" {
-			m.config.Logger.Debug(fmt.Sprintf("  Voice: %s", request.Voice))
+			m.config.Logger.Debug("Voice", "value", request.Voice)
 		}
 	}
 }
 
 func (m *TypedLoggingMiddleware) logAudioResponse(response types.AudioResponse, duration time.Duration) {
-	m.config.Logger.Debug(fmt.Sprintf("Audio response received in %v:", duration))
-	m.config.Logger.Debug(fmt.Sprintf("  Model: %s", response.Model))
+	m.config.Logger.Debug("Audio response received", "duration", duration, "model", response.Model)
 
 	if response.Text != "" {
-		m.config.Logger.Debug(fmt.Sprintf("  Text: %s", truncateString(response.Text, 100)))
+		m.config.Logger.Debug("Text", "value", truncateString(response.Text, 100))
 	}
 	if len(response.Audio) > 0 {
-		m.config.Logger.Debug(fmt.Sprintf("  Audio data: %d bytes", len(response.Audio)))
+		m.config.Logger.Debug("Audio data", "bytes", len(response.Audio))
 	}
 	if !response.Created.IsZero() {
-		m.config.Logger.Debug(fmt.Sprintf("  Created: %v", response.Created))
+		m.config.Logger.Debug("Created", "value", response.Created)
 	}
 }
 
 func (m *TypedLoggingMiddleware) logImageRequest(request types.ImageRequest) {
-	m.config.Logger.Debug(fmt.Sprintf("Image request to model %s", request.Model))
-	m.config.Logger.Debug(fmt.Sprintf("  Prompt: %s", truncateString(request.Prompt, 100)))
+	m.config.Logger.Debug("Image request", "model", request.Model)
+	m.config.Logger.Debug("Prompt", "value", truncateString(request.Prompt, 100))
 	if request.Size != "" {
-		m.config.Logger.Debug(fmt.Sprintf("  Size: %s", request.Size))
+		m.config.Logger.Debug("Size", "value", request.Size)
 	}
 	if request.Quality != "" {
-		m.config.Logger.Debug(fmt.Sprintf("  Quality: %s", request.Quality))
+		m.config.Logger.Debug("Quality", "value", request.Quality)
 	}
 	if request.N > 0 {
-		m.config.Logger.Debug(fmt.Sprintf("  Count: %d", request.N))
+		m.config.Logger.Debug("Count", "value", request.N)
 	}
 }
 
 func (m *TypedLoggingMiddleware) logImageResponse(response types.ImageResponse, duration time.Duration) {
-	m.config.Logger.Debug(fmt.Sprintf("Image response received in %v:", duration))
-	m.config.Logger.Debug(fmt.Sprintf("  Model: %s", response.Model))
-	m.config.Logger.Debug(fmt.Sprintf("  Images generated: %d", len(response.Images)))
+	m.config.Logger.Debug("Image response received", "duration", duration, "model", response.Model)
+	m.config.Logger.Debug("Images generated", "count", len(response.Images))
 
 	for i, img := range response.Images {
 		if img.URL != "" {
-			m.config.Logger.Debug(fmt.Sprintf("    [%d] URL provided", i))
+			m.config.Logger.Debug("Image", "index", i, "type", "URL provided")
 		}
 		if len(img.B64JSON) > 0 {
-			m.config.Logger.Debug(fmt.Sprintf("    [%d] Base64 data: %d chars", i, len(img.B64JSON)))
+			m.config.Logger.Debug("Image", "index", i, "type", "Base64 data", "chars", len(img.B64JSON))
 		}
 	}
 }
