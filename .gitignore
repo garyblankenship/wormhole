@@ -16,6 +16,15 @@
 *.out
 *_coverage.out
 coverage.html
+coverage/
+coverage.xml
+coverage.txt
+
+# Generated code
+*.pb.go
+*.pb.gw.go
+*.swagger.json
+*.swagger.yaml
 
 # Dependency directories
 vendor/
