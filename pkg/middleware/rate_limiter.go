@@ -135,6 +135,8 @@ type AdaptiveRateLimiter struct {
 	targetLatency   time.Duration
 	latencyWindow   []time.Duration
 	windowSize      int
+	totalLatency    time.Duration // Running total of latencies in window
+	windowCount     int           // Number of latencies in window
 	adjustInterval  time.Duration
 	lastAdjustment  time.Time
 	healthMetrics   *HealthMetrics    // Optional health metrics
@@ -180,8 +182,15 @@ func (arl *AdaptiveRateLimiter) RecordLatency(latency time.Duration) {
 
 	// Add to window
 	arl.latencyWindow = append(arl.latencyWindow, latency)
+	arl.totalLatency += latency
+	arl.windowCount++
+
+	// If window exceeds size, remove oldest element
 	if len(arl.latencyWindow) > arl.windowSize {
+		oldest := arl.latencyWindow[0]
 		arl.latencyWindow = arl.latencyWindow[1:]
+		arl.totalLatency -= oldest
+		arl.windowCount--
 	}
 
 	// Check if we should adjust
@@ -190,15 +199,11 @@ func (arl *AdaptiveRateLimiter) RecordLatency(latency time.Duration) {
 	}
 
 	// Calculate average latency
-	if len(arl.latencyWindow) < arl.windowSize/2 {
+	if arl.windowCount < arl.windowSize/2 {
 		return // Not enough data
 	}
 
-	var totalLatency time.Duration
-	for _, l := range arl.latencyWindow {
-		totalLatency += l
-	}
-	avgLatency := totalLatency / time.Duration(len(arl.latencyWindow))
+	avgLatency := arl.totalLatency / time.Duration(arl.windowCount)
 
 	// Adjust rate based on latency and health metrics
 	arl.adjustRate(avgLatency)
