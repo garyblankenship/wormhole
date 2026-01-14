@@ -15,6 +15,10 @@ type DiscoveryService struct {
 	fetchers map[string]ModelFetcher
 	config   DiscoveryConfig
 	mu       sync.RWMutex
+	ctx      context.Context
+	cancel   context.CancelFunc
+	wg       sync.WaitGroup
+	stopOnce sync.Once
 	stopCh   chan struct{}
 }
 
@@ -25,10 +29,13 @@ func NewDiscoveryService(config DiscoveryConfig, fetchers ...ModelFetcher) *Disc
 		config = DefaultConfig()
 	}
 
+	ctx, cancel := context.WithCancel(context.Background())
 	s := &DiscoveryService{
 		cache:    NewModelCache(config),
 		fetchers: make(map[string]ModelFetcher),
 		config:   config,
+		ctx:      ctx,
+		cancel:   cancel,
 		stopCh:   make(chan struct{}),
 	}
 
@@ -53,7 +60,7 @@ func (s *DiscoveryService) GetModels(ctx context.Context, provider string) ([]*t
 	if models, fresh := s.cache.Get(provider); len(models) > 0 {
 		if !fresh {
 			// Using fallback/stale cache, trigger background refresh
-			go s.refreshProvider(provider)
+			s.refreshProvider(provider)
 		}
 		return models, nil
 	}
@@ -111,27 +118,38 @@ func (s *DiscoveryService) StartBackgroundRefresh(ctx context.Context) {
 		return // Background refresh disabled
 	}
 
+	s.wg.Add(1)
 	ticker := time.NewTicker(s.config.RefreshInterval)
 	go func() {
+		defer s.wg.Done()
+		defer ticker.Stop()
 		for {
 			select {
 			case <-ticker.C:
 				// Refresh all providers (errors logged but not returned in background)
 				_ = s.RefreshModels(ctx)
 			case <-s.stopCh:
-				ticker.Stop()
 				return
 			case <-ctx.Done():
-				ticker.Stop()
+				return
+			case <-s.ctx.Done():
 				return
 			}
 		}
 	}()
 }
 
-// Stop halts background refresh
-func (s *DiscoveryService) Stop() {
-	close(s.stopCh)
+// Stop halts background refresh and cleans up resources
+func (s *DiscoveryService) Stop() error {
+	var err error
+	s.stopOnce.Do(func() {
+		s.cancel()      // Cancel context
+		close(s.stopCh) // Close stop channel
+		s.wg.Wait()     // Wait for all goroutines
+		// Close the model cache
+		s.cache.Close()
+	})
+	return err
 }
 
 // fetchModels fetches models from a provider and updates cache
@@ -165,12 +183,16 @@ func (s *DiscoveryService) fetchModels(ctx context.Context, provider string) ([]
 
 // refreshProvider refreshes a single provider in background
 func (s *DiscoveryService) refreshProvider(provider string) {
-	// Use background context with timeout
-	refreshCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
+	s.wg.Add(1)
+	go func() {
+		defer s.wg.Done()
+		// Use service context with timeout for proper cancellation
+		refreshCtx, cancel := context.WithTimeout(s.ctx, 30*time.Second)
+		defer cancel()
 
-	// Ignore errors in background refresh (best effort)
-	_, _ = s.fetchModels(refreshCtx, provider)
+		// Ignore errors in background refresh (best effort)
+		_, _ = s.fetchModels(refreshCtx, provider)
+	}()
 }
 
 // ClearCache clears all cached models

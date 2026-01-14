@@ -62,3 +62,12 @@ type FileCache struct {
 	Updated time.Time              `json:"updated"`
 	Entries map[string]*CacheEntry `json:"entries"` // provider -> CacheEntry
 }
+
+// JournalEntry represents an append-only journal entry for cache updates
+type JournalEntry struct {
+	Provider  string             `json:"provider"`
+	Models    []*types.ModelInfo `json:"models"`
+	Timestamp time.Time          `json:"timestamp"`
+	Checksum  string             `json:"checksum"` // SHA256 checksum for validation
+	Sequence  int64              `json:"sequence"` // Monotonic sequence number
+}

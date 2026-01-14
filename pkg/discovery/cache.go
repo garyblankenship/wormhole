@@ -1,6 +1,8 @@
 package discovery
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -13,46 +15,85 @@ import (
 
 // ModelCache implements 3-tier caching: memory -> file -> fallback
 type ModelCache struct {
-	memory          *sync.Map // provider -> *CacheEntry
-	filePath        string
-	memoryTTL       time.Duration
-	fileTTL         time.Duration
-	enableFileCache bool
-	fallback        map[string][]*types.ModelInfo
-	mu              sync.RWMutex
+	memory              map[string]*CacheEntry // provider -> *CacheEntry
+	memoryMu            sync.RWMutex           // Protects memory map
+	filePath            string
+	memoryTTL           time.Duration
+	fileTTL             time.Duration
+	enableFileCache     bool
+	enableAppendJournal bool // Experimental: use append-based journaling
+	fallback            map[string][]*types.ModelInfo
+	mu                  sync.RWMutex             // Protects file operations
+	fileLocks           map[string]*sync.RWMutex // Per-provider file locks
+	fileLocksMu         sync.RWMutex             // Protects fileLocks map
+
+	// Goroutine lifecycle management
+	stopCh  chan struct{}
+	wg      sync.WaitGroup
+	stopOnce sync.Once
 }
 
 // NewModelCache creates a new model cache
 func NewModelCache(config DiscoveryConfig) *ModelCache {
 	return &ModelCache{
-		memory:          &sync.Map{},
-		filePath:        expandPath(config.FileCachePath),
-		memoryTTL:       config.CacheTTL,
-		fileTTL:         config.FileCacheTTL,
-		enableFileCache: config.EnableFileCache,
-		fallback:        getFallbackModels(),
+		memory:              make(map[string]*CacheEntry),
+		filePath:            expandPath(config.FileCachePath),
+		memoryTTL:           config.CacheTTL,
+		fileTTL:             config.FileCacheTTL,
+		enableFileCache:     config.EnableFileCache,
+		enableAppendJournal: false, // Disabled by default for compatibility
+		fallback:            getFallbackModels(),
+		fileLocks:           make(map[string]*sync.RWMutex),
+		stopCh:              make(chan struct{}),
 	}
+}
+
+// getProviderLock returns or creates a provider-specific lock
+func (c *ModelCache) getProviderLock(provider string) *sync.RWMutex {
+	c.fileLocksMu.RLock()
+	lock, exists := c.fileLocks[provider]
+	c.fileLocksMu.RUnlock()
+
+	if exists {
+		return lock
+	}
+
+	// Lock doesn't exist, create it
+	c.fileLocksMu.Lock()
+	defer c.fileLocksMu.Unlock()
+
+	// Double-check after acquiring write lock
+	lock, exists = c.fileLocks[provider]
+	if !exists {
+		lock = &sync.RWMutex{}
+		c.fileLocks[provider] = lock
+	}
+
+	return lock
 }
 
 // Get retrieves models from cache (L1 -> L2 -> L3)
 func (c *ModelCache) Get(provider string) ([]*types.ModelInfo, bool) {
 	// L1: Check memory cache
-	if entry, ok := c.memory.Load(provider); ok {
-		cached := entry.(*CacheEntry)
-		if time.Since(cached.Timestamp) < c.memoryTTL {
-			return cached.Models, true
-		}
+	c.memoryMu.RLock()
+	entry, ok := c.memory[provider]
+	c.memoryMu.RUnlock()
+	if ok && time.Since(entry.Timestamp) < c.memoryTTL {
+		return entry.Models, true
 	}
 
 	// L2: Check file cache (if enabled)
 	if c.enableFileCache {
 		if models, ok := c.loadFromFile(provider); ok {
 			// Populate memory cache
-			c.memory.Store(provider, &CacheEntry{
+			entry := &CacheEntry{
 				Models:    models,
 				Timestamp: time.Now(),
 				Provider:  provider,
-			})
+			}
+			c.memoryMu.Lock()
+			c.memory[provider] = entry
+			c.memoryMu.Unlock()
 			return models, true
 		}
 	}
@@ -76,7 +117,9 @@ func (c *ModelCache) Set(provider string, models []*types.ModelInfo) {
 	}
 
 	// L1: Memory cache
-	c.memory.Store(provider, entry)
+	c.memoryMu.Lock()
+	c.memory[provider] = entry
+	c.memoryMu.Unlock()
 
 	// L2: File cache (if enabled)
 	if c.enableFileCache {
@@ -86,6 +129,11 @@ func (c *ModelCache) Set(provider string, models []*types.ModelInfo) {
 
 // loadFromFile loads models from persistent file cache
 func (c *ModelCache) loadFromFile(provider string) ([]*types.ModelInfo, bool) {
+	// Use per-provider read lock for consistency
+	lock := c.getProviderLock(provider)
+	lock.RLock()
+	defer lock.RUnlock()
+
 	// Read file
 	data, err := os.ReadFile(c.filePath)
 	if err != nil {
@@ -114,8 +162,16 @@ func (c *ModelCache) loadFromFile(provider string) ([]*types.ModelInfo, bool) {
 
 // saveToFile persists models to file cache
 func (c *ModelCache) saveToFile(provider string, models []*types.ModelInfo) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
+	// Get or create provider-specific lock
+	lock := c.getProviderLock(provider)
+	lock.Lock()
+	defer lock.Unlock()
+
+	// Use append-based journaling if enabled (experimental)
+	if c.enableAppendJournal {
+		_ = c.appendToJournal(provider, models) // Ignore errors for backward compatibility
+		// Still update main cache file for backward compatibility
+	}
 
 	// Read existing cache
 	var fileCache FileCache
@@ -163,11 +219,204 @@ func (c *ModelCache) saveToFile(provider string, models []*types.ModelInfo) {
 	}
 }
 
+// appendToJournal appends cache updates to a journal file (experimental)
+func (c *ModelCache) appendToJournal(provider string, models []*types.ModelInfo) error {
+	journalPath := c.filePath + "." + provider + ".journal"
+
+	entry := JournalEntry{
+		Provider:  provider,
+		Models:    models,
+		Timestamp: time.Now(),
+		Checksum:  computeChecksum(models),
+		Sequence:  time.Now().UnixNano(), // Simple monotonic sequence
+	}
+
+	data, err := json.Marshal(entry)
+	if err != nil {
+		return err
+	}
+
+	// Ensure directory exists
+	dir := filepath.Dir(journalPath)
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		return err
+	}
+
+	// Append with O_APPEND flag
+	f, err := os.OpenFile(journalPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0600)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+
+	// Write with newline separator
+	if _, err := f.Write(data); err != nil {
+		return err
+	}
+	if _, err := f.Write([]byte("\n")); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// computeChecksum calculates SHA256 checksum of models data
+func computeChecksum(models []*types.ModelInfo) string {
+	data, err := json.Marshal(models)
+	if err != nil {
+		return ""
+	}
+	hash := sha256.Sum256(data)
+	return hex.EncodeToString(hash[:])
+}
+
+// recoverFromJournal recovers cache state from journal files
+func (c *ModelCache) recoverFromJournal() error {
+	// Get all journal files in the cache directory
+	dir := filepath.Dir(c.filePath)
+	pattern := filepath.Join(dir, "*.journal")
+	matches, err := filepath.Glob(pattern)
+	if err != nil {
+		return err
+	}
+
+	if len(matches) == 0 {
+		return nil // No journal files to recover from
+	}
+
+	// Process each journal file
+	for _, journalPath := range matches {
+		if err := c.processJournalFile(journalPath); err != nil {
+			// Log error but continue with other journals
+			// In production, you'd want proper logging here
+			_ = err
+		}
+	}
+
+	return nil
+}
+
+// processJournalFile reads and validates a single journal file
+func (c *ModelCache) processJournalFile(journalPath string) error {
+	data, err := os.ReadFile(journalPath)
+	if err != nil {
+		return err
+	}
+
+	lines := strings.Split(string(data), "\n")
+	validEntries := make([]JournalEntry, 0, len(lines))
+
+	// Validate each line
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+
+		var entry JournalEntry
+		if err := json.Unmarshal([]byte(line), &entry); err != nil {
+			// Invalid JSON, skip this entry
+			continue
+		}
+
+		// Validate checksum
+		expectedChecksum := computeChecksum(entry.Models)
+		if entry.Checksum != "" && entry.Checksum != expectedChecksum {
+			// Checksum mismatch, skip this entry
+			continue
+		}
+
+		validEntries = append(validEntries, entry)
+	}
+
+	if len(validEntries) == 0 {
+		return nil // No valid entries found
+	}
+
+	// Apply the most recent valid entry for each provider
+	// For simplicity, we take the last entry per provider (highest sequence)
+	latestByProvider := make(map[string]JournalEntry)
+	for _, entry := range validEntries {
+		if existing, exists := latestByProvider[entry.Provider]; !exists || entry.Sequence > existing.Sequence {
+			latestByProvider[entry.Provider] = entry
+		}
+	}
+
+	// Update cache with recovered entries
+	for provider, entry := range latestByProvider {
+		cacheEntry := &CacheEntry{
+			Models:    entry.Models,
+			Timestamp: entry.Timestamp,
+			Provider:  provider,
+		}
+
+		// Update memory cache
+		c.memoryMu.Lock()
+		c.memory[provider] = cacheEntry
+		c.memoryMu.Unlock()
+
+		// Update file cache
+		c.saveToFile(provider, entry.Models)
+	}
+
+	return nil
+}
+
 // Clear removes all cached entries
 func (c *ModelCache) Clear() {
-	c.memory = &sync.Map{}
+	c.memoryMu.Lock()
+	for k := range c.memory {
+		delete(c.memory, k)
+	}
+	c.memoryMu.Unlock()
 	if c.enableFileCache {
 		os.Remove(c.filePath)
+	}
+}
+
+// Size returns the number of entries in the memory cache
+func (c *ModelCache) Size() int {
+	c.memoryMu.RLock()
+	defer c.memoryMu.RUnlock()
+	return len(c.memory)
+}
+
+// StartCleanup starts a background goroutine that periodically removes expired entries
+func (c *ModelCache) StartCleanup(interval time.Duration) {
+	c.wg.Add(1)
+	go func() {
+		defer c.wg.Done()
+		ticker := time.NewTicker(interval)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ticker.C:
+				c.cleanupExpired()
+			case <-c.stopCh:
+				return
+			}
+		}
+	}()
+}
+
+// Close stops the cleanup goroutine and waits for it to finish
+func (c *ModelCache) Close() error {
+	c.stopOnce.Do(func() {
+		close(c.stopCh)
+		c.wg.Wait()
+	})
+	return nil
+}
+
+// cleanupExpired removes expired entries from the memory cache
+func (c *ModelCache) cleanupExpired() {
+	c.memoryMu.Lock()
+	defer c.memoryMu.Unlock()
+	now := time.Now()
+	for k, entry := range c.memory {
+		if now.Sub(entry.Timestamp) > c.memoryTTL {
+			delete(c.memory, k)
+		}
 	}
 }
 
