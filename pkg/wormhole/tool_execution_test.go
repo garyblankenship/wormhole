@@ -65,6 +65,10 @@ func (m *mockToolProvider) GenerateImage(ctx context.Context, request types.Imag
 	return nil, fmt.Errorf("not implemented")
 }
 
+func (m *mockToolProvider) Close() error {
+	return nil
+}
+
 // ==================== Tool Executor Tests ====================
 
 func TestToolExecutor_ExecuteSingleTool(t *testing.T) {

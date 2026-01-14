@@ -10,7 +10,7 @@ import (
 
 // MockProvider is a mock implementation of the Provider interface for testing
 type MockProvider struct {
-	types.BaseProvider
+	*types.BaseProvider
 	name           string
 	textResponses  []types.TextResponse
 	textIndex      int
@@ -24,7 +24,8 @@ type MockProvider struct {
 // NewMockProvider creates a new mock provider
 func NewMockProvider(name string) *MockProvider {
 	return &MockProvider{
-		name: name,
+		BaseProvider: types.NewBaseProvider(name),
+		name:         name,
 	}
 }
 

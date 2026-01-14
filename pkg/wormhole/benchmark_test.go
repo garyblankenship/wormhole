@@ -3,6 +3,7 @@ package wormhole
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/garyblankenship/wormhole/pkg/middleware"
 	testing_pkg "github.com/garyblankenship/wormhole/pkg/testing"
@@ -20,8 +21,14 @@ func BenchmarkTextGeneration(b *testing.B) {
 
 	// Create Wormhole client with mock provider
 	client := &Wormhole{
-		providers: map[string]types.Provider{"mock": mockProvider},
-		config:    Config{DefaultProvider: "mock"},
+		providers: map[string]*cachedProvider{
+			"mock": {
+				provider: mockProvider,
+				lastUsed: time.Now(),
+				refCount: 1,
+			},
+		},
+		config: Config{DefaultProvider: "mock"},
 	}
 
 	ctx := context.Background()
@@ -46,8 +53,14 @@ func BenchmarkEmbeddings(b *testing.B) {
 	mockProvider.WithEmbeddings([]types.Embedding{{Index: 0, Embedding: []float64{0.1, 0.2, 0.3}}})
 
 	client := &Wormhole{
-		providers: map[string]types.Provider{"mock": mockProvider},
-		config:    Config{DefaultProvider: "mock"},
+		providers: map[string]*cachedProvider{
+			"mock": {
+				provider: mockProvider,
+				lastUsed: time.Now(),
+				refCount: 1,
+			},
+		},
+		config: Config{DefaultProvider: "mock"},
 	}
 
 	ctx := context.Background()
@@ -72,8 +85,14 @@ func BenchmarkStructuredGeneration(b *testing.B) {
 	mockProvider.WithStructuredData(map[string]any{"name": "John", "age": 30})
 
 	client := &Wormhole{
-		providers: map[string]types.Provider{"mock": mockProvider},
-		config:    Config{DefaultProvider: "mock"},
+		providers: map[string]*cachedProvider{
+			"mock": {
+				provider: mockProvider,
+				lastUsed: time.Now(),
+				refCount: 1,
+			},
+		},
+		config: Config{DefaultProvider: "mock"},
 	}
 
 	ctx := context.Background()
@@ -164,8 +183,14 @@ func BenchmarkConcurrent(b *testing.B) {
 	})
 
 	client := &Wormhole{
-		providers: map[string]types.Provider{"mock": mockProvider},
-		config:    Config{DefaultProvider: "mock"},
+		providers: map[string]*cachedProvider{
+			"mock": {
+				provider: mockProvider,
+				lastUsed: time.Now(),
+				refCount: 1,
+			},
+		},
+		config: Config{DefaultProvider: "mock"},
 	}
 
 	ctx := context.Background()

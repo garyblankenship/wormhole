@@ -487,11 +487,11 @@ func TestOpenAIIntegration_StreamingGeneration(t *testing.T) {
 		assert.Equal(t, types.FinishReasonStop, *chunks[3].FinishReason)
 
 		// Verify full text concatenation
-		fullText := ""
+		var builder strings.Builder
 		for _, chunk := range chunks[:3] { // Exclude finish chunk
-			fullText += chunk.Text
+			builder.WriteString(chunk.Text)
 		}
-		assert.Equal(t, "Hello there!", fullText)
+		assert.Equal(t, "Hello there!", builder.String())
 	})
 }
 
@@ -515,7 +515,7 @@ func TestIntegration_ErrorHandling(t *testing.T) {
 		client := wormhole.New(
 			wormhole.WithDefaultProvider("openai"),
 			wormhole.WithOpenAICompatible("openai", server.URL, types.ProviderConfig{
-				APIKey: "invalid-key",
+				APIKey: "sk-invalid1234567890", // Valid format but invalid key
 			}),
 		)
 
