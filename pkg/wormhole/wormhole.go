@@ -5,9 +5,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 
+	"os"
 	"github.com/garyblankenship/wormhole/pkg/discovery"
 	"github.com/garyblankenship/wormhole/pkg/discovery/fetchers"
 	"github.com/garyblankenship/wormhole/pkg/middleware"
@@ -18,17 +20,61 @@ import (
 	"github.com/garyblankenship/wormhole/pkg/types"
 )
 
+// validateAPIKey performs basic format validation for provider API keys
+func validateAPIKey(provider, apiKey string) error {
+	if apiKey == "" {
+		return fmt.Errorf("empty API key for provider %s", provider)
+	}
+
+	// Skip validation for test/mock keys (common in testing)
+	if strings.HasPrefix(apiKey, "test-") || strings.HasPrefix(apiKey, "mock-") || strings.HasPrefix(apiKey, "dummy-") {
+		return nil
+	}
+
+	// Provider-specific validation
+	switch provider {
+	case "openai":
+		if !strings.HasPrefix(apiKey, "sk-") && !strings.HasPrefix(apiKey, "org-") {
+			return fmt.Errorf("invalid OpenAI API key format, expected 'sk-' or 'org-' prefix")
+		}
+	case "anthropic":
+		if !strings.HasPrefix(apiKey, "sk-ant-") {
+			return fmt.Errorf("invalid Anthropic API key format, expected 'sk-ant-' prefix")
+		}
+	case "gemini":
+		// Google AI Studio keys don't have fixed format, just check length
+		if len(apiKey) < 10 {
+			return fmt.Errorf("API key for Google AI Studio is too short (minimum 10 characters)")
+		}
+	case "openrouter":
+		if !strings.HasPrefix(apiKey, "sk-or-") {
+			return fmt.Errorf("invalid OpenRouter API key format, expected 'sk-or-' prefix")
+		}
+		// For other providers like ollama, groq, mistral, etc., just basic validation
+	}
+	return nil
+}
+
 // Provider name constants
 const (
 	providerOpenAI    = "openai"
 	providerAnthropic = "anthropic"
 )
 
+// cachedProvider wraps a provider with reference counting and last-used tracking
+type cachedProvider struct {
+	provider types.Provider
+	lastUsed time.Time
+	refCount int
+	mu       sync.RWMutex
+}
+
 // Wormhole is the main client for interacting with LLM providers
 type Wormhole struct {
 	providerFactories  map[string]types.ProviderFactory // Factory functions for creating providers
-	providers          map[string]types.Provider        // Cached provider instances
+	providers          map[string]*cachedProvider       // Cached provider instances with ref counting
 	providersMutex     sync.RWMutex
+	closeOnce          sync.Once // Ensures Close() is idempotent
 	config             Config
 	providerMiddleware *types.ProviderMiddlewareChain // Type-safe middleware chain
 	middlewareChain    *middleware.Chain              // DEPRECATED: use providerMiddleware instead
@@ -75,7 +121,7 @@ func New(opts ...Option) *Wormhole {
 	// Create client with final, immutable config
 	p := &Wormhole{
 		providerFactories: make(map[string]types.ProviderFactory),
-		providers:         make(map[string]types.Provider),
+		providers:         make(map[string]*cachedProvider),
 		config:            config,
 		toolRegistry:      NewToolRegistry(),
 	}
@@ -97,7 +143,7 @@ func New(opts ...Option) *Wormhole {
 	if config.DebugLogging && config.Logger != nil {
 		warnings := validateConfig(&config)
 		for _, warning := range warnings {
-			config.Logger.Warn("Config warning: " + warning)
+			config.Logger.Warn("Config warning", "warning", warning)
 		}
 	}
 
@@ -138,6 +184,12 @@ func (p *Wormhole) registerBuiltinProviders() {
 		return gemini.New(c.APIKey, c), nil
 	}
 	p.providerFactories["ollama"] = func(c types.ProviderConfig) (types.Provider, error) {
+		// Check environment variable for Ollama base URL if not set in config
+		if c.BaseURL == "" {
+			if envURL := os.Getenv("OLLAMA_BASE_URL"); envURL != "" {
+				c.BaseURL = envURL
+			}
+		}
 		return ollama.New(c), nil
 	}
 	// NOTE: groq and mistral now use the generic openai provider via WithOpenAICompatible()
@@ -202,9 +254,14 @@ func (p *Wormhole) Batch() *BatchBuilder {
 func (p *Wormhole) Provider(name string) (types.Provider, error) {
 	// First, try to read with read lock
 	p.providersMutex.RLock()
-	if provider, exists := p.providers[name]; exists {
+	if cp, exists := p.providers[name]; exists {
+		// Increment reference count and update last used time
+		cp.mu.Lock()
+		cp.refCount++
+		cp.lastUsed = time.Now()
+		cp.mu.Unlock()
 		p.providersMutex.RUnlock()
-		return provider, nil
+		return cp.provider, nil
 	}
 	p.providersMutex.RUnlock()
 
@@ -213,8 +270,13 @@ func (p *Wormhole) Provider(name string) (types.Provider, error) {
 	defer p.providersMutex.Unlock()
 
 	// Double-check after acquiring write lock (another goroutine might have created it)
-	if provider, exists := p.providers[name]; exists {
-		return provider, nil
+	if cp, exists := p.providers[name]; exists {
+		// Increment reference count and update last used time
+		cp.mu.Lock()
+		cp.refCount++
+		cp.lastUsed = time.Now()
+		cp.mu.Unlock()
+		return cp.provider, nil
 	}
 
 	// Get the factory for the requested provider
@@ -241,6 +303,13 @@ func (p *Wormhole) Provider(name string) (types.Provider, error) {
 			WithDetails(p.formatProviderHint(name))
 	}
 
+	// Validate API key format before creating provider
+	if config.APIKey != "" {
+		if err := validateAPIKey(name, config.APIKey); err != nil {
+			return nil, fmt.Errorf("invalid API key for provider %s: %w", name, err)
+		}
+	}
+
 	// Apply DefaultTimeout if provider config doesn't have explicit timeout
 	// Special case: if DefaultTimeout is 0 (unlimited), only apply to configs without explicit timeout
 	if config.Timeout == 0 && p.config.DefaultTimeout != 0 {
@@ -256,8 +325,15 @@ func (p *Wormhole) Provider(name string) (types.Provider, error) {
 		return nil, fmt.Errorf("failed to create provider %s: %w", name, err)
 	}
 
+	// Create cached provider wrapper
+	cp := &cachedProvider{
+		provider: provider,
+		lastUsed: time.Now(),
+		refCount: 1,
+	}
+
 	// Cache the provider
-	p.providers[name] = provider
+	p.providers[name] = cp
 	return provider, nil
 }
 
@@ -473,7 +549,11 @@ func (p *Wormhole) initializeDiscoveryService() {
 		case "ollama":
 			baseURL := providerConfig.BaseURL
 			if baseURL == "" {
-				baseURL = "http://localhost:11434"
+				if envURL := os.Getenv("OLLAMA_BASE_URL"); envURL != "" {
+					baseURL = envURL
+				} else {
+					baseURL = "http://localhost:11434"
+				}
 			}
 			modelFetchers = append(modelFetchers, fetchers.NewOllamaFetcher(baseURL))
 		}
@@ -565,14 +645,14 @@ func (p *Wormhole) StopModelDiscovery() {
 type Capability string
 
 const (
-	CapabilityText         Capability = "text"
-	CapabilityStructured   Capability = "structured"
-	CapabilityEmbeddings   Capability = "embeddings"
-	CapabilityImages       Capability = "images"
-	CapabilityAudio        Capability = "audio"
-	CapabilityToolCalling  Capability = "tool_calling"
-	CapabilityStreaming    Capability = "streaming"
-	CapabilityVision       Capability = "vision"
+	CapabilityText          Capability = "text"
+	CapabilityStructured    Capability = "structured"
+	CapabilityEmbeddings    Capability = "embeddings"
+	CapabilityImages        Capability = "images"
+	CapabilityAudio         Capability = "audio"
+	CapabilityToolCalling   Capability = "tool_calling"
+	CapabilityStreaming     Capability = "streaming"
+	CapabilityVision        Capability = "vision"
 	CapabilityCodeExecution Capability = "code_execution"
 )
 
@@ -699,4 +779,66 @@ func (c *Capabilities) SupportsImages() bool {
 // SupportsAudio returns true if the provider supports audio generation/transcription
 func (c *Capabilities) SupportsAudio() bool {
 	return c.Has(CapabilityAudio)
+}
+
+// Close implements io.Closer interface for Wormhole
+// It cleans up all cached providers and stops the discovery service
+func (p *Wormhole) Close() error {
+	var errs []error
+	p.closeOnce.Do(func() {
+		// Cleanup providers
+		p.providersMutex.Lock()
+		defer p.providersMutex.Unlock()
+		for name, cp := range p.providers {
+			if err := cp.provider.Close(); err != nil {
+				errs = append(errs, fmt.Errorf("provider %s: %w", name, err))
+			}
+			delete(p.providers, name)
+		}
+
+		// Stop discovery service
+		if p.discoveryService != nil {
+			if err := p.discoveryService.Stop(); err != nil {
+				errs = append(errs, fmt.Errorf("discovery service: %w", err))
+			}
+		}
+
+		// Cleanup tool registry resources if needed
+		// (currently tool registry has no resources to clean up)
+	})
+
+	if len(errs) > 0 {
+		return fmt.Errorf("errors during cleanup: %v", errs)
+	}
+	return nil
+}
+
+// CleanupStaleProviders cleans up providers that haven't been used for a while
+func (p *Wormhole) CleanupStaleProviders(maxAge time.Duration, maxCount int) {
+	p.providersMutex.Lock()
+	defer p.providersMutex.Unlock()
+
+	now := time.Now()
+	staleKeys := []string{}
+	for name, cp := range p.providers {
+		cp.mu.RLock()
+		if cp.refCount == 0 && now.Sub(cp.lastUsed) > maxAge {
+			staleKeys = append(staleKeys, name)
+		}
+		cp.mu.RUnlock()
+	}
+
+	// Remove stale providers
+	for _, name := range staleKeys {
+		if cp, ok := p.providers[name]; ok {
+			cp.provider.Close()
+			delete(p.providers, name)
+		}
+	}
+
+	// Enforce max count
+	if len(p.providers) > maxCount {
+		// Remove oldest unused providers
+		// TODO: Implement LRU cleanup logic
+	}
 }
