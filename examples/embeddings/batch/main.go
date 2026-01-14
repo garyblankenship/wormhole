@@ -73,9 +73,9 @@ func main() {
 
 	// Create 5 batches of 20 texts each
 	jobs := make([]EmbeddingJob, 5)
-	for i := 0; i < 5; i++ {
+	for i := 0; i < len(jobs); i++ {
 		job := EmbeddingJob{ID: i + 1, Texts: make([]string, 20)}
-		for j := 0; j < 20; j++ {
+		for j := 0; j < len(job.Texts); j++ {
 			job.Texts[j] = fmt.Sprintf("Batch %d, text %d: concurrent processing example", i+1, j+1)
 		}
 		jobs[i] = job

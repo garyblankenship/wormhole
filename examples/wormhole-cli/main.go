@@ -124,15 +124,35 @@ func parseFlags() CLIConfig {
 	// Parse subcommand flags
 	switch config.Command {
 	case CmdGenerate:
-		generateCmd.Parse(os.Args[2:])
+		if err := generateCmd.Parse(os.Args[2:]); err != nil {
+			fmt.Fprintf(os.Stderr, "Error parsing generate command flags: %v\n", err)
+			generateCmd.Usage()
+			os.Exit(1)
+		}
 	case CmdStream:
-		streamCmd.Parse(os.Args[2:])
+		if err := streamCmd.Parse(os.Args[2:]); err != nil {
+			fmt.Fprintf(os.Stderr, "Error parsing stream command flags: %v\n", err)
+			streamCmd.Usage()
+			os.Exit(1)
+		}
 	case CmdEmbedding:
-		embeddingCmd.Parse(os.Args[2:])
+		if err := embeddingCmd.Parse(os.Args[2:]); err != nil {
+			fmt.Fprintf(os.Stderr, "Error parsing embedding command flags: %v\n", err)
+			embeddingCmd.Usage()
+			os.Exit(1)
+		}
 	case CmdStructured:
-		structuredCmd.Parse(os.Args[2:])
+		if err := structuredCmd.Parse(os.Args[2:]); err != nil {
+			fmt.Fprintf(os.Stderr, "Error parsing structured command flags: %v\n", err)
+			structuredCmd.Usage()
+			os.Exit(1)
+		}
 	case CmdBenchmark:
-		benchmarkCmd.Parse(os.Args[2:])
+		if err := benchmarkCmd.Parse(os.Args[2:]); err != nil {
+			fmt.Fprintf(os.Stderr, "Error parsing benchmark command flags: %v\n", err)
+			benchmarkCmd.Usage()
+			os.Exit(1)
+		}
 	default:
 		// Unknown command will be handled in main
 	}
