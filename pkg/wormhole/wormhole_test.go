@@ -2,6 +2,7 @@ package wormhole_test
 
 import (
 	"testing"
+	"time"
 
 	mocktesting "github.com/garyblankenship/wormhole/pkg/testing"
 	"github.com/garyblankenship/wormhole/pkg/types"
@@ -177,4 +178,15 @@ func TestMessageTypes(t *testing.T) {
 		assert.Equal(t, "text", parts[0].Type)
 		assert.Equal(t, "image", parts[1].Type)
 	})
+}
+
+func TestProviderCacheEviction(t *testing.T) {
+	p := wormhole.New(wormhole.WithOpenAI("test-key"))
+	// No providers cached yet, should not panic
+	p.CleanupStaleProviders(time.Minute, 10)
+	metrics := p.GetCacheMetrics()
+	assert.Equal(t, int64(0), metrics.Hits)
+	assert.Equal(t, int64(0), metrics.Misses)
+	assert.Equal(t, int64(0), metrics.Evictions)
+	assert.Equal(t, 0, metrics.Size)
 }

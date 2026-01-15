@@ -35,7 +35,7 @@ func TestBaseURLFunctionality(t *testing.T) {
 	t.Run("Without BaseURL uses default provider", func(t *testing.T) {
 		// This should try OpenAI endpoint and get auth error
 		_, err := client.Text().
-			Model("gpt-4o-mini").
+			Model("gpt-5-mini").
 			Prompt("test").
 			MaxTokens(5).
 			Generate(ctx)
@@ -87,7 +87,7 @@ func TestBaseURLValidation(t *testing.T) {
 	t.Run("Empty BaseURL uses default", func(t *testing.T) {
 		_, err := client.Text().
 			BaseURL(""). // Empty should fallback to default
-			Model("gpt-4o-mini").
+			Model("gpt-5-mini").
 			Prompt("test").
 			MaxTokens(5).
 			Generate(ctx)
