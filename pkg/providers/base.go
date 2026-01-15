@@ -123,15 +123,24 @@ func readAllPooled(r io.Reader) ([]byte, error) {
 	return buf, nil
 }
 
+// AuthStrategy defines the interface for authentication strategies
+type AuthStrategy interface {
+	// Apply adds authentication to the request
+	Apply(req *http.Request, config types.ProviderConfig) error
+	// Name returns the name of the authentication strategy
+	Name() string
+}
+
 // BaseProvider provides common functionality for all providers
 // Embeds the types.BaseProvider for default method implementations
 // and adds HTTP functionality for making requests
 type BaseProvider struct {
 	*types.BaseProvider
-	Config      types.ProviderConfig
-	tlsConfig   *config.TLSConfig
-	httpClient  *http.Client
-	retryClient *utils.RetryableHTTPClient
+	Config       types.ProviderConfig
+	tlsConfig    *config.TLSConfig
+	httpClient   *http.Client
+	retryClient  *utils.RetryableHTTPClient
+	authStrategy AuthStrategy
 }
 
 // GetHTTPTimeout returns the configured HTTP timeout for this provider
@@ -155,31 +164,43 @@ func (p *BaseProvider) GetHTTPClient() *http.Client {
 	}
 
 	// Create HTTP client with TLS configuration
-	return NewSecureHTTPClient(p.GetHTTPTimeout(), p.tlsConfig, nil)
+	return NewSecureHTTPClient(p.GetHTTPTimeout(), p.tlsConfig, nil, "")
 }
 
 // NewBaseProvider creates a new base provider with default secure TLS configuration
 func NewBaseProvider(name string, providerConfig types.ProviderConfig) *BaseProvider {
-	return NewBaseProviderWithTLS(name, providerConfig, nil)
+	return NewBaseProviderWithAuth(name, providerConfig, nil, nil)
 }
 
 // NewBaseProviderWithTLS creates a new base provider with custom TLS configuration
 // If tlsConfig is nil, extracts TLS configuration from ProviderConfig.Params if available,
 // otherwise uses DefaultTLSConfig() for secure defaults
 func NewBaseProviderWithTLS(name string, providerConfig types.ProviderConfig, tlsConfig *config.TLSConfig) *BaseProvider {
+	return NewBaseProviderWithAuth(name, providerConfig, tlsConfig, nil)
+}
+
+// NewBaseProviderWithAuth creates a new base provider with custom TLS and auth configuration
+func NewBaseProviderWithAuth(name string, providerConfig types.ProviderConfig, tlsConfig *config.TLSConfig, authStrategy AuthStrategy) *BaseProvider {
 	// Extract TLS configuration from ProviderConfig if not explicitly provided
 	if tlsConfig == nil {
 		tlsConfig = ExtractTLSConfigFromProviderConfig(providerConfig)
+	}
+
+	// Use BearerAuthStrategy if no auth strategy provided
+	if authStrategy == nil {
+		authStrategy = &BearerAuthStrategy{}
 	}
 
 	bp := &BaseProvider{
 		BaseProvider: types.NewBaseProvider(name),
 		Config:       providerConfig,
 		tlsConfig:    tlsConfig,
+		authStrategy: authStrategy,
 	}
 
 	// Create HTTP client with configured timeout and TLS settings
-	bp.httpClient = NewSecureHTTPClient(bp.GetHTTPTimeout(), tlsConfig, nil)
+	// Include base URL for connection pooling across providers with same host
+	bp.httpClient = NewSecureHTTPClient(bp.GetHTTPTimeout(), tlsConfig, nil, providerConfig.BaseURL)
 
 	// Configure retry logic based on per-provider settings
 	retryConfig := utils.DefaultRetryConfig() // Start with global defaults
@@ -209,7 +230,7 @@ func NewInsecureBaseProvider(name string, providerConfig types.ProviderConfig, s
 		insecureTLS = insecureTLS.WithInsecureSkipVerify(true)
 	}
 
-	return NewBaseProviderWithTLS(name, providerConfig, &insecureTLS)
+	return NewBaseProviderWithAuth(name, providerConfig, &insecureTLS, nil)
 }
 
 // DoRequest performs an HTTP request with common error handling
@@ -262,7 +283,9 @@ func (p *BaseProvider) buildRequest(ctx context.Context, method, url string, bod
 	}
 
 	// Set headers
-	p.setRequestHeaders(req)
+	if err := p.setRequestHeaders(req); err != nil {
+		return nil, err
+	}
 
 	return req, nil
 }
@@ -286,14 +309,20 @@ func (p *BaseProvider) marshalRequestBody(body any) (io.Reader, error) {
 }
 
 // setRequestHeaders sets common and custom headers
-func (p *BaseProvider) setRequestHeaders(req *http.Request) {
+func (p *BaseProvider) setRequestHeaders(req *http.Request) error {
 	req.Header.Set(types.HeaderContentType, types.ContentTypeJSON)
-	req.Header.Set(types.HeaderAuthorization, "Bearer "+p.Config.APIKey)
+
+	// Apply authentication strategy
+	if err := p.authStrategy.Apply(req, p.Config); err != nil {
+		return err
+	}
 
 	// Set custom headers
 	for k, v := range p.Config.Headers {
 		req.Header.Set(k, v)
 	}
+
+	return nil
 }
 
 // handleRequestError processes errors from HTTP request execution
@@ -310,7 +339,7 @@ func (p *BaseProvider) handleRequestError(ctx context.Context, err error) error 
 		return wormholeErr
 	}
 
-	return fmt.Errorf("request failed: %w", err)
+	return p.WrapError(types.ErrorCodeNetwork, "request failed", err)
 }
 
 // buildErrorResponse creates a detailed error response for HTTP errors
@@ -422,9 +451,13 @@ func (p *BaseProvider) StreamRequest(ctx context.Context, method, url string, bo
 
 	// Set common headers
 	req.Header.Set(types.HeaderContentType, types.ContentTypeJSON)
-	req.Header.Set(types.HeaderAuthorization, "Bearer "+p.Config.APIKey)
 	req.Header.Set(types.HeaderAccept, types.ContentTypeEventStream)
 	req.Header.Set(types.HeaderCacheControl, "no-cache")
+
+	// Apply authentication strategy
+	if err := p.authStrategy.Apply(req, p.Config); err != nil {
+		return nil, err
+	}
 
 	// Set custom headers
 	for k, v := range p.Config.Headers {
@@ -433,22 +466,14 @@ func (p *BaseProvider) StreamRequest(ctx context.Context, method, url string, bo
 
 	resp, err := p.httpClient.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("request failed: %w", err)
+		return nil, p.WrapError(types.ErrorCodeNetwork, "request failed", err)
 	}
 
 	if resp.StatusCode >= 400 {
-		defer func() {
-		if err := resp.Body.Close(); err != nil {
-			log.Printf("warning: failed to close response body: %v", err)
-		}
-	}()
+		defer resp.Body.Close()
 		respBody, _ := readAllPooled(resp.Body)
 		defer responseBodyPool.Put(respBody[:0])
-		var apiError types.WormholeProviderError
-		if err := json.Unmarshal(respBody, &apiError); err != nil {
-			return nil, fmt.Errorf("HTTP %d: %s", resp.StatusCode, string(respBody))
-		}
-		return nil, apiError
+		return nil, p.buildErrorResponse(resp.StatusCode, resp.Status, url, respBody)
 	}
 
 	return resp.Body, nil
@@ -465,7 +490,94 @@ func (p *BaseProvider) GetBaseURL() string {
 
 // NotImplementedError returns a standard not implemented error
 func (p *BaseProvider) NotImplementedError(method string) error {
-	return fmt.Errorf("%s provider does not support %s", p.Name(), method)
+	return p.ProviderErrorf("%s provider does not support %s", p.Name(), method)
+}
+
+// ValidationError returns a WormholeError with ErrorCodeValidation
+func (p *BaseProvider) ValidationError(message string, details ...string) error {
+	err := types.NewWormholeError(types.ErrorCodeValidation, message, false)
+	err.Provider = p.Name()
+	if len(details) > 0 {
+		err.Details = details[0]
+	}
+	return err
+}
+
+// ValidationErrorf formats a validation error
+func (p *BaseProvider) ValidationErrorf(format string, args ...any) error {
+	return p.ValidationError(fmt.Sprintf(format, args...))
+}
+
+// ProviderError returns a WormholeError with ErrorCodeProvider
+func (p *BaseProvider) ProviderError(message string, details ...string) error {
+	err := types.NewWormholeError(types.ErrorCodeProvider, message, true) // provider errors are retryable
+	err.Provider = p.Name()
+	if len(details) > 0 {
+		err.Details = details[0]
+	}
+	return err
+}
+
+// ProviderErrorf formats a provider error
+func (p *BaseProvider) ProviderErrorf(format string, args ...any) error {
+	return p.ProviderError(fmt.Sprintf(format, args...))
+}
+
+// RequestError wraps a cause with ErrorCodeRequest
+func (p *BaseProvider) RequestError(message string, cause error) error {
+	err := types.NewWormholeError(types.ErrorCodeRequest, message, false)
+	err.Provider = p.Name()
+	err.Cause = cause
+	return err
+}
+
+// ModelError returns a WormholeError with ErrorCodeModel
+func (p *BaseProvider) ModelError(message string, details ...string) error {
+	err := types.NewWormholeError(types.ErrorCodeModel, message, false)
+	err.Provider = p.Name()
+	if len(details) > 0 {
+		err.Details = details[0]
+	}
+	return err
+}
+
+// ModelErrorf formats a model error
+func (p *BaseProvider) ModelErrorf(format string, args ...any) error {
+	return p.ModelError(fmt.Sprintf(format, args...))
+}
+
+// AuthError returns a WormholeError with ErrorCodeAuth
+func (p *BaseProvider) AuthError(message string, details ...string) error {
+	err := types.NewWormholeError(types.ErrorCodeAuth, message, true) // auth errors often retryable
+	err.Provider = p.Name()
+	if len(details) > 0 {
+		err.Details = details[0]
+	}
+	return err
+}
+
+// AuthErrorf formats an auth error
+func (p *BaseProvider) AuthErrorf(format string, args ...any) error {
+	return p.AuthError(fmt.Sprintf(format, args...))
+}
+
+// WrapError wraps an error with Wormhole error context
+func (p *BaseProvider) WrapError(code types.ErrorCode, message string, cause error) error {
+	err := types.NewWormholeError(code, message, p.isRetryableCode(code))
+	err.Provider = p.Name()
+	err.Cause = cause
+	return err
+}
+
+// Helper to determine retryability from error code (similar to isRetryableStatus)
+func (p *BaseProvider) isRetryableCode(code types.ErrorCode) bool {
+	switch code {
+	case types.ErrorCodeAuth, types.ErrorCodeRateLimit, types.ErrorCodeTimeout,
+		 types.ErrorCodeProvider, types.ErrorCodeNetwork:
+		return true
+	default:
+		return false
+	}
 }
 
 // maskAPIKeyInURL masks API keys in URLs for security in error messages

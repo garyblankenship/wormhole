@@ -2,7 +2,6 @@ package types
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"io"
 	"time"
@@ -15,6 +14,7 @@ type Provider interface {
 
 	// Core provider info
 	Name() string
+	SupportedCapabilities() []ModelCapability
 
 	// Text generation
 	Text(ctx context.Context, request TextRequest) (*TextResponse, error)
@@ -52,9 +52,14 @@ func (bp *BaseProvider) Name() string {
 	return bp.name
 }
 
+// SupportedCapabilities returns an empty slice of capabilities by default
+func (bp *BaseProvider) SupportedCapabilities() []ModelCapability {
+	return []ModelCapability{}
+}
+
 // NotImplementedError returns a standard not implemented error
 func (bp *BaseProvider) NotImplementedError(method string) error {
-	return fmt.Errorf("%s provider does not support %s", bp.name, method)
+	return NewWormholeError(ErrorCodeProvider, fmt.Sprintf("%s provider does not support %s", bp.name, method), false)
 }
 
 // Default implementations that return not implemented errors
@@ -339,8 +344,12 @@ func IsNotSupportedError(err error) bool {
 	if err == nil {
 		return false
 	}
-	return errors.Is(err, errors.New("not supported")) ||
-		(err.Error() != "" &&
-			(len(err.Error()) > 20 &&
-				err.Error()[len(err.Error())-20:] == "does not support"))
+	// Check if it's a WormholeError with ErrorCodeProvider
+	if wormholeErr, ok := AsWormholeError(err); ok {
+		return wormholeErr.Code == ErrorCodeProvider
+	}
+	// Fallback: check error message for backward compatibility
+	return err.Error() != "" &&
+		(len(err.Error()) > 20 &&
+			err.Error()[len(err.Error())-20:] == "does not support")
 }

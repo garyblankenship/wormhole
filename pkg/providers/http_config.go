@@ -79,6 +79,30 @@ func (c HTTPTransportConfig) Fingerprint() string {
 	return b.String()
 }
 
+// CacheKey returns a cache key that includes both base URL and transport configuration fingerprint.
+// This enables connection pooling across providers with the same base URL and identical transport configuration.
+func (c HTTPTransportConfig) CacheKey(baseURL string) string {
+	if baseURL == "" {
+		return c.Fingerprint()
+	}
+	// Extract host from base URL for grouping
+	host := extractHostFromBaseURL(baseURL)
+	if host == "" {
+		return c.Fingerprint()
+	}
+	return host + "|" + c.Fingerprint()
+}
+
+// extractHostFromBaseURL extracts the host (hostname:port) from a base URL.
+// Returns empty string if parsing fails.
+func extractHostFromBaseURL(baseURL string) string {
+	u, err := url.Parse(baseURL)
+	if err != nil {
+		return ""
+	}
+	return u.Host
+}
+
 var (
 	transportCache sync.RWMutex
 	transports = make(map[string]*http.Transport)
@@ -111,13 +135,14 @@ func setCachedTransport(key string, transport *http.Transport) {
 //   - timeout: Overall request timeout (0 for no timeout)
 //   - tlsConfig: TLS configuration (nil for default secure configuration)
 //   - transportConfig: HTTP transport configuration (nil for default)
+//   - baseURL: Base URL for connection pooling grouping (empty for no grouping)
 //
 // The client uses:
 //   - Secure TLS 1.2+ by default
 //   - Modern cipher suites only
 //   - Connection pooling for performance
 //   - Proper timeout handling
-func NewSecureHTTPClient(timeout time.Duration, tlsConfig *config.TLSConfig, transportConfig *HTTPTransportConfig) *http.Client {
+func NewSecureHTTPClient(timeout time.Duration, tlsConfig *config.TLSConfig, transportConfig *HTTPTransportConfig, baseURL string) *http.Client {
 	// Use default TLS config if not provided
 	if tlsConfig == nil {
 		defaultTLS := config.DefaultTLSConfig()
@@ -136,8 +161,8 @@ func NewSecureHTTPClient(timeout time.Duration, tlsConfig *config.TLSConfig, tra
 		tlsClientConfig = tlsConfig.ApplyToTLSConfig(nil)
 	}
 
-	// Compute cache key based on transport configuration
-	key := transportConfig.Fingerprint()
+	// Compute cache key based on transport configuration and base URL
+	key := transportConfig.CacheKey(baseURL)
 
 	// Try to get cached transport
 	transport, ok := getCachedTransport(key)
@@ -192,7 +217,7 @@ func NewInsecureHTTPClient(timeout time.Duration, skipVerify bool) *http.Client 
 	transportConfig := DefaultHTTPTransportConfig()
 	transportConfig.TLSConfig = &tlsConfig
 
-	return NewSecureHTTPClient(timeout, &tlsConfig, &transportConfig)
+	return NewSecureHTTPClient(timeout, &tlsConfig, &transportConfig, "")
 }
 
 // NewStrictHTTPClient creates an HTTP client with the strictest TLS configuration.
@@ -205,7 +230,7 @@ func NewStrictHTTPClient(timeout time.Duration) *http.Client {
 	transportConfig := DefaultHTTPTransportConfig()
 	transportConfig.TLSConfig = &tlsConfig
 
-	return NewSecureHTTPClient(timeout, &tlsConfig, &transportConfig)
+	return NewSecureHTTPClient(timeout, &tlsConfig, &transportConfig, "")
 }
 
 // WithTLSConfig returns a copy of HTTPTransportConfig with the specified TLS configuration.
@@ -243,34 +268,51 @@ func (c HTTPTransportConfig) WithProxy(proxy func(*http.Request) (*url.URL, erro
 // Returns an error if any setting is invalid.
 func (c HTTPTransportConfig) Validate() error {
 	if c.TLSConfig != nil && !c.TLSConfig.IsSecure() {
-		return fmt.Errorf("TLS configuration is not secure: MinVersion=%d, InsecureSkipVerify=%v",
-			c.TLSConfig.MinVersion, c.TLSConfig.InsecureSkipVerify)
+		err := types.NewWormholeError(types.ErrorCodeValidation, "TLS configuration is not secure", false)
+		err.Details = fmt.Sprintf("MinVersion=%d, InsecureSkipVerify=%v", c.TLSConfig.MinVersion, c.TLSConfig.InsecureSkipVerify)
+		return err
 	}
 
 	if c.MaxIdleConns < 0 {
-		return fmt.Errorf("MaxIdleConns cannot be negative: %d", c.MaxIdleConns)
+		err := types.NewWormholeError(types.ErrorCodeValidation, "MaxIdleConns cannot be negative", false)
+		err.Details = fmt.Sprintf("%d", c.MaxIdleConns)
+		return err
 	}
 	if c.MaxIdleConnsPerHost < 0 {
-		return fmt.Errorf("MaxIdleConnsPerHost cannot be negative: %d", c.MaxIdleConnsPerHost)
+		err := types.NewWormholeError(types.ErrorCodeValidation, "MaxIdleConnsPerHost cannot be negative", false)
+		err.Details = fmt.Sprintf("%d", c.MaxIdleConnsPerHost)
+		return err
 	}
 	if c.MaxConnsPerHost < 0 {
-		return fmt.Errorf("MaxConnsPerHost cannot be negative: %d", c.MaxConnsPerHost)
+		err := types.NewWormholeError(types.ErrorCodeValidation, "MaxConnsPerHost cannot be negative", false)
+		err.Details = fmt.Sprintf("%d", c.MaxConnsPerHost)
+		return err
 	}
 
 	if c.IdleConnTimeout < 0 {
-		return fmt.Errorf("IdleConnTimeout cannot be negative: %v", c.IdleConnTimeout)
+		err := types.NewWormholeError(types.ErrorCodeValidation, "IdleConnTimeout cannot be negative", false)
+		err.Details = fmt.Sprintf("%v", c.IdleConnTimeout)
+		return err
 	}
 	if c.DialTimeout < 0 {
-		return fmt.Errorf("DialTimeout cannot be negative: %v", c.DialTimeout)
+		err := types.NewWormholeError(types.ErrorCodeValidation, "DialTimeout cannot be negative", false)
+		err.Details = fmt.Sprintf("%v", c.DialTimeout)
+		return err
 	}
 	if c.TLSHandshakeTimeout < 0 {
-		return fmt.Errorf("TLSHandshakeTimeout cannot be negative: %v", c.TLSHandshakeTimeout)
+		err := types.NewWormholeError(types.ErrorCodeValidation, "TLSHandshakeTimeout cannot be negative", false)
+		err.Details = fmt.Sprintf("%v", c.TLSHandshakeTimeout)
+		return err
 	}
 	if c.ExpectContinueTimeout < 0 {
-		return fmt.Errorf("ExpectContinueTimeout cannot be negative: %v", c.ExpectContinueTimeout)
+		err := types.NewWormholeError(types.ErrorCodeValidation, "ExpectContinueTimeout cannot be negative", false)
+		err.Details = fmt.Sprintf("%v", c.ExpectContinueTimeout)
+		return err
 	}
 	if c.ResponseHeaderTimeout < 0 {
-		return fmt.Errorf("ResponseHeaderTimeout cannot be negative: %v", c.ResponseHeaderTimeout)
+		err := types.NewWormholeError(types.ErrorCodeValidation, "ResponseHeaderTimeout cannot be negative", false)
+		err.Details = fmt.Sprintf("%v", c.ResponseHeaderTimeout)
+		return err
 	}
 
 	return nil
