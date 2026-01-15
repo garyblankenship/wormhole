@@ -422,3 +422,75 @@ func HealthAwareAdaptiveRateLimitMiddleware(initialRate, minRate, maxRate int, t
 		}
 	}
 }
+
+// ProviderAwareConcurrencyLimitConfig holds configuration for provider-aware concurrency limiting
+type ProviderAwareConcurrencyLimitConfig struct {
+	// Limiter is the provider-aware limiter to use
+	Limiter ProviderAwareLimiter
+
+	// EnableProviderAware controls whether provider-aware limiting is enabled
+	// When false, the middleware falls back to global limiting only
+	EnableProviderAware bool
+}
+
+// ProviderAwareConcurrencyLimitMiddleware creates a middleware with provider-aware adaptive concurrency control
+func ProviderAwareConcurrencyLimitMiddleware(limiter ProviderAwareLimiter) Middleware {
+	return ProviderAwareConcurrencyLimitMiddlewareWithConfig(ProviderAwareConcurrencyLimitConfig{
+		Limiter: limiter,
+		EnableProviderAware: true,
+	})
+}
+
+// ProviderAwareConcurrencyLimitMiddlewareWithConfig creates a middleware with provider-aware adaptive concurrency control using config
+func ProviderAwareConcurrencyLimitMiddlewareWithConfig(config ProviderAwareConcurrencyLimitConfig) Middleware {
+	limiter := config.Limiter
+	enableProviderAware := config.EnableProviderAware
+	return func(next Handler) Handler {
+		return func(ctx context.Context, req any) (any, error) {
+			start := time.Now()
+
+			// Extract provider and model from context (similar to EnhancedMetricsMiddleware)
+			var provider, model string
+			if enableProviderAware {
+				if p, ok := ctx.Value("provider").(string); ok {
+					provider = p
+				}
+				if m, ok := ctx.Value("model").(string); ok {
+					model = m
+				}
+			}
+
+			// If provider-aware mode is enabled and provider is available, use provider-aware methods
+			acquired := false
+			if enableProviderAware && provider != "" {
+				acquired = limiter.AcquireWithProvider(ctx, provider, model)
+			} else {
+				// Fallback to global limiting if provider info not available or provider-aware mode is disabled
+				acquired = limiter.Acquire(ctx)
+			}
+
+			if !acquired {
+				// Acquire returns false only when context is cancelled or timeout occurs
+				// (the limiter blocks until slot is available or context cancelled)
+				return nil, wrapMiddlewareError("provider_aware_concurrency_limit", "acquire", ctx.Err())
+			}
+
+			// Execute the next handler
+			resp, err := next(ctx, req)
+			latency := time.Since(start)
+
+			// Record latency for adaptive adjustments
+			if enableProviderAware && provider != "" {
+				limiter.RecordLatencyWithProvider(latency, provider, model, err)
+				// Release provider-specific slot
+				limiter.ReleaseWithProvider(provider, model)
+			} else {
+				// Fallback to global methods
+				limiter.RecordLatency(latency)
+				limiter.Release()
+			}
+
+			return resp, wrapIfNotWormholeError("provider_aware_concurrency_limit", "execute", err)
+		}
+	}
+}

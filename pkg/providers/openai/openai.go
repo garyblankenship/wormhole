@@ -8,6 +8,7 @@ import (
 	"log"
 	"net/http"
 
+	"github.com/garyblankenship/wormhole/internal/pool"
 	"github.com/garyblankenship/wormhole/internal/utils"
 	"github.com/garyblankenship/wormhole/pkg/providers"
 	"github.com/garyblankenship/wormhole/pkg/types"
@@ -105,8 +106,13 @@ func (p *Provider) Structured(ctx context.Context, request types.StructuredReque
 	if request.Mode == types.StructuredModeJSON {
 		err = json.Unmarshal([]byte(response.Text), &data)
 	} else if len(response.ToolCalls) > 0 {
-		argsBytes, _ := json.Marshal(response.ToolCalls[0].Arguments)
-		err = json.Unmarshal(argsBytes, &data)
+		argsBytes, marshalErr := pool.Marshal(response.ToolCalls[0].Arguments)
+		if marshalErr != nil {
+			err = marshalErr
+		} else {
+			defer pool.Return(argsBytes)
+			err = json.Unmarshal(argsBytes, &data)
+		}
 	} else {
 		err = fmt.Errorf("no structured data in response")
 	}

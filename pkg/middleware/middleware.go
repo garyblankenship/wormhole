@@ -60,6 +60,40 @@ func MetricsMiddleware(metrics *Metrics) Middleware {
 	}
 }
 
+// EnhancedMetricsMiddleware tracks request metrics with enhanced features
+func EnhancedMetricsMiddleware(collector *EnhancedMetricsCollector) Middleware {
+	return func(next Handler) Handler {
+		return func(ctx context.Context, req any) (any, error) {
+			start := time.Now()
+
+			resp, err := next(ctx, req)
+
+			duration := time.Since(start)
+
+			// Extract labels from context or request if possible
+			var labels *RequestLabels
+			// Try to extract from context first
+			if provider, ok := ctx.Value("provider").(string); ok {
+				if model, ok := ctx.Value("model").(string); ok {
+					if method, ok := ctx.Value("method").(string); ok {
+						labels = &RequestLabels{
+							Provider: provider,
+							Model:    model,
+							Method:   method,
+							ErrorType: "", // Will be detected by error detector
+						}
+					}
+				}
+			}
+
+			// Record with enhanced metrics
+			collector.RecordRequest(labels, duration, err, 0, 0, 0)
+
+			return resp, wrapIfNotWormholeError("metrics", "execute", err)
+		}
+	}
+}
+
 // LoggingMiddleware creates basic logging middleware
 func LoggingMiddleware(logger types.Logger) Middleware {
 	return func(next Handler) Handler {
@@ -109,10 +143,14 @@ func TimeoutMiddleware(timeout time.Duration) Middleware {
 }
 
 // Metrics tracks provider metrics using atomic operations for better performance
+// DEPRECATED: Use EnhancedMetricsCollector for richer metrics with labels and histograms
 type Metrics struct {
 	totalRequests int64 // atomic counter
 	totalErrors   int64 // atomic counter
 	totalDuration int64 // atomic counter (nanoseconds)
+
+	// Enhanced metrics collector (optional)
+	enhanced *EnhancedMetricsCollector
 }
 
 // NewMetrics creates a new metrics instance
@@ -127,6 +165,12 @@ func (m *Metrics) RecordRequest(duration time.Duration, err error) {
 
 	if err != nil {
 		atomic.AddInt64(&m.totalErrors, 1)
+	}
+
+	// Also record to enhanced metrics if available
+	if m.enhanced != nil {
+		// Record without labels for backward compatibility
+		m.enhanced.RecordRequest(nil, duration, err, 0, 0, 0)
 	}
 }
 
@@ -202,10 +246,57 @@ func AvailableMiddleware() []MiddlewareInfo {
 			Example:    "middleware.TimeoutMiddleware(30*time.Second)",
 			ConfigType: "timeout time.Duration",
 		},
+		{
+			Name:       "AdaptiveRateLimitMiddleware",
+			Purpose:    "Adaptive rate limiting based on response latency",
+			Example:    "middleware.AdaptiveRateLimitMiddleware(5, 2, 10, 50*time.Millisecond)",
+			ConfigType: "initialRate, minRate, maxRate int, targetLatency time.Duration",
+		},
+		{
+			Name:       "HealthAwareAdaptiveRateLimitMiddleware",
+			Purpose:    "Health-aware adaptive rate limiting with circuit breaker integration",
+			Example:    "middleware.HealthAwareAdaptiveRateLimitMiddleware(5, 2, 10, 50*time.Millisecond, \"openai\", checker, breaker)",
+			ConfigType: "initialRate, minRate, maxRate int, targetLatency time.Duration, providerName string, checker *HealthChecker, breaker *CircuitBreaker",
+		},
+		{
+			Name:       "ProviderAwareConcurrencyLimitMiddleware",
+			Purpose:    "Provider-aware adaptive concurrency control with PID tuning",
+			Example:    "middleware.ProviderAwareConcurrencyLimitMiddleware(limiter)",
+			ConfigType: "limiter ProviderAwareLimiter",
+		},
+		{
+			Name:       "ProviderAwareConcurrencyLimitMiddlewareWithConfig",
+			Purpose:    "Provider-aware adaptive concurrency control with configurable provider-awareness",
+			Example:    "middleware.ProviderAwareConcurrencyLimitMiddlewareWithConfig(middleware.ProviderAwareConcurrencyLimitConfig{Limiter: limiter, EnableProviderAware: true})",
+			ConfigType: "ProviderAwareConcurrencyLimitConfig",
+		},
 	}
 }
 
 // ==================== Error Standardization ====================
+
+// ProviderAwareLimiter defines the interface for provider-aware adaptive limiters
+// This interface allows middleware to work with any limiter implementation
+// without creating import cycles
+type ProviderAwareLimiter interface {
+	// Acquire acquires a slot from the global limiter
+	Acquire(ctx context.Context) bool
+
+	// AcquireWithProvider acquires a slot with provider/model awareness
+	AcquireWithProvider(ctx context.Context, provider, model string) bool
+
+	// Release releases a slot to the global limiter
+	Release()
+
+	// ReleaseWithProvider releases a slot with provider/model awareness
+	ReleaseWithProvider(provider, model string)
+
+	// RecordLatency records latency for global limiter
+	RecordLatency(latency time.Duration)
+
+	// RecordLatencyWithProvider records latency with provider/model and error info
+	RecordLatencyWithProvider(latency time.Duration, provider, model string, err error)
+}
 
 // MiddlewareError provides structured error information for middleware failures
 type MiddlewareError struct {
