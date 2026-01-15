@@ -24,6 +24,14 @@ func (m *mockToolProvider) Name() string {
 	return "mock"
 }
 
+func (m *mockToolProvider) SupportedCapabilities() []types.ModelCapability {
+	return []types.ModelCapability{
+		types.CapabilityText,
+		types.CapabilityChat,
+		types.CapabilityFunctions,
+	}
+}
+
 func (m *mockToolProvider) Text(ctx context.Context, request types.TextRequest) (*types.TextResponse, error) {
 	if m.callCount >= len(m.responses) {
 		return nil, fmt.Errorf("no more mock responses available")

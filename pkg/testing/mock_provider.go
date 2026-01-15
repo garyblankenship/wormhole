@@ -65,6 +65,19 @@ func (m *MockProvider) Name() string {
 	return m.name
 }
 
+// SupportedCapabilities returns the capabilities supported by MockProvider
+func (m *MockProvider) SupportedCapabilities() []types.ModelCapability {
+	return []types.ModelCapability{
+		types.CapabilityText,
+		types.CapabilityChat,
+		types.CapabilityStructured,
+		types.CapabilityEmbeddings,
+		types.CapabilityAudio,
+		types.CapabilityImages,
+		types.CapabilityStream,
+	}
+}
+
 // Text returns a mocked text response
 func (m *MockProvider) Text(ctx context.Context, request types.TextRequest) (*types.TextResponse, error) {
 	if m.shouldError {

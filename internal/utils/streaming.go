@@ -2,16 +2,26 @@ package utils
 
 import (
 	"bufio"
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"io"
 	"strings"
+	"sync"
 
 	"github.com/garyblankenship/wormhole/pkg/types"
 )
 
 // Stream sentinel value
 const streamDoneMarker = "[DONE]"
+
+// lineBufferPool pools byte slices for line reading to reduce allocations
+var lineBufferPool = sync.Pool{
+	New: func() any {
+		// Start with 1KB buffer, typical line size
+		return make([]byte, 0, 1024)
+	},
+}
 
 // SSEParser parses Server-Sent Events streams
 type SSEParser struct {
@@ -40,9 +50,11 @@ func (p *SSEParser) Parse() (*SSEEvent, error) {
 		// Check if we should return the event (EOF or empty line with data)
 		shouldReturn, returnErr := p.shouldReturnWithError(line, event, eof)
 		if returnErr != nil {
+			p.returnToPool(line)
 			return nil, returnErr
 		}
 		if shouldReturn {
+			p.returnToPool(line)
 			return event, nil
 		}
 
@@ -50,15 +62,19 @@ func (p *SSEParser) Parse() (*SSEEvent, error) {
 		if p.shouldSkip(line) {
 			// If we hit EOF while skipping empty lines, return EOF if no event data
 			if eof && !p.hasEventData(event) {
+				p.returnToPool(line)
 				return nil, io.EOF
 			}
+			p.returnToPool(line)
 			continue
 		}
 
 		// Parse and apply field to event
 		if err := p.parseField(line, event); err != nil {
+			p.returnToPool(line)
 			continue // Invalid field format, skip
 		}
+		p.returnToPool(line)
 
 		// Return event if we reached EOF after processing
 		if eof {
@@ -68,27 +84,77 @@ func (p *SSEParser) Parse() (*SSEEvent, error) {
 }
 
 // readLine reads next line and handles EOF
-func (p *SSEParser) readLine() (string, bool, error) {
-	line, err := p.reader.ReadString('\n')
+func (p *SSEParser) readLine() ([]byte, bool, error) {
+	// Use ReadSlice to avoid allocation, then copy to pooled buffer
+	slice, err := p.reader.ReadSlice('\n')
 
-	// Handle EOF with remaining content
-	if err == io.EOF && line != "" {
-		return strings.TrimSpace(line), true, nil
+	// Helper to trim trailing newline characters
+	trimNewline := func(s []byte) []byte {
+		if len(s) > 0 && s[len(s)-1] == '\n' {
+			s = s[:len(s)-1]
+			if len(s) > 0 && s[len(s)-1] == '\r' {
+				s = s[:len(s)-1]
+			}
+		}
+		return s
 	}
 
-	// Handle other errors
-	if err != nil && err != io.EOF {
-		return "", false, err
+	// Check if we need to handle EOF
+	if err == io.EOF {
+		if len(slice) == 0 {
+			return nil, true, io.EOF
+		}
+		// Have data before EOF, process it
+		trimmed := trimNewline(slice)
+		line := p.copyToPooledBuffer(trimmed)
+		return line, true, nil
 	}
 
-	return strings.TrimSpace(line), err == io.EOF, nil
+	// Handle other errors (buffer too small)
+	if err != nil && err != bufio.ErrBufferFull {
+		return nil, false, err
+	}
+
+	// If buffer was full, slice contains partial line
+	// Need to read more (rare case for SSE)
+	if err == bufio.ErrBufferFull {
+		// For SSE, lines should be short. This is unexpected.
+		// Fall back to ReadString for simplicity
+		lineStr, err2 := p.reader.ReadString('\n')
+		if err2 != nil {
+			return nil, false, err2
+		}
+		trimmed := trimNewline([]byte(lineStr))
+		line := p.copyToPooledBuffer(trimmed)
+		return line, false, nil
+	}
+
+	// Normal case: successful read
+	trimmed := trimNewline(slice)
+	line := p.copyToPooledBuffer(trimmed)
+	return line, false, nil
+}
+
+// copyToPooledBuffer copies a byte slice to a pooled buffer
+// Caller must return the buffer to pool after use
+func (p *SSEParser) copyToPooledBuffer(slice []byte) []byte {
+	buf := lineBufferPool.Get().([]byte)
+	buf = buf[:0] // reset length
+	buf = append(buf, slice...)
+	return buf
+}
+
+// returnToPool returns a buffer to the pool
+// This should be called by Parse after processing a line
+func (p *SSEParser) returnToPool(buf []byte) {
+	lineBufferPool.Put(buf[:0])
 }
 
 // shouldReturn checks if event is complete and should be returned
 // Returns (shouldReturn bool, returnError error)
-func (p *SSEParser) shouldReturnWithError(line string, event *SSEEvent, isEOF bool) (bool, error) {
+func (p *SSEParser) shouldReturnWithError(line []byte, event *SSEEvent, isEOF bool) (bool, error) {
 	// Empty line signals end of event
-	if line == "" {
+	if len(line) == 0 {
 		if p.hasEventData(event) {
 			return true, nil
 		}
@@ -104,8 +170,8 @@ func (p *SSEParser) shouldReturnWithError(line string, event *SSEEvent, isEOF bo
 }
 
 // shouldSkip checks if line should be skipped (comments)
-func (p *SSEParser) shouldSkip(line string) bool {
-	return line == "" || strings.HasPrefix(line, ":")
+func (p *SSEParser) shouldSkip(line []byte) bool {
+	return len(line) == 0 || (len(line) > 0 && line[0] == ':')
 }
 
 // hasEventData checks if event has meaningful data
@@ -114,14 +180,14 @@ func (p *SSEParser) hasEventData(event *SSEEvent) bool {
 }
 
 // parseField parses a field line and updates the event
-func (p *SSEParser) parseField(line string, event *SSEEvent) error {
-	parts := strings.SplitN(line, ":", 2)
+func (p *SSEParser) parseField(line []byte, event *SSEEvent) error {
+	parts := bytes.SplitN(line, []byte(":"), 2)
 	if len(parts) < 2 {
 		return fmt.Errorf("invalid field format")
 	}
 
-	field := strings.TrimSpace(parts[0])
-	value := strings.TrimSpace(parts[1])
+	field := strings.TrimSpace(string(parts[0]))
+	value := strings.TrimSpace(string(parts[1]))
 
 	p.applyField(field, value, event)
 	return nil

@@ -12,7 +12,7 @@ import (
 
 func TestNewSecureHTTPClient(t *testing.T) {
 	// Test 1: Default secure client
-	client := NewSecureHTTPClient(30*time.Second, nil, nil)
+	client := NewSecureHTTPClient(30*time.Second, nil, nil, "")
 	if client == nil {
 		t.Fatal("NewSecureHTTPClient returned nil")
 	}
@@ -22,7 +22,7 @@ func TestNewSecureHTTPClient(t *testing.T) {
 
 	// Test 2: Client with custom TLS config
 	tlsConfig := config.DefaultTLSConfig().WithMinVersion(tls.VersionTLS13)
-	client2 := NewSecureHTTPClient(60*time.Second, &tlsConfig, nil)
+	client2 := NewSecureHTTPClient(60*time.Second, &tlsConfig, nil, "")
 	if client2 == nil {
 		t.Fatal("NewSecureHTTPClient with custom TLS returned nil")
 	}
@@ -224,7 +224,7 @@ func TestHTTPClientCreationWithTransportConfig(t *testing.T) {
 			0,
 		)
 
-	client := NewSecureHTTPClient(30*time.Second, nil, &transportConfig)
+	client := NewSecureHTTPClient(30*time.Second, nil, &transportConfig, "")
 	if client == nil {
 		t.Fatal("NewSecureHTTPClient with custom transport config returned nil")
 	}
@@ -256,7 +256,7 @@ func TestTransportCacheMetrics(t *testing.T) {
 	configA.MaxIdleConnsPerHost = 1111
 
 	// Create first client with configA - likely a miss (new transport)
-	client1 := NewSecureHTTPClient(30*time.Second, nil, &configA)
+	client1 := NewSecureHTTPClient(30*time.Second, nil, &configA, "")
 	if client1 == nil {
 		t.Fatal("NewSecureHTTPClient returned nil")
 	}
@@ -269,7 +269,7 @@ func TestTransportCacheMetrics(t *testing.T) {
 	hitDelta := metrics1.Hits - initial.Hits
 
 	// Create second client with same configA - should be a hit (cached transport)
-	client2 := NewSecureHTTPClient(30*time.Second, nil, &configA)
+	client2 := NewSecureHTTPClient(30*time.Second, nil, &configA, "")
 	if client2 == nil {
 		t.Fatal("NewSecureHTTPClient returned nil")
 	}
@@ -283,7 +283,7 @@ func TestTransportCacheMetrics(t *testing.T) {
 	configB := DefaultHTTPTransportConfig()
 	configB.MaxIdleConns = 8888
 	configB.MaxIdleConnsPerHost = 2222
-	client3 := NewSecureHTTPClient(30*time.Second, nil, &configB)
+	client3 := NewSecureHTTPClient(30*time.Second, nil, &configB, "")
 	if client3 == nil {
 		t.Fatal("NewSecureHTTPClient returned nil")
 	}
