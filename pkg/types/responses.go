@@ -3,6 +3,8 @@ package types
 import (
 	"encoding/json"
 	"time"
+
+	"github.com/garyblankenship/wormhole/internal/pool"
 )
 
 // FinishReason represents why the model stopped generating
@@ -90,11 +92,12 @@ func (r *StructuredResponse) ContentAs(target any) error {
 		return nil
 	}
 
-	// Marshal and unmarshal for type conversion
-	jsonBytes, err := json.Marshal(r.Data)
+	// Marshal and unmarshal for type conversion using pooled buffer
+	jsonBytes, err := pool.Marshal(r.Data)
 	if err != nil {
 		return err
 	}
+	defer pool.Return(jsonBytes)
 	return json.Unmarshal(jsonBytes, target)
 }
 

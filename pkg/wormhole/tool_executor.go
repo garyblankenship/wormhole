@@ -8,6 +8,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/garyblankenship/wormhole/internal/pool"
 	"github.com/garyblankenship/wormhole/pkg/types"
 	"github.com/garyblankenship/wormhole/pkg/validation"
 )
@@ -175,13 +176,14 @@ func (e *ToolExecutor) validateOutputSize(result any) error {
 		return nil
 	}
 
-	// Try to estimate size by marshaling to JSON
-	jsonData, err := json.Marshal(result)
+	// Try to estimate size by marshaling to JSON using pooled buffer
+	jsonData, err := pool.Marshal(result)
 	if err != nil {
 		// If we can't marshal, we can't validate - log warning but allow
 		// In production, you might want to handle this differently
 		return nil
 	}
+	defer pool.Return(jsonData)
 
 	if len(jsonData) > e.safetyConfig.MaxToolOutputSize {
 		return fmt.Errorf("output size %d bytes exceeds limit of %d bytes", len(jsonData), e.safetyConfig.MaxToolOutputSize)

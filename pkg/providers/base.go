@@ -14,6 +14,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/garyblankenship/wormhole/internal/pool"
 	"github.com/garyblankenship/wormhole/internal/utils"
 	"github.com/garyblankenship/wormhole/pkg/config"
 	"github.com/garyblankenship/wormhole/pkg/types"
@@ -47,6 +48,27 @@ func (r *pooledBytesReader) Read(p []byte) (n int, err error) {
 		if !r.returned {
 			// Return slice to pool, resetting length to 0 but keeping capacity
 			requestBodyPool.Put(r.bytes[:0])
+			r.returned = true
+		}
+		return 0, io.EOF
+	}
+	n = copy(p, r.bytes[r.pos:])
+	r.pos += n
+	return n, nil
+}
+
+// jsonPooledReader is an io.Reader that returns its underlying byte slice to the JSON buffer pool after reading
+type jsonPooledReader struct {
+	bytes   []byte
+	pos     int
+	returned bool
+}
+
+func (r *jsonPooledReader) Read(p []byte) (n int, err error) {
+	if r.pos >= len(r.bytes) {
+		if !r.returned {
+			// Return slice to JSON buffer pool
+			pool.Return(r.bytes)
 			r.returned = true
 		}
 		return 0, io.EOF
@@ -251,23 +273,16 @@ func (p *BaseProvider) marshalRequestBody(body any) (io.Reader, error) {
 		return nil, nil
 	}
 
-	// Marshal to temporary slice to determine size
-	jsonBody, err := json.Marshal(body)
+	// Use pooled JSON marshaling
+	bytes, err := pool.Marshal(body)
 	if err != nil {
 		return nil, types.Errorf("marshal request body", err)
 	}
 
-	// Get pooled slice with sufficient capacity
-	bytes := requestBodyPool.Get().([]byte)
-	if cap(bytes) < len(jsonBody) {
-		// Pooled slice too small, allocate new one
-		bytes = make([]byte, 0, len(jsonBody))
-	}
-	bytes = bytes[:0] // Reset length
-	bytes = append(bytes, jsonBody...) // Copy data
-
 	// Create pooled reader that will return slice to pool after reading
-	return &pooledBytesReader{bytes: bytes}, nil
+	// Note: pooledBytesReader uses requestBodyPool, but we want to use pool.Return
+	// So we need a custom reader that calls pool.Return
+	return &jsonPooledReader{bytes: bytes}, nil
 }
 
 // setRequestHeaders sets common and custom headers

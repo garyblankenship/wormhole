@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 
+	"github.com/garyblankenship/wormhole/internal/pool"
 	"github.com/garyblankenship/wormhole/pkg/types"
 )
 
@@ -60,12 +61,18 @@ func (b *StructuredRequestBuilder) SystemPrompt(prompt string) *StructuredReques
 
 // Schema sets the JSON schema for the response
 func (b *StructuredRequestBuilder) Schema(schema any) *StructuredRequestBuilder {
-	schemaBytes, err := json.Marshal(schema)
+	schemaBytes, err := pool.Marshal(schema)
 	if err != nil {
 		// Store error to return during Generate
 		b.request.Schema = nil
 	} else {
-		b.request.Schema = schemaBytes
+		// Note: We need to copy the data since pool.Marshal returns a pooled buffer
+		// that must be returned to the pool. The StructuredRequest stores the schema
+		// for later use, so we need to make a copy.
+		copiedBytes := make([]byte, len(schemaBytes))
+		copy(copiedBytes, schemaBytes)
+		b.request.Schema = copiedBytes
+		pool.Return(schemaBytes)
 	}
 	return b
 }
@@ -149,10 +156,11 @@ func (b *StructuredRequestBuilder) GenerateAs(ctx context.Context, result any) e
 	}
 
 	// Marshal the response data to JSON then unmarshal into the result
-	jsonBytes, err := json.Marshal(response.Data)
+	jsonBytes, err := pool.Marshal(response.Data)
 	if err != nil {
 		return fmt.Errorf("failed to marshal response data: %w", err)
 	}
+	defer pool.Return(jsonBytes)
 
 	if err := json.Unmarshal(jsonBytes, result); err != nil {
 		return fmt.Errorf("failed to unmarshal response data: %w", err)
