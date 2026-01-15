@@ -1,209 +1,272 @@
-# Wormhole SDK Architecture Flow
+# Wormhole SDK - Architecture Flow
 
-## Overview
-Wormhole SDK is a unified LLM provider abstraction layer written in Go. It provides a consistent interface for interacting with multiple LLM providers (OpenAI, Anthropic, Gemini, Ollama, OpenRouter) while maintaining provider-specific capabilities and optimizations.
+**Project**: Wormhole - Unified LLM SDK for Go
+**Type**: Library (SDK) with CLI examples
+**Stack**: Go 1.23, HTTP client, provider abstractions
+**Entry points**: examples/wormhole-cli/main.go, pkg/wormhole/*.go
+**Key files**: pkg/wormhole/*.go (core SDK), pkg/types/*.go (types), pkg/middleware/*.go (middleware), pkg/providers/*.go (provider implementations)
+**Build**: `go build ./...`, `go test ./pkg/wormhole/... -short`
+**External services**: Multiple AI providers (OpenAI, Anthropic, Gemini, OpenRouter, Ollama, LM Studio, Mistral, etc.)
+**Concurrency model**: Goroutines, async processing, middleware chain
 
-## Core Architecture Components
+**Created**: 2026-01-14
+**Audit mode**: flow (lean)
 
-### 1. Wormhole Client (`pkg/wormhole/wormhole.go`)
-**Primary entry point**: The `Wormhole` struct manages provider lifecycle, caching, and request routing.
+---
 
-**Key responsibilities**:
-- Provider factory registration and instantiation
-- Provider caching with reference counting
-- Request builder creation (Text, Structured, Embeddings, Image, Audio, Batch)
-- Tool registry management
-- Model discovery service coordination
-- Configuration validation and defaults
+## 1. Mental Model
 
-**Concurrency patterns**:
-- `sync.RWMutex` for provider map access
-- Reference counting for cached providers
-- `sync.Once` for idempotent close operations
-- Stale provider cleanup with LRU-like logic
+### What Wormhole Is
+A **unified provider abstraction layer** that normalizes 10+ different AI provider APIs into a single Go interface. Think of it as a **database driver** for LLMs - you write once, it runs anywhere.
 
-### 2. Provider Abstraction Layer (`pkg/types/provider.go`)
-**Interface hierarchy**:
-- `Provider` interface: Unified interface with default "not implemented" implementations
-- `BaseProvider` struct: Embedded by concrete providers for common functionality
-- Provider-specific implementations in `pkg/providers/`
+### Core Metaphor: Plug Adaptor
+```go
+// Traditional: Vendor-locked
+openaiClient.ChatCompletion()  // OpenAI specific
+anthropicClient.Messages()     // Anthropic specific
 
-**Request/Response types**:
-- Strongly typed request/response structures for each operation type
-- Common message types (`Message`, `Conversation`) for chat interfaces
-- Error standardization with `WormholeError` type
-
-### 3. Provider Implementations (`pkg/providers/`)
-**Base provider** (`pkg/providers/base.go`):
-- HTTP client management with TLS configuration
-- Retry logic integration via `RetryableHTTPClient`
-- Common error handling and response parsing
-- API key validation and masking
-
-**Concrete providers**:
-- OpenAI (`openai/`): OpenAI API compatibility
-- Anthropic (`anthropic/`): Claude API support
-- Gemini (`gemini/`): Google Gemini API
-- Ollama (`ollama/`): Local Ollama server
-- OpenRouter (`openrouter/`): OpenRouter proxy service
-
-### 4. Middleware System (`pkg/middleware/`)
-**Two middleware systems**:
-1. **Type-safe middleware** (`types.ProviderMiddlewareChain`): Method-specific middleware with compile-time safety
-2. **Generic middleware** (`middleware.Chain`): Legacy system using `any` types (deprecated)
-
-**Available middleware**:
-- Metrics: Request timing and success/failure tracking
-- Logging: Request/response logging with structured output
-- Timeout: Context timeout enforcement
-- Circuit breaker: Failure detection and automatic disablement
-- Rate limiting: Request rate control
-- Load balancing: Provider selection and failover
-- Caching: Response caching with TTL
-
-### 5. Request Builder Pattern (`pkg/wormhole/*_builder.go`)
-**Builder types**:
-- `TextRequestBuilder`: Text generation with conversation support
-- `StructuredRequestBuilder`: Structured output generation
-- `EmbeddingsRequestBuilder`: Vector embeddings
-- `ImageRequestBuilder`: Image generation
-- `AudioRequestBuilder`: Audio transcription/synthesis
-- `BatchBuilder`: Concurrent batch execution
-
-**Builder features**:
-- Fluent API with method chaining
-- Immutable cloning for configuration reuse
-- Provider override support
-- Base URL customization for OpenAI-compatible APIs
-
-### 6. Tool Execution System (`pkg/wormhole/tool_*.go`)
-**Components**:
-- `ToolRegistry`: Tool registration and lookup
-- `ToolExecutor`: Tool execution with safety controls
-- `ToolSafetyConfig`: Configurable safety limits
-
-**Safety features**:
-- Concurrency limiting
-- Circuit breaker for error detection
-- Argument schema validation
-- Retry logic for transient failures
-
-### 7. Model Discovery Service (`pkg/discovery/`)
-**Dynamic model catalog**:
-- Background model fetching from provider APIs
-- Caching with TTL and stale-while-revalidate
-- Parallel model fetching across providers
-- Offline mode support
-
-**Fetchers**:
-- Provider-specific fetchers in `pkg/discovery/fetchers/`
-- Support for OpenAI, Anthropic, Ollama, OpenRouter
-- Configurable refresh intervals
-
-## Data Flow
-
-### Standard Request Flow
-```
-User Code → Request Builder → Wormhole Client → Provider Cache → Provider Instance → HTTP Client → LLM API
+// Wormhole: Unified interface
+wormhole.Text()               // Works with ANY provider
 ```
 
-### Provider Resolution Flow
+### Design Philosophy
+1. **Provider Agnostic**: Switch providers without code changes
+2. **Middleware First**: Observability via composable middleware
+3. **Performance Aware**: Caching, batching, adaptive concurrency
+4. **Developer Experience**: Strong types, clear errors, CLI examples
+
+### Key Abstractions
+- `types.Provider` - Core interface all providers implement
+- `BaseProvider` - Default "not implemented" implementations
+- `Wormhole` - Main client with caching, middleware, discovery
+- `ProviderMiddlewareChain` - Type-safe middleware system
+
+---
+
+## 2. Architecture
+
+### High-Level View
 ```
-1. Request specifies provider (or uses default)
-2. Check provider cache (read lock)
-3. If cached: increment ref count, return provider
-4. If not cached: acquire write lock, create provider via factory
-5. Cache provider, set ref count = 1
-6. Return provider
+┌─────────────────────────────────────────────────────────┐
+│                     Application                          │
+│  (Your code using Wormhole)                              │
+└─────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌─────────────────────────────────────────────────────────┐
+│                    Wormhole Client                       │
+│  • Provider selection & routing                          │
+│  • Adaptive concurrency control                          │
+│  • Caching (provider instances, responses)               │
+│  • Middleware chain application                          │
+└─────────────────────────────────────────────────────────┘
+                              │
+                    ┌─────────┴─────────┐
+                    │                   │
+                    ▼                   ▼
+        ┌─────────────────┐     ┌─────────────────┐
+        │   Provider      │     │   Provider      │
+        │   OpenAI        │     │   Anthropic     │
+        └─────────────────┘     └─────────────────┘
+                    │                   │
+                    ▼                   ▼
+            ┌──────────────┐     ┌──────────────┐
+            │  HTTP API    │     │  HTTP API    │
+            │  OpenAI.com  │     │ Anthropic.com│
+            └──────────────┘     └──────────────┘
 ```
 
-### Middleware Application Flow
+### Core Components
+
+**1. Types Layer (`pkg/types/`)**
+- `Provider` interface - Unified 10+ method interface
+- `BaseProvider` - Default implementations (return "not implemented")
+- Request/response types - Strongly typed API contracts
+- Error types - Provider-specific error wrapping
+
+**2. Provider Implementations (`pkg/providers/`)**
+- Each provider embeds `BaseProvider`
+- Override only supported methods
+- Handle provider-specific API formats
+- Examples: OpenAI, Anthropic, Gemini, Ollama, OpenRouter
+
+**3. Middleware System (`pkg/middleware/`)**
+- Two systems: legacy generic `Chain`, type-safe `ProviderMiddlewareChain`
+- Built-in middleware: metrics, logging, retry, circuit breaker, cache
+- Context-aware labeling (provider, model, method)
+
+**4. Core Client (`pkg/wormhole/`)**
+- `Wormhole` struct - Main entry point
+- Provider factory registry - Lazy instantiation
+- Adaptive concurrency control - PID controller for rate limiting
+- Idempotency cache - Avoid duplicate requests
+- Tool registry - Function calling support
+
+**5. Discovery Service (`pkg/discovery/`)**
+- Dynamic model fetching from provider APIs
+- Version management (GPT-5.2 vs GPT-5.1)
+- Caching to avoid API rate limits
+
+### Concurrency Patterns
+- **Goroutine per request** with context propagation
+- **Sync.Map** for idempotency cache (thread-safe)
+- **Atomic counters** for metrics (lock-free)
+- **WaitGroup** for graceful shutdown tracking
+- **Adaptive limiter** - PID controller adjusts concurrency based on success rate
+
+---
+
+## 3. Data Flow
+
+### Text Generation Request
 ```
-1. Request builder creates typed request
-2. Wormhole gets provider
-3. Apply type-safe middleware chain (if configured)
-4. Call provider method through middleware wrappers
-5. Middleware processes request/response
-6. Return to caller
+1. Application calls wormhole.Text(request)
+   │
+2. Wormhole resolves provider → cachedProvider or factory.create()
+   │   • Provider caching with ref counting & LRU eviction
+   │
+3. Apply middleware chain (metrics → logging → retry → circuit breaker)
+   │   • Each middleware wraps and calls next()
+   │
+4. Provider implementation translates to provider-specific API
+   │   • OpenAI: POST /v1/chat/completions
+   │   • Anthropic: POST /v1/messages
+   │   • Gemini: POST /v1/models/gemini-2.0:generateContent
+   │
+5. HTTP client executes request with timeout context
+   │
+6. Response parsed into unified TextResponse
+   │
+7. Return to application
 ```
 
-### Error Handling Flow
+### Streaming Flow
 ```
-1. Provider HTTP layer catches errors
-2. Map HTTP status codes to Wormhole error codes
-3. Wrap with provider context
-4. Middleware can add additional context
-5. Return structured WormholeError to caller
+1. wormhole.Stream(request) returns <-chan TextChunk
+   │
+2. Provider creates goroutine that:
+   │   • Opens SSE connection to provider
+   │   • Parses streaming JSON chunks
+   │   • Sends chunks to channel
+   │
+3. Application consumes from channel
+   │
+4. Goroutine cleans up on completion/error
 ```
 
-## Concurrency Patterns
+### Middleware Chain Execution
+```
+MetricsMiddleware (start timer)
+   │
+LoggingMiddleware (log request)
+   │
+RetryMiddleware (attempt N times)
+   │
+CircuitBreakerMiddleware (check health)
+   │
+CacheMiddleware (check cache)
+   │
+Actual Provider Method
+   │
+MetricsMiddleware (record duration, error)
+   │
+Return to caller
+```
 
-### Provider Caching
-- Double-checked locking pattern for thread-safe provider creation
-- Reference counting for shared provider instances
-- Stale provider cleanup based on last-used timestamp
+### Adaptive Concurrency Flow
+```
+┌─────────────┐     ┌─────────────┐     ┌─────────────┐
+│  Success    │────▶│   PID       │────▶│  Adjust     │
+│  Rate       │     │ Controller  │     │  Concurrency│
+└─────────────┘     └─────────────┘     └─────────────┘
+       ▲                    │                    │
+       │                    ▼                    ▼
+┌─────────────┐     ┌─────────────┐     ┌─────────────┐
+│  Monitor    │◀────│  Requests   │◀────│  Execute    │
+│  Outcomes   │     │  In Flight  │     │  Requests   │
+└─────────────┘     └─────────────┘     └─────────────┘
+```
 
-### Batch Execution
-- Semaphore-based concurrency limiting
-- WaitGroup for request completion tracking
-- Context cancellation propagation
-- Result ordering preservation
+---
 
-### Discovery Service
-- Background goroutine with ticker for periodic refresh
-- Parallel model fetching with error channel
-- Graceful shutdown with wait group
-- Cache staleness detection
+## 4. Failure Modes & Recovery
 
-### Tool Execution
-- Concurrency limiter for parallel tool calls
-- Circuit breaker for error rate detection
-- Retry executor with exponential backoff
+### Provider-Specific Failures
+| Failure | Detection | Recovery |
+|---------|-----------|----------|
+| **Invalid API key** | `validateAPIKey()` format check | Return error immediately |
+| **Provider API down** | HTTP 5xx, timeout | Circuit breaker → fail fast |
+| **Rate limiting** | HTTP 429, provider headers | Retry with exponential backoff |
+| **Model not found** | HTTP 404 | Discovery service updates cache |
+| **Network partition** | Context timeout | Fail request, log metric |
 
-## Memory Management
+### SDK Internal Failures
+| Failure | Detection | Recovery |
+|---------|-----------|----------|
+| **Provider cache leak** | Ref counting mismatch | LRU eviction after timeout |
+| **Middleware chain error** | Error wrapping | Propagate with context |
+| **Adaptive limiter drift** | Success rate monitoring | PID controller reset |
+| **Tool execution deadlock** | Timeout context | Cancel goroutine, clean up |
+| **Memory leak in streaming** | Goroutine tracking | WaitGroup ensures cleanup |
 
-### Allocation Patterns
-- Request builders reuse request objects via pools
-- Response parsing minimizes allocations
-- Streaming responses use channels rather than buffers
-- Tool execution validates schemas without deep copying
+### Error Propagation Pattern
+```go
+// All errors flow through wrapIfNotWormholeError()
+err = provider.Text(ctx, req)
+if err != nil {
+    // Wrap with context if not already a WormholeError
+    return nil, wrapIfNotWormholeError("provider", "text", err)
+}
+```
 
-### Caching Strategy
-- Provider instances cached until stale/unused
-- Model discovery cache with TTL
-- Response caching via middleware (optional)
-- Tool registry uses map for O(1) lookups
+### Graceful Degradation
+1. **Circuit breaker**: After N failures, stop trying provider
+2. **Retry with backoff**: For transient network errors
+3. **Fallback providers**: Configurable provider fallback chain
+4. **Cache responses**: Idempotent requests return cached results
+5. **Timeout propagation**: Context deadlines respected at all levels
 
-## Performance Considerations
+### Monitoring Points
+- **Metrics middleware**: Latency, error rates per provider/model
+- **Enhanced metrics**: Labels (provider, model, method, error type)
+- **Cache metrics**: Hits/misses/evictions
+- **Adaptive limiter**: Current concurrency, success rate
+- **Discovery service**: Model freshness, fetch failures
 
-### Hot Paths
-1. **Provider resolution**: Double-checked locking with RWMutex
-2. **HTTP request execution**: Retry logic with exponential backoff
-3. **Response parsing**: JSON unmarshaling with type safety
-4. **Middleware chain**: Minimal overhead for common operations
+---
 
-### Optimization Opportunities
-- Provider pooling for high-concurrency scenarios
-- Request/response object pooling
-- Connection pooling at HTTP client level
-- Lazy initialization of expensive resources
+## Key Insights
 
-## Security Considerations
+### Strengths
+1. **Clean abstraction**: Single interface for 10+ providers
+2. **Observability built-in**: Middleware provides metrics out of box
+3. **Performance aware**: Caching, batching, adaptive concurrency
+4. **Strong typing**: Compile-time safety for API contracts
+5. **Gradual adoption**: `BaseProvider` makes implementing new providers easy
 
-### API Key Protection
-- Key format validation on configuration
-- Key masking in error messages and logs
-- TLS configuration with secure defaults
-- Provider-specific authentication headers
+### Areas for Attention
+1. **Dual middleware systems**: Legacy `Chain` vs type-safe `ProviderMiddlewareChain`
+2. **Provider sprawl**: 10+ implementations to maintain
+3. **Model discovery complexity**: Keeping up with rapid provider model releases
+4. **Streaming resource management**: Goroutine lifecycle needs careful tracking
 
-### Input Validation
-- Tool argument schema validation
-- Request parameter bounds checking
-- Content length limits for large inputs
-- Structured output schema enforcement
+### Evolution Trajectory
+The SDK shows **mature library patterns**:
+- Started with basic provider interface
+- Added middleware for observability
+- Introduced performance optimizations (caching, concurrency)
+- Now evolving toward **type-safe middleware** and **dynamic discovery**
 
-### Safety Controls
-- Maximum tool execution iterations
-- Timeout enforcement at multiple levels
-- Concurrency limits for parallel operations
-- Circuit breakers for error containment
+The architecture supports **both simple use** (text generation) and **advanced scenarios** (tool calling, streaming, batching, metrics).
+
+---
+
+## Flow Summary
+
+**Wormhole normalizes chaos**: It takes 10+ different AI provider APIs with varying endpoints, authentication, error formats, and capabilities, and presents a **single, consistent Go interface**.
+
+The flow is: **Request → Provider resolution → Middleware chain → Provider-specific translation → HTTP call → Unified response**.
+
+Failures are **detected, categorized, and recovered** at appropriate levels: validation (immediate), network (retry), provider (circuit breaker), system (graceful degradation).
+
+The result is **LLM infrastructure as code** - reliable, observable, and provider-agnostic.
