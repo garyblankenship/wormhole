@@ -3,6 +3,7 @@ package wormhole
 import (
 	"context"
 	"sync"
+	"time"
 
 	"github.com/garyblankenship/wormhole/pkg/types"
 )
@@ -81,6 +82,9 @@ func (b *BatchBuilder) Execute(ctx context.Context) []BatchResult {
 	resultCh := make(chan batchResult, len(b.requests))
 	var wg sync.WaitGroup
 
+	// Check if adaptive concurrency is enabled
+	adaptiveLimiter := b.wormhole.GetAdaptiveLimiter()
+
 	// Start worker goroutines
 	for w := 0; w < concurrency; w++ {
 		wg.Add(1)
@@ -88,7 +92,43 @@ func (b *BatchBuilder) Execute(ctx context.Context) []BatchResult {
 			defer wg.Done()
 			for index := range taskCh {
 				req := b.requests[index]
-				resp, err := req.Generate(ctx)
+
+				var resp *types.TextResponse
+				var err error
+				var start time.Time
+
+				// Use adaptive concurrency if enabled
+				if adaptiveLimiter != nil {
+					// Extract provider and model from request
+					provider := req.provider
+					model := req.request.Model
+
+					// Acquire slot with provider/model awareness
+					if !adaptiveLimiter.AcquireWithProvider(ctx, provider, model) {
+						// Context expired or cancelled
+						resultCh <- batchResult{
+							index:    index,
+							response: nil,
+							err:      ctx.Err(),
+						}
+						continue
+					}
+
+					// Record start time
+					start = time.Now()
+					resp, err = req.Generate(ctx)
+
+					// Record latency and error
+					latency := time.Since(start)
+					adaptiveLimiter.RecordLatencyWithProvider(latency, provider, model, err)
+
+					// Release slot
+					adaptiveLimiter.ReleaseWithProvider(provider, model)
+				} else {
+					// Use traditional fixed concurrency
+					resp, err = req.Generate(ctx)
+				}
+
 				resultCh <- batchResult{
 					index:    index,
 					response: resp,
@@ -165,6 +205,9 @@ func (b *BatchBuilder) ExecuteFirst(ctx context.Context) (*types.TextResponse, e
 		concurrency = len(b.requests)
 	}
 
+	// Check if adaptive concurrency is enabled
+	adaptiveLimiter := b.wormhole.GetAdaptiveLimiter()
+
 	type result struct {
 		resp *types.TextResponse
 		err  error
@@ -181,7 +224,42 @@ func (b *BatchBuilder) ExecuteFirst(ctx context.Context) (*types.TextResponse, e
 			defer wg.Done()
 			for index := range taskCh {
 				req := b.requests[index]
-				resp, err := req.Generate(ctx)
+
+				var resp *types.TextResponse
+				var err error
+				var start time.Time
+
+				// Use adaptive concurrency if enabled
+				if adaptiveLimiter != nil {
+					// Extract provider and model from request
+					provider := req.provider
+					model := req.request.Model
+
+					// Acquire slot with provider/model awareness
+					if !adaptiveLimiter.AcquireWithProvider(ctx, provider, model) {
+						// Context expired or cancelled, send error and continue
+						select {
+						case resultCh <- result{nil, ctx.Err()}:
+						case <-ctx.Done():
+						}
+						continue
+					}
+
+					// Record start time
+					start = time.Now()
+					resp, err = req.Generate(ctx)
+
+					// Record latency and error
+					latency := time.Since(start)
+					adaptiveLimiter.RecordLatencyWithProvider(latency, provider, model, err)
+
+					// Release slot
+					adaptiveLimiter.ReleaseWithProvider(provider, model)
+				} else {
+					// Use traditional fixed concurrency
+					resp, err = req.Generate(ctx)
+				}
+
 				select {
 				case resultCh <- result{resp, err}:
 				case <-ctx.Done():
