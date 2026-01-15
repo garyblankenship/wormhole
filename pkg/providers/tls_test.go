@@ -245,3 +245,62 @@ func TestHTTPClientCreationWithTransportConfig(t *testing.T) {
 		t.Errorf("Expected IdleConnTimeout 60s, got %v", transport.IdleConnTimeout)
 	}
 }
+
+func TestTransportCacheMetrics(t *testing.T) {
+	// Get initial metrics
+	initial := GetTransportCacheMetrics()
+
+	// Create a unique transport config that likely hasn't been cached before
+	configA := DefaultHTTPTransportConfig()
+	configA.MaxIdleConns = 9999
+	configA.MaxIdleConnsPerHost = 1111
+
+	// Create first client with configA - likely a miss (new transport)
+	client1 := NewSecureHTTPClient(30*time.Second, nil, &configA)
+	if client1 == nil {
+		t.Fatal("NewSecureHTTPClient returned nil")
+	}
+
+	metrics1 := GetTransportCacheMetrics()
+	// We can't guarantee miss increase if configA was already cached from previous tests
+	// But we can verify that hits increased if it was a hit, or misses increased if it was a miss
+	// Just record the delta
+	missDelta := metrics1.Misses - initial.Misses
+	hitDelta := metrics1.Hits - initial.Hits
+
+	// Create second client with same configA - should be a hit (cached transport)
+	client2 := NewSecureHTTPClient(30*time.Second, nil, &configA)
+	if client2 == nil {
+		t.Fatal("NewSecureHTTPClient returned nil")
+	}
+
+	metrics2 := GetTransportCacheMetrics()
+	if metrics2.Hits <= metrics1.Hits {
+		t.Errorf("Expected hit count to increase for same config, got %d (previous %d)", metrics2.Hits, metrics1.Hits)
+	}
+
+	// Create a different transport config - should be a miss (different fingerprint)
+	configB := DefaultHTTPTransportConfig()
+	configB.MaxIdleConns = 8888
+	configB.MaxIdleConnsPerHost = 2222
+	client3 := NewSecureHTTPClient(30*time.Second, nil, &configB)
+	if client3 == nil {
+		t.Fatal("NewSecureHTTPClient returned nil")
+	}
+
+	metrics3 := GetTransportCacheMetrics()
+	if metrics3.Misses <= metrics2.Misses {
+		t.Errorf("Expected miss count to increase with different config, got %d (previous %d)", metrics3.Misses, metrics2.Misses)
+	}
+
+	// Size should increase with new transports (unless configB was already cached)
+	sizeIncreased := metrics3.Size > metrics2.Size
+	if !sizeIncreased && metrics3.Misses > metrics2.Misses {
+		t.Errorf("Miss count increased but cache size didn't: size %d (previous %d)", metrics3.Size, metrics2.Size)
+	}
+
+	// Verify that at least one hit occurred (second client)
+	if metrics2.Hits == initial.Hits && missDelta == 0 && hitDelta == 0 {
+		t.Log("Note: All transports were already cached from previous tests")
+	}
+}

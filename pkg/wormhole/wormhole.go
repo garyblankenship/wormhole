@@ -81,6 +81,14 @@ type Wormhole struct {
 	toolRegistry       *ToolRegistry                  // Registry of available tools for function calling
 	discoveryService   *discovery.DiscoveryService    // Dynamic model discovery service
 
+	// Cache metrics
+	cacheHits      atomic.Int64
+	cacheMisses    atomic.Int64
+	cacheEvictions atomic.Int64
+
+	// Adaptive concurrency control
+	adaptiveLimiter *EnhancedAdaptiveLimiter
+
 	// Shutdown management
 	shutdownOnce       sync.Once
 	shutdownChan       chan struct{}          // Signal for graceful shutdown
@@ -288,6 +296,7 @@ func (p *Wormhole) Provider(name string) (types.Provider, error) {
 		// Increment reference count and update last used time (atomic)
 		atomic.AddInt32(&cp.refCount, 1)
 		atomic.StoreInt64(&cp.lastUsed, time.Now().UnixNano())
+		p.cacheHits.Add(1)
 		p.providersMutex.RUnlock()
 		return cp.provider, nil
 	}
@@ -302,6 +311,7 @@ func (p *Wormhole) Provider(name string) (types.Provider, error) {
 		// Increment reference count and update last used time (atomic)
 		atomic.AddInt32(&cp.refCount, 1)
 		atomic.StoreInt64(&cp.lastUsed, time.Now().UnixNano())
+		p.cacheHits.Add(1)
 		return cp.provider, nil
 	}
 
@@ -360,6 +370,7 @@ func (p *Wormhole) Provider(name string) (types.Provider, error) {
 
 	// Cache the provider
 	p.providers[name] = cp
+	p.cacheMisses.Add(1)
 	return provider, nil
 }
 
@@ -1023,12 +1034,103 @@ func (p *Wormhole) CleanupStaleProviders(maxAge time.Duration, maxCount int) {
 				p.config.Logger.Warn("error closing stale provider", "provider", name, "error", err)
 			}
 			delete(p.providers, name)
+			p.cacheEvictions.Add(1)
 		}
 	}
 
-	// Enforce max count
-	if len(p.providers) > maxCount {
-		// Remove oldest unused providers
-		// TODO: Implement LRU cleanup logic
+	// Enforce max count (skip if maxCount <= 0)
+	if maxCount > 0 && len(p.providers) > maxCount {
+		// Remove oldest unused providers (LRU)
+		// Collect providers with zero reference count
+		type providerInfo struct {
+			name     string
+			lastUsed int64
+		}
+		unusedProviders := make([]providerInfo, 0, len(p.providers))
+
+		for name, cp := range p.providers {
+			if atomic.LoadInt32(&cp.refCount) == 0 {
+				lastUsed := atomic.LoadInt64(&cp.lastUsed)
+				unusedProviders = append(unusedProviders, providerInfo{
+					name:     name,
+					lastUsed: lastUsed,
+				})
+			}
+		}
+
+		// Sort by lastUsed ascending (oldest first)
+		sort.Slice(unusedProviders, func(i, j int) bool {
+			return unusedProviders[i].lastUsed < unusedProviders[j].lastUsed
+		})
+
+		// Remove enough providers to get under maxCount
+		neededEvictions := len(p.providers) - maxCount
+		for i := 0; i < neededEvictions && i < len(unusedProviders); i++ {
+			name := unusedProviders[i].name
+			if cp, ok := p.providers[name]; ok {
+				if err := cp.provider.Close(); err != nil && p.config.Logger != nil {
+					p.config.Logger.Warn("error closing provider during LRU eviction", "provider", name, "error", err)
+				}
+				delete(p.providers, name)
+				p.cacheEvictions.Add(1)
+			}
+		}
+
+		// If still over limit (no unused providers), log warning
+		if len(p.providers) > maxCount && p.config.Logger != nil {
+			p.config.Logger.Warn("provider cache exceeds max count but all providers are in use",
+				"current", len(p.providers), "max", maxCount)
+		}
 	}
+}
+
+// CacheMetrics holds cache performance statistics
+type CacheMetrics struct {
+	Hits      int64
+	Misses    int64
+	Evictions int64
+	Size     int
+}
+
+// GetCacheMetrics returns current cache performance statistics
+func (p *Wormhole) GetCacheMetrics() CacheMetrics {
+	p.providersMutex.RLock()
+	defer p.providersMutex.RUnlock()
+
+	return CacheMetrics{
+		Hits:      p.cacheHits.Load(),
+		Misses:    p.cacheMisses.Load(),
+		Evictions: p.cacheEvictions.Load(),
+		Size:      len(p.providers),
+	}
+}
+
+// EnableAdaptiveConcurrency enables adaptive concurrency control with the given configuration.
+// If config is nil, DefaultEnhancedAdaptiveConfig() is used.
+func (p *Wormhole) EnableAdaptiveConcurrency(config *EnhancedAdaptiveConfig) {
+	if config == nil {
+		defaultConfig := DefaultEnhancedAdaptiveConfig()
+		config = &defaultConfig
+	}
+
+	// Stop existing limiter if any
+	if p.adaptiveLimiter != nil {
+		p.adaptiveLimiter.Stop()
+	}
+
+	p.adaptiveLimiter = NewEnhancedAdaptiveLimiter(*config)
+}
+
+// GetAdaptiveLimiter returns the adaptive limiter if enabled, or nil.
+func (p *Wormhole) GetAdaptiveLimiter() *EnhancedAdaptiveLimiter {
+	return p.adaptiveLimiter
+}
+
+// GetAdaptiveConcurrencyStats returns statistics from the adaptive limiter if enabled.
+// Returns nil if adaptive concurrency is not enabled.
+func (p *Wormhole) GetAdaptiveConcurrencyStats() map[string]interface{} {
+	if p.adaptiveLimiter == nil {
+		return nil
+	}
+	return p.adaptiveLimiter.GetStats()
 }

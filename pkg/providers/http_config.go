@@ -12,6 +12,7 @@ import (
 	"net/url"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/garyblankenship/wormhole/pkg/config"
@@ -81,12 +82,20 @@ func (c HTTPTransportConfig) Fingerprint() string {
 var (
 	transportCache sync.RWMutex
 	transports = make(map[string]*http.Transport)
+
+	// Transport cache metrics
+	transportCacheHits   atomic.Int64
+	transportCacheMisses atomic.Int64
 )
 
-func getCachedTransport(key string) *http.Transport {
+func getCachedTransport(key string) (*http.Transport, bool) {
 	transportCache.RLock()
 	defer transportCache.RUnlock()
-	return transports[key]
+	transport, ok := transports[key]
+	if ok {
+		transportCacheHits.Add(1)
+	}
+	return transport, ok
 }
 
 func setCachedTransport(key string, transport *http.Transport) {
@@ -131,8 +140,11 @@ func NewSecureHTTPClient(timeout time.Duration, tlsConfig *config.TLSConfig, tra
 	key := transportConfig.Fingerprint()
 
 	// Try to get cached transport
-	transport := getCachedTransport(key)
-	if transport == nil {
+	transport, ok := getCachedTransport(key)
+	if !ok {
+		// Increment miss count
+		transportCacheMisses.Add(1)
+
 		// Create new transport with TLS config
 		transport = &http.Transport{
 			Proxy: transportConfig.Proxy,
@@ -262,6 +274,25 @@ func (c HTTPTransportConfig) Validate() error {
 	}
 
 	return nil
+}
+
+// TransportCacheMetrics holds transport cache performance statistics
+type TransportCacheMetrics struct {
+	Hits   int64
+	Misses int64
+	Size   int
+}
+
+// GetTransportCacheMetrics returns current transport cache performance statistics
+func GetTransportCacheMetrics() TransportCacheMetrics {
+	transportCache.RLock()
+	defer transportCache.RUnlock()
+
+	return TransportCacheMetrics{
+		Hits:   transportCacheHits.Load(),
+		Misses: transportCacheMisses.Load(),
+		Size:   len(transports),
+	}
 }
 
 // ==================== TLS Configuration Extraction from ProviderConfig ====================
