@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/garyblankenship/wormhole/pkg/providers"
+	transform "github.com/garyblankenship/wormhole/pkg/providers/transform"
 	"github.com/garyblankenship/wormhole/pkg/types"
 )
 
@@ -16,7 +17,10 @@ const (
 // Gemini provider implementation
 type Gemini struct {
 	*providers.BaseProvider
-	apiKey string
+	apiKey            string
+	requestBuilder    *providers.RequestBuilder
+	responseTransform *transform.ResponseTransform
+	streamingTransformer *transform.StreamingTransformer
 }
 
 // New creates a new Gemini provider
@@ -31,12 +35,27 @@ func New(apiKey string, config types.ProviderConfig) *Gemini {
 	return &Gemini{
 		BaseProvider: providers.NewBaseProvider("gemini", config),
 		apiKey:       apiKey,
+		requestBuilder: providers.NewRequestBuilder(),
+		responseTransform: transform.NewResponseTransform(),
+		streamingTransformer: nil,
 	}
 }
 
 // Name returns the provider name
 func (g *Gemini) Name() string {
 	return "gemini"
+}
+
+// SupportedCapabilities returns the capabilities supported by Gemini provider
+func (g *Gemini) SupportedCapabilities() []types.ModelCapability {
+	return []types.ModelCapability{
+		types.CapabilityText,
+		types.CapabilityChat,
+		types.CapabilityStructured,
+		types.CapabilityEmbeddings,
+		types.CapabilityStream,
+		types.CapabilityFunctions,
+	}
 }
 
 // Text generates text using Gemini models
@@ -111,7 +130,7 @@ func (g *Gemini) Embeddings(ctx context.Context, request types.EmbeddingsRequest
 		strings.HasSuffix(request.Model, ":embedding")
 
 	if !isEmbeddingModel {
-		return nil, fmt.Errorf("model '%s' does not appear to be an embedding model. Expected models containing 'embedding' or known embedding models", request.Model)
+		return nil, g.ModelErrorf("model '%s' does not appear to be an embedding model", request.Model)
 	}
 
 	payload := g.buildEmbeddingsPayload(request)
@@ -159,19 +178,24 @@ func (g *Gemini) buildTextPayload(request types.TextRequest) (map[string]any, er
 		}
 	}
 
-	// Add generation config
+	// Add generation config using shared utility
 	generationConfig := map[string]any{}
-	if request.MaxTokens != nil && *request.MaxTokens > 0 {
-		generationConfig["maxOutputTokens"] = *request.MaxTokens
+	// Use shared utility for common parameters, then map to Gemini field names
+	stdConfig := map[string]any{}
+	g.requestBuilder.AddGenerationParams(stdConfig, request.Temperature, request.TopP, request.MaxTokens, request.Stop)
+
+	// Map standard field names to Gemini-specific names
+	if maxTokens, ok := stdConfig["max_tokens"]; ok {
+		generationConfig["maxOutputTokens"] = maxTokens
 	}
-	if request.Temperature != nil {
-		generationConfig["temperature"] = *request.Temperature
+	if temp, ok := stdConfig["temperature"]; ok {
+		generationConfig["temperature"] = temp
 	}
-	if request.TopP != nil {
-		generationConfig["topP"] = *request.TopP
+	if topP, ok := stdConfig["top_p"]; ok {
+		generationConfig["topP"] = topP
 	}
-	if len(request.Stop) > 0 {
-		generationConfig["stopSequences"] = request.Stop
+	if stop, ok := stdConfig["stop"]; ok {
+		generationConfig["stopSequences"] = stop
 	}
 
 	if len(generationConfig) > 0 {

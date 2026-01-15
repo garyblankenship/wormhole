@@ -2,9 +2,10 @@ package middleware
 
 import (
 	"context"
-	"errors"
 	"sync"
 	"time"
+
+	"github.com/garyblankenship/wormhole/pkg/types"
 )
 
 // CircuitState represents the state of a circuit breaker
@@ -21,7 +22,7 @@ const (
 
 var (
 	// ErrCircuitOpen is returned when circuit breaker is open
-	ErrCircuitOpen = errors.New("circuit breaker is open")
+	ErrCircuitOpen = types.NewWormholeError(types.ErrorCodeMiddleware, "circuit breaker is open", true)
 )
 
 // CircuitBreaker implements the circuit breaker pattern

@@ -2,9 +2,10 @@ package middleware
 
 import (
 	"context"
-	"errors"
 	"sync"
 	"time"
+
+	"github.com/garyblankenship/wormhole/pkg/types"
 )
 
 // HealthStatus represents the health status of a provider
@@ -222,4 +223,4 @@ func HealthCheckMiddleware(checker *HealthChecker, providerName string) Middlewa
 }
 
 // ErrProviderUnhealthy is returned when a provider is unhealthy
-var ErrProviderUnhealthy = errors.New("provider is unhealthy")
+var ErrProviderUnhealthy = types.NewWormholeError(types.ErrorCodeMiddleware, "provider is unhealthy", true)

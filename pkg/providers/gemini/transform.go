@@ -3,8 +3,6 @@ package gemini
 import (
 	"encoding/base64"
 	"encoding/json"
-	"errors"
-	"fmt"
 	"io"
 	"strings"
 
@@ -101,7 +99,7 @@ func (g *Gemini) transformMessageToParts(msg types.Message) ([]map[string]any, e
 		parts = append(parts, map[string]any{"text": m.Content})
 
 	default:
-		return nil, fmt.Errorf("unsupported message type: %T", msg)
+		return nil, g.ProviderErrorf("unsupported message type: %T", msg)
 	}
 
 	return parts, nil
@@ -113,7 +111,7 @@ func (g *Gemini) transformMedia(media types.Media) (map[string]any, error) {
 	case *types.ImageMedia:
 		if m.URL != "" {
 			// Gemini requires base64 encoded images
-			return nil, errors.New("Gemini requires base64 encoded images, URLs are not supported")
+			return nil, g.ValidationError("Gemini requires base64 encoded images", "URLs are not supported")
 		}
 
 		return map[string]any{
@@ -132,24 +130,37 @@ func (g *Gemini) transformMedia(media types.Media) (map[string]any, error) {
 		}, nil
 
 	default:
-		return nil, fmt.Errorf("unsupported media type: %T", media)
+		return nil, g.ProviderErrorf("unsupported media type: %T", media)
 	}
 }
 
 // transformTools converts tools to Gemini format
 func (g *Gemini) transformTools(tools []types.Tool) []map[string]any {
-	var geminiTools []map[string]any
+	// Use shared RequestBuilder for common tool transformation
+	standardTools := g.requestBuilder.TransformTools(tools)
 
-	functions := make([]map[string]any, 0, len(tools))
-	for _, tool := range tools {
-		schema := g.transformToolSchema(tool.InputSchema)
-		functions = append(functions, map[string]any{
-			"name":        tool.Name,
-			"description": tool.Description,
-			"parameters":  schema,
-		})
+	// Adapt to Gemini-specific format: extract function declarations
+	functions := make([]map[string]any, 0, len(standardTools))
+	for _, stdTool := range standardTools {
+		if toolFunc, ok := stdTool["function"].(map[string]any); ok {
+			// Extract name, description, parameters from standard tool format
+			function := map[string]any{
+				"name":        toolFunc["name"],
+				"description": toolFunc["description"],
+			}
+
+			// Handle parameters - ensure type: "object" if missing
+			if params, ok := toolFunc["parameters"].(map[string]any); ok {
+				params = g.transformToolSchema(params)
+				function["parameters"] = params
+			}
+
+			functions = append(functions, function)
+		}
 	}
 
+	// Wrap functions in Gemini format
+	var geminiTools []map[string]any
 	if len(functions) > 0 {
 		geminiTools = append(geminiTools, map[string]any{
 			"functionDeclarations": functions,
@@ -298,11 +309,11 @@ func (g *Gemini) stringSchemaToMap(s *types.StringSchema, result map[string]any)
 // transformTextResponse converts Gemini response to types.TextResponse
 func (g *Gemini) transformTextResponse(response *geminiTextResponse) (*types.TextResponse, error) {
 	if response.Error != nil {
-		return nil, errors.New(response.Error.Message)
+		return nil, g.ProviderError(response.Error.Message)
 	}
 
 	if len(response.Candidates) == 0 {
-		return nil, errors.New("no candidates in response")
+		return nil, g.ProviderError("no candidates in response")
 	}
 
 	candidate := response.Candidates[0]
@@ -359,11 +370,11 @@ func (g *Gemini) transformTextResponse(response *geminiTextResponse) (*types.Tex
 // transformStructuredResponse converts Gemini response to types.StructuredResponse
 func (g *Gemini) transformStructuredResponse(response *geminiTextResponse, schema types.Schema) (*types.StructuredResponse, error) {
 	if response.Error != nil {
-		return nil, errors.New(response.Error.Message)
+		return nil, g.ProviderError(response.Error.Message)
 	}
 
 	if len(response.Candidates) == 0 {
-		return nil, errors.New("no candidates in response")
+		return nil, g.ProviderError("no candidates in response")
 	}
 
 	candidate := response.Candidates[0]
@@ -379,13 +390,13 @@ func (g *Gemini) transformStructuredResponse(response *geminiTextResponse, schem
 	// Parse JSON
 	var data any
 	if err := json.Unmarshal([]byte(text), &data); err != nil {
-		return nil, fmt.Errorf("failed to parse structured response: %w", err)
+		return nil, g.RequestError("failed to parse structured response", err)
 	}
 
 	// Validate against schema if it implements SchemaInterface
 	if schemaIface, ok := schema.(types.SchemaInterface); ok {
 		if err := schemaIface.Validate(data); err != nil {
-			return nil, fmt.Errorf("response validation failed: %w", err)
+			return nil, g.RequestError("response validation failed", err)
 		}
 	}
 
@@ -481,7 +492,7 @@ func (g *Gemini) parseStreamEvent(data string) ([]types.TextChunk, bool, error) 
 		return nil, false, err
 	}
 	if response.Error != nil {
-		return nil, false, errors.New(response.Error.Message)
+		return nil, false, g.ProviderError(response.Error.Message)
 	}
 	if len(response.Candidates) == 0 {
 		return nil, false, nil

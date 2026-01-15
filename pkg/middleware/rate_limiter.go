@@ -2,15 +2,16 @@ package middleware
 
 import (
 	"context"
-	"errors"
 	"math"
 	"sync"
 	"time"
+
+	"github.com/garyblankenship/wormhole/pkg/types"
 )
 
 var (
 	// ErrRateLimitExceeded is returned when rate limit is exceeded
-	ErrRateLimitExceeded = errors.New("rate limit exceeded")
+	ErrRateLimitExceeded = types.NewWormholeError(types.ErrorCodeRateLimit, "rate limit exceeded", true)
 )
 
 // RateLimiter implements token bucket rate limiting

@@ -2,7 +2,6 @@ package middleware
 
 import (
 	"context"
-	"errors"
 	"math/rand"
 	"sync"
 	"sync/atomic"
@@ -10,6 +9,7 @@ import (
 
 	"github.com/garyblankenship/wormhole/internal/utils"
 	"github.com/garyblankenship/wormhole/pkg/config"
+	"github.com/garyblankenship/wormhole/pkg/types"
 )
 
 func init() {
@@ -19,7 +19,7 @@ func init() {
 
 var (
 	// ErrNoHealthyProviders is returned when no healthy providers are available
-	ErrNoHealthyProviders = errors.New("no healthy providers available")
+	ErrNoHealthyProviders = types.NewWormholeError(types.ErrorCodeMiddleware, "no healthy providers available", false)
 )
 
 // LoadBalanceStrategy defines how to select providers

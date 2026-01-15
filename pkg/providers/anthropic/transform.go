@@ -37,15 +37,13 @@ func (p *Provider) buildMessagePayload(request *types.TextRequest) map[string]an
 		payload["max_tokens"] = 4096 // Default
 	}
 
-	// Optional parameters
-	if request.Temperature != nil {
-		payload["temperature"] = *request.Temperature
-	}
-	if request.TopP != nil {
-		payload["top_p"] = *request.TopP
-	}
-	if len(request.Stop) > 0 {
-		payload["stop_sequences"] = request.Stop
+	// Optional parameters - use shared utility
+	// Pass nil for maxTokens since Anthropic handles max_tokens separately
+	p.requestBuilder.AddGenerationParams(payload, request.Temperature, request.TopP, nil, request.Stop)
+	// Anthropic uses "stop_sequences" instead of "stop", so rename if present
+	if stop, ok := payload["stop"]; ok {
+		payload["stop_sequences"] = stop
+		delete(payload, "stop")
 	}
 
 	// Tools

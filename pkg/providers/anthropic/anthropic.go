@@ -3,7 +3,6 @@ package anthropic
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"io"
 	"log"
 	"net/http"
@@ -11,6 +10,7 @@ import (
 
 	"github.com/garyblankenship/wormhole/internal/utils"
 	"github.com/garyblankenship/wormhole/pkg/providers"
+	transform "github.com/garyblankenship/wormhole/pkg/providers/transform"
 	"github.com/garyblankenship/wormhole/pkg/types"
 )
 
@@ -24,6 +24,9 @@ const (
 // Provider implements the Anthropic provider
 type Provider struct {
 	*providers.BaseProvider
+	requestBuilder *providers.RequestBuilder
+	responseTransform *transform.ResponseTransform
+	streamingTransformer *transform.StreamingTransformer
 }
 
 // New creates a new Anthropic provider
@@ -41,6 +44,20 @@ func New(config types.ProviderConfig) *Provider {
 
 	return &Provider{
 		BaseProvider: providers.NewBaseProvider("anthropic", config),
+		requestBuilder: providers.NewRequestBuilder(),
+		responseTransform: transform.NewResponseTransform(),
+		streamingTransformer: transform.NewAnthropicStreamingTransformer(),
+	}
+}
+
+// SupportedCapabilities returns the capabilities supported by Anthropic provider
+func (p *Provider) SupportedCapabilities() []types.ModelCapability {
+	return []types.ModelCapability{
+		types.CapabilityText,
+		types.CapabilityChat,
+		types.CapabilityStructured,
+		types.CapabilityStream,
+		types.CapabilityFunctions,
 	}
 }
 
@@ -86,7 +103,7 @@ func (p *Provider) Structured(ctx context.Context, request types.StructuredReque
 	// Create a tool from the schema
 	schemaBytes, err := json.Marshal(request.Schema)
 	if err != nil {
-		return nil, fmt.Errorf("failed to marshal schema: %w", err)
+		return nil, p.RequestError("failed to marshal schema", err)
 	}
 	tool, err := p.schemaToTool(json.RawMessage(schemaBytes), request.SchemaName)
 	if err != nil {
@@ -106,7 +123,7 @@ func (p *Provider) Structured(ctx context.Context, request types.StructuredReque
 
 	// Extract structured data from tool call
 	if len(response.ToolCalls) == 0 {
-		return nil, fmt.Errorf("no tool call in response")
+		return nil, p.ProviderError("no tool call in response")
 	}
 
 	var data any
@@ -118,7 +135,7 @@ func (p *Provider) Structured(ctx context.Context, request types.StructuredReque
 		err = utils.LenientUnmarshal(jsonBytes, &data)
 	}
 	if err != nil {
-		return nil, fmt.Errorf("failed to parse structured response: %w", err)
+		return nil, p.RequestError("failed to parse structured response", err)
 	}
 
 	return &types.StructuredResponse{
@@ -150,12 +167,12 @@ func (p *Provider) doAnthropicRequest(ctx context.Context, method, url string, b
 	// Use custom header handling for Anthropic
 	jsonBody, err := json.Marshal(body)
 	if err != nil {
-		return fmt.Errorf("failed to marshal request body: %w", err)
+		return p.RequestError("failed to marshal request body", err)
 	}
 
 	req, err := http.NewRequestWithContext(ctx, method, url, strings.NewReader(string(jsonBody)))
 	if err != nil {
-		return fmt.Errorf("failed to create request: %w", err)
+		return p.RequestError("failed to create request", err)
 	}
 
 	// Set headers
@@ -171,7 +188,7 @@ func (p *Provider) doAnthropicRequest(ctx context.Context, method, url string, b
 
 	resp, err := p.GetHTTPClient().Do(req)
 	if err != nil {
-		return fmt.Errorf("request failed: %w", err)
+		return p.WrapError(types.ErrorCodeNetwork, "request failed", err)
 	}
 	defer func() {
 		if err := resp.Body.Close(); err != nil {
@@ -181,20 +198,22 @@ func (p *Provider) doAnthropicRequest(ctx context.Context, method, url string, b
 
 	respBody, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return fmt.Errorf("failed to read response body: %w", err)
+		return p.RequestError("failed to read response body", err)
 	}
 
 	if resp.StatusCode >= 400 {
 		var apiError anthropicError
 		if err := json.Unmarshal(respBody, &apiError); err != nil {
-			return fmt.Errorf("HTTP %d: %s", resp.StatusCode, string(respBody))
+			err := types.HTTPStatusToError(resp.StatusCode, string(respBody))
+			err.Provider = p.Name()
+			return err
 		}
 		return apiError
 	}
 
 	if result != nil && len(respBody) > 0 {
 		if err := json.Unmarshal(respBody, result); err != nil {
-			return fmt.Errorf("failed to unmarshal response: %w", err)
+			return p.RequestError("failed to unmarshal response", err)
 		}
 	}
 
@@ -205,12 +224,12 @@ func (p *Provider) doAnthropicRequest(ctx context.Context, method, url string, b
 func (p *Provider) streamAnthropicRequest(ctx context.Context, method, url string, body any) (io.ReadCloser, error) {
 	jsonBody, err := json.Marshal(body)
 	if err != nil {
-		return nil, fmt.Errorf("failed to marshal request body: %w", err)
+		return nil, p.RequestError("failed to marshal request body", err)
 	}
 
 	req, err := http.NewRequestWithContext(ctx, method, url, strings.NewReader(string(jsonBody)))
 	if err != nil {
-		return nil, fmt.Errorf("failed to create request: %w", err)
+		return nil, p.RequestError("failed to create request", err)
 	}
 
 	// Set headers
@@ -228,7 +247,7 @@ func (p *Provider) streamAnthropicRequest(ctx context.Context, method, url strin
 
 	resp, err := p.GetHTTPClient().Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("request failed: %w", err)
+		return nil, p.WrapError(types.ErrorCodeNetwork, "request failed", err)
 	}
 
 	if resp.StatusCode >= 400 {
@@ -240,7 +259,9 @@ func (p *Provider) streamAnthropicRequest(ctx context.Context, method, url strin
 		respBody, _ := io.ReadAll(resp.Body)
 		var apiError anthropicError
 		if err := json.Unmarshal(respBody, &apiError); err != nil {
-			return nil, fmt.Errorf("HTTP %d: %s", resp.StatusCode, string(respBody))
+			err := types.HTTPStatusToError(resp.StatusCode, string(respBody))
+			err.Provider = p.Name()
+			return nil, err
 		}
 		return nil, apiError
 	}

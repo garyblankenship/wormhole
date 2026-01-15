@@ -11,6 +11,7 @@ import (
 	"github.com/garyblankenship/wormhole/internal/pool"
 	"github.com/garyblankenship/wormhole/internal/utils"
 	"github.com/garyblankenship/wormhole/pkg/providers"
+	transform "github.com/garyblankenship/wormhole/pkg/providers/transform"
 	"github.com/garyblankenship/wormhole/pkg/types"
 )
 
@@ -21,6 +22,9 @@ const (
 // Provider implements the OpenAI provider
 type Provider struct {
 	*providers.BaseProvider
+	requestBuilder *providers.RequestBuilder
+	responseTransform *transform.ResponseTransform
+	streamingTransformer *transform.StreamingTransformer
 }
 
 // New creates a new OpenAI provider
@@ -31,6 +35,23 @@ func New(config types.ProviderConfig) *Provider {
 
 	return &Provider{
 		BaseProvider: providers.NewBaseProvider("openai", config),
+		requestBuilder: providers.NewRequestBuilder(),
+		responseTransform: transform.NewResponseTransform(),
+		streamingTransformer: transform.NewOpenAIStreamingTransformer(),
+	}
+}
+
+// SupportedCapabilities returns the capabilities supported by OpenAI provider
+func (p *Provider) SupportedCapabilities() []types.ModelCapability {
+	return []types.ModelCapability{
+		types.CapabilityText,
+		types.CapabilityChat,
+		types.CapabilityStructured,
+		types.CapabilityEmbeddings,
+		types.CapabilityAudio,
+		types.CapabilityImages,
+		types.CapabilityStream,
+		types.CapabilityFunctions,
 	}
 }
 
@@ -50,7 +71,7 @@ func (p *Provider) Text(ctx context.Context, request types.TextRequest) (*types.
 
 	// Validate response has content to prevent silent failures
 	if textResponse.Text == "" && len(textResponse.ToolCalls) == 0 {
-		return nil, fmt.Errorf("received empty response from OpenAI API: no content or tool calls returned")
+		return nil, p.ProviderError("received empty response from OpenAI API", "no content or tool calls returned")
 	}
 
 	return textResponse, nil
@@ -114,11 +135,11 @@ func (p *Provider) Structured(ctx context.Context, request types.StructuredReque
 			err = json.Unmarshal(argsBytes, &data)
 		}
 	} else {
-		err = fmt.Errorf("no structured data in response")
+		err = p.ProviderError("no structured data in response")
 	}
 
 	if err != nil {
-		return nil, fmt.Errorf("failed to parse structured response: %w", err)
+		return nil, p.RequestError("failed to parse structured response", err)
 	}
 
 	return &types.StructuredResponse{
@@ -223,7 +244,7 @@ func (p *Provider) handleTextToSpeech(ctx context.Context, request types.AudioRe
 
 	audio, err := io.ReadAll(body)
 	if err != nil {
-		return nil, fmt.Errorf("failed to read audio data: %w", err)
+		return nil, p.RequestError("failed to read audio data", err)
 	}
 
 	return &types.AudioResponse{
@@ -247,14 +268,14 @@ func (p *Provider) handleSpeechToText(ctx context.Context, request types.AudioRe
 
 	reader, contentType, err := utils.BuildAudioForm(formData)
 	if err != nil {
-		return nil, fmt.Errorf("failed to build audio form: %w", err)
+		return nil, p.RequestError("failed to build audio form", err)
 	}
 
 	// Make request to OpenAI Whisper API
 	url := fmt.Sprintf("%s/audio/transcriptions", p.Config.BaseURL)
 	req, err := http.NewRequestWithContext(ctx, "POST", url, reader)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create request: %w", err)
+		return nil, p.RequestError("failed to create request", err)
 	}
 
 	// Set headers
@@ -264,7 +285,7 @@ func (p *Provider) handleSpeechToText(ctx context.Context, request types.AudioRe
 	// Execute request
 	resp, err := p.GetHTTPClient().Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("request failed: %w", err)
+		return nil, p.WrapError(types.ErrorCodeNetwork, "request failed", err)
 	}
 	defer func() {
 		if err := resp.Body.Close(); err != nil {
@@ -279,7 +300,9 @@ func (p *Provider) handleSpeechToText(ctx context.Context, request types.AudioRe
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("API error %d: %s", resp.StatusCode, string(body))
+		err := types.HTTPStatusToError(resp.StatusCode, string(body))
+		err.Provider = p.Name()
+		return nil, err
 	}
 
 	var sttResponse struct {

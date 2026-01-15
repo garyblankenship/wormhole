@@ -2,7 +2,6 @@ package openai
 
 import (
 	"encoding/json"
-	"fmt"
 	"strings"
 	"time"
 
@@ -41,17 +40,17 @@ func (p *Provider) buildChatPayload(request *types.TextRequest) map[string]any {
 
 // addGenerationParams adds temperature, top_p, max_tokens, and stop sequences to payload
 func (p *Provider) addGenerationParams(payload map[string]any, request *types.TextRequest) {
-	if request.Temperature != nil {
-		payload["temperature"] = *request.Temperature
-	}
-	if request.TopP != nil {
-		payload["top_p"] = *request.TopP
-	}
+	// Use shared utility for common parameters
+	p.requestBuilder.AddGenerationParams(payload, request.Temperature, request.TopP, request.MaxTokens, request.Stop)
+
+	// OpenAI-specific: adjust max tokens parameter name for GPT-5 models
 	if request.MaxTokens != nil && *request.MaxTokens > 0 {
-		payload[p.getMaxTokensParam(request.Model)] = *request.MaxTokens
-	}
-	if len(request.Stop) > 0 {
-		payload["stop"] = request.Stop
+		paramName := p.getMaxTokensParam(request.Model)
+		if paramName != "max_tokens" {
+			// Remove the generic max_tokens added by shared utility
+			delete(payload, "max_tokens")
+			payload[paramName] = *request.MaxTokens
+		}
 	}
 }
 
@@ -86,19 +85,15 @@ func (p *Provider) transformMessages(messages []types.Message) []map[string]any 
 	result := make([]map[string]any, len(messages))
 
 	for i, msg := range messages {
-		openAIMsg := map[string]any{
-			"role": string(msg.GetRole()),
-		}
+		// Use shared RequestBuilder for basic message transformation
+		// This handles role, content, tool calls, and tool call IDs
+		openAIMsg := p.requestBuilder.TransformMessage(msg)
 
-		// Handle content based on type
-		content := msg.GetContent()
-		switch c := content.(type) {
-		case string:
-			openAIMsg["content"] = c
-		case []types.MessagePart:
-			// Multi-modal content
-			parts := make([]map[string]any, len(c))
-			for j, part := range c {
+		// Transform content if it's multi-modal ([]types.MessagePart)
+		// OpenAI requires specific format for multi-modal content
+		if content, ok := openAIMsg["content"].([]types.MessagePart); ok {
+			parts := make([]map[string]any, len(content))
+			for j, part := range content {
 				if part.Type == "text" {
 					parts[j] = map[string]any{
 						"type": "text",
@@ -112,19 +107,6 @@ func (p *Provider) transformMessages(messages []types.Message) []map[string]any 
 				}
 			}
 			openAIMsg["content"] = parts
-		default:
-			// Try to convert to string
-			openAIMsg["content"] = fmt.Sprintf("%v", content)
-		}
-
-		// Handle assistant messages with tool calls
-		if assistantMsg, ok := msg.(*types.AssistantMessage); ok && len(assistantMsg.ToolCalls) > 0 {
-			openAIMsg["tool_calls"] = p.transformToolCalls(assistantMsg.ToolCalls)
-		}
-
-		// Handle tool messages
-		if toolMsg, ok := msg.(*types.ToolMessage); ok {
-			openAIMsg["tool_call_id"] = toolMsg.ToolCallID
 		}
 
 		result[i] = openAIMsg
@@ -135,40 +117,27 @@ func (p *Provider) transformMessages(messages []types.Message) []map[string]any 
 
 // transformTools converts internal tools to OpenAI format
 func (p *Provider) transformTools(tools []types.Tool) []map[string]any {
-	result := make([]map[string]any, len(tools))
+	// Use shared RequestBuilder for common tool transformation
+	baseTools := p.requestBuilder.TransformTools(tools)
 
-	for i, tool := range tools {
-		parameters, _ := json.Marshal(tool.Function.Parameters)
-		result[i] = map[string]any{
-			"type": tool.Type,
-			"function": map[string]any{
-				"name":        tool.Function.Name,
-				"description": tool.Function.Description,
-				"parameters":  json.RawMessage(parameters),
-			},
+	// Adapt to OpenAI-specific format (json.RawMessage for parameters)
+	for _, baseTool := range baseTools {
+		if toolFunc, ok := baseTool["function"].(map[string]any); ok {
+			if params, ok := toolFunc["parameters"].(map[string]any); ok {
+				// Convert map to json.RawMessage
+				parameters, _ := json.Marshal(params)
+				toolFunc["parameters"] = json.RawMessage(parameters)
+			}
+		}
+		// Ensure type field is present (OpenAI requires "type": "function")
+		if _, hasType := baseTool["type"]; !hasType {
+			baseTool["type"] = "function"
 		}
 	}
 
-	return result
+	return baseTools
 }
 
-// transformToolCalls converts internal tool calls to OpenAI format
-func (p *Provider) transformToolCalls(toolCalls []types.ToolCall) []map[string]any {
-	result := make([]map[string]any, len(toolCalls))
-
-	for i, tc := range toolCalls {
-		result[i] = map[string]any{
-			"id":   tc.ID,
-			"type": tc.Type,
-			"function": map[string]any{
-				"name":      tc.Function.Name,
-				"arguments": tc.Function.Arguments,
-			},
-		}
-	}
-
-	return result
-}
 
 // cleanJSONResponse removes markdown code blocks from JSON responses
 // Delegates to shared utility for consistent behavior across providers
@@ -251,6 +220,12 @@ func (p *Provider) transformImageResponse(response *imageResponse) *types.Images
 
 // parseStreamChunk parses a streaming chunk
 func (p *Provider) parseStreamChunk(data []byte) (*types.TextChunk, error) {
+	// Try to use unified streaming transformer if available
+	if p.streamingTransformer != nil {
+		return p.streamingTransformer.ParseChunk(data)
+	}
+
+	// Fall back to original implementation
 	var response streamResponse
 	if err := json.Unmarshal(data, &response); err != nil {
 		return nil, err
@@ -343,27 +318,20 @@ func (p *Provider) mapFinishReason(reason string) types.FinishReason {
 
 // transformToolChoice converts tool choice to OpenAI format
 func (p *Provider) transformToolChoice(choice *types.ToolChoice) any {
-	if choice == nil {
-		return toolChoiceAuto
+	// Use shared RequestBuilder for common tool choice transformation
+	sharedResult := p.requestBuilder.TransformToolChoice(choice)
+
+	// Handle OpenAI-specific ToolChoiceTypeAny
+	if choice != nil && choice.Type == types.ToolChoiceTypeAny {
+		return "required"
 	}
 
-	switch choice.Type {
-	case types.ToolChoiceTypeNone:
-		return "none"
-	case types.ToolChoiceTypeAuto:
-		return toolChoiceAuto
-	case types.ToolChoiceTypeAny:
-		return "required"
-	case types.ToolChoiceTypeSpecific:
-		return map[string]any{
-			"type": "function",
-			"function": map[string]any{
-				"name": choice.ToolName,
-			},
-		}
-	default:
+	// Return shared result (handles nil, None, Auto, Specific)
+	// If sharedResult is nil (choice is nil), return default "auto"
+	if sharedResult == nil {
 		return toolChoiceAuto
 	}
+	return sharedResult
 }
 
 func (p *Provider) schemaToTool(schema types.Schema, name string) (*types.Tool, error) {

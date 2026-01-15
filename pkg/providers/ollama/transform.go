@@ -202,6 +202,12 @@ func (p *Provider) transformTextResponse(response *chatResponse) *types.TextResp
 
 // parseStreamChunk parses a streaming chunk from Ollama
 func (p *Provider) parseStreamChunk(data []byte) (*types.TextChunk, error) {
+	// Try to use unified streaming transformer if available
+	if p.streamingTransformer != nil {
+		return p.streamingTransformer.ParseChunk(data)
+	}
+
+	// Fall back to original implementation
 	var response streamResponse
 	if err := json.Unmarshal(data, &response); err != nil {
 		return nil, err

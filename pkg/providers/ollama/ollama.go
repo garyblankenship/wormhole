@@ -12,6 +12,7 @@ import (
 
 	"github.com/garyblankenship/wormhole/internal/utils"
 	"github.com/garyblankenship/wormhole/pkg/providers"
+	transform "github.com/garyblankenship/wormhole/pkg/providers/transform"
 	"github.com/garyblankenship/wormhole/pkg/types"
 )
 
@@ -20,17 +21,37 @@ import (
 // Provider implements the Ollama provider
 type Provider struct {
 	*providers.BaseProvider
+	requestBuilder *providers.RequestBuilder
+	responseTransform *transform.ResponseTransform
+	streamingTransformer *transform.StreamingTransformer
 }
 
 // New creates a new Ollama provider
 func New(config types.ProviderConfig) (*Provider, error) {
 	if config.BaseURL == "" {
-		return nil, fmt.Errorf("Ollama BaseURL is required: provide via config.BaseURL or environment variable")
+		err := types.NewWormholeError(types.ErrorCodeValidation, "Ollama BaseURL is required", false)
+		err.Details = "provide via config.BaseURL or environment variable"
+		err.Provider = "ollama"
+		return nil, err
 	}
 
 	return &Provider{
 		BaseProvider: providers.NewBaseProvider("ollama", config),
+		requestBuilder: providers.NewRequestBuilder(),
+		responseTransform: transform.NewResponseTransform(),
+		streamingTransformer: transform.NewOllamaStreamingTransformer(),
 	}, nil
+}
+
+// SupportedCapabilities returns the capabilities supported by Ollama provider
+func (p *Provider) SupportedCapabilities() []types.ModelCapability {
+	return []types.ModelCapability{
+		types.CapabilityText,
+		types.CapabilityChat,
+		types.CapabilityStructured,
+		types.CapabilityEmbeddings,
+		types.CapabilityStream,
+	}
 }
 
 // Text generates a text response using Ollama's chat API
@@ -82,7 +103,7 @@ func (p *Provider) Structured(ctx context.Context, request types.StructuredReque
 		// Add schema instruction to system prompt or last user message
 		schemaBytes, err := json.Marshal(request.Schema)
 		if err != nil {
-			return nil, fmt.Errorf("failed to marshal schema: %w", err)
+			return nil, p.RequestError("failed to marshal schema", err)
 		}
 
 		schemaInstruction := fmt.Sprintf("Please respond with valid JSON that conforms to this schema: %s", string(schemaBytes))
@@ -109,7 +130,7 @@ func (p *Provider) Structured(ctx context.Context, request types.StructuredReque
 	var data any
 	err = json.Unmarshal([]byte(response.Text), &data)
 	if err != nil {
-		return nil, fmt.Errorf("failed to parse structured response: %w", err)
+		return nil, p.RequestError("failed to parse structured response", err)
 	}
 
 	return &types.StructuredResponse{
@@ -126,7 +147,7 @@ func (p *Provider) Embeddings(ctx context.Context, request types.EmbeddingsReque
 	// Ollama embeddings API processes one input at a time
 	// For multiple inputs, we process them concurrently for better performance
 	if len(request.Input) == 0 {
-		return nil, fmt.Errorf("no input provided for embeddings")
+		return nil, p.ValidationError("no input provided for embeddings")
 	}
 
 	// For small batches, process sequentially to avoid overwhelming local Ollama instance
@@ -153,7 +174,7 @@ func (p *Provider) processEmbeddingsSequentially(ctx context.Context, request ty
 		var response embeddingsResponse
 		err := p.doOllamaRequest(ctx, http.MethodPost, url, payload, &response)
 		if err != nil {
-			return nil, fmt.Errorf("failed to get embedding for input %d: %w", i, err)
+			return nil, p.WrapError(types.ErrorCodeProvider, fmt.Sprintf("failed to get embedding for input %d", i), err)
 		}
 
 		embeddings = append(embeddings, types.Embedding{
@@ -200,7 +221,7 @@ func (p *Provider) processEmbeddingsConcurrently(ctx context.Context, request ty
 			err := p.doOllamaRequest(ctx, http.MethodPost, url, payload, &response)
 
 			if err != nil {
-				results <- result{index: idx, err: fmt.Errorf("failed to get embedding for input %d: %w", idx, err)}
+				results <- result{index: idx, err: p.WrapError(types.ErrorCodeProvider, fmt.Sprintf("failed to get embedding for input %d", idx), err)}
 			} else {
 				results <- result{
 					index: idx,
@@ -292,7 +313,7 @@ func (p *Provider) PullModel(ctx context.Context, model string) error {
 	var response map[string]any // Ollama returns various status messages
 	err := p.doOllamaRequest(ctx, http.MethodPost, url, payload, &response)
 	if err != nil {
-		return fmt.Errorf("failed to pull model %s: %w", model, err)
+		return p.WrapError(types.ErrorCodeProvider, fmt.Sprintf("failed to pull model %s", model), err)
 	}
 
 	return nil
@@ -309,7 +330,7 @@ func (p *Provider) ShowModel(ctx context.Context, model string) (map[string]any,
 	var response map[string]any
 	err := p.doOllamaRequest(ctx, http.MethodPost, url, payload, &response)
 	if err != nil {
-		return nil, fmt.Errorf("failed to show model %s: %w", model, err)
+		return nil, p.WrapError(types.ErrorCodeProvider, fmt.Sprintf("failed to show model %s", model), err)
 	}
 
 	return response, nil
@@ -326,7 +347,7 @@ func (p *Provider) DeleteModel(ctx context.Context, model string) error {
 	var response map[string]any
 	err := p.doOllamaRequest(ctx, http.MethodDelete, url, payload, &response)
 	if err != nil {
-		return fmt.Errorf("failed to delete model %s: %w", model, err)
+		return p.WrapError(types.ErrorCodeProvider, fmt.Sprintf("failed to delete model %s", model), err)
 	}
 
 	return nil
@@ -338,14 +359,14 @@ func (p *Provider) doOllamaRequest(ctx context.Context, method, url string, body
 	if body != nil {
 		jsonBody, err := json.Marshal(body)
 		if err != nil {
-			return fmt.Errorf("failed to marshal request body: %w", err)
+			return p.RequestError("failed to marshal request body", err)
 		}
 		reqBody = bytes.NewReader(jsonBody)
 	}
 
 	req, err := http.NewRequestWithContext(ctx, method, url, reqBody)
 	if err != nil {
-		return fmt.Errorf("failed to create request: %w", err)
+		return p.RequestError("failed to create request", err)
 	}
 
 	// Set headers - Ollama doesn't require authentication by default
@@ -358,7 +379,7 @@ func (p *Provider) doOllamaRequest(ctx context.Context, method, url string, body
 
 	resp, err := p.GetHTTPClient().Do(req)
 	if err != nil {
-		return fmt.Errorf("request failed: %w", err)
+		return p.WrapError(types.ErrorCodeNetwork, "request failed", err)
 	}
 	defer func() {
 		if err := resp.Body.Close(); err != nil {
@@ -368,17 +389,19 @@ func (p *Provider) doOllamaRequest(ctx context.Context, method, url string, body
 
 	respBody, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return fmt.Errorf("failed to read response body: %w", err)
+		return p.RequestError("failed to read response body", err)
 	}
 
 	if resp.StatusCode >= 400 {
 		// Ollama returns simple error messages, not structured like other APIs
-		return fmt.Errorf("HTTP %d: %s", resp.StatusCode, string(respBody))
+		err := types.HTTPStatusToError(resp.StatusCode, string(respBody))
+		err.Provider = p.Name()
+		return err
 	}
 
 	if result != nil && len(respBody) > 0 {
 		if err := json.Unmarshal(respBody, result); err != nil {
-			return fmt.Errorf("failed to unmarshal response: %w", err)
+			return p.RequestError("failed to unmarshal response", err)
 		}
 	}
 
@@ -391,14 +414,14 @@ func (p *Provider) streamOllamaRequest(ctx context.Context, method, url string, 
 	if body != nil {
 		jsonBody, err := json.Marshal(body)
 		if err != nil {
-			return nil, fmt.Errorf("failed to marshal request body: %w", err)
+			return nil, p.RequestError("failed to marshal request body", err)
 		}
 		reqBody = bytes.NewReader(jsonBody)
 	}
 
 	req, err := http.NewRequestWithContext(ctx, method, url, reqBody)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create request: %w", err)
+		return nil, p.RequestError("failed to create request", err)
 	}
 
 	// Set headers
@@ -413,7 +436,7 @@ func (p *Provider) streamOllamaRequest(ctx context.Context, method, url string, 
 
 	resp, err := p.GetHTTPClient().Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("request failed: %w", err)
+		return nil, p.WrapError(types.ErrorCodeNetwork, "request failed", err)
 	}
 
 	if resp.StatusCode >= 400 {
@@ -423,7 +446,9 @@ func (p *Provider) streamOllamaRequest(ctx context.Context, method, url string, 
 		}
 	}()
 		respBody, _ := io.ReadAll(resp.Body)
-		return nil, fmt.Errorf("HTTP %d: %s", resp.StatusCode, string(respBody))
+		err := types.HTTPStatusToError(resp.StatusCode, string(respBody))
+		err.Provider = p.Name()
+		return nil, err
 	}
 
 	return resp.Body, nil
