@@ -56,6 +56,49 @@ func validateAPIKey(provider, apiKey string) error {
 	return nil
 }
 
+// providerFactoryHelpers contains helper functions for creating standardized provider factories
+
+// openAIFactory returns a factory for OpenAI providers
+func openAIFactory() types.ProviderFactory {
+	return func(c types.ProviderConfig) (types.Provider, error) {
+		return openai.New(c), nil
+	}
+}
+
+// anthropicFactory returns a factory for Anthropic providers
+func anthropicFactory() types.ProviderFactory {
+	return func(c types.ProviderConfig) (types.Provider, error) {
+		return anthropic.New(c), nil
+	}
+}
+
+// geminiFactory returns a factory for Gemini providers
+func geminiFactory() types.ProviderFactory {
+	return func(c types.ProviderConfig) (types.Provider, error) {
+		return gemini.New(c.APIKey, c), nil
+	}
+}
+
+// ollamaFactory returns a factory for Ollama providers
+func ollamaFactory() types.ProviderFactory {
+	return func(c types.ProviderConfig) (types.Provider, error) {
+		// Check environment variable for Ollama base URL if not set in config
+		if c.BaseURL == "" {
+			if envURL := os.Getenv("OLLAMA_BASE_URL"); envURL != "" {
+				c.BaseURL = envURL
+			}
+		}
+		return ollama.New(c)
+	}
+}
+
+// openAICompatibleFactory returns a factory for OpenAI-compatible providers
+func openAICompatibleFactory() types.ProviderFactory {
+	return func(c types.ProviderConfig) (types.Provider, error) {
+		return openai.New(c), nil
+	}
+}
+
 // Provider name constants
 const (
 	providerOpenAI    = "openai"
@@ -77,7 +120,7 @@ type Wormhole struct {
 	closeOnce          sync.Once // Ensures Close() is idempotent
 	config             Config
 	providerMiddleware *types.ProviderMiddlewareChain // Type-safe middleware chain
-	middlewareChain    *middleware.Chain              // DEPRECATED: use providerMiddleware instead
+	middlewareChain    *middleware.Chain              // DEPRECATED: No longer created, legacy middleware converted to type-safe
 	toolRegistry       *ToolRegistry                  // Registry of available tools for function calling
 	discoveryService   *discovery.DiscoveryService    // Dynamic model discovery service
 
@@ -190,35 +233,19 @@ func New(opts ...Option) *Wormhole {
 	}
 
 	// Legacy middleware support (deprecated)
-	var middlewares []middleware.Middleware
-	middlewares = append(middlewares, config.Middleware...)
-	if len(middlewares) > 0 {
-		p.middlewareChain = middleware.NewChain(middlewares...)
-	}
+	// Note: Legacy middleware is automatically converted to type-safe middleware
+	// via WithMiddleware() option. The middlewareChain is no longer created
+	// as all middleware execution happens through providerMiddleware.
 
 	return p
 }
 
 // registerBuiltinProviders pre-registers all built-in provider factories
 func (p *Wormhole) registerBuiltinProviders() {
-	p.providerFactories["openai"] = func(c types.ProviderConfig) (types.Provider, error) {
-		return openai.New(c), nil
-	}
-	p.providerFactories["anthropic"] = func(c types.ProviderConfig) (types.Provider, error) {
-		return anthropic.New(c), nil
-	}
-	p.providerFactories["gemini"] = func(c types.ProviderConfig) (types.Provider, error) {
-		return gemini.New(c.APIKey, c), nil
-	}
-	p.providerFactories["ollama"] = func(c types.ProviderConfig) (types.Provider, error) {
-		// Check environment variable for Ollama base URL if not set in config
-		if c.BaseURL == "" {
-			if envURL := os.Getenv("OLLAMA_BASE_URL"); envURL != "" {
-				c.BaseURL = envURL
-			}
-		}
-		return ollama.New(c)
-	}
+	p.providerFactories["openai"] = openAIFactory()
+	p.providerFactories["anthropic"] = anthropicFactory()
+	p.providerFactories["gemini"] = geminiFactory()
+	p.providerFactories["ollama"] = ollamaFactory()
 	// NOTE: groq and mistral now use the generic openai provider via WithOpenAICompatible()
 }
 

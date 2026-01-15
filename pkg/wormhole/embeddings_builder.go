@@ -2,7 +2,7 @@ package wormhole
 
 import (
 	"context"
-	"fmt"
+	"maps"
 
 	"github.com/garyblankenship/wormhole/pkg/types"
 )
@@ -89,9 +89,7 @@ func (b *EmbeddingsRequestBuilder) Clone() *EmbeddingsRequestBuilder {
 	}
 	if len(b.request.ProviderOptions) > 0 {
 		clonedRequest.ProviderOptions = make(map[string]any)
-		for k, v := range b.request.ProviderOptions {
-			clonedRequest.ProviderOptions[k] = v
-		}
+		maps.Copy(clonedRequest.ProviderOptions, b.request.ProviderOptions)
 	}
 
 	return &EmbeddingsRequestBuilder{
@@ -168,27 +166,6 @@ func (b *EmbeddingsRequestBuilder) Generate(ctx context.Context) (*types.Embeddi
 		return handler(ctx, *b.request)
 	}
 
-	// Fallback to legacy middleware if configured
-	if b.getWormhole().middlewareChain != nil {
-		handler := b.getWormhole().middlewareChain.Apply(func(ctx context.Context, req any) (any, error) {
-			// Safe type assertion with error handling
-			embeddingsReq, ok := req.(*types.EmbeddingsRequest)
-			if !ok {
-				return nil, fmt.Errorf("invalid request type: expected *EmbeddingsRequest, got %T", req)
-			}
-			return provider.Embeddings(ctx, *embeddingsReq)
-		})
-		resp, err := handler(ctx, b.request)
-		if err != nil {
-			return nil, err
-		}
-		// Safe type assertion with error handling
-		embeddingsResp, ok := resp.(*types.EmbeddingsResponse)
-		if !ok {
-			return nil, fmt.Errorf("invalid response type: expected *EmbeddingsResponse, got %T", resp)
-		}
-		return embeddingsResp, nil
-	}
-
+	// No middleware configured, use provider directly
 	return provider.Embeddings(ctx, *b.request)
 }

@@ -146,13 +146,13 @@ func (f *SimpleFactory) WithCache(ttl time.Duration) Option {
 
 // WithTimeout returns an option to add timeout middleware
 func (f *SimpleFactory) WithTimeout(timeout time.Duration) Option {
-	return WithMiddleware(middleware.TimeoutMiddleware(timeout))
+	return WithProviderMiddleware(middleware.NewTypedTimeoutMiddleware(timeout))
 }
 
 // WithMetrics returns an option to add metrics tracking middleware and the metrics instance
-func (f *SimpleFactory) WithMetrics() (Option, *middleware.Metrics) {
-	metrics := middleware.NewMetrics()
-	return WithMiddleware(middleware.MetricsMiddleware(metrics)), metrics
+func (f *SimpleFactory) WithMetrics() (Option, *middleware.TypedMetrics) {
+	metrics := middleware.NewTypedMetrics()
+	return WithProviderMiddleware(middleware.NewTypedMetricsMiddleware(metrics)), metrics
 }
 
 // WithLogging returns an option to add basic logging middleware
@@ -168,7 +168,7 @@ func (f *SimpleFactory) WithDetailedLogging(logger types.Logger) Option {
 
 // WithDebugLogging returns an option to add debug logging middleware
 func (f *SimpleFactory) WithDebugLogging(logger types.Logger) Option {
-	return WithMiddleware(middleware.DebugLoggingMiddleware(logger))
+	return WithProviderMiddleware(middleware.NewDebugTypedLoggingMiddleware(logger))
 }
 
 // getAPIKey retrieves API key from provided value or environment variables

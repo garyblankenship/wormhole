@@ -117,27 +117,7 @@ func (b *SpeechToTextBuilder) Transcribe(ctx context.Context) (*types.SpeechToTe
 		}, nil
 	}
 
-	// Fallback to legacy middleware if configured
-	if b.wormhole.middlewareChain != nil {
-		handler := b.wormhole.middlewareChain.Apply(func(ctx context.Context, req any) (any, error) {
-			audioReq := req.(*types.AudioRequest)
-			return provider.Audio(ctx, *audioReq)
-		})
-		resp, err := handler(ctx, &audioRequest)
-		if err != nil {
-			return nil, err
-		}
-		audioResp := resp.(*types.AudioResponse)
-		return &types.SpeechToTextResponse{
-			ID:       audioResp.ID,
-			Model:    audioResp.Model,
-			Text:     audioResp.Text,
-			Created:  audioResp.Created,
-			Metadata: audioResp.Metadata,
-		}, nil
-	}
-
-	// Direct call
+	// No middleware configured, use provider directly
 	audioResp, err := provider.Audio(ctx, audioRequest)
 	if err != nil {
 		return nil, err
@@ -235,28 +215,7 @@ func (b *TextToSpeechBuilder) Generate(ctx context.Context) (*types.TextToSpeech
 		}, nil
 	}
 
-	// Fallback to legacy middleware if configured
-	if b.wormhole.middlewareChain != nil {
-		handler := b.wormhole.middlewareChain.Apply(func(ctx context.Context, req any) (any, error) {
-			audioReq := req.(*types.AudioRequest)
-			return provider.Audio(ctx, *audioReq)
-		})
-		resp, err := handler(ctx, &audioRequest)
-		if err != nil {
-			return nil, err
-		}
-		audioResp := resp.(*types.AudioResponse)
-		return &types.TextToSpeechResponse{
-			ID:       audioResp.ID,
-			Model:    audioResp.Model,
-			Audio:    audioResp.Audio,
-			Format:   audioResp.Format,
-			Created:  audioResp.Created,
-			Metadata: audioResp.Metadata,
-		}, nil
-	}
-
-	// Direct call
+	// No middleware configured, use provider directly
 	audioResp, err := provider.Audio(ctx, audioRequest)
 	if err != nil {
 		return nil, err

@@ -7,7 +7,6 @@ import (
 
 	"github.com/garyblankenship/wormhole/pkg/discovery"
 	"github.com/garyblankenship/wormhole/pkg/middleware"
-	"github.com/garyblankenship/wormhole/pkg/providers/openai"
 	"github.com/garyblankenship/wormhole/pkg/types"
 )
 
@@ -110,9 +109,7 @@ func WithLMStudio(config types.ProviderConfig) Option {
 		}
 
 		c.Providers["lmstudio"] = config
-		c.CustomFactories["lmstudio"] = func(cfg types.ProviderConfig) (types.Provider, error) {
-			return openai.New(cfg), nil
-		}
+		c.CustomFactories["lmstudio"] = openAICompatibleFactory()
 	}
 }
 
@@ -127,9 +124,7 @@ func WithVLLM(config types.ProviderConfig) Option {
 		}
 
 		c.Providers["vllm"] = config
-		c.CustomFactories["vllm"] = func(cfg types.ProviderConfig) (types.Provider, error) {
-			return openai.New(cfg), nil
-		}
+		c.CustomFactories["vllm"] = openAICompatibleFactory()
 	}
 }
 
@@ -144,9 +139,7 @@ func WithOllamaOpenAI(config types.ProviderConfig) Option {
 		}
 
 		c.Providers["ollama-openai"] = config
-		c.CustomFactories["ollama-openai"] = func(cfg types.ProviderConfig) (types.Provider, error) {
-			return openai.New(cfg), nil
-		}
+		c.CustomFactories["ollama-openai"] = openAICompatibleFactory()
 	}
 }
 
@@ -165,9 +158,7 @@ func WithOpenAICompatible(name, baseURL string, config types.ProviderConfig) Opt
 		c.Providers[name] = config
 
 		// Register the factory for this custom provider
-		c.CustomFactories[name] = func(cfg types.ProviderConfig) (types.Provider, error) {
-			return openai.New(cfg), nil
-		}
+		c.CustomFactories[name] = openAICompatibleFactory()
 
 		// Models are now auto-registered globally in New() - no need to register here
 		// OpenRouter models are automatically available
@@ -204,9 +195,27 @@ func WithProviderConfig(name string, config types.ProviderConfig) Option {
 }
 
 // WithMiddleware adds middleware to the client's execution chain.
+// DEPRECATED: Use WithProviderMiddleware for type-safe middleware instead.
+// This function automatically converts legacy middleware to type-safe middleware
+// using adapter pattern for backward compatibility.
 func WithMiddleware(mw ...middleware.Middleware) Option {
 	return func(c *Config) {
+		// Store legacy middleware for backward compatibility
 		c.Middleware = append(c.Middleware, mw...)
+
+		// Convert legacy middleware to type-safe middleware using adapter
+		for _, legacyMw := range mw {
+			adapter := middleware.NewLegacyAdapter(legacyMw)
+			c.ProviderMiddlewares = append(c.ProviderMiddlewares, adapter)
+		}
+	}
+}
+
+// WithProviderMiddleware adds type-safe middleware to the client's execution chain.
+// Use this for compile-time type checking instead of the deprecated WithMiddleware.
+func WithProviderMiddleware(mw ...types.ProviderMiddleware) Option {
+	return func(c *Config) {
+		c.ProviderMiddlewares = append(c.ProviderMiddlewares, mw...)
 	}
 }
 

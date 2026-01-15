@@ -3,6 +3,8 @@ package wormhole
 import (
 	"context"
 	"encoding/json"
+	"maps"
+	"strings"
 
 	"github.com/garyblankenship/wormhole/pkg/types"
 )
@@ -149,9 +151,7 @@ func (b *TextRequestBuilder) Clone() *TextRequestBuilder {
 	}
 	if len(b.request.ProviderOptions) > 0 {
 		clonedRequest.ProviderOptions = make(map[string]any)
-		for k, v := range b.request.ProviderOptions {
-			clonedRequest.ProviderOptions[k] = v
-		}
+		maps.Copy(clonedRequest.ProviderOptions, b.request.ProviderOptions)
 	}
 
 	// Clone fallbackModels slice
@@ -368,19 +368,7 @@ func (b *TextRequestBuilder) executeGenerate(ctx context.Context, provider types
 		return handler(ctx, *b.request)
 	}
 
-	// Fallback to legacy middleware if configured
-	if wormhole.middlewareChain != nil {
-		handler := wormhole.middlewareChain.Apply(func(ctx context.Context, req any) (any, error) {
-			textReq := req.(*types.TextRequest)
-			return provider.Text(ctx, *textReq)
-		})
-		resp, err := handler(ctx, b.request)
-		if err != nil {
-			return nil, err
-		}
-		return resp.(*types.TextResponse), nil
-	}
-
+	// No middleware configured, use provider directly
 	return provider.Text(ctx, *b.request)
 }
 
@@ -434,19 +422,7 @@ func (b *TextRequestBuilder) Stream(ctx context.Context) (<-chan types.StreamChu
 		return handler(ctx, *b.request)
 	}
 
-	// Fallback to legacy middleware if configured
-	if b.getWormhole().middlewareChain != nil {
-		handler := b.getWormhole().middlewareChain.Apply(func(ctx context.Context, req any) (any, error) {
-			textReq := req.(*types.TextRequest)
-			return provider.Stream(ctx, *textReq)
-		})
-		resp, err := handler(ctx, b.request)
-		if err != nil {
-			return nil, err
-		}
-		return resp.(<-chan types.StreamChunk), nil
-	}
-
+	// No middleware configured, use provider directly
 	return provider.Stream(ctx, *b.request)
 }
 
@@ -560,15 +536,15 @@ func (b *TextRequestBuilder) StreamAndAccumulate(ctx context.Context) (<-chan ty
 	}
 
 	accumulated := make(chan types.StreamChunk)
-	var fullText string
+	var builder strings.Builder
 
 	go func() {
 		defer close(accumulated)
 		for chunk := range stream {
-			fullText += chunk.Content()
+			builder.WriteString(chunk.Content())
 			accumulated <- chunk
 		}
 	}()
 
-	return accumulated, func() string { return fullText }, nil
+	return accumulated, func() string { return builder.String() }, nil
 }

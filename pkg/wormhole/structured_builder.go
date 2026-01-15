@@ -132,19 +132,7 @@ func (b *StructuredRequestBuilder) Generate(ctx context.Context) (*types.Structu
 		return handler(ctx, *b.request)
 	}
 
-	// Fallback to legacy middleware if configured
-	if b.getWormhole().middlewareChain != nil {
-		handler := b.getWormhole().middlewareChain.Apply(func(ctx context.Context, req any) (any, error) {
-			structuredReq := req.(*types.StructuredRequest)
-			return provider.Structured(ctx, *structuredReq)
-		})
-		resp, err := handler(ctx, b.request)
-		if err != nil {
-			return nil, err
-		}
-		return resp.(*types.StructuredResponse), nil
-	}
-
+	// No middleware configured, use provider directly
 	return provider.Structured(ctx, *b.request)
 }
 

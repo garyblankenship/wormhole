@@ -38,7 +38,7 @@ func main() {
 
 	// Example: Rate limiting in action
 	fmt.Println("Testing rate limiting...")
-	for i := 0; i < 3; i++ {
+	for i := range 3 {
 		resp, err := client.Text().
 			Model("gpt-5").
 			Prompt(fmt.Sprintf("Say 'Response %d'", i+1)).
@@ -77,7 +77,7 @@ func main() {
 	})
 
 	// Test load balancing
-	for i := 0; i < 4; i++ {
+	for i := range 4 {
 		resp, err := handler(context.Background(), nil)
 		if err != nil {
 			log.Printf("Load balanced request %d failed: %v", i+1, err)
@@ -136,13 +136,22 @@ func main() {
 	fmt.Printf("Metrics - Requests: %d, Errors: %d, Avg Duration: %v\n",
 		requests, errors, avgDuration)
 
-	// NEW: Debug logging middleware demo
-	fmt.Println("\nDebug logging middleware...")
+	// NEW: Debug logging middleware demo (legacy version)
+	fmt.Println("\nDebug logging middleware (legacy WithMiddleware)...")
 	debugClient := wormhole.New(
 		wormhole.WithOpenAI(""),
 		wormhole.WithDefaultProvider("openai"),
 		wormhole.WithMiddleware(middleware.DebugLoggingMiddleware(nil)), // Uses default logger
 	)
+
+	// NEW: Type-safe middleware demo
+	fmt.Println("\nType-safe middleware (WithProviderMiddleware)...")
+	fmt.Println("Type-safe middleware configured with compile-time type checking")
+	fmt.Println("Example: wormhole.WithProviderMiddleware(")
+	fmt.Println("  middleware.NewTypedTimeoutMiddleware(30*time.Second),")
+	fmt.Println("  middleware.NewTypedMetricsMiddleware(middleware.NewTypedMetrics()),")
+	fmt.Println("  middleware.NewDebugTypedLoggingMiddleware(nil),")
+	fmt.Println(")")
 
 	_, err := debugClient.Text().
 		Model("gpt-5").
@@ -213,6 +222,7 @@ func main() {
 	fmt.Println("✅ Debug logging, structured errors")
 	fmt.Println("✅ Custom provider integration")
 	fmt.Println("✅ Multi-provider fallback patterns")
+	fmt.Println("✅ Type-safe middleware migration (WithProviderMiddleware)")
 }
 
 // MockProvider for demonstration
@@ -221,6 +231,17 @@ type MockProvider struct {
 }
 
 func (p *MockProvider) Name() string { return "mock" }
+func (p *MockProvider) SupportedCapabilities() []types.ModelCapability {
+	return []types.ModelCapability{
+		types.CapabilityText,
+		types.CapabilityChat,
+		types.CapabilityStructured,
+		types.CapabilityEmbeddings,
+		types.CapabilityAudio,
+		types.CapabilityImages,
+		types.CapabilityStream,
+	}
+}
 func (p *MockProvider) Text(ctx context.Context, req types.TextRequest) (*types.TextResponse, error) {
 	return &types.TextResponse{Text: "Mock response", Model: req.Model}, nil
 }
