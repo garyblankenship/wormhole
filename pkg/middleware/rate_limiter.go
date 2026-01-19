@@ -117,6 +117,12 @@ func (rl *RateLimiter) GetAvailableTokens() int {
 	return int(rl.tokens)
 }
 
+// Close releases rate limiter resources
+func (rl *RateLimiter) Close() error {
+	close(rl.requestQueue)
+	return nil
+}
+
 // HealthMetrics represents provider health metrics for adaptive rate limiting
 type HealthMetrics struct {
 	CircuitState      CircuitState     // Circuit breaker state
@@ -329,6 +335,11 @@ func (arl *AdaptiveRateLimiter) calculateHealthScore() float64 {
 		return score / float64(totalWeight)
 	}
 	return 1.0
+}
+
+// Close releases adaptive rate limiter resources
+func (arl *AdaptiveRateLimiter) Close() error {
+	return arl.RateLimiter.Close()
 }
 
 // RateLimitMiddleware creates a middleware with rate limiting

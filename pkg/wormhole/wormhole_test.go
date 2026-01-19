@@ -1,6 +1,7 @@
 package wormhole_test
 
 import (
+	"context"
 	"testing"
 	"time"
 
@@ -12,7 +13,7 @@ import (
 )
 
 func TestTextGeneration(t *testing.T) {
-	// Create a mock provider
+	// Create a mock provider with test response
 	mockProvider := mocktesting.NewMockProvider("mock").
 		WithTextResponse(types.TextResponse{
 			ID:           "test-123",
@@ -20,26 +21,35 @@ func TestTextGeneration(t *testing.T) {
 			Text:         "Hello from mock",
 			FinishReason: types.FinishReasonStop,
 		})
-	_ = mockProvider // TODO: inject into wormhole for actual testing
 
-	// Create Wormhole instance
+	// Create Wormhole instance with mock provider injected
 	p := wormhole.New(
-		wormhole.WithDefaultProvider("openai"),
-		wormhole.WithOpenAI("test-key"),
+		wormhole.WithDefaultProvider("mock"),
+		wormhole.WithCustomProvider("mock", mocktesting.MockProviderFactory(mockProvider)),
+		wormhole.WithProviderConfig("mock", types.ProviderConfig{}),
 	)
 
-	t.Run("simple prompt", func(t *testing.T) {
-		// For now, test the builder pattern
+	ctx := context.Background()
+
+	t.Run("simple prompt with mock provider", func(t *testing.T) {
 		req := p.Text().
 			Model("gpt-5").
 			Prompt("Hello world").
 			Temperature(0.7)
 
+		// Test builder serialization
 		json, err := req.ToJSON()
 		require.NoError(t, err)
 		assert.Contains(t, json, `"model": "gpt-5"`)
 		assert.Contains(t, json, `"content": "Hello world"`)
 		assert.Contains(t, json, `"temperature": 0.7`)
+
+		// Test actual execution with mock provider
+		resp, err := req.Generate(ctx)
+		require.NoError(t, err)
+		assert.Equal(t, "Hello from mock", resp.Text)
+		assert.Equal(t, "mock-model", resp.Model)
+		assert.Equal(t, "test-123", resp.ID)
 	})
 
 	t.Run("with system prompt", func(t *testing.T) {

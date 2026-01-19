@@ -222,9 +222,7 @@ func TestGeminiProvider_IntegrationTextGeneration(t *testing.T) {
 			// Additional header checks if required
 			if tc.checkHeaders {
 				assert.Equal(t, "application/json", capturedHeaders.Get("Content-Type"))
-				// Note: Gemini doesn't use Authorization header, API key is in URL
-				// The base provider sets it by default, but Gemini ignores it
-				assert.Contains(t, capturedHeaders.Get("Authorization"), "Bearer")
+				// Note: Gemini uses API key in URL query param, not Authorization header
 			}
 		})
 	}

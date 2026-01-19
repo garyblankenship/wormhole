@@ -3,6 +3,7 @@ package middleware
 import (
 	"context"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/garyblankenship/wormhole/pkg/types"
@@ -35,8 +36,8 @@ type CircuitBreaker struct {
 	successThreshold int
 	timeout          time.Duration
 	lastFailureTime  time.Time
-	halfOpenCalls    int
-	maxHalfOpenCalls int
+	halfOpenCalls    atomic.Int32 // Atomic for CAS-based admission control
+	maxHalfOpenCalls int32        // int32 for atomic comparison
 }
 
 // NewCircuitBreaker creates a new circuit breaker
@@ -58,7 +59,7 @@ func (cb *CircuitBreaker) Execute(ctx context.Context, fn func() (any, error)) (
 	if cb.state == StateOpen {
 		if time.Since(cb.lastFailureTime) > cb.timeout {
 			cb.state = StateHalfOpen
-			cb.halfOpenCalls = 0
+			cb.halfOpenCalls.Store(0)
 			cb.successes = 0
 		} else {
 			cb.mu.Unlock()
@@ -66,13 +67,21 @@ func (cb *CircuitBreaker) Execute(ctx context.Context, fn func() (any, error)) (
 		}
 	}
 
-	// Check if we've exceeded half-open call limit
+	// Half-open admission using atomic CAS to prevent race conditions
 	if cb.state == StateHalfOpen {
-		if cb.halfOpenCalls >= cb.maxHalfOpenCalls {
-			cb.mu.Unlock()
-			return nil, wrapMiddlewareError("circuit_breaker", "execute", ErrCircuitOpen)
+		// CAS loop ensures exactly maxHalfOpenCalls requests pass
+		for {
+			current := cb.halfOpenCalls.Load()
+			if current >= cb.maxHalfOpenCalls {
+				cb.mu.Unlock()
+				return nil, wrapMiddlewareError("circuit_breaker", "execute", ErrCircuitOpen)
+			}
+			// Atomic increment - only proceeds if no concurrent modification
+			if cb.halfOpenCalls.CompareAndSwap(current, current+1) {
+				break
+			}
+			// CAS failed (another goroutine incremented), retry
 		}
-		cb.halfOpenCalls++
 	}
 
 	cb.mu.Unlock()
@@ -103,6 +112,7 @@ func (cb *CircuitBreaker) handleError(result any, err error) (any, error) {
 		// Any failure in half-open state reopens the circuit
 		cb.state = StateOpen
 		cb.failures = cb.failureThreshold
+		cb.halfOpenCalls.Store(0) // Reset for next half-open cycle
 	}
 
 	return result, err
@@ -117,6 +127,7 @@ func (cb *CircuitBreaker) handleSuccess(result any) any {
 		if cb.successes >= cb.successThreshold {
 			cb.state = StateClosed
 			cb.successes = 0
+			cb.halfOpenCalls.Store(0) // Reset for next half-open cycle
 		}
 	}
 
@@ -128,6 +139,11 @@ func (cb *CircuitBreaker) GetState() CircuitState {
 	cb.mu.RLock()
 	defer cb.mu.RUnlock()
 	return cb.state
+}
+
+// Close is a no-op for circuit breaker (no background resources)
+func (cb *CircuitBreaker) Close() error {
+	return nil
 }
 
 // CircuitBreakerMiddleware creates a middleware with circuit breaker protection

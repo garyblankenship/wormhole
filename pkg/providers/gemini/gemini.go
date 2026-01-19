@@ -29,11 +29,10 @@ func New(apiKey string, config types.ProviderConfig) *Gemini {
 		config.BaseURL = defaultBaseURL
 	}
 
-	// Gemini uses API key in URL, not in Authorization header
-	config.APIKey = ""
-
+	// Gemini uses API key in URL query param, not Authorization header
+	// Use NoAuthStrategy to prevent Bearer header from being added
 	return &Gemini{
-		BaseProvider: providers.NewBaseProvider("gemini", config),
+		BaseProvider: providers.NewBaseProviderWithAuth("gemini", config, nil, &providers.NoAuthStrategy{}),
 		apiKey:       apiKey,
 		requestBuilder: providers.NewRequestBuilder(),
 		responseTransform: transform.NewResponseTransform(),

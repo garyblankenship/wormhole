@@ -112,6 +112,31 @@ type cachedProvider struct {
 	refCount int32 // atomic
 }
 
+// idempotencyEntry wraps cached responses with expiration metadata
+type idempotencyEntry struct {
+	response  any
+	expiresAt int64 // UnixNano timestamp for expiration
+}
+
+// ProviderHandle wraps a provider with automatic reference counting.
+// Callers MUST call Close() when done with the provider to prevent memory leaks.
+type ProviderHandle struct {
+	types.Provider        // Embedded provider interface
+	wormhole       *Wormhole
+	name           string
+	released       atomic.Bool
+}
+
+// Close decrements the reference count for this provider handle.
+// It's safe to call Close() multiple times - only the first call has effect.
+// This does NOT close the underlying provider, just releases the reference.
+func (h *ProviderHandle) Close() error {
+	if h.released.CompareAndSwap(false, true) {
+		h.wormhole.releaseProvider(h.name)
+	}
+	return nil
+}
+
 // Wormhole is the main client for interacting with LLM providers
 type Wormhole struct {
 	providerFactories  map[string]types.ProviderFactory // Factory functions for creating providers
@@ -139,7 +164,10 @@ type Wormhole struct {
 	shuttingDown       atomic.Bool            // Atomic flag for shutdown state
 
 	// Idempotency cache
-	idempotencyCache   sync.Map               // Thread-safe cache for idempotent responses
+	idempotencyCache       sync.Map   // Thread-safe cache for idempotent responses
+	idempotencySweepTicker *time.Ticker
+	idempotencySweepStop   chan struct{}
+	idempotencySweepOnce   sync.Once
 }
 
 // IdempotencyConfig holds configuration for idempotent request handling
@@ -411,6 +439,42 @@ func (p *Wormhole) getProvider(override string) (types.Provider, error) {
 		return nil, fmt.Errorf("no provider specified and no default provider configured")
 	}
 	return p.Provider(providerName)
+}
+
+// releaseProvider decrements the reference count for a provider.
+// Called by ProviderHandle.Close() to signal the provider is no longer in use.
+func (p *Wormhole) releaseProvider(name string) {
+	p.providersMutex.RLock()
+	cp, exists := p.providers[name]
+	p.providersMutex.RUnlock()
+
+	if exists {
+		atomic.AddInt32(&cp.refCount, -1)
+	}
+}
+
+// ProviderWithHandle returns a provider wrapped in a handle that must be closed.
+// This is the preferred API for safe reference counting - CleanupStaleProviders
+// will respect active handles and not evict providers that are still in use.
+//
+// Example:
+//
+//	handle, err := client.ProviderWithHandle("openai")
+//	if err != nil { return err }
+//	defer handle.Close()  // IMPORTANT: Always close the handle
+//
+//	resp, err := handle.Text(ctx, request)
+func (p *Wormhole) ProviderWithHandle(name string) (*ProviderHandle, error) {
+	provider, err := p.Provider(name)
+	if err != nil {
+		return nil, err
+	}
+
+	return &ProviderHandle{
+		Provider: provider,
+		wormhole: p,
+		name:     name,
+	}, nil
 }
 
 // createOpenAICompatibleProvider creates a temporary OpenAI provider with custom config
@@ -876,6 +940,16 @@ func (p *Wormhole) Close() error {
 			}
 		}
 
+		// Stop idempotency sweep goroutine
+		if p.idempotencySweepStop != nil {
+			select {
+			case <-p.idempotencySweepStop:
+				// Already closed
+			default:
+				close(p.idempotencySweepStop)
+			}
+		}
+
 		// Cleanup tool registry resources if needed
 		// (currently tool registry has no resources to clean up)
 	})
@@ -951,8 +1025,20 @@ func (p *Wormhole) Shutdown(ctx context.Context) error {
 			}
 		}
 
-		// TODO: Close middleware resources (circuit breakers, rate limiters)
-		// This requires middleware to implement io.Closer interface
+		// Stop adaptive limiter
+		if p.adaptiveLimiter != nil {
+			p.adaptiveLimiter.Stop()
+		}
+
+		// Stop idempotency sweep goroutine
+		if p.idempotencySweepStop != nil {
+			select {
+			case <-p.idempotencySweepStop:
+				// Already closed
+			default:
+				close(p.idempotencySweepStop)
+			}
+		}
 
 		if len(errs) > 0 {
 			shutdownErr = fmt.Errorf("errors during shutdown cleanup: %v", errs)
@@ -1007,7 +1093,23 @@ func (p *Wormhole) checkIdempotencyCache(key string) (any, bool) {
 		return nil, false
 	}
 	cached, ok := p.idempotencyCache.Load(key)
-	return cached, ok
+	if !ok {
+		return nil, false
+	}
+
+	entry, ok := cached.(*idempotencyEntry)
+	if !ok {
+		// Legacy entry without expiration - return as-is
+		return cached, true
+	}
+
+	// Check if expired
+	if time.Now().UnixNano() >= entry.expiresAt {
+		p.idempotencyCache.Delete(key)
+		return nil, false
+	}
+
+	return entry.response, true
 }
 
 // storeIdempotencyResponse stores a response in the idempotency cache
@@ -1021,13 +1123,72 @@ func (p *Wormhole) storeIdempotencyResponse(key string, response any) {
 		ttl = 24 * time.Hour // Default TTL
 	}
 
-	p.idempotencyCache.Store(key, response)
+	entry := &idempotencyEntry{
+		response:  response,
+		expiresAt: time.Now().Add(ttl).UnixNano(),
+	}
 
-	// Schedule deletion after TTL
-	go func() {
-		time.Sleep(ttl)
-		p.idempotencyCache.Delete(key)
-	}()
+	p.idempotencyCache.Store(key, entry)
+
+	// Ensure sweep goroutine is started (lazy initialization)
+	p.startIdempotencySweep()
+}
+
+// startIdempotencySweep starts the background sweep goroutine for cleaning expired entries
+func (p *Wormhole) startIdempotencySweep() {
+	p.idempotencySweepOnce.Do(func() {
+		// Default sweep interval: 1 minute
+		interval := time.Minute
+
+		p.idempotencySweepTicker = time.NewTicker(interval)
+		p.idempotencySweepStop = make(chan struct{})
+
+		go p.idempotencySweepLoop()
+	})
+}
+
+// idempotencySweepLoop runs the periodic sweep for expired idempotency entries
+func (p *Wormhole) idempotencySweepLoop() {
+	for {
+		select {
+		case <-p.idempotencySweepTicker.C:
+			p.sweepExpiredIdempotencyEntries()
+		case <-p.idempotencySweepStop:
+			p.idempotencySweepTicker.Stop()
+			return
+		case <-p.shutdownChan:
+			p.idempotencySweepTicker.Stop()
+			return
+		}
+	}
+}
+
+// sweepExpiredIdempotencyEntries removes expired entries from the idempotency cache
+func (p *Wormhole) sweepExpiredIdempotencyEntries() {
+	now := time.Now().UnixNano()
+	maxPerSweep := 1000 // Cap entries processed per sweep for bounded time
+
+	swept := 0
+	p.idempotencyCache.Range(func(key, value any) bool {
+		if swept >= maxPerSweep {
+			return false // Stop iteration, continue next sweep
+		}
+
+		entry, ok := value.(*idempotencyEntry)
+		if !ok {
+			// Legacy entry without expiration - delete it
+			p.idempotencyCache.Delete(key)
+			swept++
+			return true
+		}
+
+		if now >= entry.expiresAt {
+			p.idempotencyCache.Delete(key)
+			swept++
+		}
+
+		return true
+	})
 }
 
 // ClearIdempotencyCache clears all cached idempotent responses

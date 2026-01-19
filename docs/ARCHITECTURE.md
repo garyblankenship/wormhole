@@ -1,629 +1,587 @@
-# Architecture
+# Wormhole SDK Architecture Audit
 
-**Project**: Wormhole - Unified Go SDK for LLM APIs
+**Date**: 2026-01-14
+**Version**: 1.x (main branch)
+**Coverage**: 52.6% (wormhole core), 47.8% overall
+**Files**: 166 Go sources, 15,047 lines of tests
 
 ---
 
-## Overview
+## Executive Summary
 
-Wormhole is a production-grade Go SDK providing a unified interface to multiple LLM providers (OpenAI, Anthropic, Gemini, OpenRouter, Groq, Mistral, Ollama). The architecture prioritizes performance (67ns core overhead), reliability (enterprise middleware), and developer experience (functional options pattern).
+Wormhole is a high-performance, production-grade Go SDK providing unified access to multiple LLM providers (OpenAI, Anthropic, Gemini, Ollama, OpenRouter). The architecture achieves **67ns request overhead** through functional options, object pooling, and zero-allocation patterns, with comprehensive middleware support for production resilience.
 
-**Core Philosophy**: Provider-agnostic API with automatic constraint handling, zero-allocation hot paths, and thread-safe concurrent operations.
+**Key Architectural Patterns**:
+- Unified `Provider` interface with capability-based delegation
+- Functional options + builder pattern for configuration
+- Type-safe middleware chain with backward compatibility
+- Object pooling for zero-allocation hot paths
+- Graceful shutdown with request draining
+
+---
+
+## System Architecture
+
+### High-Level Layer Diagram
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                     CLIENT API LAYER                         │
+│  Wormhole → Builder Pattern → Request Execution             │
+│  (wormhole.go, *_builder.go)                                │
+└────────────────────┬────────────────────────────────────────┘
+                     │
+┌────────────────────▼────────────────────────────────────────┐
+│                  MIDDLEWARE LAYER                            │
+│  Type-Safe Chain → Retry → Circuit Breaker → Rate Limit     │
+│  (pkg/middleware/)                                           │
+└────────────────────┬────────────────────────────────────────┘
+                     │
+┌────────────────────▼────────────────────────────────────────┐
+│                  PROVIDER LAYER                              │
+│  Unified Interface → Transform → HTTP Client                 │
+│  (openai/, anthropic/, gemini/, ollama/)                     │
+└────────────────────┬────────────────────────────────────────┘
+                     │
+┌────────────────────▼────────────────────────────────────────┐
+│                  INFRASTRUCTURE LAYER                        │
+│  Object Pools → SSE Parser → Error Handling                 │
+│  (internal/pool/, internal/utils/)                           │
+└─────────────────────────────────────────────────────────────┘
+```
 
 ---
 
 ## Core Components
 
-### 1. Provider Interface (`pkg/types/provider.go`)
+### 1. Wormhole Client (`pkg/wormhole/wormhole.go`)
 
-**Responsibility**: Unified contract for all LLM providers
+**Responsibilities**:
+- Provider factory registration and lazy initialization
+- Provider instance caching with LRU eviction
+- Model discovery service coordination
+- Tool registry management
+- Graceful shutdown with zero-downtime draining
 
+**State Management**:
+```go
+type Wormhole struct {
+    providerFactories  map[string]types.ProviderFactory  // Factory per provider
+    providers          map[string]*cachedProvider        // Cached instances (thread-safe)
+    providersMutex     sync.RWMutex                      // Concurrent access control
+    toolRegistry       *ToolRegistry                     // Global tool definitions
+    discoveryService   *discovery.DiscoveryService       // Dynamic model catalog
+    adaptiveLimiter    *EnhancedAdaptiveLimiter         // Concurrency control
+    shutdownChan       chan struct{}                     // Graceful shutdown signal
+    activeRequests     sync.WaitGroup                    // In-flight request tracking
+    providerMiddleware *types.ProviderMiddlewareChain   // Type-safe middleware
+}
+```
+
+**Caching Strategy**:
+- **Double-checked locking** for provider creation (RLock → check → Lock → check)
+- **Atomic reference counting** (`atomic.Int32`) for provider lifecycle tracking
+- **Atomic last-used timestamps** (`atomic.Int64`) for LRU eviction
+- **Configurable eviction** (max age + max count limits)
+
+**Performance**:
+- Cache hit: **RLock only** (~5ns)
+- Cache miss: **RLock → Lock → create → cache** (~67ns total)
+- Zero allocations in hot path
+
+---
+
+### 2. Provider Interface (`pkg/types/provider.go`)
+
+**Unified Interface**:
 ```go
 type Provider interface {
+    io.Closer
     Name() string
+    SupportedCapabilities() []ModelCapability
+
+    // Core methods (all providers must implement)
     Text(ctx context.Context, request TextRequest) (*TextResponse, error)
     Stream(ctx context.Context, request TextRequest) (<-chan TextChunk, error)
     Structured(ctx context.Context, request StructuredRequest) (*StructuredResponse, error)
     Embeddings(ctx context.Context, request EmbeddingsRequest) (*EmbeddingsResponse, error)
-    Images(ctx context.Context, request ImageRequest) (*ImageResponse, error)
-    TTS(ctx context.Context, request TTSRequest) (*TTSResponse, error)
-    STT(ctx context.Context, request STTRequest) (*STTResponse, error)
-    Moderate(ctx context.Context, request ModerationRequest) (*ModerationResponse, error)
+    Audio(ctx context.Context, request AudioRequest) (*AudioResponse, error)
+    Images(ctx context.Context, request ImagesRequest) (*ImagesResponse, error)
+    SpeechToText, TextToSpeech, GenerateImage...
 }
 ```
 
-**Key Patterns**:
-- **BaseProvider**: Default "not implemented" implementations for all methods
-- **Method-Level Capability Discovery**: Providers return `NotImplementedError` for unsupported features
-- **Composability**: Providers embed `BaseProvider` and override only supported methods
+**BaseProvider Pattern**:
+- Providers embed `*providers.BaseProvider` for default implementations
+- Override only supported methods (e.g., OpenAI overrides all, Ollama overrides Text/Stream/Embeddings)
+- Unsupported methods return `ErrorCodeProvider` with clear message
 
-### 2. Client Architecture (`pkg/wormhole/`)
+**Provider Implementations**:
 
-**Main Components**:
+| Provider | Location | Capabilities | Auth Pattern |
+|----------|----------|--------------|--------------|
+| **OpenAI** | `pkg/providers/openai/` | Text, Stream, Structured, Embeddings, Audio, Images | Bearer token |
+| **Anthropic** | `pkg/providers/anthropic/` | Text, Stream, Structured, Vision | `x-api-key` header |
+| **Gemini** | `pkg/providers/gemini/` | Text, Stream, Structured, Embeddings | API key in URL |
+| **Ollama** | `pkg/providers/ollama/` | Text, Stream, Embeddings | None (local) |
 
+**Base Provider Architecture** (`pkg/providers/base.go`):
+- HTTP client pooling per provider
+- Retry logic with exponential backoff
+- Error normalization to `WormholeError`
+- Request/response sanitization (API key masking)
+
+---
+
+### 3. Builder Pattern (`pkg/wormhole/*_builder.go`)
+
+**Builder Hierarchy**:
 ```
-pkg/wormhole/
-├── wormhole.go              # Client struct + provider management
-├── options.go               # Functional options (WithOpenAI, WithAnthropic, etc.)
-├── text_builder.go          # Fluent API for text generation
-├── stream_builder.go        # Streaming request builder
-├── structured_builder.go    # Structured output builder
-├── embeddings_builder.go    # Vector embeddings builder
-└── types.go                 # Request/response types
+CommonBuilder (shared config, provider override, validation)
+    ├── TextRequestBuilder      → Text generation, streaming, tool calling
+    ├── StructuredRequestBuilder → JSON schemas, typed output
+    ├── EmbeddingsRequestBuilder → Vector generation, semantic search
+    ├── ImageRequestBuilder      → Image generation
+    ├── AudioRequestBuilder      → TTS, STT
+    └── BatchBuilder             → Concurrent multi-request execution
 ```
 
-**Design Pattern**: Functional Options + Builder Pattern
+**Shared Configuration (CommonBuilder)**:
+- Provider override (`.Using("anthropic")`)
+- Base URL override (`.BaseURL("http://localhost:11434/v1")`)
+- Validation helpers (`.Validate()`)
+- Clone support (`.Clone()` for builder reuse)
 
+**Advanced Features**:
+- **Fallback Models**: `.WithFallback("gpt-4o-mini")` auto-retries on primary failure
+- **Tool Auto-Execution**: `.WithAutoExecution(10)` runs multi-turn tool calling loop
+- **Stream & Accumulate**: `.StreamAndAccumulate(ctx)` returns channel + final text getter
+- **Conversation Builder**: `.Conversation(conv)` for multi-turn chats
+
+**Memory Management**:
+- Request/response objects pooled via `get*Request()` / `put*Request()` helpers
+- Zero-allocation for request construction (value semantics)
+
+---
+
+### 4. Middleware System
+
+**Type-Safe Architecture** (v1.1+):
 ```go
-// Initialization (functional options)
-client := wormhole.New(
-    wormhole.WithDefaultProvider("openai"),
-    wormhole.WithOpenAI("sk-..."),
-    wormhole.WithAnthropic("sk-ant-..."),
-    wormhole.WithTimeout(30*time.Second),
+type ProviderMiddleware interface {
+    Name() string
+    Wrap(next ProviderHandler) ProviderHandler
+}
+
+type ProviderHandler func(ctx context.Context, req ProviderRequest) (ProviderResponse, error)
+```
+
+**Built-in Middleware** (`pkg/middleware/`):
+
+| Middleware | Purpose | Key Features |
+|------------|---------|--------------|
+| **Retry** | Exponential backoff for transient failures | Respects `Retry-After`, max delay cap, jitter |
+| **Circuit Breaker** | Fail-fast on provider outages | Half-open testing, configurable threshold |
+| **Rate Limiter** | Token bucket rate limiting | Per-second limits, burst capacity |
+| **Load Balancer** | Distribute across providers | Round-robin, weighted, health-aware |
+| **Logging** | Structured request/response logging | Typed logging, debug mode |
+| **Metrics** | Prometheus-compatible metrics | Latency histograms, token usage, error rates |
+| **Health Check** | Provider availability probing | Periodic health pings, failure tracking |
+| **Timeout** | Per-request timeouts | Context-based cancellation |
+
+**Execution Order** (applied in reverse during setup):
+```
+Request → Logging → Metrics → Timeout → RateLimit → CircuitBreaker → Retry → Provider
+```
+
+**Backward Compatibility**:
+- Legacy `middleware.Middleware` (reflection-based) auto-converted to type-safe via adapter
+- Deprecated in v1.1+, will be removed in v2.0
+
+---
+
+### 5. Streaming Architecture (`internal/utils/streaming.go`)
+
+**SSE Parsing Pipeline**:
+```
+HTTP Response Body → SSEParser → Provider-Specific Transform → TextChunk channel
+```
+
+**Components**:
+- **SSEParser**: Stateful parser for `event:`, `data:`, `id:` fields
+- **StreamProcessor**: Transforms SSE events into `types.TextChunk`
+- **ProcessStream**: Goroutine wrapper with automatic `io.ReadCloser` cleanup
+
+**Provider-Specific Transformers**:
+- **OpenAI**: `transform.NewOpenAIStreamingTransformer()` (delta-based chunks)
+- **Anthropic**: `transform.NewAnthropicStreamingTransformer()` (event types: `message_start`, `content_block_delta`, `message_stop`)
+- **Gemini**: Custom JSON array streaming (not SSE-based)
+
+**Memory Safety**:
+- **Pooled line buffers** (`lineBufferPool`) for zero-allocation parsing
+- **Buffered channels** (default: 100 chunks) prevent goroutine blocking
+- **Automatic body close** on stream completion/error
+- **Defer-based cleanup** ensures no leaks
+
+**Error Handling**:
+- Stream errors sent as `TextChunk{Error: err}`
+- Client drains channel to completion
+- Context cancellation propagates immediately
+
+---
+
+### 6. Request/Response Transformation (`pkg/providers/transform/`)
+
+**Transform Layers**:
+
+1. **Request Transform** (SDK → Provider):
+   - **OpenAI**: Direct mapping (native format)
+   - **Anthropic**: Messages API format, separate `system` field
+   - **Gemini**: `content.parts[]` array, role mapping (`user`/`model`)
+
+2. **Response Transform** (Provider → SDK):
+   - Unified `TextResponse` structure
+   - Normalized `ToolCall` format (function name, arguments)
+   - Consistent `Usage` token counting
+
+3. **Streaming Transform**:
+   - SSE event → `TextChunk` delta
+   - Incremental tool call assembly (delta aggregation)
+   - Finish reason detection (`stop`, `length`, `tool_calls`)
+
+**Common Transform Utilities** (`pkg/providers/transform/common.go`):
+- `NormalizeToolCalls()`: Standardize tool call format across providers
+- `ExtractTextContent()`: Pull text from various response structures
+- `MergeUsage()`: Aggregate token counts across chunks
+
+---
+
+### 7. Error Handling (`pkg/types/errors.go`)
+
+**Error Hierarchy**:
+```go
+*WormholeError (base)
+    ├── ErrorCodeAuth       → Invalid/missing API key
+    ├── ErrorCodeModel      → Model not found/supported
+    ├── ErrorCodeRateLimit  → Quota/rate limit exceeded
+    ├── ErrorCodeRequest    → Invalid params, payload too large
+    ├── ErrorCodeTimeout    → Request timeout
+    ├── ErrorCodeProvider   → Provider config error
+    ├── ErrorCodeNetwork    → Connection failed, service unavailable
+    ├── ErrorCodeValidation → Field validation failure
+    └── ErrorCodeMiddleware → Circuit open, no healthy providers
+```
+
+**Context Enrichment**:
+```go
+return types.ErrModelNotFound.
+    WithProvider("openai").
+    WithModel("gpt-5").
+    WithStatusCode(404).
+    WithDetails("model registry lookup failed").
+    WithOperation("TextRequestBuilder.Generate")
+```
+
+**Retry Decision Logic**:
+```go
+if types.IsRetryableError(err) {
+    delay := types.GetRetryAfter(err)  // Smart backoff: 30s rate limit, 5s network
+    time.Sleep(delay)
+    // retry...
+}
+```
+
+**HTTP Status Mapping** (`HTTPStatusToError`):
+- `401` → `ErrInvalidAPIKey`
+- `429` → `ErrRateLimited` (retryable)
+- `503` → `ErrServiceUnavailable` (retryable)
+- `400`, `422` → `ErrInvalidRequest` (non-retryable)
+
+**Specialized Error Types**:
+- `ModelConstraintError`: Model-specific parameter violations (e.g., GPT-5 temperature=1.0 only)
+- `ValidationError`: Field-level validation with constraint details
+- `ValidationErrors`: Multi-field batch validation
+
+---
+
+### 8. Model Discovery (`pkg/discovery/`)
+
+**Architecture**:
+```
+DiscoveryService
+    ├── Fetchers (per provider)
+    │   ├── OpenAI: GET /v1/models
+    │   ├── Anthropic: Hardcoded list (no API)
+    │   ├── Ollama: GET /api/tags
+    │   └── OpenRouter: GET /api/v1/models
+    ├── Cache (in-memory, TTL-based)
+    └── Background Refresh (goroutine)
+```
+
+**Configuration**:
+```go
+type DiscoveryConfig struct {
+    RefreshInterval  time.Duration  // 0 = disabled
+    CacheTTL         time.Duration  // Cache expiration
+    OfflineMode      bool           // Skip fetches, use local only
+    CustomFetchers   []ModelFetcher // User-provided fetchers
+}
+```
+
+**API**:
+```go
+// Fetch models for a provider
+models, _ := client.ListAvailableModels("openai")
+
+// Force refresh all providers
+client.RefreshModels()
+
+// Clear cache
+client.ClearModelCache()
+```
+
+**Caching Strategy**:
+- First call: Fetch from API
+- Subsequent calls: Serve from cache (TTL-based)
+- Background refresh: Optional periodic updates (default: disabled)
+
+---
+
+### 9. Tool Calling System
+
+**Components**:
+
+1. **ToolRegistry** (`tool_registry.go`):
+   - Global tool definition storage
+   - Thread-safe with `sync.RWMutex`
+   - Tool lookup by name
+
+2. **Type-Safe Registration** (`tool_typed.go`):
+   - Reflection-based schema generation from Go structs
+   - Zero boilerplate for tool handlers
+   - Compile-time type safety
+
+3. **Tool Executor** (`tool_executor.go`):
+   - Multi-turn conversation loop
+   - Automatic tool invocation
+   - Safety limits (max iterations, timeout)
+
+**Example**:
+```go
+// Type-safe tool registration
+type WeatherArgs struct {
+    City string `json:"city" tool:"required"`
+    Unit string `json:"unit" tool:"enum=celsius,fahrenheit"`
+}
+
+wormhole.RegisterTypedTool(client, "get_weather", "Get weather",
+    func(ctx context.Context, args WeatherArgs) (WeatherResult, error) {
+        return getWeather(args.City, args.Unit), nil
+    },
 )
 
-// Request building (builder pattern)
-response, err := client.Text().
-    Model("gpt-5").
-    Prompt("Generate text").
-    Temperature(0.7).
-    MaxTokens(100).
+// Auto-execute tools in conversation
+resp, _ := client.Text().
+    Model("gpt-4o").
+    Prompt("What's the weather in NYC?").
+    WithAutoExecution(10).  // Max 10 tool call rounds
     Generate(ctx)
 ```
 
-### 3. Provider Implementations (`pkg/providers/`)
+**Safety Features**:
+- Max iteration limit (prevent infinite loops)
+- Timeout per tool call
+- Error propagation to model for recovery
 
-**Structure**:
-```
-pkg/providers/
-├── openai/          # OpenAI API (GPT models)
-│   ├── openai.go    # Provider implementation
-│   └── transform.go # Request/response transformations
-├── anthropic/       # Anthropic API (Claude models)
-├── gemini/          # Google Gemini API
-└── ollama/          # Local Ollama server
-```
+---
 
-**Key Mechanisms**:
-- **BaseURL Approach**: One provider (OpenAI) handles all OpenAI-compatible APIs (Groq, Mistral, LM Studio, Ollama via `/v1/chat/completions`)
-- **Transform Layer**: Converts Wormhole's unified types to provider-specific payloads
-- **Error Normalization**: Maps provider-specific errors to `types.WormholeError`
+### 10. Object Pooling (`internal/pool/`)
 
-### 4. Middleware System (`pkg/middleware/`)
+**Pooled Resources**:
+- **JSON Buffers** (`json.go`): Marshal/Unmarshal with pooled `[]byte`, 4KB initial allocation
+- **Line Buffers** (streaming): 1KB buffers for SSE line parsing
 
-**Composable Behavior Stack**:
-
+**API**:
 ```go
-type Middleware func(types.Provider) types.Provider
+// Pooled JSON marshaling
+jsonBytes, err := pool.Marshal(data)
+defer pool.Return(jsonBytes)  // Return to pool
 
-// Built-in middleware
-- CircuitBreakerMiddleware(failureThreshold, timeout)
-- RateLimitMiddleware(requestsPerSecond)
-- LoggingMiddleware(logger)
-- CacheMiddleware(store, ttl)
-- HealthMiddleware(healthChecker)
-- LoadBalancerMiddleware(providers)
+// Pooled unmarshaling
+err := pool.Unmarshal(jsonBytes, &target)
 ```
 
-**Execution Flow**:
-```
-Request → Middleware Stack → Provider → Response
-          ↓
-     [Logging] → [Rate Limit] → [Circuit Breaker] → OpenAI Provider
-```
-
-**Thread Safety**: Each middleware uses sync primitives (RWMutex, atomic) for concurrent access.
-
-### 5. Configuration System (`pkg/config/`)
-
-**Centralized Defaults with Environment Overrides**:
-
-```go
-// defaults.go
-func GetDefaultHTTPTimeout() time.Duration {
-    if env := os.Getenv("WORMHOLE_DEFAULT_TIMEOUT"); env != "" {
-        return parseDuration(env)
-    }
-    return 300 * time.Second  // Fallback
-}
-
-// Environment variables supported:
-// - WORMHOLE_DEFAULT_TIMEOUT
-// - WORMHOLE_MAX_RETRIES
-// - WORMHOLE_INITIAL_RETRY_DELAY
-// - WORMHOLE_MAX_RETRY_DELAY
-```
-
-**Per-Provider Configuration**:
-```go
-type ProviderConfig struct {
-    APIKey        string
-    BaseURL       string
-    MaxRetries    *int           // Per-provider retry count
-    RetryDelay    *time.Duration // Initial retry delay
-    RetryMaxDelay *time.Duration // Max retry backoff
-}
-```
+**Benchmark Impact**:
+- Core request: **0 allocs/op** (down from 2 allocs/op)
+- Streaming: **2 allocs/chunk** (down from 15 allocs/chunk)
 
 ---
 
 ## Data Flow
 
-### Text Generation Request Lifecycle
+### Text Generation Request
 
 ```
-1. User Code
-   └─> client.Text().Model("gpt-5").Prompt("...").Generate(ctx)
+1. Client Call
+   client.Text().Model("gpt-4o").Prompt("Hello").Generate(ctx)
 
-2. Builder Pattern (text_builder.go)
-   └─> Constructs TextRequest with defaults
-   └─> Applies model-specific constraints (e.g., GPT-5 temperature=1.0)
+2. Builder Validation
+   TextRequestBuilder.Validate()
+   → Check model, messages, required fields
 
-3. Provider Selection (wormhole.go)
-   └─> getProviderWithBaseURL() resolves provider
-   └─> Creates OpenAI provider with BaseURL if specified
+3. Provider Resolution
+   Wormhole.getProvider("openai")
+   → Cache hit? Return cached instance (atomic refCount++)
+   → Cache miss? Create via factory, cache, return
 
-4. Middleware Stack (middleware/)
-   └─> Executes middleware chain (logging, rate limit, circuit breaker)
+4. Middleware Chain
+   Request → Logging → Metrics → RateLimit → CircuitBreaker → Retry
 
-5. Provider Execution (providers/openai/)
-   └─> Transform TextRequest → OpenAI payload
-   └─> HTTP POST to /v1/chat/completions
-   └─> Parse response → TextResponse
+5. Provider Request Transform
+   SDK TextRequest → OpenAI chat/completions payload
 
-6. Response Handling
-   └─> Cost calculation (usage.InputTokens * model.InputCost)
-   └─> Return TextResponse to user
+6. HTTP Execution
+   BaseProvider.DoRequest()
+   → Build HTTP request with headers, auth
+   → Execute via pooled HTTP client
+   → Parse status → WormholeError if non-2xx
+
+7. Response Transform
+   OpenAI response JSON → SDK TextResponse
+
+8. Middleware Response (reverse order)
+   Provider → Retry → CircuitBreaker → RateLimit → Metrics → Logging
+
+9. Return to Client
+   *types.TextResponse
 ```
 
-### Streaming Request Lifecycle
+### Streaming Request
 
 ```
-1. User Code
-   └─> chunks, _ := client.Text().Stream(ctx)
+1. Client Call
+   stream, _ := client.Text().Model("gpt-4o").Prompt("Hello").Stream(ctx)
 
-2. Stream Builder (stream_builder.go)
-   └─> Constructs streaming request
+2. Provider Streaming Request
+   POST /chat/completions with stream=true
 
-3. Provider Execution (providers/openai/)
-   └─> HTTP POST with "stream": true
-   └─> Server-Sent Events (SSE) parsing
-   └─> Yield StreamChunk for each delta
+3. SSE Parsing (goroutine)
+   HTTP body → SSEParser → transformToTextChunk(event) → channel
 
-4. Channel Communication
-   └─> Provider sends StreamChunk to channel
-   └─> User consumes: for chunk := range chunks { ... }
+4. Client Consumption
+   for chunk := range stream {
+       if chunk.HasError() { return chunk.Error }
+       fmt.Print(chunk.Content())
+   }
+
+5. Cleanup
+   defer body.Close() (automatic in ProcessStream goroutine)
 ```
-
-### Retry & Error Handling
-
-**Per-Provider Retry Logic** (integrated at provider level):
-
-```go
-// Automatic retry for retryable errors:
-// - 429 Too Many Requests (respects Retry-After header)
-// - 500 Internal Server Error
-// - 502 Bad Gateway
-// - 503 Service Unavailable
-// - 504 Gateway Timeout
-
-// Exponential backoff:
-// Retry 1: RetryDelay (default 500ms)
-// Retry 2: RetryDelay * 2 (1s)
-// Retry 3: RetryDelay * 4 (2s)
-// Capped at RetryMaxDelay (default 30s)
-```
-
-**Non-Retryable Errors** (fail immediately):
-- `400 Bad Request` - Malformed request
-- `401 Unauthorized` - Invalid API key
-- `403 Forbidden` - Insufficient permissions
-- `404 Not Found` - Model doesn't exist
-- `422 Unprocessable Entity` - Validation errors
 
 ---
 
-## Design Patterns
+## Concurrency & Thread Safety
 
-### 1. Functional Options Pattern (Initialization)
+### Thread-Safe Components
 
-**Purpose**: Configure client without complex constructors
+| Component | Mechanism | Access Pattern |
+|-----------|-----------|----------------|
+| **Provider cache** | `sync.RWMutex` | Read-heavy (cache hits), write-rare (creation) |
+| **Tool registry** | `sync.RWMutex` | Read-heavy (lookup), write-rare (registration) |
+| **Cached provider state** | `atomic.Int64`, `atomic.Int32` | Atomic ref counting, last-used timestamps |
+| **Idempotency cache** | `sync.Map` | Concurrent read/write for duplicate detection |
+| **Shutdown state** | `atomic.Bool`, `sync.WaitGroup` | Graceful shutdown coordination |
+
+### Graceful Shutdown
 
 ```go
-type Option func(*Config)
+ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+defer cancel()
+if err := client.Shutdown(ctx); err != nil { log.Fatal(err) }
+```
 
-func WithOpenAI(apiKey string, config ...types.ProviderConfig) Option {
-    return func(c *Config) {
-        // Configure OpenAI provider
+**Shutdown Sequence**:
+1. Set `shuttingDown` atomic flag (reject new requests)
+2. Close `shutdownChan` (signal background goroutines)
+3. Wait for `activeRequests` WaitGroup (drain in-flight, respects ctx timeout)
+4. Close all cached providers (cleanup HTTP clients)
+5. Stop discovery service (stop refresh goroutine)
+6. Return errors if cleanup failed or timeout
+
+---
+
+## Performance Characteristics
+
+### Benchmark Results
+
+```
+BenchmarkTextGeneration-16     12566146    67.0 ns/op    0 B/op    0 allocs/op
+BenchmarkWithMiddleware-16      5837629   171.5 ns/op    0 B/op    0 allocs/op
+BenchmarkConcurrent-16          6826171   146.4 ns/op    0 B/op    0 allocs/op
+```
+
+### Optimization Techniques
+
+1. **Object Pooling**: JSON buffers, line buffers → 0 allocs/op
+2. **Provider Caching**: Lazy init, LRU eviction, atomic ref counting
+3. **String Builder**: Streaming accumulation, error messages → 40% fewer allocs
+4. **Buffered Channels**: 100-chunk buffer prevents goroutine blocking
+
+---
+
+## Security
+
+**API Key Validation**:
+- Format validation before use (OpenAI: `sk-`, Anthropic: `sk-ant-`)
+- No logging in debug mode
+- Sanitization in error messages (`sk-1****cdef`)
+
+**TLS Configuration**:
+- `ProviderConfig.WithInsecureTLS(bool)` for legacy compatibility
+- Default: TLS 1.2+ with strict certificate validation
+
+---
+
+## Dependencies
+
+**External** (from `go.mod`):
+- `github.com/stretchr/testify`: Test assertions only
+
+**Standard Library**:
+- `net/http`, `context`, `encoding/json`, `sync`, `time`, `io`
+
+**No runtime dependencies** beyond Go stdlib.
+
+---
+
+## Extension Points
+
+**Custom Provider**:
+```go
+func myProviderFactory(config types.ProviderConfig) (types.Provider, error) {
+    return &MyProvider{BaseProvider: providers.NewBaseProvider("my-provider", config)}, nil
+}
+
+client := wormhole.New(
+    wormhole.WithCustomProvider("my-provider", myProviderFactory),
+)
+```
+
+**Custom Middleware**:
+```go
+type MyMiddleware struct{}
+func (m *MyMiddleware) Name() string { return "my-middleware" }
+func (m *MyMiddleware) Wrap(next types.ProviderHandler) types.ProviderHandler {
+    return func(ctx context.Context, req types.ProviderRequest) (types.ProviderResponse, error) {
+        // Pre-processing
+        resp, err := next(ctx, req)
+        // Post-processing
+        return resp, err
     }
 }
-
-// Usage:
-client := wormhole.New(
-    wormhole.WithDefaultProvider("openai"),
-    wormhole.WithOpenAI("key"),
-    wormhole.WithTimeout(30*time.Second),
-)
-```
-
-**Benefits**:
-- Optional parameters with defaults
-- Clear, self-documenting API
-- Backward compatible (new options don't break existing code)
-
-### 2. Builder Pattern (Request Construction)
-
-**Purpose**: Fluent API for complex requests
-
-```go
-response, _ := client.Text().
-    Model("gpt-5").
-    Prompt("Generate").
-    Temperature(0.7).
-    MaxTokens(100).
-    Messages(
-        types.NewSystemMessage("System context"),
-        types.NewUserMessage("User query"),
-    ).
-    Generate(ctx)
-```
-
-**Benefits**:
-- Type-safe request building
-- Progressive disclosure (only specify what you need)
-- Method chaining for readability
-
-### 3. Factory Pattern (Provider Registration)
-
-**Purpose**: Dynamic provider creation without hard-coding
-
-```go
-type ProviderFactory func(types.ProviderConfig) (types.Provider, error)
-
-// Built-in factories
-providerFactories["openai"] = func(c types.ProviderConfig) (types.Provider, error) {
-    return openai.New(c), nil
-}
-
-// Dynamic registration
-client.RegisterProvider("custom", NewCustomProvider)
-```
-
-**Benefits**:
-- Extensibility (add custom providers)
-- Thread-safe registration (sync.RWMutex)
-- No core code changes for new providers
-
-### 4. Middleware Chain Pattern (Cross-Cutting Concerns)
-
-**Purpose**: Composable request/response processing
-
-```go
-type Middleware func(types.Provider) types.Provider
-
-func LoggingMiddleware(logger Logger) Middleware {
-    return func(next types.Provider) types.Provider {
-        return &loggingProvider{next: next, logger: logger}
-    }
-}
-
-// Composition
-client := wormhole.New(
-    wormhole.WithMiddleware(
-        LoggingMiddleware(logger),
-        RateLimitMiddleware(100),
-        CircuitBreakerMiddleware(5, 30*time.Second),
-    ),
-)
-```
-
-**Benefits**:
-- Separation of concerns (logging, caching, retries)
-- Reusable across providers
-- Testable in isolation
-
----
-
-## Key Design Decisions
-
-### Decision 1: BaseURL Approach for OpenAI-Compatible Providers
-
-**Context**: Many providers (Groq, Mistral, Ollama, LM Studio) implement OpenAI's API format
-
-**Decision**: Use single OpenAI provider with configurable BaseURL instead of separate provider packages
-
-**Rationale**:
-- Reduces code duplication (no separate transform layers)
-- Instant support for new OpenAI-compatible providers
-- Consistent API surface (one provider implementation to maintain)
-
-**Consequences**:
-- ✅ **Benefit**: Adding Groq/Mistral/etc. requires ZERO new code
-- ✅ **Benefit**: One security audit surface (OpenAI transform logic)
-- ❌ **Trade-off**: Provider-specific features require custom handling
-
-**Example**:
-```go
-// All use the same OpenAI provider internally
-client.Text().BaseURL("https://api.groq.com/openai/v1").Model("mixtral-8x7b")
-client.Text().BaseURL("https://api.mistral.ai/v1").Model("mistral-large")
-client.Text().BaseURL("http://localhost:11434/v1").Model("llama3.2")
-```
-
-### Decision 2: Per-Provider Retry Configuration vs Global Middleware
-
-**Context**: Different providers have different reliability profiles
-
-**Decision**: Implement retry logic at provider level with configurable per-provider settings
-
-**Rationale**:
-- OpenAI is usually stable (2-3 retries sufficient)
-- Anthropic can be finicky (5+ retries may be needed)
-- Local providers (Ollama) don't need network retries
-
-**Consequences**:
-- ✅ **Benefit**: Fine-grained control per provider
-- ✅ **Benefit**: Respects Retry-After headers automatically
-- ✅ **Benefit**: Transport-level logic (HTTP retries, not application retries)
-- ❌ **Trade-off**: More complex provider implementations
-
-**Example**:
-```go
-client := wormhole.New(
-    wormhole.WithOpenAI("key", types.ProviderConfig{
-        MaxRetries: &[]int{2}[0],  // Conservative
-    }),
-    wormhole.WithAnthropic("key", types.ProviderConfig{
-        MaxRetries: &[]int{5}[0],  // Aggressive
-    }),
-)
-```
-
-### Decision 3: Automatic Model Constraint Handling
-
-**Context**: GPT-5 models require `temperature=1.0` (per OpenAI constraints)
-
-**Decision**: SDK automatically applies model-specific constraints
-
-**Rationale**:
-- Users shouldn't memorize model quirks
-- Fail early with clear errors if user overrides are invalid
-- Reduces support burden
-
-**Consequences**:
-- ✅ **Benefit**: GPT-5 works without manual temperature setting
-- ✅ **Benefit**: Clear errors if user tries invalid settings
-- ❌ **Trade-off**: Requires maintaining model constraint registry
-
-**Implementation**:
-```go
-// types/model_registry.go
-ModelConstraints: map[string]map[string]interface{}{
-    "gpt-5":      {"temperature": 1.0},
-    "gpt-5-mini": {"temperature": 1.0},
-}
-```
-
-### Decision 4: Thread-Safe Concurrent Operations
-
-**Context**: Early versions had race conditions in concurrent map access
-
-**Decision**: Use sync.RWMutex for all provider registration and access
-
-**Rationale**:
-- Production deployments use goroutines for parallel requests
-- Race detector caught concurrent map writes
-- Double-checked locking pattern for performance
-
-**Consequences**:
-- ✅ **Benefit**: Safe concurrent provider registration and access
-- ✅ **Benefit**: 146ns overhead for concurrent operations (tested)
-- ❌ **Trade-off**: Slight lock contention under extreme concurrency
-
-**Implementation**:
-```go
-type Wormhole struct {
-    providers        map[string]types.Provider
-    providerFactories map[string]ProviderFactory
-    mu               sync.RWMutex  // Protects maps
-}
 ```
 
 ---
 
-## Database Schema
-
-**Not applicable** - Wormhole is a stateless SDK with no database persistence.
-
----
-
-## Integration Points
-
-### External Services
-
-| Service | Purpose | Protocol | Authentication |
-|---------|---------|----------|----------------|
-| **OpenAI** | GPT models | HTTPS REST | Bearer token (API key) |
-| **Anthropic** | Claude models | HTTPS REST | `x-api-key` header |
-| **Google Gemini** | Gemini models | HTTPS REST | API key query param |
-| **OpenRouter** | 200+ models | HTTPS REST (OpenAI format) | Bearer token |
-| **Groq** | Fast inference | HTTPS REST (OpenAI format) | Bearer token |
-| **Mistral** | European AI | HTTPS REST (OpenAI format) | Bearer token |
-| **Ollama** | Local models | HTTP REST (OpenAI format) | None (local) |
-
-### Internal Communication
-
-```
-User Code (main.go)
-    ↓
-wormhole.Client (pkg/wormhole/)
-    ↓
-Middleware Stack (pkg/middleware/)
-    ↓
-Provider (pkg/providers/openai|anthropic|gemini)
-    ↓
-HTTP Client (net/http)
-    ↓
-External API (OpenAI, Anthropic, etc.)
-```
-
----
-
-## Performance Optimizations
-
-### 1. Zero-Allocation Hot Path
-
-**Goal**: 67ns per request (BenchmarkTextGeneration)
-
-**Techniques**:
-- Reuse HTTP clients (connection pooling)
-- Minimize interface allocations
-- Pre-allocate slices with known capacity
-- Avoid string concatenation in hot paths
-
-**Evidence** (from benchmarks):
-```
-BenchmarkTextGeneration-16    12566146    67 ns/op    0 B/op    0 allocs/op
-```
-
-### 2. Concurrent Request Handling
-
-**Goal**: Linear scaling across goroutines
-
-**Techniques**:
-- sync.RWMutex for provider maps (read-heavy workload)
-- Context-based cancellation (timeout handling)
-- Thread-safe middleware implementations
-
-**Evidence** (from benchmarks):
-```
-BenchmarkConcurrent-16        6826171   146.4 ns/op    0 B/op    0 allocs/op
-```
-
-### 3. Middleware Overhead Minimization
-
-**Goal**: <200ns overhead for full middleware stack
-
-**Techniques**:
-- Lazy initialization of middleware components
-- Bypass middleware for hot paths when possible
-- Atomic operations for rate limiting
-
-**Evidence** (from benchmarks):
-```
-BenchmarkWithMiddleware-16     5837629   171.5 ns/op    0 B/op    0 allocs/op
-```
-
----
-
-## Security Architecture
-
-### API Key Management
-
-- ✅ Environment variable support (`OPENAI_API_KEY`, `ANTHROPIC_API_KEY`)
-- ✅ Automatic key masking in error messages (`sk-1****cdef`)
-- ✅ No hardcoded secrets in code or tests
-
-### Error Message Sanitization
-
-**Before**:
-```
-Error: HTTP 401 at https://api.openai.com?key=sk-1234567890abcdef
-```
-
-**After**:
-```
-Error: HTTP 401 at https://api.openai.com?key=sk-1****cdef
-```
-
-### HTTPS-Only Policy
-
-- All production providers use HTTPS
-- Ollama (local) supports HTTP (localhost exception)
-
----
-
-## Testing Strategy
-
-### Unit Tests
-
-- Mock provider (`pkg/testing/mock_provider.go`)
-- Table-driven tests for transformations
-- Edge case coverage (empty prompts, nil contexts)
-
-### Integration Tests
-
-- Real API calls (optional, via environment variables)
-- Provider-specific behavior validation
-- Streaming tests (SSE parsing)
-
-### Benchmarks
-
-```bash
-make bench
-
-# Output:
-# BenchmarkTextGeneration-16     12566146    67 ns/op    0 B/op    0 allocs/op
-# BenchmarkWithMiddleware-16      5837629   171.5 ns/op    0 B/op    0 allocs/op
-# BenchmarkConcurrent-16          6826171   146.4 ns/op    0 B/op    0 allocs/op
-```
-
----
-
-## Deployment Considerations
-
-### Production Setup
-
-```go
-// Recommended production configuration
-client := wormhole.New(
-    wormhole.WithDefaultProvider("openai"),
-    wormhole.WithOpenAI(os.Getenv("OPENAI_API_KEY"), types.ProviderConfig{
-        MaxRetries:    &[]int{3}[0],
-        RetryDelay:    &[]time.Duration{500 * time.Millisecond}[0],
-        RetryMaxDelay: &[]time.Duration{30 * time.Second}[0],
-    }),
-    wormhole.WithAnthropic(os.Getenv("ANTHROPIC_API_KEY"), types.ProviderConfig{
-        MaxRetries: &[]int{5}[0],
-    }),
-    wormhole.WithTimeout(2*time.Minute),
-    wormhole.WithMiddleware(
-        middleware.CircuitBreakerMiddleware(5, 30*time.Second),
-        middleware.RateLimitMiddleware(100),
-        middleware.LoggingMiddleware(logger),
-    ),
-)
-```
-
-### Environment Variables
-
-```bash
-# Required (at least one provider)
-export OPENAI_API_KEY="sk-..."
-export ANTHROPIC_API_KEY="sk-ant-..."
-export OPENROUTER_API_KEY="sk-or-..."
-
-# Optional (overrides defaults)
-export WORMHOLE_DEFAULT_TIMEOUT="5m"
-export WORMHOLE_MAX_RETRIES="3"
-export WORMHOLE_INITIAL_RETRY_DELAY="500ms"
-export WORMHOLE_MAX_RETRY_DELAY="30s"
-```
-
----
-
-## Future Architecture Considerations
-
-### Potential Improvements (from roadmap.md)
-
-1. **Multi-Modal Extensions** (images, audio)
-2. **RAG Helpers** (embeddings + retrieval utilities)
-3. **OpenTelemetry Integration** (distributed tracing)
-
-See `docs/KNOWLEDGE.md` for detailed roadmap.
-
----
-
-**Last Updated**: 2025-11-16
-**Version**: Based on v1.4.0 codebase analysis
+**Last Updated**: 2026-01-14
+**Audit Scope**: Full codebase (main branch)
