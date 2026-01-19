@@ -24,9 +24,12 @@ fmt.Println(response.Content()) // That's it. You're done.
 
 **Or with full control:**
 ```go
-client := wormhole.New(wormhole.WithOpenAI(os.Getenv("OPENAI_API_KEY")))
-response, _ := client.Text().Model("gpt-4o").Prompt("Hello").Generate(ctx)
+client := wormhole.New(wormhole.WithOpenAI(os.Getenv("OPENAI_API_KEY"))) // [1] Initialize client
+response, _ := client.Text().Model("gpt-4o").Prompt("Hello").Generate(ctx) // [2] Generate text
 ```
+
+> [!TIP]
+> The `QuickText()` helper is perfect for scripts and quick tests. For production use, create a client and reuse it across requests.
 
 ---
 
@@ -129,47 +132,61 @@ import (
     "context"
     "fmt"
     "log"
-    
+
     "github.com/garyblankenship/wormhole/pkg/wormhole"
 )
 
 func main() {
     // Functional options pattern - like Laravel, but for people with taste
     client := wormhole.New(
-        wormhole.WithDefaultProvider("openai"),
-        wormhole.WithOpenAI("your-openai-key-here"),
+        wormhole.WithDefaultProvider("openai"),            // [1] Set default provider
+        wormhole.WithOpenAI("your-openai-key-here"),       // [2] Configure OpenAI key
         // Optional: Enable debug mode to see the quantum mechanics
-        wormhole.WithDebugLogging(true),
+        wormhole.WithDebugLogging(true),                   // [3] Enable request/response logging
     )
-    
+
     // This literally bends spacetime. 67ns per request.
     response, err := client.Text().
-        Model("gpt-4o").                                    // Latest and greatest
-        Prompt("Explain quantum tunneling to Jerry").      // Be specific
-        MaxTokens(100).                                    // Token budgeting
-        Temperature(0.7).                                  // Creativity dial
-        Generate(context.Background())
-    
+        Model("gpt-4o").                                   // [4] Specify model
+        Prompt("Explain quantum tunneling to Jerry").     // [5] User prompt
+        MaxTokens(100).                                   // [6] Token budgeting
+        Temperature(0.7).                                 // [7] Creativity dial (0-2)
+        Generate(context.Background())                    // [8] Execute request
+
     if err != nil {
         log.Fatalf("Portal malfunction: %v", err)
     }
-    
+
     fmt.Printf("🧪 Response: %s\n", response.Text)
     fmt.Printf("💰 Cost: $%.4f\n", response.Usage.Cost)
-    fmt.Printf("⚡ Tokens: %d in, %d out\n", 
-        response.Usage.InputTokens, 
+    fmt.Printf("⚡ Tokens: %d in, %d out\n",
+        response.Usage.InputTokens,
         response.Usage.OutputTokens)
-        
+
     // Bonus: Generate embeddings for semantic search/RAG
     embeddings, _ := client.Embeddings().
         Model("text-embedding-3-small").
         Input("Convert text to vectors for AI magic").
         Dimensions(512).  // Smaller = faster, larger = more precise
         Generate(context.Background())
-        
+
     fmt.Printf("🧬 Embedding: %d dimensions\n", len(embeddings.Data[0].Embedding))
 }
 ```
+
+### What's happening?
+
+1. **Default provider** - Sets which provider to use when no provider is specified per-request.
+2. **API key** - Pass your OpenAI API key. In production, use `os.Getenv("OPENAI_API_KEY")`.
+3. **Debug logging** - Logs all requests and responses for debugging. Disable in production.
+4. **Model selection** - Choose which model to use (gpt-4o, gpt-5, claude-sonnet-4-5, etc.).
+5. **Prompt** - The user input or question to send to the model.
+6. **Max tokens** - Limit the response length. Helps with cost control.
+7. **Temperature** - Controls randomness. 0 = deterministic, 2 = very creative.
+8. **Generate** - Executes the request and returns the response (or error).
+
+> [!WARNING]
+> Never hardcode API keys. Use environment variables: `wormhole.WithOpenAI(os.Getenv("OPENAI_API_KEY"))`.
 
 ### 🧬 NEW: Type-Safe Tool Registration (Zero Boilerplate)
 
@@ -186,25 +203,28 @@ client.RegisterTool("get_weather", "...",
 
 // AFTER: 8 lines of type-safe perfection
 type WeatherArgs struct {
-    City string `json:"city" tool:"required" desc:"City name"`
-    Unit string `json:"unit" tool:"enum=celsius,fahrenheit" desc:"Temperature unit"`
+    City string `json:"city" tool:"required" desc:"City name"`                           // [1] Required field
+    Unit string `json:"unit" tool:"enum=celsius,fahrenheit" desc:"Temperature unit"`    // [2] Enum constraint
 }
 
 wormhole.RegisterTypedTool(client, "get_weather", "Get current weather",
-    func(ctx context.Context, args WeatherArgs) (WeatherResult, error) {
+    func(ctx context.Context, args WeatherArgs) (WeatherResult, error) {                // [3] Type-safe args
         return getWeather(args.City, args.Unit), nil  // FULLY TYPE SAFE!
     },
 )
 ```
 
-**Supported Struct Tags:**
-- `json:"field_name"` - JSON property name
-- `tool:"required"` - Mark field as required
-- `tool:"enum=a,b,c"` - Enum constraint
-- `tool:"min=0;max=100"` - Numeric bounds (use semicolon as delimiter)
-- `tool:"minLength=3;maxLength=50"` - String length constraints
-- `tool:"pattern=^[A-Z]+$"` - Regex pattern
-- `desc:"Description"` - Field description for LLM
+### What's happening?
+
+1. **Required field** - The `tool:"required"` tag marks this field as required for tool calls.
+2. **Enum constraint** - `tool:"enum=celsius,fahrenheit"` limits valid values to the specified options.
+3. **Type-safe handler** - The function receives a typed struct instead of `map[string]any`, eliminating panic-prone type assertions.
+
+> [!TIP]
+> Type-safe tool registration generates JSON schemas automatically via reflection. No manual schema maintenance needed.
+
+> [!WARNING]
+> The reflection-based approach has a small performance overhead compared to manual schemas. For performance-critical paths, use manual schema registration.
 
 ### 💬 NEW: Conversation Builder (Multi-Turn Made Easy)
 
@@ -213,40 +233,70 @@ Building message arrays is tedious. Here's the fluent way:
 ```go
 // Fluent conversation builder
 conv := types.NewConversation().
-    System("You are a helpful coding assistant").
-    User("What is Go?").
-    Assistant("Go is a statically typed programming language").
-    User("What makes it good for servers?")
+    System("You are a helpful coding assistant").           // [1] System prompt
+    User("What is Go?").                                   // [2] First user message
+    Assistant("Go is a statically typed programming language"). // [3] Assistant response
+    User("What makes it good for servers?")                // [4] Follow-up question
 
-response, _ := client.Text().Conversation(conv).Generate(ctx)
+response, _ := client.Text().Conversation(conv).Generate(ctx) // [5] Generate with conversation
 
 // Few-shot prompting made simple
 conv := types.FewShot(
-    "You are a translator",
+    "You are a translator",                                // [6] System instruction
     []types.ExamplePair{
         {User: "Hello", Assistant: "Hola"},
         {User: "Goodbye", Assistant: "Adiós"},
     },
-).User("How are you?")
+).User("How are you?")                                    // [7] Actual prompt
 ```
+
+### What's happening?
+
+1. **System message** - Sets the behavior/role for the AI assistant.
+2. **User message** - The first question from the user.
+3. **Assistant message** - A pre-filled response (useful for few-shot or continuing conversations).
+4. **Follow-up** - Continue the conversation with additional messages.
+5. **Generate** - Process the entire conversation and generate a response.
+6. **System instruction** - For few-shot, define the task.
+7. **Examples + prompt** - Provide example pairs, then the actual query.
+
+> [!TIP]
+> The conversation builder is more readable than manually constructing message slices. It also validates message order (system -> user -> assistant -> user...).
+
+> [!WARNING]
+> Most providers require alternating user/assistant messages. The conversation builder enforces this, preventing API errors from malformed message sequences.
 
 ### 🔄 NEW: Builder Cloning & Fallback Chains
 
 **Clone for reusable configurations:**
 ```go
-base := client.Text().Model("gpt-4o").Temperature(0.7)
-resp1, _ := base.Clone().Prompt("Question 1").Generate(ctx)
-resp2, _ := base.Clone().Prompt("Question 2").Generate(ctx)
+base := client.Text().Model("gpt-4o").Temperature(0.7) // [1] Base configuration
+resp1, _ := base.Clone().Prompt("Question 1").Generate(ctx) // [2] Reuse base + custom prompt
+resp2, _ := base.Clone().Prompt("Question 2").Generate(ctx) // [3] Reuse base + different prompt
 ```
 
 **Automatic model fallback for resilience:**
 ```go
 response, _ := client.Text().
-    Model("gpt-4o").
-    WithFallback("gpt-4o-mini", "gpt-4-turbo").
+    Model("gpt-4o").                                   // [4] Primary model
+    WithFallback("gpt-4o-mini", "gpt-4-turbo").        // [5] Fallback models
     Prompt("Complex task").
     Generate(ctx)  // Tries models in order on failure
 ```
+
+### What's happening?
+
+1. **Base configuration** - Create a reusable builder with common settings (model, temperature, etc.).
+2. **Clone + prompt** - Clone creates a copy, then we add a prompt and generate.
+3. **Clone + different prompt** - Same base settings, different prompt - no need to repeat configuration.
+4. **Primary model** - The first model to try.
+5. **Fallback chain** - If primary fails, tries gpt-4o-mini, then gpt-4-turbo.
+
+> [!TIP]
+> Cloning is more efficient than rebuilding from scratch. It's also less error-prone since the base configuration is defined once.
+
+> [!WARNING]
+> Fallback models may have different capabilities (context length, tool support, etc.). Ensure your prompt works with all models in the fallback chain.
 
 ### 🎯 NEW: Builder Validation (Fail-Fast Pattern)
 
@@ -259,25 +309,38 @@ builder := client.Text().
     Temperature(0.7).
     MaxTokens(1000)
 
-if err := builder.Validate(); err != nil {
+if err := builder.Validate(); err != nil {              // [1] Validate before API call
     // Get detailed field-level error information
-    if vErr, ok := types.AsValidationError(err); ok {
+    if vErr, ok := types.AsValidationError(err); ok {     // [2] Extract validation error
         fmt.Printf("Field '%s' failed: %s\n", vErr.Field, vErr.Message)
     }
     return err
 }
 
 // Now safe to generate
-response, _ := builder.Prompt("Hello").Generate(ctx)
+response, _ := builder.Prompt("Hello").Generate(ctx)    // [3] Won't fail due to config
 
 // Or use MustValidate for development/testing (panics on error)
 response, _ := client.Text().
     Model("gpt-4o").
     Temperature(0.7).
-    MustValidate().  // Panics if invalid - perfect for tests
+    MustValidate().                                      // [4] Panics if invalid
     Prompt("Hello").
     Generate(ctx)
 ```
+
+### What's happening?
+
+1. **Validate** - Checks the builder configuration before making any API calls.
+2. **Error extraction** - Gets detailed field-level validation errors.
+3. **Safe generate** - After validation passes, Generate() won't fail due to configuration.
+4. **MustValidate** - Convenience method that panics on validation error (useful in tests/main).
+
+> [!TIP]
+> Validate early to avoid wasting API quota on malformed requests. Validation catches issues like invalid temperature ranges, missing models, etc.
+
+> [!WARNING]
+> Validation only checks client-side constraints. The provider may still reject requests for reasons not detectable client-side (content policy, account issues, etc.).
 
 **What gets validated:**
 - `model` - Must be specified
@@ -291,29 +354,44 @@ response, _ := client.Text().
 Check what features a provider supports before using them:
 
 ```go
-caps := client.ProviderCapabilities("openai")
+caps := client.ProviderCapabilities("openai")           // [1] Get capabilities for provider
 
-if caps.SupportsToolCalling() {
+if caps.SupportsToolCalling() {                         // [2] Check for tool support
     // Safe to use tools
     client.RegisterTool(...)
 }
 
-if caps.SupportsVision() {
+if caps.SupportsVision() {                              // [3] Check for image support
     // Safe to send images
 }
 
-if caps.SupportsStreaming() {
+if caps.SupportsStreaming() {                           // [4] Check for streaming support
     // Use streaming
 }
 
 // Or check any capability directly
-if caps.Has(wormhole.CapabilityStructured) {
+if caps.Has(wormhole.CapabilityStructured) {             // [5] Check specific capability
     // Use structured output
 }
 
 // Get all capabilities
-allCaps := caps.All() // []Capability{"text", "structured", "tool_calling", ...}
+allCaps := caps.All()                                   // [6] Get complete list
 ```
+
+### What's happening?
+
+1. **Get capabilities** - Returns a `Capabilities` struct for the specified provider.
+2. **Tool calling** - Some providers/models don't support function calling.
+3. **Vision** - Some providers can't process images.
+4. **Streaming** - Most providers support streaming, but good to verify.
+5. **Direct check** - Use `Has()` with a `Capability` constant for specific features.
+6. **All capabilities** - Returns a list of all supported capabilities for inspection.
+
+> [!TIP]
+> Capability checking prevents runtime errors from attempting unsupported operations. It's especially useful when building multi-provider applications.
+
+> [!WARNING]
+> Capabilities are per-provider, not per-model. Some models within a provider may have different capabilities. Check model-specific constraints separately.
 
 **Available capabilities:**
 - `CapabilityText`, `CapabilityStructured`, `CapabilityEmbeddings`
@@ -327,30 +405,49 @@ All response types now have a consistent `Content()` method:
 ```go
 // Text response
 textResp, _ := client.Text().Model("gpt-4o").Prompt("Hi").Generate(ctx)
-fmt.Println(textResp.Content())  // Returns string
-fmt.Println(textResp.HasToolCalls())  // Check for tool calls
-fmt.Println(textResp.IsComplete())    // Check if finished normally
-fmt.Println(textResp.WasTruncated())  // Check if hit max tokens
+fmt.Println(textResp.Content())                    // [1] Returns string
+fmt.Println(textResp.HasToolCalls())                // [2] Check for tool calls
+fmt.Println(textResp.IsComplete())                  // [3] Check if finished normally
+fmt.Println(textResp.WasTruncated())                // [4] Check if hit max tokens
 
 // Structured response
 structResp, _ := client.Structured().Model("gpt-4o").Schema(s).Generate(ctx)
-data := structResp.Content()  // Returns any
+data := structResp.Content()                        // [5] Returns any
 var person Person
-structResp.ContentAs(&person)  // Type-safe unmarshaling
+structResp.ContentAs(&person)                       // [6] Type-safe unmarshaling
 
 // Embeddings response
 embResp, _ := client.Embeddings().Model("text-embedding-3-small").Input("text").Generate(ctx)
-vector := embResp.Content()   // Returns first []float64
-vector2 := embResp.Vector(1)  // Get specific vector by index
-count := embResp.Count()      // Number of embeddings
+vector := embResp.Content()                         // [7] Returns first []float64
+vector2 := embResp.Vector(1)                        // [8] Get specific vector by index
+count := embResp.Count()                            // [9] Number of embeddings
 
 // Streaming chunks
 for chunk := range stream {
-    fmt.Print(chunk.Content())  // Works for both Text and Delta
+    fmt.Print(chunk.Content())                      // [10] Works for both Text and Delta
     if chunk.IsDone() { break }
     if chunk.HasError() { log.Fatal(chunk.Error) }
 }
 ```
+
+### What's happening?
+
+1. **Text content** - `Content()` returns the generated text as a string.
+2. **Tool calls** - Returns `true` if the model made any tool/function calls.
+3. **Completion status** - Returns `true` if the model completed normally (not truncated, not filtered).
+4. **Truncated check** - Returns `true` if the response was cut off due to `max_tokens`.
+5. **Structured content** - Returns the parsed structured output as `any`.
+6. **Type-safe unmarshal** - Populates the provided struct with the response data.
+7. **First embedding** - Returns the first embedding vector.
+8. **Specific vector** - Get a specific embedding by index (useful for batch requests).
+9. **Count** - Returns the number of embeddings in the response.
+10. **Stream content** - Works for both text chunks and delta chunks (unified accessor).
+
+> [!TIP]
+> The unified `Content()` method makes code more readable and works across all response types. No need to remember different field names for different providers.
+
+> [!WARNING]
+> For structured responses, `ContentAs()` will fail if the model output doesn't match your struct. Always handle the error case for schema mismatches.
 
 ### 🌊 NEW: StreamAndAccumulate Helper
 
@@ -373,9 +470,19 @@ for chunk := range chunks {
 }
 
 // Get complete accumulated text after streaming finishes
-fullStory := getFullText()
+fullStory := getFullText()                             // [1] Call accumulator function
 fmt.Printf("\n\nFull story (%d chars): %s\n", len(fullStory), fullStory)
 ```
+
+### What's happening?
+
+1. **Accumulator function** - Returns a function that, when called after streaming completes, returns the full accumulated text.
+
+> [!TIP]
+> `StreamAndAccumulate()` is perfect when you need both real-time feedback AND the complete text for storage or further processing.
+
+> [!WARNING]
+> Only call `getFullText()` after consuming the entire channel. The accumulator runs concurrently and updates as chunks arrive.
 
 ### ⚡ NEW: Batch Operations (Concurrent Execution)
 
@@ -386,7 +493,7 @@ results := client.Batch().
     Add(client.Text().Model("gpt-4o").Prompt("Q1")).
     Add(client.Text().Model("gpt-4o").Prompt("Q2")).
     Add(client.Text().Model("gpt-4o").Prompt("Q3")).
-    Concurrency(5).
+    Concurrency(5).                                    // [1] Max concurrent requests
     Execute(ctx)
 
 for _, r := range results {
@@ -401,8 +508,19 @@ for _, r := range results {
 resp, _ := client.Batch().
     Add(client.Text().Model("gpt-4o").Prompt("Task")).
     Add(client.Text().Model("claude-3-opus").Prompt("Task")).
-    ExecuteFirst(ctx)  // Returns first successful response
+    ExecuteFirst(ctx)                                  // [2] Returns first successful response
 ```
+
+### What's happening?
+
+1. **Concurrency limit** - Maximum number of concurrent requests. Prevents overwhelming the provider.
+2. **Execute first** - Races all requests and returns the first successful one, cancelling the rest.
+
+> [!TIP]
+> Batch operations are ideal for processing independent requests in parallel. `ExecuteFirst` is useful for racing multiple providers for lowest latency.
+
+> [!WARNING]
+> Each request in a batch counts against your rate limits. Set `Concurrency` appropriately to avoid hitting rate limits.
 
 ### 🚀 NEW: One-Liner Quick Start
 
@@ -413,6 +531,12 @@ For scripts and demos, skip the ceremony:
 response, _ := wormhole.QuickText("gpt-4o", "Hello world", os.Getenv("OPENAI_API_KEY"))
 ```
 
+> [!TIP]
+> `QuickText()` creates a temporary client and makes a single request. Perfect for one-off scripts and quick tests.
+
+> [!WARNING]
+> `QuickText()` creates a new client each call. For multiple requests, create a client once and reuse it for better performance.
+
 ### 🛠️ Native Tool Use / Function Calling (Agent Mode Activated)
 
 *BURP* Finally - **actual** function calling that doesn't require you to manually string together requests like a Jerry trying to build IKEA furniture. Register Go functions once, the AI calls them automatically. It's like having infinite Meeseeks, but they actually finish their tasks.
@@ -420,9 +544,9 @@ response, _ := wormhole.QuickText("gpt-4o", "Hello world", os.Getenv("OPENAI_API
 ```go
 // Step 1: Register tools the AI can use (just like teaching Morty, but successful)
 client.RegisterTool(
-    "get_weather",
-    "Get current weather for a city",
-    map[string]any{
+    "get_weather",                                     // [1] Tool name
+    "Get current weather for a city",                 // [2] Tool description
+    map[string]any{                                   // [3] JSON schema for parameters
         "type": "object",
         "properties": map[string]any{
             "city": map[string]any{"type": "string"},
@@ -430,7 +554,7 @@ client.RegisterTool(
         },
         "required": []string{"city"},
     },
-    func(ctx context.Context, args map[string]any) (any, error) {
+    func(ctx context.Context, args map[string]any) (any, error) { // [4] Handler function
         city := args["city"].(string)
         // Your actual weather API call here
         return map[string]any{"temp": 72, "condition": "sunny"}, nil
@@ -452,6 +576,19 @@ response, _ := client.Text().
 fmt.Println(response.Text)
 // Output: "The weather in San Francisco is 72°F and sunny."
 ```
+
+### What's happening?
+
+1. **Tool name** - Identifier the AI uses to refer to this tool.
+2. **Description** - Tells the AI what this tool does.
+3. **Schema** - JSON Schema describing the parameters the tool accepts.
+4. **Handler** - Your Go function that gets called when the AI uses this tool.
+
+> [!TIP]
+> Tool descriptions are critical. Be specific about what the tool does and when to use it. The AI relies on this to decide whether to call your tool.
+
+> [!WARNING]
+> Tool handlers run in the same process as your application. Be careful with side effects and ensure your handlers are safe to call concurrently.
 
 **Why This Doesn't Suck (Unlike Other Implementations):**
 - ✅ **Automatic Execution** - Tools run automatically, no manual orchestration
