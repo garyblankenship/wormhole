@@ -20,19 +20,21 @@ import (
 	"github.com/garyblankenship/wormhole/pkg/types"
 )
 
-// requestBodyPool pools byte slices for request bodies to reduce allocations
+// requestBodyPool pools byte slices for request bodies to reduce allocations.
+// Stores *[]byte so sync.Pool.Put receives a pointer type (SA6002).
 var requestBodyPool = sync.Pool{
 	New: func() any {
-		// Start with 1KB buffer, will grow as needed
-		return make([]byte, 0, 1024)
+		buf := make([]byte, 0, 1024)
+		return &buf
 	},
 }
 
-// responseBodyPool pools byte slices for response bodies to reduce allocations
+// responseBodyPool pools byte slices for response bodies to reduce allocations.
+// Stores *[]byte so sync.Pool.Put receives a pointer type (SA6002).
 var responseBodyPool = sync.Pool{
 	New: func() any {
-		// Start with 4KB buffer, typical response size
-		return make([]byte, 0, 4096)
+		buf := make([]byte, 0, 4096)
+		return &buf
 	},
 }
 
@@ -47,7 +49,8 @@ func (r *pooledBytesReader) Read(p []byte) (n int, err error) {
 	if r.pos >= len(r.bytes) {
 		if !r.returned {
 			// Return slice to pool, resetting length to 0 but keeping capacity
-			requestBodyPool.Put(r.bytes[:0])
+			buf := r.bytes[:0]
+			requestBodyPool.Put(&buf)
 			r.returned = true
 		}
 		return 0, io.EOF
@@ -80,11 +83,11 @@ func (r *jsonPooledReader) Read(p []byte) (n int, err error) {
 
 
 // readAllPooled reads all data from r into a pooled byte slice.
-// The caller MUST call responseBodyPool.Put(buf[:0]) after using the slice.
+// The caller MUST call returnResponseBuf after using the slice.
 func readAllPooled(r io.Reader) ([]byte, error) {
 	// Get initial buffer from pool
-	buf := responseBodyPool.Get().([]byte)
-	buf = buf[:0] // reset length
+	bufPtr := responseBodyPool.Get().(*[]byte)
+	buf := (*bufPtr)[:0] // reset length
 
 	// Temporary scratch buffer for reading chunks
 	scratch := make([]byte, 4096)
@@ -106,7 +109,8 @@ func readAllPooled(r io.Reader) ([]byte, error) {
 				newBuf := make([]byte, len(buf), newCap)
 				copy(newBuf, buf)
 				// Return old buffer to pool
-				responseBodyPool.Put(buf[:0])
+				old := buf[:0]
+				responseBodyPool.Put(&old)
 				buf = newBuf
 			}
 			buf = append(buf, scratch[:n]...)
@@ -116,11 +120,18 @@ func readAllPooled(r io.Reader) ([]byte, error) {
 				break
 			}
 			// On error, return buffer to pool
-			responseBodyPool.Put(buf[:0])
+			errBuf := buf[:0]
+			responseBodyPool.Put(&errBuf)
 			return nil, err
 		}
 	}
 	return buf, nil
+}
+
+// returnResponseBuf returns a response buffer to the pool.
+func returnResponseBuf(buf []byte) {
+	buf = buf[:0]
+	responseBodyPool.Put(&buf)
 }
 
 // AuthStrategy defines the interface for authentication strategies
@@ -257,7 +268,7 @@ func (p *BaseProvider) DoRequest(ctx context.Context, method, url string, body a
 	if err != nil {
 		return types.Errorf("read response body", err)
 	}
-	defer responseBodyPool.Put(respBody[:0])
+	defer returnResponseBuf(respBody)
 
 	// Handle error responses
 	if resp.StatusCode >= 400 {
@@ -472,7 +483,7 @@ func (p *BaseProvider) StreamRequest(ctx context.Context, method, url string, bo
 	if resp.StatusCode >= 400 {
 		defer resp.Body.Close()
 		respBody, _ := readAllPooled(resp.Body)
-		defer responseBodyPool.Put(respBody[:0])
+		defer returnResponseBuf(respBody)
 		return nil, p.buildErrorResponse(resp.StatusCode, resp.Status, url, respBody)
 	}
 

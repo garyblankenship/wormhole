@@ -15,11 +15,12 @@ import (
 // Stream sentinel value
 const streamDoneMarker = "[DONE]"
 
-// lineBufferPool pools byte slices for line reading to reduce allocations
+// lineBufferPool pools byte slices for line reading to reduce allocations.
+// Stores *[]byte so sync.Pool.Put receives a pointer type (SA6002).
 var lineBufferPool = sync.Pool{
 	New: func() any {
-		// Start with 1KB buffer, typical line size
-		return make([]byte, 0, 1024)
+		buf := make([]byte, 0, 1024)
+		return &buf
 	},
 }
 
@@ -138,8 +139,8 @@ func (p *SSEParser) readLine() ([]byte, bool, error) {
 // copyToPooledBuffer copies a byte slice to a pooled buffer
 // Caller must return the buffer to pool after use
 func (p *SSEParser) copyToPooledBuffer(slice []byte) []byte {
-	buf := lineBufferPool.Get().([]byte)
-	buf = buf[:0] // reset length
+	bufPtr := lineBufferPool.Get().(*[]byte)
+	buf := (*bufPtr)[:0] // reset length
 	buf = append(buf, slice...)
 	return buf
 }
@@ -147,7 +148,8 @@ func (p *SSEParser) copyToPooledBuffer(slice []byte) []byte {
 // returnToPool returns a buffer to the pool
 // This should be called by Parse after processing a line
 func (p *SSEParser) returnToPool(buf []byte) {
-	lineBufferPool.Put(buf[:0])
+	buf = buf[:0]
+	lineBufferPool.Put(&buf)
 }
 
 // shouldReturn checks if event is complete and should be returned

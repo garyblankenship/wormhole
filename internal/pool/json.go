@@ -6,11 +6,13 @@ import (
 	"sync"
 )
 
-// JSONBufferPool pools byte slices for JSON marshaling to reduce allocations.
-// Buffers start with 4KB capacity, which is sufficient for most JSON payloads.
-var JSONBufferPool = sync.Pool{
+// jsonBufferPool pools byte slices for JSON marshaling to reduce allocations.
+// Stores *[]byte (pointer to slice) so sync.Pool.Put receives a pointer type,
+// avoiding the allocation from boxing a slice header into interface{} (SA6002).
+var jsonBufferPool = sync.Pool{
 	New: func() any {
-		return make([]byte, 0, 4096)
+		buf := make([]byte, 0, 4096)
+		return &buf
 	},
 }
 
@@ -49,13 +51,13 @@ func Marshal(v any) ([]byte, error) {
 	// Get the encoded bytes
 	encodedBytes := buf.Bytes()
 
-	// Get a byte slice from JSONBufferPool with sufficient capacity
-	result := JSONBufferPool.Get().([]byte)
-	result = result[:0]
+	// Get a byte slice from pool with sufficient capacity
+	slicePtr := jsonBufferPool.Get().(*[]byte)
+	result := (*slicePtr)[:0]
 	if cap(result) < len(encodedBytes) {
 		// Pooled slice too small, allocate new one
 		// Return the unused pooled slice
-		JSONBufferPool.Put(result)
+		jsonBufferPool.Put(slicePtr)
 		result = make([]byte, len(encodedBytes))
 	} else {
 		// Reuse pooled slice
@@ -75,7 +77,7 @@ func Return(buf []byte) {
 	}
 	// Reset length to 0 while keeping capacity
 	buf = buf[:0]
-	JSONBufferPool.Put(buf)
+	jsonBufferPool.Put(&buf)
 }
 
 // MarshalToString marshals v to JSON and returns it as a string.
