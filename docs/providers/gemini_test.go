@@ -385,9 +385,9 @@ func testSpecificFeatures(t *testing.T, doc string) {
 	t.Run("Code examples quality", func(t *testing.T) {
 		// Check that examples use proper Go syntax
 		requiredPatterns := []string{
-			"```go",  // All examples should be in Go code blocks
+			"```go",        // All examples should be in Go code blocks
 			"package main", // Complete examples should have package declaration
-			"import (", // Examples should show imports
+			"import (",     // Examples should show imports
 		}
 
 		for _, pattern := range requiredPatterns {

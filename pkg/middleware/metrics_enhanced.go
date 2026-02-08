@@ -177,12 +177,7 @@ func (c *EnhancedMetricsCollector) RecordRequest(labels *RequestLabels, duration
 	// Record metrics
 	bucket.record(c.buckets, duration, err != nil, retries, inputTokens, outputTokens)
 
-	// Update concurrency gauge if enabled
-	if c.config.EnableConcurrencyTracking {
-		// Note: This is a simplified concurrency gauge. In production,
-		// you'd want more sophisticated tracking with active request count
-		// that increments at request start and decrements at request end
-	}
+	// TODO: concurrency gauge tracking - increment at request start, decrement at request end
 }
 
 // record updates a metrics bucket with a request

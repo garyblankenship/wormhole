@@ -142,9 +142,8 @@ func (al *AdaptiveLimiter) adjustCapacity() {
 	averageLatency := al.totalLatency / time.Duration(al.sampleCount)
 	currentCapacity := al.limiter.Capacity() // Need to expose capacity method
 
-	newCapacity := currentCapacity
-
 	// Simple proportional control: if latency > target, reduce capacity; if less, increase
+	var newCapacity int
 	if averageLatency > al.config.TargetLatency {
 		// Reduce capacity by 1, but not below min
 		newCapacity = max(al.config.MinCapacity, currentCapacity-1)

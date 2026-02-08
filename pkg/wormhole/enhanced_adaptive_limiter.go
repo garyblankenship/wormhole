@@ -325,7 +325,7 @@ func (l *EnhancedAdaptiveLimiter) getState(provider, model string) *ProviderAdap
 
 	// Fallback to provider-level state
 	l.mu.RLock()
-	state, _ = l.providerStates[provider]
+	state = l.providerStates[provider]
 	l.mu.RUnlock()
 
 	return state
