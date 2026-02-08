@@ -10,6 +10,26 @@ import (
 	"github.com/garyblankenship/wormhole/pkg/types"
 )
 
+// contextKey is an unexported type for context keys in the middleware package.
+// Using a distinct type prevents collisions with keys defined in other packages.
+type contextKey string
+
+// Context keys used by middleware to extract request metadata.
+const (
+	// CtxKeyProvider identifies the LLM provider (e.g. "openai", "anthropic").
+	CtxKeyProvider contextKey = "provider"
+
+	// CtxKeyModel identifies the model being used.
+	CtxKeyModel contextKey = "model"
+
+	// CtxKeyMethod identifies the request method (e.g. "text", "stream").
+	CtxKeyMethod contextKey = "method"
+
+	// CtxKeyWormholeProvider is an alternative provider key used by the typed
+	// enhanced metrics middleware.
+	CtxKeyWormholeProvider contextKey = "wormhole_provider"
+)
+
 // Middleware represents a function that wraps provider calls
 // DEPRECATED: Use types.ProviderMiddleware for type-safe middleware instead
 type Middleware func(next Handler) Handler
@@ -73,9 +93,9 @@ func EnhancedMetricsMiddleware(collector *EnhancedMetricsCollector) Middleware {
 			// Extract labels from context or request if possible
 			var labels *RequestLabels
 			// Try to extract from context first
-			if provider, ok := ctx.Value("provider").(string); ok {
-				if model, ok := ctx.Value("model").(string); ok {
-					if method, ok := ctx.Value("method").(string); ok {
+			if provider, ok := ctx.Value(CtxKeyProvider).(string); ok {
+				if model, ok := ctx.Value(CtxKeyModel).(string); ok {
+					if method, ok := ctx.Value(CtxKeyMethod).(string); ok {
 						labels = &RequestLabels{
 							Provider: provider,
 							Model:    model,

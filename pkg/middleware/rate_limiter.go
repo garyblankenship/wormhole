@@ -464,10 +464,10 @@ func ProviderAwareConcurrencyLimitMiddlewareWithConfig(config ProviderAwareConcu
 			// Extract provider and model from context (similar to EnhancedMetricsMiddleware)
 			var provider, model string
 			if enableProviderAware {
-				if p, ok := ctx.Value("provider").(string); ok {
+				if p, ok := ctx.Value(CtxKeyProvider).(string); ok {
 					provider = p
 				}
-				if m, ok := ctx.Value("model").(string); ok {
+				if m, ok := ctx.Value(CtxKeyModel).(string); ok {
 					model = m
 				}
 			}
@@ -482,8 +482,8 @@ func ProviderAwareConcurrencyLimitMiddlewareWithConfig(config ProviderAwareConcu
 			}
 
 			if !acquired {
-				// Acquire returns false only when context is cancelled or timeout occurs
-				// (the limiter blocks until slot is available or context cancelled)
+				// Acquire returns false only when context is canceled or timeout occurs
+				// (the limiter blocks until slot is available or context canceled)
 				return nil, wrapMiddlewareError("provider_aware_concurrency_limit", "acquire", ctx.Err())
 			}
 

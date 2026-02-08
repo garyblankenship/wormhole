@@ -211,7 +211,7 @@ func TestTypedEnhancedMetricsMiddleware(t *testing.T) {
 		collector := NewEnhancedMetricsCollector(nil)
 		middleware := NewTypedEnhancedMetricsMiddleware(collector)
 
-		ctx := context.WithValue(context.Background(), "wormhole_provider", "openai")
+		ctx := context.WithValue(context.Background(), CtxKeyWormholeProvider, "openai")
 
 		labels := middleware.extractLabels(ctx, "text", "gpt-4")
 		assert.Equal(t, "openai", labels.Provider)

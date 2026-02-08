@@ -78,7 +78,7 @@ func main() {
 	wrappedHandler := typedMiddleware.ApplyText(textHandler)
 
 	// Create a context with provider information
-	ctx := context.WithValue(context.Background(), "wormhole_provider", "google")
+	ctx := context.WithValue(context.Background(), middleware.CtxKeyWormholeProvider, "google")
 
 	// Create request
 	request := types.TextRequest{

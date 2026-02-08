@@ -25,9 +25,9 @@ func (m *TypedEnhancedMetricsMiddleware) extractLabels(ctx context.Context, meth
 
 	// Try to extract provider from context
 	if ctx != nil {
-		if p, ok := ctx.Value("wormhole_provider").(string); ok {
+		if p, ok := ctx.Value(CtxKeyWormholeProvider).(string); ok {
 			provider = p
-		} else if p, ok := ctx.Value("provider").(string); ok {
+		} else if p, ok := ctx.Value(CtxKeyProvider).(string); ok {
 			provider = p
 		}
 	}

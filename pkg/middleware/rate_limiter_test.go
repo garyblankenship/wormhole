@@ -209,8 +209,8 @@ func TestProviderAwareConcurrencyLimitMiddleware(t *testing.T) {
 		wrapped := mw(handler)
 
 		// Test with provider in context - should use provider-aware methods
-		ctx := context.WithValue(context.Background(), "provider", "openai")
-		ctx = context.WithValue(ctx, "model", "test-model")
+		ctx := context.WithValue(context.Background(), CtxKeyProvider, "openai")
+		ctx = context.WithValue(ctx, CtxKeyModel, "test-model")
 
 		resp, err := wrapped(ctx, "request")
 		require.NoError(t, err)
@@ -267,11 +267,11 @@ func TestProviderAwareConcurrencyLimitMiddleware(t *testing.T) {
 
 		wrapped := mw(handler)
 
-		// Create a cancelled context
+		// Create a canceled context
 		ctx, cancel := context.WithCancel(context.Background())
 		cancel() // Cancel immediately
-		ctx = context.WithValue(ctx, "provider", "test")
-		ctx = context.WithValue(ctx, "model", "test-model")
+		ctx = context.WithValue(ctx, CtxKeyProvider, "test")
+		ctx = context.WithValue(ctx, CtxKeyModel, "test-model")
 
 		resp, err := wrapped(ctx, "request")
 		require.Error(t, err)
@@ -302,8 +302,8 @@ func TestProviderAwareConcurrencyLimitMiddleware(t *testing.T) {
 		wrapped := mw(handler)
 
 		// Even with provider in context, should use global methods when disabled
-		ctx := context.WithValue(context.Background(), "provider", "openai")
-		ctx = context.WithValue(ctx, "model", "test-model")
+		ctx := context.WithValue(context.Background(), CtxKeyProvider, "openai")
+		ctx = context.WithValue(ctx, CtxKeyModel, "test-model")
 
 		resp, err := wrapped(ctx, "request")
 		require.NoError(t, err)
