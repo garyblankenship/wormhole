@@ -63,16 +63,14 @@ func SecureRandomIntRange(min, max int64) (int64, error) {
 	return min + n, nil
 }
 
-// SeedGlobalRand seeds the global math/rand generator with cryptographically secure randomness.
-// This improves the randomness of math/rand for non-security-critical operations.
-// Note: The global math/rand generator is automatically seeded in Go 1.20+, but this
-// ensures cryptographically secure seeding for additional safety.
-func SeedGlobalRand() error {
+// NewCryptoSeededRand returns a new *rand.Rand seeded with cryptographically secure randomness.
+// Use this for non-security-critical operations that need a dedicated generator (e.g., to avoid
+// contention on the global source). For most uses, the auto-seeded global math/rand (Go 1.20+)
+// is sufficient.
+func NewCryptoSeededRand() (*mrand.Rand, error) {
 	var seed int64
-	// Read 8 random bytes for seed
 	if err := binary.Read(rand.Reader, binary.BigEndian, &seed); err != nil {
-		return err
+		return nil, err
 	}
-	mrand.Seed(seed)
-	return nil
+	return mrand.New(mrand.NewSource(seed)), nil
 }

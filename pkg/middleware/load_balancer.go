@@ -7,15 +7,9 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/garyblankenship/wormhole/internal/utils"
 	"github.com/garyblankenship/wormhole/pkg/config"
 	"github.com/garyblankenship/wormhole/pkg/types"
 )
-
-func init() {
-	// Seed global random generator for load balancing
-	_ = utils.SeedGlobalRand()
-}
 
 var (
 	// ErrNoHealthyProviders is returned when no healthy providers are available
