@@ -128,7 +128,9 @@ func TestRetryableHTTPClient_Do_Success(t *testing.T) {
 
 	resp, err := client.Do(req)
 	require.NoError(t, err)
-	defer resp.Body.Close()
+	defer func() {
+		_ = resp.Body.Close()
+	}()
 
 	assert.Equal(t, http.StatusOK, resp.StatusCode)
 
@@ -169,7 +171,9 @@ func TestRetryableHTTPClient_Do_RetryableErrors(t *testing.T) {
 	duration := time.Since(start)
 
 	require.NoError(t, err)
-	defer resp.Body.Close()
+	defer func() {
+		_ = resp.Body.Close()
+	}()
 
 	assert.Equal(t, http.StatusOK, resp.StatusCode)
 	assert.Equal(t, 3, attempt) // Should have made 3 attempts
@@ -196,7 +200,9 @@ func TestRetryableHTTPClient_Do_NonRetryableError(t *testing.T) {
 	// Non-retryable HTTP errors should return the response, not an error
 	assert.NoError(t, err)
 	assert.NotNil(t, resp)
-	defer resp.Body.Close()
+	defer func() {
+		_ = resp.Body.Close()
+	}()
 
 	assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
 
@@ -228,7 +234,9 @@ func TestRetryableHTTPClient_Do_ExceedMaxRetries(t *testing.T) {
 
 	resp, err := client.Do(req)
 	if resp != nil {
-		defer resp.Body.Close()
+		defer func() {
+			_ = resp.Body.Close()
+		}()
 	}
 
 	assert.Error(t, err)
@@ -262,7 +270,9 @@ func TestRetryableHTTPClient_Do_ContextCancellation(t *testing.T) {
 	start := time.Now()
 	resp, err := client.Do(req)
 	if resp != nil {
-		defer resp.Body.Close()
+		defer func() {
+			_ = resp.Body.Close()
+		}()
 	}
 	duration := time.Since(start)
 
@@ -306,7 +316,9 @@ func TestRetryableHTTPClient_Do_RetryAfterHeader(t *testing.T) {
 	duration := time.Since(start)
 
 	require.NoError(t, err)
-	defer resp.Body.Close()
+	defer func() {
+		_ = resp.Body.Close()
+	}()
 
 	assert.Equal(t, http.StatusOK, resp.StatusCode)
 	assert.Equal(t, 2, attempt)
@@ -516,7 +528,9 @@ func TestRetryableHTTPClient_NetworkError(t *testing.T) {
 
 	resp, err := client.Do(req)
 	if resp != nil {
-		defer resp.Body.Close()
+		defer func() {
+			_ = resp.Body.Close()
+		}()
 	}
 
 	assert.Error(t, err)
@@ -558,7 +572,9 @@ func TestRetryableHTTPClient_RequestCloning(t *testing.T) {
 
 	resp, err := client.Do(req)
 	require.NoError(t, err)
-	defer resp.Body.Close()
+	defer func() {
+		_ = resp.Body.Close()
+	}()
 
 	assert.Equal(t, 2, attempt)
 	assert.Len(t, requestBodies, 2)
@@ -610,7 +626,9 @@ func TestRetryableHTTPClient_RealWorldScenario(t *testing.T) {
 	duration := time.Since(start)
 
 	require.NoError(t, err)
-	defer resp.Body.Close()
+	defer func() {
+		_ = resp.Body.Close()
+	}()
 
 	assert.Equal(t, http.StatusOK, resp.StatusCode)
 	assert.Equal(t, 3, attempt)

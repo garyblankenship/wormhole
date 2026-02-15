@@ -178,25 +178,7 @@ func BenchmarkWithMiddleware(b *testing.B) {
 
 // BenchmarkConcurrent measures performance under concurrent load
 func BenchmarkConcurrent(b *testing.B) {
-	mockProvider := testing_pkg.NewMockProvider("mock")
-	mockProvider.WithTextResponse(types.TextResponse{
-		Text:  "Concurrent response",
-		Usage: &types.Usage{TotalTokens: 8},
-	})
-
-	client := &Wormhole{
-		providerFactories: make(map[string]types.ProviderFactory),
-		providers: map[string]*cachedProvider{
-			"mock": {
-				provider: mockProvider,
-				lastUsed: time.Now().UnixNano(),
-				refCount: 1,
-			},
-		},
-		config:       Config{DefaultProvider: "mock"},
-		toolRegistry: NewToolRegistry(),
-	}
-
+	client := createMockClient("mock", "Concurrent response", 8)
 	ctx := context.Background()
 
 	b.ResetTimer()

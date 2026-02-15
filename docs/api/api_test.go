@@ -12,6 +12,7 @@ import (
 func TestAC01_PkgGoDevLink(t *testing.T) {
 	// Given: docs/api/README.md exists
 	path := filepath.Join("..", "..", "docs", "api", "README.md")
+	//nolint:gosec // G304: test file paths are hardcoded and not user-controlled
 	content, err := os.ReadFile(path)
 	if err != nil {
 		t.Fatalf("docs/api/README.md does not exist: %v", err)
@@ -37,6 +38,7 @@ func TestAC01_PkgGoDevLink(t *testing.T) {
 func TestAC02_KeyTypesAndFunctionsListed(t *testing.T) {
 	// Given: docs/api/README.md exists
 	path := filepath.Join("..", "..", "docs", "api", "README.md")
+	//nolint:gosec // G304: test file paths are hardcoded and not user-controlled
 	content, err := os.ReadFile(path)
 	if err != nil {
 		t.Fatalf("docs/api/README.md does not exist: %v", err)
@@ -92,6 +94,7 @@ func TestAC02_KeyTypesAndFunctionsListed(t *testing.T) {
 func TestAC03_PackageStructureOutlined(t *testing.T) {
 	// Given: docs/api/README.md exists
 	path := filepath.Join("..", "..", "docs", "api", "README.md")
+	//nolint:gosec // G304: test file paths are hardcoded and not user-controlled
 	content, err := os.ReadFile(path)
 	if err != nil {
 		t.Fatalf("docs/api/README.md does not exist: %v", err)

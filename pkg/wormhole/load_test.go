@@ -53,7 +53,6 @@ type ResourceMonitor struct {
 	startMemStats runtime.MemStats
 	endMemStats   runtime.MemStats
 	gcPauses      []time.Duration
-	maxGoroutines int
 	samples       []goroutineSample
 	stopChan      chan struct{}
 	mu            sync.Mutex
@@ -146,13 +145,15 @@ func (rm *ResourceMonitor) sample() {
 	})
 
 	// Track GC pauses (simplified - track difference in pause times)
-	currentPauseTotal := time.Duration(memStats.PauseTotalNs)
-	if len(rm.gcPauses) == 0 {
-		rm.gcPauses = append(rm.gcPauses, currentPauseTotal)
-	} else {
-		lastPause := rm.gcPauses[len(rm.gcPauses)-1]
-		if currentPauseTotal > lastPause {
-			rm.gcPauses = append(rm.gcPauses, currentPauseTotal-lastPause)
+	if memStats.PauseTotalNs > 0 && memStats.PauseTotalNs <= (1<<63-1) {
+		currentPauseTotal := time.Duration(int64(memStats.PauseTotalNs)) //nolint:gosec // G115: bounds checked above
+		if len(rm.gcPauses) == 0 {
+			rm.gcPauses = append(rm.gcPauses, currentPauseTotal)
+		} else {
+			lastPause := rm.gcPauses[len(rm.gcPauses)-1]
+			if currentPauseTotal > lastPause {
+				rm.gcPauses = append(rm.gcPauses, currentPauseTotal-lastPause)
+			}
 		}
 	}
 }
@@ -488,9 +489,21 @@ func TestMemoryLeakDetection(t *testing.T) {
 	var postLoadMem runtime.MemStats
 	runtime.ReadMemStats(&postLoadMem)
 
-	// Calculate memory difference
-	allocDiff := int64(postLoadMem.Alloc) - int64(baselineMem.Alloc)
-	totalAllocDiff := int64(postLoadMem.TotalAlloc) - int64(baselineMem.TotalAlloc)
+	// Calculate memory difference (subtraction on unsigned values prevents underflow;
+	// result fits in int64 for any realistic memory measurement)
+	var allocDiff int64
+	if postLoadMem.Alloc > baselineMem.Alloc {
+		allocDiff = int64(postLoadMem.Alloc - baselineMem.Alloc) //nolint:gosec // G115: memory diff always fits int64
+	} else {
+		allocDiff = -int64(baselineMem.Alloc - postLoadMem.Alloc) //nolint:gosec // G115: memory diff always fits int64
+	}
+
+	var totalAllocDiff int64
+	if postLoadMem.TotalAlloc > baselineMem.TotalAlloc {
+		totalAllocDiff = int64(postLoadMem.TotalAlloc - baselineMem.TotalAlloc) //nolint:gosec // G115: memory diff always fits int64
+	} else {
+		totalAllocDiff = -int64(baselineMem.TotalAlloc - postLoadMem.TotalAlloc) //nolint:gosec // G115: memory diff always fits int64
+	}
 
 	t.Logf("Memory after load test:")
 	t.Logf("  Alloc difference: %d bytes", allocDiff)
@@ -579,7 +592,7 @@ func runMixedOperationsTest(t *testing.T, client *Wormhole, testName string) {
 		// Start workers
 		for i := 0; i < config.Concurrency; i++ {
 			wg.Add(1)
-			go func(workerID int) {
+			go func(_ int) {
 				defer wg.Done()
 
 				operationCounter := 0
@@ -769,7 +782,7 @@ func runLoadTestWithClient(t *testing.T, config LoadTestConfig, client *Wormhole
 		// Start workers
 		for i := 0; i < config.Concurrency; i++ {
 			wg.Add(1)
-			go func(workerID int) {
+			go func(_ int) {
 				defer wg.Done()
 
 				// Worker loop
@@ -888,27 +901,31 @@ func runLoadTestWithClient(t *testing.T, config LoadTestConfig, client *Wormhole
 	})
 }
 
-// BenchmarkLoadSustained benchmarks sustained load performance
-func BenchmarkLoadSustained(b *testing.B) {
-	mockProvider := testing_pkg.NewMockProvider("mock")
+// createMockClient creates a mock Wormhole client for benchmarking
+func createMockClient(providerName, responseText string, totalTokens int) *Wormhole {
+	mockProvider := testing_pkg.NewMockProvider(providerName)
 	mockProvider.WithTextResponse(types.TextResponse{
-		Text:  "Benchmark response",
-		Usage: &types.Usage{TotalTokens: 10},
+		Text:  responseText,
+		Usage: &types.Usage{TotalTokens: totalTokens},
 	})
 
-	client := &Wormhole{
+	return &Wormhole{
 		providerFactories: make(map[string]types.ProviderFactory),
 		providers: map[string]*cachedProvider{
-			"mock": {
+			providerName: {
 				provider: mockProvider,
 				lastUsed: time.Now().UnixNano(),
 				refCount: 1,
 			},
 		},
-		config:       Config{DefaultProvider: "mock"},
+		config:       Config{DefaultProvider: providerName},
 		toolRegistry: NewToolRegistry(),
 	}
+}
 
+// BenchmarkLoadSustained benchmarks sustained load performance
+func BenchmarkLoadSustained(b *testing.B) {
+	client := createMockClient("mock", "Benchmark response", 10)
 	ctx := context.Background()
 
 	b.ResetTimer()

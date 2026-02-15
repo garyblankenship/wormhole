@@ -288,7 +288,9 @@ func BenchmarkModelCache_ShardedFiles(b *testing.B) {
 	if err != nil {
 		b.Fatal(err)
 	}
-	defer os.RemoveAll(tmpDir)
+	defer func() {
+		_ = os.RemoveAll(tmpDir)
+	}()
 
 	config := DiscoveryConfig{
 		CacheTTL:        24 * time.Hour,
@@ -343,7 +345,9 @@ func BenchmarkModelCache_ConcurrentShardedFiles(b *testing.B) {
 	if err != nil {
 		b.Fatal(err)
 	}
-	defer os.RemoveAll(tmpDir)
+	defer func() {
+		_ = os.RemoveAll(tmpDir)
+	}()
 
 	config := DiscoveryConfig{
 		CacheTTL:        24 * time.Hour,

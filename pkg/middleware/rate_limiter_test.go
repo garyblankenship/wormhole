@@ -277,7 +277,7 @@ func TestProviderAwareConcurrencyLimitMiddleware(t *testing.T) {
 		require.Error(t, err)
 		assert.Nil(t, resp)
 		assert.Equal(t, 0, handlerCalls) // Handler should not be called
-		// Should return context cancelled error
+		// Should return context canceled error
 		assert.ErrorIs(t, err, context.Canceled)
 	})
 

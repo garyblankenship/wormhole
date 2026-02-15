@@ -207,7 +207,7 @@ data: [DONE]
 				// Split by lines and write with small delays
 				lines := strings.Split(tc.mockStreamData, "\n")
 				for _, line := range lines {
-					fmt.Fprintf(w, "%s\n", line)
+					_, _ = fmt.Fprintf(w, "%s\n", line)
 					flusher.Flush()
 					time.Sleep(1 * time.Millisecond) // Small delay to simulate streaming
 				}
@@ -303,13 +303,13 @@ func TestGeminiProvider_StreamContext(t *testing.T) {
 			require.True(t, ok)
 
 			// Send first chunk
-			fmt.Fprintf(w, `data: {"candidates":[{"content":{"parts":[{"text":"First"}],"role":"model"},"finishReason":""}]}`+"\n\n")
+			_, _ = fmt.Fprintf(w, `data: {"candidates":[{"content":{"parts":[{"text":"First"}],"role":"model"},"finishReason":""}]}`+"\n\n")
 			flusher.Flush()
 
 			// Wait a bit before sending second chunk
 			time.Sleep(100 * time.Millisecond)
 
-			fmt.Fprintf(w, `data: {"candidates":[{"content":{"parts":[{"text":"Second"}],"role":"model"},"finishReason":"STOP"}]}`+"\n\n")
+			_, _ = fmt.Fprintf(w, `data: {"candidates":[{"content":{"parts":[{"text":"Second"}],"role":"model"},"finishReason":"STOP"}]}`+"\n\n")
 			flusher.Flush()
 		}))
 		defer server.Close()
@@ -332,7 +332,7 @@ func TestGeminiProvider_StreamContext(t *testing.T) {
 		require.NoError(t, err)
 
 		// Collect chunks until context cancellation
-		var chunks []types.TextChunk
+		chunks := make([]types.TextChunk, 0, 10)
 		for chunk := range stream {
 			chunks = append(chunks, chunk)
 		}
@@ -348,7 +348,7 @@ func TestGeminiProvider_StreamContext(t *testing.T) {
 		// Create mock server
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("Content-Type", "text/event-stream")
-			fmt.Fprintf(w, `data: {"candidates":[{"content":{"parts":[{"text":"Never received"}],"role":"model"},"finishReason":"STOP"}]}`+"\n\n")
+			_, _ = fmt.Fprintf(w, `data: {"candidates":[{"content":{"parts":[{"text":"Never received"}],"role":"model"},"finishReason":"STOP"}]}`+"\n\n")
 		}))
 		defer server.Close()
 
@@ -398,7 +398,7 @@ func TestGeminiProvider_StreamRequestFormat(t *testing.T) {
 
 			// Return minimal response
 			w.Header().Set("Content-Type", "text/event-stream")
-			fmt.Fprintf(w, `data: {"candidates":[{"content":{"parts":[{"text":"response"}],"role":"model"},"finishReason":"STOP"}]}`+"\n\n")
+			_, _ = fmt.Fprintf(w, `data: {"candidates":[{"content":{"parts":[{"text":"response"}],"role":"model"},"finishReason":"STOP"}]}`+"\n\n")
 		}))
 		defer server.Close()
 
@@ -491,7 +491,7 @@ func TestGeminiProvider_StreamErrorScenarios(t *testing.T) {
 		// Create server that returns error
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(http.StatusInternalServerError)
-			fmt.Fprintf(w, `{"error":{"code":500,"message":"Internal server error"}}`)
+			_, _ = fmt.Fprintf(w, `{"error":{"code":500,"message":"Internal server error"}}`)
 		}))
 		defer server.Close()
 
@@ -520,14 +520,14 @@ func TestGeminiProvider_StreamErrorScenarios(t *testing.T) {
 			require.True(t, ok)
 
 			// Send partial response then close
-			fmt.Fprintf(w, `data: {"candidates":[{"content":{"parts":[{"text":"Partial"}]`)
+			_, _ = fmt.Fprintf(w, `data: {"candidates":[{"content":{"parts":[{"text":"Partial"}]`)
 			flusher.Flush()
 
 			// Abruptly close connection
 			if hijacker, ok := w.(http.Hijacker); ok {
 				conn, _, err := hijacker.Hijack()
 				if err == nil {
-					conn.Close()
+					_ = conn.Close()
 				}
 			}
 		}))
@@ -587,7 +587,7 @@ func TestGeminiProvider_StreamErrorScenarios(t *testing.T) {
 		require.NoError(t, err)
 
 		// Collect chunks - should be empty
-		var chunks []types.TextChunk
+		chunks := make([]types.TextChunk, 0, 10)
 		for chunk := range stream {
 			chunks = append(chunks, chunk)
 		}

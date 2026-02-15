@@ -466,7 +466,7 @@ func TestOpenAIIntegration_StreamingGeneration(t *testing.T) {
 		require.NoError(t, err)
 
 		// Collect streaming chunks
-		var chunks []types.TextChunk
+		chunks := make([]types.TextChunk, 0, 10)
 		for chunk := range stream {
 			chunks = append(chunks, chunk)
 			// Check for error in chunk

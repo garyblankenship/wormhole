@@ -10,6 +10,8 @@ import (
 	"github.com/garyblankenship/wormhole/pkg/wormhole"
 )
 
+const errModelNotFound = "model not found"
+
 func TestDynamicModelSupport(t *testing.T) {
 	apiKey := os.Getenv("OPENROUTER_API_KEY")
 	if apiKey == "" {
@@ -52,7 +54,7 @@ func TestDynamicModelSupport(t *testing.T) {
 						t.Logf("Expected OpenRouter error for %s: %v", model, err)
 					} else {
 						// Registry blocking would show "model not found" from our registry
-						if errStr == "model not found" {
+						if errStr == errModelNotFound {
 							t.Errorf("Model %s was blocked by local registry (DynamicModels not working)", model)
 						} else {
 							t.Logf("Other error for %s: %v", model, err)
@@ -83,7 +85,7 @@ func TestDynamicModelSupport(t *testing.T) {
 		// This SHOULD fail at registry validation stage
 		if err == nil {
 			t.Error("Expected registry validation to block unknown OpenAI model")
-		} else if err.Error() == "model not found" {
+		} else if err.Error() == errModelNotFound {
 			t.Log("Correct: Registry validation blocked unknown OpenAI model")
 		} else {
 			t.Logf("Different error: %v", err)
@@ -159,7 +161,7 @@ func TestProviderConfigDynamicModels(t *testing.T) {
 			Generate(ctx)
 
 		// Should reach OpenRouter, not be blocked by registry
-		if err != nil && err.Error() == "model not found" {
+		if err != nil && err.Error() == errModelNotFound {
 			t.Error("DynamicModels configuration not working - registry still blocking")
 		} else {
 			t.Log("Success: Registry validation bypassed for dynamic provider")

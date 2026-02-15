@@ -16,7 +16,7 @@ type DocumentValidation struct {
 
 // NewDocumentValidation creates a new validator for the given path.
 func NewDocumentValidation(path string) (*DocumentValidation, error) {
-	content, err := os.ReadFile(path)
+	content, err := os.ReadFile(path) //nolint:gosec // G304: test helper reads local doc files, path not user-controlled
 	if err != nil {
 		return nil, err
 	}

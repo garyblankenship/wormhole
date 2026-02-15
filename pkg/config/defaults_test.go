@@ -6,6 +6,28 @@ import (
 	"time"
 )
 
+// setEnvForTest sets an environment variable for testing, with automatic cleanup
+func setEnvForTest(t *testing.T, key, value string) {
+	t.Helper()
+	if value == "" {
+		// For empty values, we need to unset the variable
+		// Save original and restore in cleanup
+		original, wasSet := os.LookupEnv(key)
+		if err := os.Unsetenv(key); err != nil {
+			t.Fatalf("Failed to unset %s: %v", key, err)
+		}
+		t.Cleanup(func() {
+			if wasSet {
+				if err := os.Setenv(key, original); err != nil {
+					t.Logf("Failed to restore %s: %v", key, err)
+				}
+			}
+		})
+	} else {
+		t.Setenv(key, value)
+	}
+}
+
 func TestGetDefaultHTTPTimeout(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -46,24 +68,7 @@ func TestGetDefaultHTTPTimeout(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Save original value
-			original := os.Getenv("WORMHOLE_DEFAULT_TIMEOUT")
-
-			// Set test value
-			if tt.envValue == "" {
-				os.Unsetenv("WORMHOLE_DEFAULT_TIMEOUT") // Clear the value
-			} else {
-				os.Setenv("WORMHOLE_DEFAULT_TIMEOUT", tt.envValue)
-			}
-
-			// Restore original value after test
-			defer func() {
-				if original == "" {
-					os.Unsetenv("WORMHOLE_DEFAULT_TIMEOUT")
-				} else {
-					os.Setenv("WORMHOLE_DEFAULT_TIMEOUT", original)
-				}
-			}()
+			setEnvForTest(t, "WORMHOLE_DEFAULT_TIMEOUT", tt.envValue)
 
 			result := GetDefaultHTTPTimeout()
 			if result != tt.expected {
@@ -113,28 +118,30 @@ func TestGetDefaultMaxRetries(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Save original value
-			original := os.Getenv("WORMHOLE_MAX_RETRIES")
-
-			// Set test value
-			if tt.envValue == "" {
-				os.Unsetenv("WORMHOLE_MAX_RETRIES") // Clear the value
-			} else {
-				os.Setenv("WORMHOLE_MAX_RETRIES", tt.envValue)
-			}
-
-			// Restore original value after test
-			defer func() {
-				if original == "" {
-					os.Unsetenv("WORMHOLE_MAX_RETRIES")
-				} else {
-					os.Setenv("WORMHOLE_MAX_RETRIES", original)
-				}
-			}()
+			setEnvForTest(t, "WORMHOLE_MAX_RETRIES", tt.envValue)
 
 			result := GetDefaultMaxRetries()
 			if result != tt.expected {
 				t.Errorf("GetDefaultMaxRetries() = %v, expected %v", result, tt.expected)
+			}
+		})
+	}
+}
+
+// testDurationEnv is a helper for testing time.Duration environment variables
+func testDurationEnv(t *testing.T, envKey string, getter func() time.Duration, tests []struct {
+	name     string
+	envValue string
+	expected time.Duration
+}) {
+	t.Helper()
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			setEnvForTest(t, envKey, tt.envValue)
+
+			result := getter()
+			if result != tt.expected {
+				t.Errorf("%s() = %v, expected %v", envKey, result, tt.expected)
 			}
 		})
 	}
@@ -173,33 +180,7 @@ func TestGetDefaultMaxDelay(t *testing.T) {
 		},
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			// Save original value
-			original := os.Getenv("WORMHOLE_MAX_RETRY_DELAY")
-
-			// Set test value
-			if tt.envValue == "" {
-				os.Unsetenv("WORMHOLE_MAX_RETRY_DELAY") // Clear the value
-			} else {
-				os.Setenv("WORMHOLE_MAX_RETRY_DELAY", tt.envValue)
-			}
-
-			// Restore original value after test
-			defer func() {
-				if original == "" {
-					os.Unsetenv("WORMHOLE_MAX_RETRY_DELAY")
-				} else {
-					os.Setenv("WORMHOLE_MAX_RETRY_DELAY", original)
-				}
-			}()
-
-			result := GetDefaultMaxDelay()
-			if result != tt.expected {
-				t.Errorf("GetDefaultMaxDelay() = %v, expected %v", result, tt.expected)
-			}
-		})
-	}
+	testDurationEnv(t, "WORMHOLE_MAX_RETRY_DELAY", GetDefaultMaxDelay, tests)
 }
 
 func TestGetDefaultInitialDelay(t *testing.T) {
@@ -235,33 +216,7 @@ func TestGetDefaultInitialDelay(t *testing.T) {
 		},
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			// Save original value
-			original := os.Getenv("WORMHOLE_INITIAL_RETRY_DELAY")
-
-			// Set test value
-			if tt.envValue == "" {
-				os.Unsetenv("WORMHOLE_INITIAL_RETRY_DELAY") // Clear the value
-			} else {
-				os.Setenv("WORMHOLE_INITIAL_RETRY_DELAY", tt.envValue)
-			}
-
-			// Restore original value after test
-			defer func() {
-				if original == "" {
-					os.Unsetenv("WORMHOLE_INITIAL_RETRY_DELAY")
-				} else {
-					os.Setenv("WORMHOLE_INITIAL_RETRY_DELAY", original)
-				}
-			}()
-
-			result := GetDefaultInitialDelay()
-			if result != tt.expected {
-				t.Errorf("GetDefaultInitialDelay() = %v, expected %v", result, tt.expected)
-			}
-		})
-	}
+	testDurationEnv(t, "WORMHOLE_INITIAL_RETRY_DELAY", GetDefaultInitialDelay, tests)
 }
 
 func TestGetDefaultCircuitBreakerTimeout(t *testing.T) {
@@ -292,33 +247,7 @@ func TestGetDefaultCircuitBreakerTimeout(t *testing.T) {
 		},
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			// Save original value
-			original := os.Getenv("WORMHOLE_CIRCUIT_BREAKER_TIMEOUT")
-
-			// Set test value
-			if tt.envValue == "" {
-				os.Unsetenv("WORMHOLE_CIRCUIT_BREAKER_TIMEOUT") // Clear the value
-			} else {
-				os.Setenv("WORMHOLE_CIRCUIT_BREAKER_TIMEOUT", tt.envValue)
-			}
-
-			// Restore original value after test
-			defer func() {
-				if original == "" {
-					os.Unsetenv("WORMHOLE_CIRCUIT_BREAKER_TIMEOUT")
-				} else {
-					os.Setenv("WORMHOLE_CIRCUIT_BREAKER_TIMEOUT", original)
-				}
-			}()
-
-			result := GetDefaultCircuitBreakerTimeout()
-			if result != tt.expected {
-				t.Errorf("GetDefaultCircuitBreakerTimeout() = %v, expected %v", result, tt.expected)
-			}
-		})
-	}
+	testDurationEnv(t, "WORMHOLE_CIRCUIT_BREAKER_TIMEOUT", GetDefaultCircuitBreakerTimeout, tests)
 }
 
 func TestGetDefaultHealthCheckInterval(t *testing.T) {
@@ -349,33 +278,7 @@ func TestGetDefaultHealthCheckInterval(t *testing.T) {
 		},
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			// Save original value
-			original := os.Getenv("WORMHOLE_HEALTH_CHECK_INTERVAL")
-
-			// Set test value
-			if tt.envValue == "" {
-				os.Unsetenv("WORMHOLE_HEALTH_CHECK_INTERVAL") // Clear the value
-			} else {
-				os.Setenv("WORMHOLE_HEALTH_CHECK_INTERVAL", tt.envValue)
-			}
-
-			// Restore original value after test
-			defer func() {
-				if original == "" {
-					os.Unsetenv("WORMHOLE_HEALTH_CHECK_INTERVAL")
-				} else {
-					os.Setenv("WORMHOLE_HEALTH_CHECK_INTERVAL", original)
-				}
-			}()
-
-			result := GetDefaultHealthCheckInterval()
-			if result != tt.expected {
-				t.Errorf("GetDefaultHealthCheckInterval() = %v, expected %v", result, tt.expected)
-			}
-		})
-	}
+	testDurationEnv(t, "WORMHOLE_HEALTH_CHECK_INTERVAL", GetDefaultHealthCheckInterval, tests)
 }
 
 func TestConstants(t *testing.T) {
@@ -429,9 +332,7 @@ func TestBackwardsCompatibilityAliases(t *testing.T) {
 
 // Test concurrent access to environment variable functions
 func TestConcurrentAccess(t *testing.T) {
-	// Set a consistent environment variable
-	os.Setenv("WORMHOLE_DEFAULT_TIMEOUT", "60s")
-	defer os.Unsetenv("WORMHOLE_DEFAULT_TIMEOUT")
+	t.Setenv("WORMHOLE_DEFAULT_TIMEOUT", "60s")
 
 	// Test concurrent access doesn't cause race conditions
 	done := make(chan bool)

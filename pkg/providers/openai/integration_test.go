@@ -173,7 +173,7 @@ func TestOpenAIProvider_IntegrationStreaming(t *testing.T) {
 		}
 
 		for _, chunk := range chunks {
-			fmt.Fprint(w, chunk)
+			_, _ = fmt.Fprint(w, chunk)
 			if f, ok := w.(http.Flusher); ok {
 				f.Flush()
 			}
