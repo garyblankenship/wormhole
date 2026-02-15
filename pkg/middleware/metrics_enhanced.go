@@ -85,9 +85,6 @@ type enhancedMetricsBucket struct {
 
 	// Histogram data - using fixed-size array with atomic operations
 	histogramCounts []int64 // atomic slices for each bucket + overflow
-
-	// Concurrency gauge (if enabled)
-	concurrentRequests int64 // atomic
 }
 
 // ErrorTypeDetector categorizes errors by type

@@ -321,7 +321,11 @@ func (c *ModelCache) appendToJournal(provider string, models []*types.ModelInfo)
 	if err != nil {
 		return err
 	}
-	defer f.Close()
+	defer func() {
+		if closeErr := f.Close(); closeErr != nil {
+			log.Printf("warning: failed to close journal file: %v", closeErr)
+		}
+	}()
 
 	// Write with newline separator
 	if _, err := f.Write(data); err != nil {
@@ -342,98 +346,6 @@ func computeChecksum(models []*types.ModelInfo) string {
 	}
 	hash := sha256.Sum256(data)
 	return hex.EncodeToString(hash[:])
-}
-
-// recoverFromJournal recovers cache state from journal files
-func (c *ModelCache) recoverFromJournal() error {
-	// Get all journal files in the cache directory
-	dir := filepath.Dir(c.filePath)
-	pattern := filepath.Join(dir, "*.journal")
-	matches, err := filepath.Glob(pattern)
-	if err != nil {
-		return err
-	}
-
-	if len(matches) == 0 {
-		return nil // No journal files to recover from
-	}
-
-	// Process each journal file
-	for _, journalPath := range matches {
-		if err := c.processJournalFile(journalPath); err != nil {
-			// Log error but continue with other journals
-			// In production, you'd want proper logging here
-			_ = err
-		}
-	}
-
-	return nil
-}
-
-// processJournalFile reads and validates a single journal file
-func (c *ModelCache) processJournalFile(journalPath string) error {
-	data, err := os.ReadFile(journalPath) // #nosec G304 - path validated via ValidatePath
-	if err != nil {
-		return err
-	}
-
-	lines := strings.Split(string(data), "\n")
-	validEntries := make([]JournalEntry, 0, len(lines))
-
-	// Validate each line
-	for _, line := range lines {
-		line = strings.TrimSpace(line)
-		if line == "" {
-			continue
-		}
-
-		var entry JournalEntry
-		if err := json.Unmarshal([]byte(line), &entry); err != nil {
-			// Invalid JSON, skip this entry
-			continue
-		}
-
-		// Validate checksum
-		expectedChecksum := computeChecksum(entry.Models)
-		if entry.Checksum != "" && entry.Checksum != expectedChecksum {
-			// Checksum mismatch, skip this entry
-			continue
-		}
-
-		validEntries = append(validEntries, entry)
-	}
-
-	if len(validEntries) == 0 {
-		return nil // No valid entries found
-	}
-
-	// Apply the most recent valid entry for each provider
-	// For simplicity, we take the last entry per provider (highest sequence)
-	latestByProvider := make(map[string]JournalEntry)
-	for _, entry := range validEntries {
-		if existing, exists := latestByProvider[entry.Provider]; !exists || entry.Sequence > existing.Sequence {
-			latestByProvider[entry.Provider] = entry
-		}
-	}
-
-	// Update cache with recovered entries
-	for provider, entry := range latestByProvider {
-		cacheEntry := &CacheEntry{
-			Models:    entry.Models,
-			Timestamp: entry.Timestamp,
-			Provider:  provider,
-		}
-
-		// Update memory cache
-		c.memoryMu.Lock()
-		c.memory[provider] = cacheEntry
-		c.memoryMu.Unlock()
-
-		// Update file cache
-		c.saveToFile(provider, entry.Models)
-	}
-
-	return nil
 }
 
 // Clear removes all cached entries

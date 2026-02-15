@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
 	"sort"
 	"strings"
 	"sync"
@@ -18,7 +19,6 @@ import (
 	"github.com/garyblankenship/wormhole/pkg/providers/ollama"
 	"github.com/garyblankenship/wormhole/pkg/providers/openai"
 	"github.com/garyblankenship/wormhole/pkg/types"
-	"os"
 )
 
 // validateAPIKey performs basic format validation for provider API keys
@@ -34,20 +34,20 @@ func validateAPIKey(provider, apiKey string) error {
 
 	// Provider-specific validation
 	switch provider {
-	case "openai":
+	case providerOpenAI:
 		if !strings.HasPrefix(apiKey, "sk-") && !strings.HasPrefix(apiKey, "org-") {
 			return fmt.Errorf("invalid OpenAI API key format, expected 'sk-' or 'org-' prefix")
 		}
-	case "anthropic":
+	case providerAnthropic:
 		if !strings.HasPrefix(apiKey, "sk-ant-") {
 			return fmt.Errorf("invalid Anthropic API key format, expected 'sk-ant-' prefix")
 		}
-	case "gemini":
+	case providerGemini:
 		// Google AI Studio keys don't have fixed format, just check length
 		if len(apiKey) < 10 {
 			return fmt.Errorf("API key for Google AI Studio is too short (minimum 10 characters)")
 		}
-	case "openrouter":
+	case providerOpenRouter:
 		if !strings.HasPrefix(apiKey, "sk-or-") {
 			return fmt.Errorf("invalid OpenRouter API key format, expected 'sk-or-' prefix")
 		}
@@ -101,8 +101,11 @@ func openAICompatibleFactory() types.ProviderFactory {
 
 // Provider name constants
 const (
-	providerOpenAI    = "openai"
-	providerAnthropic = "anthropic"
+	providerOpenAI     = "openai"
+	providerAnthropic  = "anthropic"
+	providerGemini     = "gemini"
+	providerOpenRouter = "openrouter"
+	providerOllama     = "ollama"
 )
 
 // cachedProvider wraps a provider with reference counting and last-used tracking
@@ -110,12 +113,6 @@ type cachedProvider struct {
 	provider types.Provider
 	lastUsed int64 // atomic, UnixNano timestamp
 	refCount int32 // atomic
-}
-
-// idempotencyEntry wraps cached responses with expiration metadata
-type idempotencyEntry struct {
-	response  any
-	expiresAt int64 // UnixNano timestamp for expiration
 }
 
 // ProviderHandle wraps a provider with automatic reference counting.
@@ -145,7 +142,6 @@ type Wormhole struct {
 	closeOnce          sync.Once // Ensures Close() is idempotent
 	config             Config
 	providerMiddleware *types.ProviderMiddlewareChain // Type-safe middleware chain
-	middlewareChain    *middleware.Chain              // DEPRECATED: No longer created, legacy middleware converted to type-safe
 	toolRegistry       *ToolRegistry                  // Registry of available tools for function calling
 	discoveryService   *discovery.DiscoveryService    // Dynamic model discovery service
 
@@ -164,10 +160,7 @@ type Wormhole struct {
 	shuttingDown   atomic.Bool    // Atomic flag for shutdown state
 
 	// Idempotency cache
-	idempotencyCache       sync.Map // Thread-safe cache for idempotent responses
-	idempotencySweepTicker *time.Ticker
-	idempotencySweepStop   chan struct{}
-	idempotencySweepOnce   sync.Once
+	idempotencyCache sync.Map // Thread-safe cache for idempotent responses
 }
 
 // IdempotencyConfig holds configuration for idempotent request handling
@@ -270,10 +263,10 @@ func New(opts ...Option) *Wormhole {
 
 // registerBuiltinProviders pre-registers all built-in provider factories
 func (p *Wormhole) registerBuiltinProviders() {
-	p.providerFactories["openai"] = openAIFactory()
-	p.providerFactories["anthropic"] = anthropicFactory()
-	p.providerFactories["gemini"] = geminiFactory()
-	p.providerFactories["ollama"] = ollamaFactory()
+	p.providerFactories[providerOpenAI] = openAIFactory()
+	p.providerFactories[providerAnthropic] = anthropicFactory()
+	p.providerFactories[providerGemini] = geminiFactory()
+	p.providerFactories[providerOllama] = ollamaFactory()
 	// NOTE: groq and mistral now use the generic openai provider via WithOpenAICompatible()
 }
 
@@ -674,7 +667,7 @@ func (p *Wormhole) initializeDiscoveryService() {
 			if providerConfig.APIKey != "" {
 				modelFetchers = append(modelFetchers, fetchers.NewAnthropicFetcher(providerConfig.APIKey))
 			}
-		case "ollama":
+		case providerOllama:
 			baseURL := providerConfig.BaseURL
 			if baseURL == "" {
 				if envURL := os.Getenv("OLLAMA_BASE_URL"); envURL != "" {
@@ -802,7 +795,7 @@ func (p *Wormhole) ProviderCapabilities(provider string) *Capabilities {
 	}
 
 	switch provider {
-	case "openai":
+	case providerOpenAI:
 		caps.caps[CapabilityText] = true
 		caps.caps[CapabilityStructured] = true
 		caps.caps[CapabilityEmbeddings] = true
@@ -811,14 +804,14 @@ func (p *Wormhole) ProviderCapabilities(provider string) *Capabilities {
 		caps.caps[CapabilityToolCalling] = true
 		caps.caps[CapabilityStreaming] = true
 		caps.caps[CapabilityVision] = true
-	case "anthropic":
+	case providerAnthropic:
 		caps.caps[CapabilityText] = true
 		caps.caps[CapabilityStructured] = true
 		caps.caps[CapabilityToolCalling] = true
 		caps.caps[CapabilityStreaming] = true
 		caps.caps[CapabilityVision] = true
 		caps.caps[CapabilityCodeExecution] = true
-	case "gemini":
+	case providerGemini:
 		caps.caps[CapabilityText] = true
 		caps.caps[CapabilityStructured] = true
 		caps.caps[CapabilityEmbeddings] = true
@@ -827,11 +820,11 @@ func (p *Wormhole) ProviderCapabilities(provider string) *Capabilities {
 		caps.caps[CapabilityStreaming] = true
 		caps.caps[CapabilityVision] = true
 		caps.caps[CapabilityCodeExecution] = true
-	case "ollama":
+	case providerOllama:
 		caps.caps[CapabilityText] = true
 		caps.caps[CapabilityEmbeddings] = true
 		caps.caps[CapabilityStreaming] = true
-	case "openrouter":
+	case providerOpenRouter:
 		// OpenRouter proxies to multiple providers, so it has broad capabilities
 		caps.caps[CapabilityText] = true
 		caps.caps[CapabilityStructured] = true
@@ -940,16 +933,6 @@ func (p *Wormhole) Close() error {
 			}
 		}
 
-		// Stop idempotency sweep goroutine
-		if p.idempotencySweepStop != nil {
-			select {
-			case <-p.idempotencySweepStop:
-				// Already closed
-			default:
-				close(p.idempotencySweepStop)
-			}
-		}
-
 		// Cleanup tool registry resources if needed
 		// (currently tool registry has no resources to clean up)
 	})
@@ -1031,16 +1014,6 @@ func (p *Wormhole) Shutdown(ctx context.Context) error {
 			p.adaptiveLimiter.Stop()
 		}
 
-		// Stop idempotency sweep goroutine
-		if p.idempotencySweepStop != nil {
-			select {
-			case <-p.idempotencySweepStop:
-				// Already closed
-			default:
-				close(p.idempotencySweepStop)
-			}
-		}
-
 		if len(errs) > 0 {
 			shutdownErr = fmt.Errorf("errors during shutdown cleanup: %v", errs)
 		}
@@ -1067,129 +1040,6 @@ func (p *Wormhole) trackRequest() bool {
 // untrackRequest decrements the active request count
 func (p *Wormhole) untrackRequest() {
 	p.activeRequests.Done()
-}
-
-// withRequestTracking executes a function with request tracking
-// Returns an error if client is shutting down
-func (p *Wormhole) withRequestTracking(fn func() error) error {
-	if !p.trackRequest() {
-		return fmt.Errorf("client is shutting down")
-	}
-	defer p.untrackRequest()
-	return fn()
-}
-
-// getIdempotencyKey returns the idempotency key if configured
-func (p *Wormhole) getIdempotencyKey() string {
-	if p.config.Idempotency == nil {
-		return ""
-	}
-	return p.config.Idempotency.Key
-}
-
-// checkIdempotencyCache checks if a cached response exists for the given key
-// Returns the cached response and true if found, nil and false otherwise
-func (p *Wormhole) checkIdempotencyCache(key string) (any, bool) {
-	if key == "" {
-		return nil, false
-	}
-	cached, ok := p.idempotencyCache.Load(key)
-	if !ok {
-		return nil, false
-	}
-
-	entry, ok := cached.(*idempotencyEntry)
-	if !ok {
-		// Legacy entry without expiration - return as-is
-		return cached, true
-	}
-
-	// Check if expired
-	if time.Now().UnixNano() >= entry.expiresAt {
-		p.idempotencyCache.Delete(key)
-		return nil, false
-	}
-
-	return entry.response, true
-}
-
-// storeIdempotencyResponse stores a response in the idempotency cache
-func (p *Wormhole) storeIdempotencyResponse(key string, response any) {
-	if key == "" || p.config.Idempotency == nil {
-		return
-	}
-
-	ttl := p.config.Idempotency.TTL
-	if ttl == 0 {
-		ttl = 24 * time.Hour // Default TTL
-	}
-
-	entry := &idempotencyEntry{
-		response:  response,
-		expiresAt: time.Now().Add(ttl).UnixNano(),
-	}
-
-	p.idempotencyCache.Store(key, entry)
-
-	// Ensure sweep goroutine is started (lazy initialization)
-	p.startIdempotencySweep()
-}
-
-// startIdempotencySweep starts the background sweep goroutine for cleaning expired entries
-func (p *Wormhole) startIdempotencySweep() {
-	p.idempotencySweepOnce.Do(func() {
-		// Default sweep interval: 1 minute
-		interval := time.Minute
-
-		p.idempotencySweepTicker = time.NewTicker(interval)
-		p.idempotencySweepStop = make(chan struct{})
-
-		go p.idempotencySweepLoop()
-	})
-}
-
-// idempotencySweepLoop runs the periodic sweep for expired idempotency entries
-func (p *Wormhole) idempotencySweepLoop() {
-	for {
-		select {
-		case <-p.idempotencySweepTicker.C:
-			p.sweepExpiredIdempotencyEntries()
-		case <-p.idempotencySweepStop:
-			p.idempotencySweepTicker.Stop()
-			return
-		case <-p.shutdownChan:
-			p.idempotencySweepTicker.Stop()
-			return
-		}
-	}
-}
-
-// sweepExpiredIdempotencyEntries removes expired entries from the idempotency cache
-func (p *Wormhole) sweepExpiredIdempotencyEntries() {
-	now := time.Now().UnixNano()
-	maxPerSweep := 1000 // Cap entries processed per sweep for bounded time
-
-	swept := 0
-	p.idempotencyCache.Range(func(key, value any) bool {
-		if swept >= maxPerSweep {
-			return false // Stop iteration, continue next sweep
-		}
-
-		entry, ok := value.(*idempotencyEntry)
-		if !ok {
-			// Legacy entry without expiration - delete it
-			p.idempotencyCache.Delete(key)
-			swept++
-			return true
-		}
-
-		if now >= entry.expiresAt {
-			p.idempotencyCache.Delete(key)
-			swept++
-		}
-
-		return true
-	})
 }
 
 // ClearIdempotencyCache clears all cached idempotent responses

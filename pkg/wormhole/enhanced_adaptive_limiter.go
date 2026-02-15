@@ -82,7 +82,6 @@ type EnhancedAdaptiveLimiter struct {
 
 	// Statistics
 	totalAdjustments int64
-	lastStatsDump    time.Time
 }
 
 // NewEnhancedAdaptiveLimiter creates a new provider-aware adaptive limiter
@@ -465,7 +464,7 @@ func splitLabelKey(key string) []string {
 }
 
 // enhanceControlWithMetrics enhances control with external metrics
-func (l *EnhancedAdaptiveLimiter) enhanceControlWithMetrics(state *ProviderAdaptiveState,
+func (l *EnhancedAdaptiveLimiter) enhanceControlWithMetrics(_ *ProviderAdaptiveState,
 	stats map[string]interface{}) {
 
 	// Extract error rate from metrics

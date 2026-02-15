@@ -53,14 +53,6 @@ type ProviderAdaptiveState struct {
 
 	// Timing
 	lastAdjustment time.Time
-	lastQueryTime  time.Time
-
-	// Performance metrics
-	avgLatency time.Duration
-	errorRate  float64
-	p50Latency time.Duration
-	p90Latency time.Duration
-	p99Latency time.Duration
 }
 
 // NewProviderAdaptiveState creates a new state tracker

@@ -20,15 +20,6 @@ import (
 	"github.com/garyblankenship/wormhole/pkg/types"
 )
 
-// requestBodyPool pools byte slices for request bodies to reduce allocations.
-// Stores *[]byte so sync.Pool.Put receives a pointer type (SA6002).
-var requestBodyPool = sync.Pool{
-	New: func() any {
-		buf := make([]byte, 0, 1024)
-		return &buf
-	},
-}
-
 // responseBodyPool pools byte slices for response bodies to reduce allocations.
 // Stores *[]byte so sync.Pool.Put receives a pointer type (SA6002).
 var responseBodyPool = sync.Pool{
@@ -36,28 +27,6 @@ var responseBodyPool = sync.Pool{
 		buf := make([]byte, 0, 4096)
 		return &buf
 	},
-}
-
-// pooledBytesReader is an io.Reader that returns its underlying byte slice to the pool after reading
-type pooledBytesReader struct {
-	bytes    []byte
-	pos      int
-	returned bool
-}
-
-func (r *pooledBytesReader) Read(p []byte) (n int, err error) {
-	if r.pos >= len(r.bytes) {
-		if !r.returned {
-			// Return slice to pool, resetting length to 0 but keeping capacity
-			buf := r.bytes[:0]
-			requestBodyPool.Put(&buf)
-			r.returned = true
-		}
-		return 0, io.EOF
-	}
-	n = copy(p, r.bytes[r.pos:])
-	r.pos += n
-	return n, nil
 }
 
 // jsonPooledReader is an io.Reader that returns its underlying byte slice to the JSON buffer pool after reading
@@ -480,7 +449,7 @@ func (p *BaseProvider) StreamRequest(ctx context.Context, method, url string, bo
 	}
 
 	if resp.StatusCode >= 400 {
-		defer resp.Body.Close()
+		defer func() { _ = resp.Body.Close() }()
 		respBody, _ := readAllPooled(resp.Body)
 		defer returnResponseBuf(respBody)
 		return nil, p.buildErrorResponse(resp.StatusCode, resp.Status, url, respBody)
