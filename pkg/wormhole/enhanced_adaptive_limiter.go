@@ -32,15 +32,15 @@ type EnhancedAdaptiveConfig struct {
 	PIDConfig PIDConfig
 
 	// State management
-	EnableModelLevel bool // Track per-model vs per-provider only
+	EnableModelLevel bool   // Track per-model vs per-provider only
 	PersistenceFile  string // Optional: save/load state
 }
 
 // ProviderSetting holds provider-specific configuration
 type ProviderSetting struct {
-	TargetLatency time.Duration
-	MinCapacity   int
-	MaxCapacity   int
+	TargetLatency   time.Duration
+	MinCapacity     int
+	MaxCapacity     int
 	InitialCapacity int
 	// Optional provider-specific PID tuning
 	PIDConfig *PIDConfig // nil = use global PIDConfig
@@ -49,10 +49,10 @@ type ProviderSetting struct {
 // DefaultEnhancedAdaptiveConfig returns sensible defaults
 func DefaultEnhancedAdaptiveConfig() EnhancedAdaptiveConfig {
 	return EnhancedAdaptiveConfig{
-		AdaptiveConfig: DefaultAdaptiveConfig(),
-		ProviderSettings: make(map[string]ProviderSetting),
-		ErrorRateThreshold: 0.1,  // 10%
-		ErrorRatePenalty:   2.0,  // Double sensitivity
+		AdaptiveConfig:     DefaultAdaptiveConfig(),
+		ProviderSettings:   make(map[string]ProviderSetting),
+		ErrorRateThreshold: 0.1, // 10%
+		ErrorRatePenalty:   2.0, // Double sensitivity
 		MinSamplesForError: 20,
 		QueryInterval:      15 * time.Second,
 		PIDConfig:          DefaultPIDConfig(),
@@ -62,7 +62,7 @@ func DefaultEnhancedAdaptiveConfig() EnhancedAdaptiveConfig {
 
 // EnhancedAdaptiveLimiter implements provider-aware adaptive concurrency control
 type EnhancedAdaptiveLimiter struct {
-	mu sync.RWMutex
+	mu     sync.RWMutex
 	config EnhancedAdaptiveConfig
 
 	// Provider state management
@@ -501,13 +501,13 @@ func (l *EnhancedAdaptiveLimiter) GetStats() map[string]interface{} {
 	// Global stats
 	avgLatency, errorRate, p50, p90, p99 := l.globalState.GetMetrics()
 	stats["global"] = map[string]interface{}{
-		"capacity":     l.globalState.Capacity(),
-		"avg_latency":  avgLatency.String(),
-		"error_rate":   errorRate,
-		"p50_latency":  p50.String(),
+		"capacity":    l.globalState.Capacity(),
+		"avg_latency": avgLatency.String(),
+		"error_rate":  errorRate,
+		"p50_latency": p50.String(),
 		"p90_latency": p90.String(),
 		"p99_latency": p99.String(),
-		"adjustments":  atomic.LoadInt64(&l.totalAdjustments),
+		"adjustments": atomic.LoadInt64(&l.totalAdjustments),
 	}
 
 	// Provider stats
@@ -544,4 +544,3 @@ func (l *EnhancedAdaptiveLimiter) GetStats() map[string]interface{} {
 
 	return stats
 }
-

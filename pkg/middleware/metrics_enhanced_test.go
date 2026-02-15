@@ -15,9 +15,9 @@ func TestEnhancedMetricsCollector(t *testing.T) {
 		collector := NewEnhancedMetricsCollector(nil)
 
 		labels := &RequestLabels{
-			Provider: "openai",
-			Model:    "gpt-4",
-			Method:   "text",
+			Provider:  "openai",
+			Model:     "gpt-4",
+			Method:    "text",
 			ErrorType: "",
 		}
 
@@ -35,9 +35,9 @@ func TestEnhancedMetricsCollector(t *testing.T) {
 		collector := NewEnhancedMetricsCollector(nil)
 
 		labels := &RequestLabels{
-			Provider: "anthropic",
-			Model:    "claude-3",
-			Method:   "text",
+			Provider:  "anthropic",
+			Model:     "claude-3",
+			Method:    "text",
 			ErrorType: "",
 		}
 
@@ -79,9 +79,9 @@ func TestEnhancedMetricsCollector(t *testing.T) {
 		collector := NewEnhancedMetricsCollector(nil)
 
 		labels := &RequestLabels{
-			Provider: "google",
-			Model:    "gemini-pro",
-			Method:   "text",
+			Provider:  "google",
+			Model:     "gemini-pro",
+			Method:    "text",
 			ErrorType: "",
 		}
 
@@ -98,16 +98,16 @@ func TestEnhancedMetricsCollector(t *testing.T) {
 		collector := NewEnhancedMetricsCollector(nil)
 
 		labels1 := &RequestLabels{
-			Provider: "openai",
-			Model:    "gpt-4",
-			Method:   "text",
+			Provider:  "openai",
+			Model:     "gpt-4",
+			Method:    "text",
 			ErrorType: "",
 		}
 
 		labels2 := &RequestLabels{
-			Provider: "anthropic",
-			Model:    "claude-3",
-			Method:   "stream",
+			Provider:  "anthropic",
+			Model:     "claude-3",
+			Method:    "stream",
 			ErrorType: "",
 		}
 
@@ -128,9 +128,9 @@ func TestEnhancedMetricsCollector(t *testing.T) {
 		collector := NewEnhancedMetricsCollector(nil)
 
 		labels := &RequestLabels{
-			Provider: "openai",
-			Model:    "gpt-4",
-			Method:   "text",
+			Provider:  "openai",
+			Model:     "gpt-4",
+			Method:    "text",
 			ErrorType: "",
 		}
 
@@ -148,23 +148,23 @@ func TestEnhancedMetricsCollector(t *testing.T) {
 	t.Run("handles label aggregation", func(t *testing.T) {
 		config := &EnhancedMetricsConfig{
 			DefaultHistogramBuckets: []float64{10, 50, 100, 500, 1000},
-			EnableLabels:           true,
-			LabelAggregation:       true,
+			EnableLabels:            true,
+			LabelAggregation:        true,
 		}
 
 		collector := NewEnhancedMetricsCollector(config)
 
 		labels1 := &RequestLabels{
-			Provider: "openai",
-			Model:    "gpt-4",
-			Method:   "text",
+			Provider:  "openai",
+			Model:     "gpt-4",
+			Method:    "text",
 			ErrorType: "",
 		}
 
 		labels2 := &RequestLabels{
-			Provider: "anthropic",
-			Model:    "claude-3",
-			Method:   "text",
+			Provider:  "anthropic",
+			Model:     "claude-3",
+			Method:    "text",
 			ErrorType: "",
 		}
 
@@ -243,11 +243,11 @@ func TestEnhancedMetricsConfig(t *testing.T) {
 
 	t.Run("custom configuration", func(t *testing.T) {
 		config := &EnhancedMetricsConfig{
-			DefaultHistogramBuckets: []float64{5, 25, 100, 250},
-			EnableLabels:           false,
-			EnableTokenTracking:    false,
+			DefaultHistogramBuckets:   []float64{5, 25, 100, 250},
+			EnableLabels:              false,
+			EnableTokenTracking:       false,
 			EnableConcurrencyTracking: false,
-			LabelAggregation:       true,
+			LabelAggregation:          true,
 		}
 
 		collector := NewEnhancedMetricsCollector(config)

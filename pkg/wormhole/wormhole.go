@@ -10,7 +10,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"os"
 	"github.com/garyblankenship/wormhole/pkg/discovery"
 	"github.com/garyblankenship/wormhole/pkg/discovery/fetchers"
 	"github.com/garyblankenship/wormhole/pkg/middleware"
@@ -19,6 +18,7 @@ import (
 	"github.com/garyblankenship/wormhole/pkg/providers/ollama"
 	"github.com/garyblankenship/wormhole/pkg/providers/openai"
 	"github.com/garyblankenship/wormhole/pkg/types"
+	"os"
 )
 
 // validateAPIKey performs basic format validation for provider API keys
@@ -121,7 +121,7 @@ type idempotencyEntry struct {
 // ProviderHandle wraps a provider with automatic reference counting.
 // Callers MUST call Close() when done with the provider to prevent memory leaks.
 type ProviderHandle struct {
-	types.Provider        // Embedded provider interface
+	types.Provider // Embedded provider interface
 	wormhole       *Wormhole
 	name           string
 	released       atomic.Bool
@@ -158,13 +158,13 @@ type Wormhole struct {
 	adaptiveLimiter *EnhancedAdaptiveLimiter
 
 	// Shutdown management
-	shutdownOnce       sync.Once
-	shutdownChan       chan struct{}          // Signal for graceful shutdown
-	activeRequests     sync.WaitGroup         // Track in-flight requests
-	shuttingDown       atomic.Bool            // Atomic flag for shutdown state
+	shutdownOnce   sync.Once
+	shutdownChan   chan struct{}  // Signal for graceful shutdown
+	activeRequests sync.WaitGroup // Track in-flight requests
+	shuttingDown   atomic.Bool    // Atomic flag for shutdown state
 
 	// Idempotency cache
-	idempotencyCache       sync.Map   // Thread-safe cache for idempotent responses
+	idempotencyCache       sync.Map // Thread-safe cache for idempotent responses
 	idempotencySweepTicker *time.Ticker
 	idempotencySweepStop   chan struct{}
 	idempotencySweepOnce   sync.Once
@@ -975,11 +975,12 @@ func (p *Wormhole) Close() error {
 //   - Returns error if shutdown fails or context times out
 //
 // Example:
-//   ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-//   defer cancel()
-//   if err := client.Shutdown(ctx); err != nil {
-//       log.Printf("Graceful shutdown failed: %v", err)
-//   }
+//
+//	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+//	defer cancel()
+//	if err := client.Shutdown(ctx); err != nil {
+//	    log.Printf("Graceful shutdown failed: %v", err)
+//	}
 func (p *Wormhole) Shutdown(ctx context.Context) error {
 	var shutdownErr error
 	p.shutdownOnce.Do(func() {
@@ -1277,7 +1278,7 @@ type CacheMetrics struct {
 	Hits      int64
 	Misses    int64
 	Evictions int64
-	Size     int
+	Size      int
 }
 
 // GetCacheMetrics returns current cache performance statistics

@@ -34,7 +34,7 @@ func TestNewSecureHTTPClient(t *testing.T) {
 	}
 
 	// Test 4: Strict client
-	client4 := NewStrictHTTPClient(30*time.Second)
+	client4 := NewStrictHTTPClient(30 * time.Second)
 	if client4 == nil {
 		t.Fatal("NewStrictHTTPClient returned nil")
 	}

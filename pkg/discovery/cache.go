@@ -31,8 +31,8 @@ type ModelCache struct {
 	fileLocksMu         sync.RWMutex             // Protects fileLocks map
 
 	// Goroutine lifecycle management
-	stopCh  chan struct{}
-	wg      sync.WaitGroup
+	stopCh   chan struct{}
+	wg       sync.WaitGroup
 	stopOnce sync.Once
 }
 

@@ -71,7 +71,7 @@ func TestSanitizeError(t *testing.T) {
 		},
 		{
 			name: "strict level - generic message for generic error",
-			err: errors.New("detailed error: sk-1234567890abcdef at 10.0.0.1"),
+			err:  errors.New("detailed error: sk-1234567890abcdef at 10.0.0.1"),
 			config: ErrorSanitizerConfig{
 				Level: SanitizeStrict,
 			},

@@ -33,12 +33,12 @@ func getSeededRand() *rand.Rand {
 
 // RetryConfig holds configuration for retry middleware
 type RetryConfig struct {
-	MaxRetries      int                // Maximum number of retry attempts
-	InitialDelay    time.Duration      // Initial delay between retries
-	MaxDelay        time.Duration      // Maximum delay between retries
-	BackoffMultiple float64            // Multiplier for exponential backoff
-	Jitter          bool               // Add random jitter to prevent thundering herd
-	RetryableFunc   func(error) bool   // Custom function to determine if error is retryable
+	MaxRetries      int              // Maximum number of retry attempts
+	InitialDelay    time.Duration    // Initial delay between retries
+	MaxDelay        time.Duration    // Maximum delay between retries
+	BackoffMultiple float64          // Multiplier for exponential backoff
+	Jitter          bool             // Add random jitter to prevent thundering herd
+	RetryableFunc   func(error) bool // Custom function to determine if error is retryable
 }
 
 // DefaultRetryConfig returns sensible defaults for retry configuration

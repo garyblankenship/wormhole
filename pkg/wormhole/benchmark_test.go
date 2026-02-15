@@ -29,7 +29,7 @@ func BenchmarkTextGeneration(b *testing.B) {
 				refCount: 1,
 			},
 		},
-		config:        Config{DefaultProvider: "mock"},
+		config:       Config{DefaultProvider: "mock"},
 		toolRegistry: NewToolRegistry(),
 	}
 
@@ -193,7 +193,7 @@ func BenchmarkConcurrent(b *testing.B) {
 				refCount: 1,
 			},
 		},
-		config:        Config{DefaultProvider: "mock"},
+		config:       Config{DefaultProvider: "mock"},
 		toolRegistry: NewToolRegistry(),
 	}
 

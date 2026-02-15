@@ -29,7 +29,7 @@ type ProviderAdaptiveState struct {
 	key ProviderKey
 
 	// Current concurrency limiter
-	limiter *ConcurrencyLimiter
+	limiter         *ConcurrencyLimiter
 	currentCapacity int
 
 	// Latency tracking
@@ -56,11 +56,11 @@ type ProviderAdaptiveState struct {
 	lastQueryTime  time.Time
 
 	// Performance metrics
-	avgLatency      time.Duration
-	errorRate       float64
-	p50Latency      time.Duration
-	p90Latency      time.Duration
-	p99Latency      time.Duration
+	avgLatency time.Duration
+	errorRate  float64
+	p50Latency time.Duration
+	p90Latency time.Duration
+	p99Latency time.Duration
 }
 
 // NewProviderAdaptiveState creates a new state tracker
@@ -75,16 +75,16 @@ func NewProviderAdaptiveState(key ProviderKey, targetLatency time.Duration,
 	}
 
 	return &ProviderAdaptiveState{
-		key:           key,
-		limiter:       NewConcurrencyLimiter(initialCapacity),
+		key:             key,
+		limiter:         NewConcurrencyLimiter(initialCapacity),
 		currentCapacity: initialCapacity,
-		latencies:     make([]time.Duration, 0, windowSize),
-		latencyRing:   ring.New(windowSize),
-		errorRates:    ring.New(windowSize),
-		pidController: NewPIDController(DefaultPIDConfig()),
-		targetLatency: targetLatency,
-		minCapacity:   minCapacity,
-		maxCapacity:   maxCapacity,
+		latencies:       make([]time.Duration, 0, windowSize),
+		latencyRing:     ring.New(windowSize),
+		errorRates:      ring.New(windowSize),
+		pidController:   NewPIDController(DefaultPIDConfig()),
+		targetLatency:   targetLatency,
+		minCapacity:     minCapacity,
+		maxCapacity:     maxCapacity,
 	}
 }
 
@@ -201,7 +201,7 @@ func (s *ProviderAdaptiveState) AdjustCapacity() (newCapacity int, changed bool)
 	controlSignal := s.pidController.Compute(s.targetLatency, avgLatency, dt)
 
 	// Apply error rate penalty if above threshold
-	const errorRateThreshold = 0.1 // 10%
+	const errorRateThreshold = 0.1  // 10%
 	const errorRateMultiplier = 2.0 // Double sensitivity when errors high
 
 	if errorRate > errorRateThreshold {

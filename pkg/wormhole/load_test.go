@@ -29,23 +29,23 @@ type LoadTestConfig struct {
 
 // LoadTestMetrics holds collected metrics during load testing
 type LoadTestMetrics struct {
-	TotalRequests     int64
-	Successful        int64
-	Failed            int64
-	TotalDuration     time.Duration
-	Throughput        float64 // requests per second
-	LatencyP50        time.Duration
-	LatencyP90        time.Duration
-	LatencyP99        time.Duration
-	LatencyMax        time.Duration
-	LatencyMin        time.Duration
-	ErrorRate         float64 // percentage
-	MemoryAlloc       uint64
-	TotalAlloc        uint64
-	GoroutineCount    int
-	GCPauses          []time.Duration
-	StartMemStats     runtime.MemStats
-	EndMemStats       runtime.MemStats
+	TotalRequests  int64
+	Successful     int64
+	Failed         int64
+	TotalDuration  time.Duration
+	Throughput     float64 // requests per second
+	LatencyP50     time.Duration
+	LatencyP90     time.Duration
+	LatencyP99     time.Duration
+	LatencyMax     time.Duration
+	LatencyMin     time.Duration
+	ErrorRate      float64 // percentage
+	MemoryAlloc    uint64
+	TotalAlloc     uint64
+	GoroutineCount int
+	GCPauses       []time.Duration
+	StartMemStats  runtime.MemStats
+	EndMemStats    runtime.MemStats
 }
 
 // ResourceMonitor tracks runtime resources during load tests
@@ -60,9 +60,9 @@ type ResourceMonitor struct {
 }
 
 type goroutineSample struct {
-	time      time.Time
-	count     int
-	alloc     uint64
+	time       time.Time
+	count      int
+	alloc      uint64
 	totalAlloc uint64
 }
 
@@ -139,9 +139,9 @@ func (rm *ResourceMonitor) sample() {
 	runtime.ReadMemStats(&memStats)
 
 	rm.samples = append(rm.samples, goroutineSample{
-		time:      time.Now(),
-		count:     runtime.NumGoroutine(),
-		alloc:     memStats.Alloc,
+		time:       time.Now(),
+		count:      runtime.NumGoroutine(),
+		alloc:      memStats.Alloc,
 		totalAlloc: memStats.TotalAlloc,
 	})
 
@@ -250,7 +250,7 @@ func TestLoadWithErrorInjection(t *testing.T) {
 				refCount: 1,
 			},
 		},
-		config:        Config{DefaultProvider: "mock"},
+		config:       Config{DefaultProvider: "mock"},
 		toolRegistry: NewToolRegistry(),
 	}
 
@@ -379,7 +379,7 @@ func TestProviderPoolStress(t *testing.T) {
 				refCount: 1,
 			},
 		},
-		config:        Config{DefaultProvider: "mock1"},
+		config:       Config{DefaultProvider: "mock1"},
 		toolRegistry: NewToolRegistry(),
 	}
 
@@ -459,7 +459,7 @@ func TestMemoryLeakDetection(t *testing.T) {
 				refCount: 1,
 			},
 		},
-		config:        Config{DefaultProvider: "mock"},
+		config:       Config{DefaultProvider: "mock"},
 		toolRegistry: NewToolRegistry(),
 	}
 
@@ -530,7 +530,7 @@ func TestLoadWithMixedOperations(t *testing.T) {
 				refCount: 1,
 			},
 		},
-		config:        Config{DefaultProvider: "mock"},
+		config:       Config{DefaultProvider: "mock"},
 		toolRegistry: NewToolRegistry(),
 	}
 
@@ -713,7 +713,7 @@ func runLoadTest(t *testing.T, config LoadTestConfig, testName string) {
 				refCount: 1,
 			},
 		},
-		config:        Config{DefaultProvider: "mock"},
+		config:       Config{DefaultProvider: "mock"},
 		toolRegistry: NewToolRegistry(),
 	}
 
@@ -905,7 +905,7 @@ func BenchmarkLoadSustained(b *testing.B) {
 				refCount: 1,
 			},
 		},
-		config:        Config{DefaultProvider: "mock"},
+		config:       Config{DefaultProvider: "mock"},
 		toolRegistry: NewToolRegistry(),
 	}
 

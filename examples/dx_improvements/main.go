@@ -84,14 +84,14 @@ func main() {
 
 	productionRetries := 3
 	productionRetryDelay := 500 * time.Millisecond
-	
+
 	productionClient := wormhole.New(
 		wormhole.WithDefaultProvider("openai"),
 		wormhole.WithOpenAI("your-key-here", types.ProviderConfig{
 			MaxRetries: &productionRetries,
 			RetryDelay: &productionRetryDelay,
 		}),
-		// Professional middleware stack from feedback  
+		// Professional middleware stack from feedback
 		wormhole.WithMiddleware(
 			middleware.CircuitBreakerMiddleware(5, 30*time.Second),
 			middleware.RateLimitMiddleware(100),

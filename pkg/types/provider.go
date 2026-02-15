@@ -315,7 +315,7 @@ func (c ProviderConfig) WithTLSConfigParam(key string, value any) ProviderConfig
 // The configuration will allow TLS 1.0 and disable certificate verification.
 func (c ProviderConfig) WithInsecureTLS(skipVerify bool) ProviderConfig {
 	return c.WithTLSConfigParam("min_version", uint16(0x0301)). // TLS 1.0
-		WithTLSConfigParam("insecure_skip_verify", skipVerify)
+									WithTLSConfigParam("insecure_skip_verify", skipVerify)
 }
 
 // HasTLSConfig returns true if the provider config contains TLS configuration.

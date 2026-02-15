@@ -15,12 +15,12 @@ import (
 
 // ToolExecutor handles the execution of tools and orchestration of multi-turn conversations
 type ToolExecutor struct {
-	registry       *ToolRegistry
-	safetyConfig   ToolSafetyConfig
-	limiter        *ConcurrencyLimiter
+	registry        *ToolRegistry
+	safetyConfig    ToolSafetyConfig
+	limiter         *ConcurrencyLimiter
 	adaptiveLimiter *AdaptiveLimiter
-	circuitBreaker *SimpleCircuitBreaker
-	retryExecutor  *RetryExecutor
+	circuitBreaker  *SimpleCircuitBreaker
+	retryExecutor   *RetryExecutor
 }
 
 // NewToolExecutor creates a new ToolExecutor with the given registry and default safety config

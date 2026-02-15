@@ -16,7 +16,7 @@ func main() {
 	maxRetries := 3
 	retryDelay := 100 * time.Millisecond
 	maxRetryDelay := 5 * time.Second
-	
+
 	// Create client with comprehensive middleware stack and per-provider retry configuration
 	client := wormhole.New(
 		wormhole.WithOpenAI("", types.ProviderConfig{

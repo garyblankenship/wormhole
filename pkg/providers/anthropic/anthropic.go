@@ -24,8 +24,8 @@ const (
 // Provider implements the Anthropic provider
 type Provider struct {
 	*providers.BaseProvider
-	requestBuilder *providers.RequestBuilder
-	responseTransform *transform.ResponseTransform
+	requestBuilder       *providers.RequestBuilder
+	responseTransform    *transform.ResponseTransform
 	streamingTransformer *transform.StreamingTransformer
 }
 
@@ -43,9 +43,9 @@ func New(config types.ProviderConfig) *Provider {
 	config.Headers[headerAPIKey] = config.APIKey
 
 	return &Provider{
-		BaseProvider: providers.NewBaseProvider("anthropic", config),
-		requestBuilder: providers.NewRequestBuilder(),
-		responseTransform: transform.NewResponseTransform(),
+		BaseProvider:         providers.NewBaseProvider("anthropic", config),
+		requestBuilder:       providers.NewRequestBuilder(),
+		responseTransform:    transform.NewResponseTransform(),
 		streamingTransformer: transform.NewAnthropicStreamingTransformer(),
 	}
 }
@@ -252,10 +252,10 @@ func (p *Provider) streamAnthropicRequest(ctx context.Context, method, url strin
 
 	if resp.StatusCode >= 400 {
 		defer func() {
-		if err := resp.Body.Close(); err != nil {
-			log.Printf("warning: failed to close response body: %v", err)
-		}
-	}()
+			if err := resp.Body.Close(); err != nil {
+				log.Printf("warning: failed to close response body: %v", err)
+			}
+		}()
 		respBody, _ := io.ReadAll(resp.Body)
 		var apiError anthropicError
 		if err := json.Unmarshal(respBody, &apiError); err != nil {

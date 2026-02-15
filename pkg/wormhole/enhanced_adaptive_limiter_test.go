@@ -47,8 +47,8 @@ func TestProviderAdaptiveState(t *testing.T) {
 	state := NewProviderAdaptiveState(key, 100*time.Millisecond, 1, 10, 5, 10)
 
 	// Record some latencies
-	state.RecordLatency(50*time.Millisecond, nil)                       // Good
-	state.RecordLatency(150*time.Millisecond, nil)                      // Bad
+	state.RecordLatency(50*time.Millisecond, nil)                  // Good
+	state.RecordLatency(150*time.Millisecond, nil)                 // Bad
 	state.RecordLatency(200*time.Millisecond, fmt.Errorf("error")) // Bad with error
 
 	// Get metrics

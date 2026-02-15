@@ -167,10 +167,10 @@ func initializeWormhole(config CLIConfig) *wormhole.Wormhole {
 	}
 
 	// Create the interdimensional gateway using functional options
-	// Configure per-provider retry settings  
+	// Configure per-provider retry settings
 	maxRetries := 3
 	retryDelay := 500 * time.Millisecond
-	
+
 	client := wormhole.New(
 		wormhole.WithDefaultProvider(config.Provider),
 		wormhole.WithOpenAI(os.Getenv("OPENAI_API_KEY"), types.ProviderConfig{

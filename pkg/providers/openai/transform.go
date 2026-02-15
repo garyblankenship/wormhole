@@ -138,7 +138,6 @@ func (p *Provider) transformTools(tools []types.Tool) []map[string]any {
 	return baseTools
 }
 
-
 // cleanJSONResponse removes markdown code blocks from JSON responses
 // Delegates to shared utility for consistent behavior across providers
 func cleanJSONResponse(content string) string {

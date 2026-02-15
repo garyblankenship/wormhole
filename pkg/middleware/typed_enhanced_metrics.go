@@ -33,9 +33,9 @@ func (m *TypedEnhancedMetricsMiddleware) extractLabels(ctx context.Context, meth
 	}
 
 	return &RequestLabels{
-		Provider: provider,
-		Model:    model,
-		Method:   method,
+		Provider:  provider,
+		Model:     model,
+		Method:    method,
 		ErrorType: "", // Will be detected by error detector
 	}
 }

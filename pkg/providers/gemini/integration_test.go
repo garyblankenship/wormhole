@@ -827,8 +827,8 @@ func TestGeminiProvider_IntegrationTimeout(t *testing.T) {
 	// Create provider with timeout
 	config := types.ProviderConfig{
 		BaseURL:    server.URL,
-		Timeout:    1,           // 1 second timeout
-		MaxRetries: &noRetries,  // Disable retries
+		Timeout:    1,          // 1 second timeout
+		MaxRetries: &noRetries, // Disable retries
 	}
 	provider := gemini.New("test-api-key", config)
 

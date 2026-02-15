@@ -40,8 +40,8 @@ var responseBodyPool = sync.Pool{
 
 // pooledBytesReader is an io.Reader that returns its underlying byte slice to the pool after reading
 type pooledBytesReader struct {
-	bytes   []byte
-	pos     int
+	bytes    []byte
+	pos      int
 	returned bool
 }
 
@@ -62,8 +62,8 @@ func (r *pooledBytesReader) Read(p []byte) (n int, err error) {
 
 // jsonPooledReader is an io.Reader that returns its underlying byte slice to the JSON buffer pool after reading
 type jsonPooledReader struct {
-	bytes   []byte
-	pos     int
+	bytes    []byte
+	pos      int
 	returned bool
 }
 
@@ -80,7 +80,6 @@ func (r *jsonPooledReader) Read(p []byte) (n int, err error) {
 	r.pos += n
 	return n, nil
 }
-
 
 // readAllPooled reads all data from r into a pooled byte slice.
 // The caller MUST call returnResponseBuf after using the slice.
@@ -584,7 +583,7 @@ func (p *BaseProvider) WrapError(code types.ErrorCode, message string, cause err
 func (p *BaseProvider) isRetryableCode(code types.ErrorCode) bool {
 	switch code {
 	case types.ErrorCodeAuth, types.ErrorCodeRateLimit, types.ErrorCodeTimeout,
-		 types.ErrorCodeProvider, types.ErrorCodeNetwork:
+		types.ErrorCodeProvider, types.ErrorCodeNetwork:
 		return true
 	default:
 		return false

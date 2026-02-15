@@ -97,9 +97,9 @@ func EnhancedMetricsMiddleware(collector *EnhancedMetricsCollector) Middleware {
 				if model, ok := ctx.Value(CtxKeyModel).(string); ok {
 					if method, ok := ctx.Value(CtxKeyMethod).(string); ok {
 						labels = &RequestLabels{
-							Provider: provider,
-							Model:    model,
-							Method:   method,
+							Provider:  provider,
+							Model:     model,
+							Method:    method,
 							ErrorType: "", // Will be detected by error detector
 						}
 					}

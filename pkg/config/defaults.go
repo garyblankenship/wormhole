@@ -11,7 +11,6 @@ import (
 	"time"
 )
 
-
 // HTTP Client Configuration Defaults
 const (
 	// UnlimitedTimeout represents no timeout (0 duration).
@@ -57,7 +56,6 @@ const (
 	DefaultMaxDelay                   = FallbackMaxDelay
 	DefaultLoadBalancerHealthInterval = FallbackLoadBalancerHealthInterval
 )
-
 
 // Runtime Configuration Support
 // These functions require environment variables - no hardcoded fallbacks

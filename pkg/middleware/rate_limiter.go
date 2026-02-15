@@ -125,29 +125,29 @@ func (rl *RateLimiter) Close() error {
 
 // HealthMetrics represents provider health metrics for adaptive rate limiting
 type HealthMetrics struct {
-	CircuitState      CircuitState     // Circuit breaker state
-	Healthy           bool             // Health checker status
-	ErrorRate         float64          // Error rate (0.0 to 1.0)
-	ResponseTime      time.Duration    // Response time from health checker
-	ConsecutiveFails  int              // Consecutive failures
-	LastCheck         time.Time        // Last health check time
+	CircuitState     CircuitState  // Circuit breaker state
+	Healthy          bool          // Health checker status
+	ErrorRate        float64       // Error rate (0.0 to 1.0)
+	ResponseTime     time.Duration // Response time from health checker
+	ConsecutiveFails int           // Consecutive failures
+	LastCheck        time.Time     // Last health check time
 }
 
 // AdaptiveRateLimiter adjusts rate based on response times and health metrics
 type AdaptiveRateLimiter struct {
 	*RateLimiter
-	mu              sync.RWMutex
-	minRate         int
-	maxRate         int
-	targetLatency   time.Duration
-	latencyWindow   []time.Duration
-	windowSize      int
-	totalLatency    time.Duration // Running total of latencies in window
-	windowCount     int           // Number of latencies in window
-	adjustInterval  time.Duration
-	lastAdjustment  time.Time
-	healthMetrics   *HealthMetrics    // Optional health metrics
-	useHealthAware  bool              // Whether to use health-aware adjustment
+	mu             sync.RWMutex
+	minRate        int
+	maxRate        int
+	targetLatency  time.Duration
+	latencyWindow  []time.Duration
+	windowSize     int
+	totalLatency   time.Duration // Running total of latencies in window
+	windowCount    int           // Number of latencies in window
+	adjustInterval time.Duration
+	lastAdjustment time.Time
+	healthMetrics  *HealthMetrics // Optional health metrics
+	useHealthAware bool           // Whether to use health-aware adjustment
 }
 
 // NewAdaptiveRateLimiter creates a rate limiter that adjusts based on latency
@@ -448,7 +448,7 @@ type ProviderAwareConcurrencyLimitConfig struct {
 // ProviderAwareConcurrencyLimitMiddleware creates a middleware with provider-aware adaptive concurrency control
 func ProviderAwareConcurrencyLimitMiddleware(limiter ProviderAwareLimiter) Middleware {
 	return ProviderAwareConcurrencyLimitMiddlewareWithConfig(ProviderAwareConcurrencyLimitConfig{
-		Limiter: limiter,
+		Limiter:             limiter,
 		EnableProviderAware: true,
 	})
 }

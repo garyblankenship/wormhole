@@ -18,16 +18,16 @@ func main() {
 
 	// Example 1: Record requests with labels
 	labels1 := &middleware.RequestLabels{
-		Provider: "openai",
-		Model:    "gpt-4",
-		Method:   "text",
+		Provider:  "openai",
+		Model:     "gpt-4",
+		Method:    "text",
 		ErrorType: "",
 	}
 
 	labels2 := &middleware.RequestLabels{
-		Provider: "anthropic",
-		Model:    "claude-3",
-		Method:   "stream",
+		Provider:  "anthropic",
+		Model:     "claude-3",
+		Method:    "stream",
 		ErrorType: "",
 	}
 

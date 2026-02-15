@@ -75,8 +75,8 @@ func (b *RequestBuilder) TransformMessage(msg any) map[string]any {
 		}
 	case *types.ToolMessage:
 		return map[string]any{
-			"role":       "tool",
-			"content":    m.Content,
+			"role":         "tool",
+			"content":      m.Content,
 			"tool_call_id": m.ToolCallID,
 		}
 	default:

@@ -129,12 +129,12 @@ func TestConcurrentRateLimiting(t *testing.T) {
 
 // mockProviderAwareLimiter is a test implementation of ProviderAwareLimiter
 type mockProviderAwareLimiter struct {
-	acquireCalls           []acquireCall
-	releaseCalls           []releaseCall
-	recordLatencyCalls     []recordLatencyCall
-	acquireShouldFail      bool
-	acquireWithProviderShouldFail bool
-	acquireReturnValue     bool
+	acquireCalls                   []acquireCall
+	releaseCalls                   []releaseCall
+	recordLatencyCalls             []recordLatencyCall
+	acquireShouldFail              bool
+	acquireWithProviderShouldFail  bool
+	acquireReturnValue             bool
 	acquireWithProviderReturnValue bool
 }
 
@@ -194,7 +194,7 @@ func (m *mockProviderAwareLimiter) RecordLatencyWithProvider(latency time.Durati
 func TestProviderAwareConcurrencyLimitMiddleware(t *testing.T) {
 	t.Run("uses provider-aware limiting when provider in context", func(t *testing.T) {
 		mockLimiter := &mockProviderAwareLimiter{
-			acquireReturnValue: true,
+			acquireReturnValue:             true,
 			acquireWithProviderReturnValue: true,
 		}
 
@@ -245,7 +245,7 @@ func TestProviderAwareConcurrencyLimitMiddleware(t *testing.T) {
 		// Should have called RecordLatency (not RecordLatencyWithProvider)
 		assert.Equal(t, 1, len(mockLimiter.recordLatencyCalls))
 		assert.Equal(t, "", mockLimiter.recordLatencyCalls[0].provider) // Empty for global
-		assert.Equal(t, "", mockLimiter.recordLatencyCalls[0].model)   // Empty for global
+		assert.Equal(t, "", mockLimiter.recordLatencyCalls[0].model)    // Empty for global
 		// Should have called Release (not ReleaseWithProvider)
 		assert.Equal(t, 1, len(mockLimiter.releaseCalls))
 		assert.Equal(t, "", mockLimiter.releaseCalls[0].provider) // Empty for global
@@ -283,7 +283,7 @@ func TestProviderAwareConcurrencyLimitMiddleware(t *testing.T) {
 
 	t.Run("respects EnableProviderAware config when disabled", func(t *testing.T) {
 		mockLimiter := &mockProviderAwareLimiter{
-			acquireReturnValue: true,
+			acquireReturnValue:             true,
 			acquireWithProviderReturnValue: true,
 		}
 
@@ -315,7 +315,7 @@ func TestProviderAwareConcurrencyLimitMiddleware(t *testing.T) {
 		// Should have called RecordLatency (not RecordLatencyWithProvider)
 		assert.Equal(t, 1, len(mockLimiter.recordLatencyCalls))
 		assert.Equal(t, "", mockLimiter.recordLatencyCalls[0].provider) // Empty for global
-		assert.Equal(t, "", mockLimiter.recordLatencyCalls[0].model)   // Empty for global
+		assert.Equal(t, "", mockLimiter.recordLatencyCalls[0].model)    // Empty for global
 		// Should have called Release (not ReleaseWithProvider)
 		assert.Equal(t, 1, len(mockLimiter.releaseCalls))
 		assert.Equal(t, "", mockLimiter.releaseCalls[0].provider) // Empty for global

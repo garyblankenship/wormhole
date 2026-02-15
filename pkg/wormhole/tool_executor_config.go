@@ -88,21 +88,21 @@ func DefaultToolSafetyConfig() ToolSafetyConfig {
 	return ToolSafetyConfig{
 		MaxConcurrentTools:         10,
 		EnableAdaptiveConcurrency:  false,
-		AdaptiveTargetLatency:     500 * time.Millisecond,
-		AdaptiveMinCapacity:       1,
-		AdaptiveMaxCapacity:       100,
+		AdaptiveTargetLatency:      500 * time.Millisecond,
+		AdaptiveMinCapacity:        1,
+		AdaptiveMaxCapacity:        100,
 		AdaptiveAdjustmentInterval: 30 * time.Second,
-		AdaptiveLatencyWindowSize: 100,
-		ToolTimeout:               30 * time.Second,
+		AdaptiveLatencyWindowSize:  100,
+		ToolTimeout:                30 * time.Second,
 		EnableCircuitBreaker:       false,
-		MaxRetriesPerTool:         0,
-		CircuitBreakerThreshold:   5,
+		MaxRetriesPerTool:          0,
+		CircuitBreakerThreshold:    5,
 		CircuitBreakerResetTimeout: time.Minute,
-		MaxMemoryMB:               0,                    // Unlimited by default
-		MaxCPUTime:                0,                    // Unlimited by default
-		EnableInputValidation:     true,                 // Enabled by default for safety
-		EnableResourceIsolation:   false,                // Disabled by default (performance)
-		MaxToolOutputSize:         10 * 1024 * 1024,     // 10MB default
+		MaxMemoryMB:                0,                // Unlimited by default
+		MaxCPUTime:                 0,                // Unlimited by default
+		EnableInputValidation:      true,             // Enabled by default for safety
+		EnableResourceIsolation:    false,            // Disabled by default (performance)
+		MaxToolOutputSize:          10 * 1024 * 1024, // 10MB default
 	}
 }
 
@@ -157,12 +157,12 @@ func (c *ToolSafetyConfig) Validate() error {
 // ToAdaptiveConfig converts the safety configuration to an adaptive configuration
 func (c *ToolSafetyConfig) ToAdaptiveConfig() AdaptiveConfig {
 	return AdaptiveConfig{
-		TargetLatency:       c.AdaptiveTargetLatency,
-		MinCapacity:         c.AdaptiveMinCapacity,
-		MaxCapacity:         c.AdaptiveMaxCapacity,
-		InitialCapacity:     c.MaxConcurrentTools,
-		AdjustmentInterval:  c.AdaptiveAdjustmentInterval,
-		LatencyWindowSize:   c.AdaptiveLatencyWindowSize,
+		TargetLatency:      c.AdaptiveTargetLatency,
+		MinCapacity:        c.AdaptiveMinCapacity,
+		MaxCapacity:        c.AdaptiveMaxCapacity,
+		InitialCapacity:    c.MaxConcurrentTools,
+		AdjustmentInterval: c.AdaptiveAdjustmentInterval,
+		LatencyWindowSize:  c.AdaptiveLatencyWindowSize,
 	}
 }
 

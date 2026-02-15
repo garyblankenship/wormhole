@@ -643,7 +643,7 @@ func TestIntegration_ErrorHandling(t *testing.T) {
 			wormhole.WithProviderConfig("openai", types.ProviderConfig{
 				APIKey:     "test-key",
 				BaseURL:    server.URL,
-				Timeout:    1,     // 1 second timeout (2s server sleep should trigger this)
+				Timeout:    1, // 1 second timeout (2s server sleep should trigger this)
 				MaxRetries: &noRetries,
 			}),
 		)

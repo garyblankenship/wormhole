@@ -47,7 +47,7 @@ func main() {
 	// Example 1: Basic text generation with different models
 	fmt.Println("\n1. 🚀 Basic Text Generation (Multiple Models)")
 	models := []string{
-		"openai/gpt-5-mini",               // OpenAI via OpenRouter
+		"openai/gpt-5-mini",                // OpenAI via OpenRouter
 		"anthropic/claude-sonnet-4-5",      // Anthropic via OpenRouter
 		"meta-llama/llama-3.1-8b-instruct", // Meta via OpenRouter
 		"google/gemini-pro",                // Google via OpenRouter

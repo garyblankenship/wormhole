@@ -54,7 +54,7 @@ type TLSConfig struct {
 func DefaultTLSConfig() TLSConfig {
 	return TLSConfig{
 		MinVersion:         tls.VersionTLS13, // TLS 1.3 for modern security
-		MaxVersion:         0, // No maximum, allows TLS 1.3
+		MaxVersion:         0,                // No maximum, allows TLS 1.3
 		CipherSuites:       ModernCipherSuites(),
 		InsecureSkipVerify: false,
 		RootCAs:            nil, // Use system root CAs
@@ -180,17 +180,17 @@ func (c TLSConfig) IsSecure() bool {
 
 	// Check if any weak cipher suites are enabled
 	weakCiphers := map[uint16]bool{
-		tls.TLS_RSA_WITH_RC4_128_SHA:                  true,
-		tls.TLS_RSA_WITH_3DES_EDE_CBC_SHA:            true,
-		tls.TLS_RSA_WITH_AES_128_CBC_SHA:             true,
-		tls.TLS_RSA_WITH_AES_256_CBC_SHA:             true,
-		tls.TLS_ECDHE_ECDSA_WITH_RC4_128_SHA:         true,
-		tls.TLS_ECDHE_RSA_WITH_RC4_128_SHA:           true,
-		tls.TLS_ECDHE_ECDSA_WITH_AES_128_CBC_SHA:     true,
-		tls.TLS_ECDHE_ECDSA_WITH_AES_256_CBC_SHA:     true,
-		tls.TLS_ECDHE_RSA_WITH_3DES_EDE_CBC_SHA:      true,
-		tls.TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA:       true,
-		tls.TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA:       true,
+		tls.TLS_RSA_WITH_RC4_128_SHA:             true,
+		tls.TLS_RSA_WITH_3DES_EDE_CBC_SHA:        true,
+		tls.TLS_RSA_WITH_AES_128_CBC_SHA:         true,
+		tls.TLS_RSA_WITH_AES_256_CBC_SHA:         true,
+		tls.TLS_ECDHE_ECDSA_WITH_RC4_128_SHA:     true,
+		tls.TLS_ECDHE_RSA_WITH_RC4_128_SHA:       true,
+		tls.TLS_ECDHE_ECDSA_WITH_AES_128_CBC_SHA: true,
+		tls.TLS_ECDHE_ECDSA_WITH_AES_256_CBC_SHA: true,
+		tls.TLS_ECDHE_RSA_WITH_3DES_EDE_CBC_SHA:  true,
+		tls.TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA:   true,
+		tls.TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA:   true,
 		// Note: Some cipher suite constants may not be available in all Go versions
 		// We check for their existence at runtime
 	}

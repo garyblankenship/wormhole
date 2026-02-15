@@ -105,7 +105,7 @@ func extractHostFromBaseURL(baseURL string) string {
 
 var (
 	transportCache sync.RWMutex
-	transports = make(map[string]*http.Transport)
+	transports     = make(map[string]*http.Transport)
 
 	// Transport cache metrics
 	transportCacheHits   atomic.Int64

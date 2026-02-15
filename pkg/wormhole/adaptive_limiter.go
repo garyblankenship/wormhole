@@ -1,8 +1,8 @@
 package wormhole
 
 import (
-	"context"
 	"container/ring"
+	"context"
 	"sync"
 	"time"
 )
@@ -48,12 +48,12 @@ type AdaptiveLimiter struct {
 	limiter *ConcurrencyLimiter
 	config  AdaptiveConfig
 
-	latencies *ring.Ring // ring buffer of recent latencies
+	latencies    *ring.Ring // ring buffer of recent latencies
 	totalLatency time.Duration
-	sampleCount int
+	sampleCount  int
 
-	stopChan  chan struct{}
-	stopOnce  sync.Once
+	stopChan chan struct{}
+	stopOnce sync.Once
 }
 
 // NewAdaptiveLimiter creates a new adaptive limiter with the given configuration.
@@ -66,10 +66,10 @@ func NewAdaptiveLimiter(config AdaptiveConfig) *AdaptiveLimiter {
 	}
 
 	al := &AdaptiveLimiter{
-		limiter:    NewConcurrencyLimiter(config.InitialCapacity),
-		config:     config,
-		latencies:  ring.New(config.LatencyWindowSize),
-		stopChan:   make(chan struct{}),
+		limiter:   NewConcurrencyLimiter(config.InitialCapacity),
+		config:    config,
+		latencies: ring.New(config.LatencyWindowSize),
+		stopChan:  make(chan struct{}),
 	}
 
 	// Start adjustment goroutine

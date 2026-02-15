@@ -30,19 +30,19 @@ type EnhancedMetricsConfig struct {
 // DefaultEnhancedMetricsConfig returns the default configuration
 func DefaultEnhancedMetricsConfig() *EnhancedMetricsConfig {
 	return &EnhancedMetricsConfig{
-		DefaultHistogramBuckets:  []float64{10, 50, 100, 500, 1000, 5000},
-		EnableLabels:             true,
-		EnableTokenTracking:      true,
+		DefaultHistogramBuckets:   []float64{10, 50, 100, 500, 1000, 5000},
+		EnableLabels:              true,
+		EnableTokenTracking:       true,
 		EnableConcurrencyTracking: true,
-		LabelAggregation:         false,
+		LabelAggregation:          false,
 	}
 }
 
 // RequestLabels represents the labels for a request
 type RequestLabels struct {
-	Provider string
-	Model    string
-	Method   string // text, stream, structured, embeddings, audio, image
+	Provider  string
+	Model     string
+	Method    string // text, stream, structured, embeddings, audio, image
 	ErrorType string // auth, rate_limit, timeout, provider, network, unknown
 }
 
@@ -74,14 +74,14 @@ type EnhancedMetricsCollector struct {
 // enhancedMetricsBucket holds metrics for a specific label combination
 type enhancedMetricsBucket struct {
 	// Basic counters
-	requests       int64 // atomic
-	errors         int64 // atomic
-	retries        int64 // atomic
-	totalDuration  int64 // atomic (nanoseconds)
+	requests      int64 // atomic
+	errors        int64 // atomic
+	retries       int64 // atomic
+	totalDuration int64 // atomic (nanoseconds)
 
 	// Token counts (if enabled)
-	inputTokens     int64 // atomic
-	outputTokens    int64 // atomic
+	inputTokens  int64 // atomic
+	outputTokens int64 // atomic
 
 	// Histogram data - using fixed-size array with atomic operations
 	histogramCounts []int64 // atomic slices for each bucket + overflow
@@ -104,19 +104,19 @@ func (d *ErrorTypeDetector) DetectErrorType(err error) string {
 	// Check for common error patterns
 	switch {
 	case strings.Contains(errStr, "auth") || strings.Contains(errStr, "unauthorized") ||
-	     strings.Contains(errStr, "token") || strings.Contains(errStr, "API key"):
+		strings.Contains(errStr, "token") || strings.Contains(errStr, "API key"):
 		return "auth"
 	case strings.Contains(errStr, "rate limit") || strings.Contains(errStr, "quota") ||
-	     strings.Contains(errStr, "too many requests"):
+		strings.Contains(errStr, "too many requests"):
 		return "rate_limit"
 	case strings.Contains(errStr, "timeout") || strings.Contains(errStr, "deadline") ||
-	     strings.Contains(errStr, "context deadline"):
+		strings.Contains(errStr, "context deadline"):
 		return "timeout"
 	case strings.Contains(errStr, "provider") || strings.Contains(errStr, "model") ||
-	     strings.Contains(errStr, "unsupported"):
+		strings.Contains(errStr, "unsupported"):
 		return "provider"
 	case strings.Contains(errStr, "network") || strings.Contains(errStr, "connection") ||
-	     strings.Contains(errStr, "dial") || strings.Contains(errStr, "EOF"):
+		strings.Contains(errStr, "dial") || strings.Contains(errStr, "EOF"):
 		return "network"
 	default:
 		return "unknown"
@@ -283,15 +283,15 @@ func (b *enhancedMetricsBucket) getStats(buckets []float64) map[string]interface
 	}
 
 	return map[string]interface{}{
-		"requests":           requests,
-		"errors":             errors,
-		"retries":            retries,
-		"total_duration_ns":  totalDuration,
-		"avg_duration":       avgDuration.String(),
-		"input_tokens":       inputTokens,
-		"output_tokens":      outputTokens,
-		"histogram_buckets":  buckets,
-		"histogram_counts":   histogramCounts,
+		"requests":          requests,
+		"errors":            errors,
+		"retries":           retries,
+		"total_duration_ns": totalDuration,
+		"avg_duration":      avgDuration.String(),
+		"input_tokens":      inputTokens,
+		"output_tokens":     outputTokens,
+		"histogram_buckets": buckets,
+		"histogram_counts":  histogramCounts,
 	}
 }
 
@@ -375,9 +375,9 @@ func ExtractLabelsFromRequest(ctx context.Context, req interface{}, method strin
 	// Check if request has Provider() and Model() methods
 	// This is a type-safe way to extract information
 	return &RequestLabels{
-		Provider: "unknown",
-		Model:    "unknown",
-		Method:   method,
+		Provider:  "unknown",
+		Model:     "unknown",
+		Method:    method,
 		ErrorType: "",
 	}
 }

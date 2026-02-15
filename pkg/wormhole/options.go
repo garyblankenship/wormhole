@@ -402,10 +402,11 @@ func WithAllProvidersFromEnv() Option {
 //   - ttl: Time-to-live for cached responses (default: 24 hours)
 //
 // Example:
-//   client := wormhole.New(
-//       wormhole.WithOpenAI(apiKey),
-//       wormhole.WithIdempotencyKey("req-123", 1*time.Hour),
-//   )
+//
+//	client := wormhole.New(
+//	    wormhole.WithOpenAI(apiKey),
+//	    wormhole.WithIdempotencyKey("req-123", 1*time.Hour),
+//	)
 func WithIdempotencyKey(key string, ttl ...time.Duration) Option {
 	return func(c *Config) {
 		if c.Idempotency == nil {

@@ -19,13 +19,13 @@ type StreamingConfig struct {
 	ModelPath         string // e.g., "model"
 
 	// Field adapters for provider-specific formats
-	TextAdapter      func(any) (string, error)
-	ToolCallAdapter  func(any) (*types.ToolCall, error)
-	UsageAdapter     func(any) (*types.Usage, error)
+	TextAdapter         func(any) (string, error)
+	ToolCallAdapter     func(any) (*types.ToolCall, error)
+	UsageAdapter        func(any) (*types.Usage, error)
 	FinishReasonAdapter func(string) types.FinishReason
 
 	// Processing configuration
-	ReturnsBatch bool // true for providers that return multiple chunks per event (e.g., Gemini)
+	ReturnsBatch bool   // true for providers that return multiple chunks per event (e.g., Gemini)
 	ChunkType    string // "text_chunk" or "stream_chunk" (for backward compatibility)
 }
 
@@ -435,9 +435,9 @@ func NewAnthropicStreamingTransformer() *StreamingTransformer {
 	return NewStreamingTransformer(StreamingConfig{
 		// Anthropic uses event-based streaming, so paths depend on event type
 		// This is a simplified configuration for basic text extraction
-		TextFieldPath:     "delta.text",
-		FinishReasonPath:  "delta.stop_reason",
-		UsagePath:         "usage",
+		TextFieldPath:    "delta.text",
+		FinishReasonPath: "delta.stop_reason",
+		UsagePath:        "usage",
 		FinishReasonAdapter: func(reason string) types.FinishReason {
 			switch reason {
 			case "end_turn":
@@ -460,7 +460,7 @@ func NewOllamaStreamingTransformer() *StreamingTransformer {
 	return NewStreamingTransformer(StreamingConfig{
 		TextFieldPath:    "message.content",
 		FinishReasonPath: "done", // Ollama uses boolean done field
-		IDPath:           "", // Ollama doesn't provide ID
+		IDPath:           "",     // Ollama doesn't provide ID
 		ModelPath:        "model",
 		FinishReasonAdapter: func(reason string) types.FinishReason {
 			// Ollama uses boolean done field, but we treat "true" as stop

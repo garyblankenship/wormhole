@@ -22,8 +22,8 @@ const (
 // Provider implements the OpenAI provider
 type Provider struct {
 	*providers.BaseProvider
-	requestBuilder *providers.RequestBuilder
-	responseTransform *transform.ResponseTransform
+	requestBuilder       *providers.RequestBuilder
+	responseTransform    *transform.ResponseTransform
 	streamingTransformer *transform.StreamingTransformer
 }
 
@@ -34,9 +34,9 @@ func New(config types.ProviderConfig) *Provider {
 	}
 
 	return &Provider{
-		BaseProvider: providers.NewBaseProvider("openai", config),
-		requestBuilder: providers.NewRequestBuilder(),
-		responseTransform: transform.NewResponseTransform(),
+		BaseProvider:         providers.NewBaseProvider("openai", config),
+		requestBuilder:       providers.NewRequestBuilder(),
+		responseTransform:    transform.NewResponseTransform(),
 		streamingTransformer: transform.NewOpenAIStreamingTransformer(),
 	}
 }

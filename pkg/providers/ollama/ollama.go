@@ -21,8 +21,8 @@ import (
 // Provider implements the Ollama provider
 type Provider struct {
 	*providers.BaseProvider
-	requestBuilder *providers.RequestBuilder
-	responseTransform *transform.ResponseTransform
+	requestBuilder       *providers.RequestBuilder
+	responseTransform    *transform.ResponseTransform
 	streamingTransformer *transform.StreamingTransformer
 }
 
@@ -36,9 +36,9 @@ func New(config types.ProviderConfig) (*Provider, error) {
 	}
 
 	return &Provider{
-		BaseProvider: providers.NewBaseProvider("ollama", config),
-		requestBuilder: providers.NewRequestBuilder(),
-		responseTransform: transform.NewResponseTransform(),
+		BaseProvider:         providers.NewBaseProvider("ollama", config),
+		requestBuilder:       providers.NewRequestBuilder(),
+		responseTransform:    transform.NewResponseTransform(),
 		streamingTransformer: transform.NewOllamaStreamingTransformer(),
 	}, nil
 }
@@ -441,10 +441,10 @@ func (p *Provider) streamOllamaRequest(ctx context.Context, method, url string, 
 
 	if resp.StatusCode >= 400 {
 		defer func() {
-		if err := resp.Body.Close(); err != nil {
-			log.Printf("warning: failed to close response body: %v", err)
-		}
-	}()
+			if err := resp.Body.Close(); err != nil {
+				log.Printf("warning: failed to close response body: %v", err)
+			}
+		}()
 		respBody, _ := io.ReadAll(resp.Body)
 		err := types.HTTPStatusToError(resp.StatusCode, string(respBody))
 		err.Provider = p.Name()
