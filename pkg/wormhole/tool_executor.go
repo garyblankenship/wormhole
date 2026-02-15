@@ -220,7 +220,8 @@ func (e *ToolExecutor) ExecuteAll(ctx context.Context, toolCalls []types.ToolCal
 			// Apply concurrency limiting if configured
 			var startTime time.Time
 			if e.adaptiveLimiter != nil {
-				if !e.adaptiveLimiter.Acquire(ctx) {
+				release, ok := e.adaptiveLimiter.AcquireToken(ctx)
+				if !ok {
 					// Context canceled or timeout while waiting for slot
 					resultChan <- resultWithIndex{
 						index: idx,
@@ -231,7 +232,7 @@ func (e *ToolExecutor) ExecuteAll(ctx context.Context, toolCalls []types.ToolCal
 					}
 					return
 				}
-				defer e.adaptiveLimiter.Release()
+				defer release()
 				startTime = time.Now()
 			} else if e.limiter != nil {
 				if !e.limiter.Acquire(ctx) {

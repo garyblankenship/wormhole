@@ -2,6 +2,7 @@ package wormhole
 
 import (
 	"container/ring"
+	"context"
 	"math"
 	"sort"
 	"sync"
@@ -243,9 +244,27 @@ func (s *ProviderAdaptiveState) Capacity() int {
 	return s.currentCapacity
 }
 
-// Limiter returns the current concurrency limiter
+// Limiter returns the current concurrency limiter.
+//
+// Deprecated: Use AcquireToken instead to prevent race conditions when
+// AdjustCapacity swaps the limiter between acquire and release.
 func (s *ProviderAdaptiveState) Limiter() *ConcurrencyLimiter {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return s.limiter
+}
+
+// AcquireToken attempts to acquire a slot and returns a release function.
+// The release function captures the specific limiter instance used for acquire,
+// preventing a race condition if AdjustCapacity swaps the limiter between
+// acquire and release.
+func (s *ProviderAdaptiveState) AcquireToken(ctx context.Context) (release func(), ok bool) {
+	s.mu.RLock()
+	limiter := s.limiter
+	s.mu.RUnlock()
+
+	if !limiter.Acquire(ctx) {
+		return nil, false
+	}
+	return limiter.Release, true
 }

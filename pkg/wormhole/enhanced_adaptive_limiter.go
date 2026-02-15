@@ -140,23 +140,31 @@ func NewEnhancedAdaptiveLimiter(config EnhancedAdaptiveConfig) *EnhancedAdaptive
 	return limiter
 }
 
-// Acquire acquires a slot from the global limiter (backward compatible)
+// Acquire acquires a slot from the global limiter (backward compatible).
+//
+// Deprecated: Use AcquireToken instead to prevent race conditions.
 func (l *EnhancedAdaptiveLimiter) Acquire(ctx context.Context) bool {
 	return l.globalState.Limiter().Acquire(ctx)
 }
 
-// AcquireWithProvider acquires a slot with provider/model awareness
+// AcquireWithProvider acquires a slot with provider/model awareness.
+//
+// Deprecated: Use AcquireTokenWithProvider instead to prevent race conditions.
 func (l *EnhancedAdaptiveLimiter) AcquireWithProvider(ctx context.Context, provider, model string) bool {
 	state := l.getOrCreateState(provider, model)
 	return state.Limiter().Acquire(ctx)
 }
 
-// Release releases a slot to the global limiter
+// Release releases a slot to the global limiter.
+//
+// Deprecated: Use the release function returned by AcquireToken instead.
 func (l *EnhancedAdaptiveLimiter) Release() {
 	l.globalState.Limiter().Release()
 }
 
-// ReleaseWithProvider releases a slot with provider/model awareness
+// ReleaseWithProvider releases a slot with provider/model awareness.
+//
+// Deprecated: Use the release function returned by AcquireTokenWithProvider instead.
 func (l *EnhancedAdaptiveLimiter) ReleaseWithProvider(provider, model string) {
 	state := l.getState(provider, model)
 	if state != nil {
@@ -164,6 +172,21 @@ func (l *EnhancedAdaptiveLimiter) ReleaseWithProvider(provider, model string) {
 	} else {
 		l.globalState.Limiter().Release()
 	}
+}
+
+// AcquireToken acquires a slot from the global limiter and returns a release function.
+// The release function captures the specific limiter instance, preventing race conditions
+// if capacity adjustment swaps the limiter between acquire and release.
+func (l *EnhancedAdaptiveLimiter) AcquireToken(ctx context.Context) (release func(), ok bool) {
+	return l.globalState.AcquireToken(ctx)
+}
+
+// AcquireTokenWithProvider acquires a slot with provider/model awareness and returns
+// a release function. The release function captures the specific limiter instance,
+// preventing race conditions if capacity adjustment swaps the limiter.
+func (l *EnhancedAdaptiveLimiter) AcquireTokenWithProvider(ctx context.Context, provider, model string) (release func(), ok bool) {
+	state := l.getOrCreateState(provider, model)
+	return state.AcquireToken(ctx)
 }
 
 // RecordLatency records latency for global limiter
@@ -182,7 +205,8 @@ func (l *EnhancedAdaptiveLimiter) RecordLatencyWithProvider(latency time.Duratio
 	l.globalState.RecordLatency(latency, err)
 }
 
-// getOrCreateState gets or creates state for provider/model
+// getOrCreateState gets or creates state for provider/model.
+// Uses double-checked locking to prevent duplicate state creation races.
 func (l *EnhancedAdaptiveLimiter) getOrCreateState(provider, model string) *ProviderAdaptiveState {
 	// Check provider-level state first (if model-level is disabled)
 	if !l.config.EnableModelLevel && model != "" {
@@ -211,10 +235,8 @@ func (l *EnhancedAdaptiveLimiter) getOrCreateState(provider, model string) *Prov
 		return state
 	}
 
-	// Check if we have provider-specific settings
-	l.mu.RLock()
+	// Resolve settings outside the lock (config is immutable after init)
 	providerSetting, hasProviderSetting := l.config.ProviderSettings[provider]
-	l.mu.RUnlock()
 
 	var targetLatency time.Duration
 	var minCapacity, maxCapacity, initialCapacity int
@@ -231,14 +253,13 @@ func (l *EnhancedAdaptiveLimiter) getOrCreateState(provider, model string) *Prov
 		initialCapacity = l.config.InitialCapacity
 	}
 
-	// Create PID config
 	pidConfig := l.config.PIDConfig
 	if hasProviderSetting && providerSetting.PIDConfig != nil {
 		pidConfig = *providerSetting.PIDConfig
 	}
 
 	// Create new state
-	state = NewProviderAdaptiveState(
+	newState := NewProviderAdaptiveState(
 		key,
 		targetLatency,
 		minCapacity,
@@ -246,13 +267,18 @@ func (l *EnhancedAdaptiveLimiter) getOrCreateState(provider, model string) *Prov
 		initialCapacity,
 		l.config.LatencyWindowSize,
 	)
-	state.pidController = NewPIDController(pidConfig)
+	newState.pidController = NewPIDController(pidConfig)
 
+	// Double-checked locking: re-check under write lock before inserting
 	l.mu.Lock()
-	l.modelStates[mapKey] = state
+	if existing, exists := l.modelStates[mapKey]; exists {
+		l.mu.Unlock()
+		return existing
+	}
+	l.modelStates[mapKey] = newState
 	l.mu.Unlock()
 
-	return state
+	return newState
 }
 
 // createProviderState creates a new provider-level state
@@ -292,7 +318,12 @@ func (l *EnhancedAdaptiveLimiter) createProviderState(provider string) *Provider
 	)
 	state.pidController = NewPIDController(pidConfig)
 
+	// Double-checked locking: re-check under write lock before inserting
 	l.mu.Lock()
+	if existing, exists := l.providerStates[provider]; exists {
+		l.mu.Unlock()
+		return existing
+	}
 	l.providerStates[provider] = state
 	l.mu.Unlock()
 

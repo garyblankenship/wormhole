@@ -104,7 +104,8 @@ func (b *BatchBuilder) Execute(ctx context.Context) []BatchResult {
 					model := req.request.Model
 
 					// Acquire slot with provider/model awareness
-					if !adaptiveLimiter.AcquireWithProvider(ctx, provider, model) {
+					release, ok := adaptiveLimiter.AcquireTokenWithProvider(ctx, provider, model)
+					if !ok {
 						// Context expired or canceled
 						resultCh <- batchResult{
 							index:    index,
@@ -122,8 +123,8 @@ func (b *BatchBuilder) Execute(ctx context.Context) []BatchResult {
 					latency := time.Since(start)
 					adaptiveLimiter.RecordLatencyWithProvider(latency, provider, model, err)
 
-					// Release slot
-					adaptiveLimiter.ReleaseWithProvider(provider, model)
+					// Release slot (uses the exact limiter instance from acquire)
+					release()
 				} else {
 					// Use traditional fixed concurrency
 					resp, err = req.Generate(ctx)
@@ -236,7 +237,8 @@ func (b *BatchBuilder) ExecuteFirst(ctx context.Context) (*types.TextResponse, e
 					model := req.request.Model
 
 					// Acquire slot with provider/model awareness
-					if !adaptiveLimiter.AcquireWithProvider(ctx, provider, model) {
+					release, ok := adaptiveLimiter.AcquireTokenWithProvider(ctx, provider, model)
+					if !ok {
 						// Context expired or canceled, send error and continue
 						select {
 						case resultCh <- result{nil, ctx.Err()}:
@@ -253,8 +255,8 @@ func (b *BatchBuilder) ExecuteFirst(ctx context.Context) (*types.TextResponse, e
 					latency := time.Since(start)
 					adaptiveLimiter.RecordLatencyWithProvider(latency, provider, model, err)
 
-					// Release slot
-					adaptiveLimiter.ReleaseWithProvider(provider, model)
+					// Release slot (uses the exact limiter instance from acquire)
+					release()
 				} else {
 					// Use traditional fixed concurrency
 					resp, err = req.Generate(ctx)

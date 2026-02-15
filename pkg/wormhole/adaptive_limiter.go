@@ -80,6 +80,9 @@ func NewAdaptiveLimiter(config AdaptiveConfig) *AdaptiveLimiter {
 
 // Acquire attempts to acquire a slot in the limiter.
 // Returns true if acquired, false if context expired or canceled.
+//
+// Deprecated: Use AcquireToken instead to prevent race conditions when
+// the limiter is swapped during capacity adjustment.
 func (al *AdaptiveLimiter) Acquire(ctx context.Context) bool {
 	al.mu.RLock()
 	limiter := al.limiter
@@ -89,12 +92,32 @@ func (al *AdaptiveLimiter) Acquire(ctx context.Context) bool {
 }
 
 // Release releases a slot in the limiter.
+//
+// Deprecated: Use the release function returned by AcquireToken instead.
 func (al *AdaptiveLimiter) Release() {
 	al.mu.RLock()
 	limiter := al.limiter
 	al.mu.RUnlock()
 
 	limiter.Release()
+}
+
+// AcquireToken attempts to acquire a slot and returns a release function.
+// The release function captures the specific limiter instance used for acquire,
+// preventing a race condition if adjustCapacity swaps the limiter between
+// acquire and release.
+//
+// Callers MUST call the returned release function exactly once after the
+// operation completes.
+func (al *AdaptiveLimiter) AcquireToken(ctx context.Context) (release func(), ok bool) {
+	al.mu.RLock()
+	limiter := al.limiter
+	al.mu.RUnlock()
+
+	if !limiter.Acquire(ctx) {
+		return nil, false
+	}
+	return limiter.Release, true
 }
 
 // RecordLatency records the latency of a completed operation.
