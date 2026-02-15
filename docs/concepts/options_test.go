@@ -105,14 +105,6 @@ var expectedOptionFunctions = []string{
 	"WithIdempotencyKey",
 }
 
-// Phrases that indicate explanation of the functional options pattern.
-var functionalOptionsPatternExplanations = []string{
-	"functional options pattern",
-	"Option is a function that configures",
-	"func(*Config)",
-	"type Option",
-}
-
 // TestOptionsDocExists verifies the documentation file exists.
 func TestOptionsDocExists(t *testing.T) {
 	path := "options.md"
