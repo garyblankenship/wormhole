@@ -8,6 +8,11 @@ import (
 	"github.com/garyblankenship/wormhole/pkg/types"
 )
 
+const (
+	// redactedValue is the placeholder for masked sensitive data
+	redactedValue = "****"
+)
+
 // SanitizationLevel defines the strictness of error sanitization
 type SanitizationLevel string
 
@@ -51,16 +56,16 @@ var sensitivePatterns = []patternReplacement{
 		func(match string) string {
 			// For "sk-1234567890abcdef", preserve "sk-" and mask the rest
 			if len(match) <= 7 { // "sk-" + at least 4 chars to mask
-				return "****"
+				return redactedValue
 			}
-			// Keep first 3 chars ("sk-") + first 2 of key + **** + last 4
-			// This gives "sk-12****cdef" for a typical key
+			// Keep first 3 chars ("sk-") + first 2 of key + redactedValue + last 4
+			// This gives "sk-12redactedValuecdef" for a typical key
 			prefix := match[:3] // "sk-"
 			keyPart := match[3:]
 			if len(keyPart) <= 8 {
-				return prefix + "****"
+				return prefix + redactedValue
 			}
-			return prefix + keyPart[:2] + "****" + keyPart[len(keyPart)-4:]
+			return prefix + keyPart[:2] + redactedValue + keyPart[len(keyPart)-4:]
 		},
 	},
 	// Bearer tokens - preserve "Bearer " prefix, mask token
@@ -92,25 +97,25 @@ var sensitivePatterns = []patternReplacement{
 			if strings.HasPrefix(value, "sk-") || strings.HasPrefix(value, "pk-") {
 				// Use API key masking logic
 				if len(value) <= 7 {
-					return paramName + "=****"
+					return paramName + "=redactedValue"
 				}
 				prefix := value[:3] // "sk-"
 				keyPart := value[3:]
 				if len(keyPart) <= 8 {
-					return paramName + "=" + prefix + "****"
+					return paramName + "=" + prefix + redactedValue
 				}
-				return paramName + "=" + prefix + keyPart[:2] + "****" + keyPart[len(keyPart)-4:]
+				return paramName + "=" + prefix + keyPart[:2] + redactedValue + keyPart[len(keyPart)-4:]
 			}
 
 			// Default masking
 			return paramName + "=" + maskSensitiveData(value)
 		},
 	},
-	// Internal IPs - mask the entire IP/host with ****
+	// Internal IPs - mask the entire IP/host with redactedValue
 	{
 		regexp.MustCompile(`((https?://)?)(10\.|192\.168\.|172\.(1[6-9]|2[0-9]|3[0-1])\.|127\.|localhost)([^/\s]*)`),
 		func(match string) string {
-			return "****"
+			return redactedValue
 		},
 	},
 	// Email addresses - mask local part
@@ -208,11 +213,11 @@ func sanitizeString(s string, config ErrorSanitizerConfig) string {
 // maskSensitiveData masks sensitive data with asterisks
 func maskSensitiveData(data string) string {
 	if len(data) <= 8 {
-		return "****"
+		return redactedValue
 	}
 
 	// For longer strings, show first 4 and last 4 characters
-	return data[:4] + "****" + data[len(data)-4:]
+	return data[:4] + redactedValue + data[len(data)-4:]
 }
 
 // genericErrorMessage returns a generic error message for strict mode
@@ -253,14 +258,14 @@ func MaskAPIKeyInString(s string) string {
 			regexp.MustCompile(`(sk-|pk-)([A-Za-z0-9\-_]{10,})`),
 			func(match string) string {
 				if len(match) <= 7 {
-					return "****"
+					return redactedValue
 				}
 				prefix := match[:3] // "sk-"
 				keyPart := match[3:]
 				if len(keyPart) <= 8 {
-					return prefix + "****"
+					return prefix + redactedValue
 				}
-				return prefix + keyPart[:2] + "****" + keyPart[len(keyPart)-4:]
+				return prefix + keyPart[:2] + redactedValue + keyPart[len(keyPart)-4:]
 			},
 		},
 		// Bearer tokens
@@ -289,14 +294,14 @@ func MaskAPIKeyInString(s string) string {
 				// Check if value looks like an API key
 				if strings.HasPrefix(value, "sk-") || strings.HasPrefix(value, "pk-") {
 					if len(value) <= 7 {
-						return paramName + "=****"
+						return paramName + "=redactedValue"
 					}
 					prefix := value[:3]
 					keyPart := value[3:]
 					if len(keyPart) <= 8 {
-						return paramName + "=" + prefix + "****"
+						return paramName + "=" + prefix + redactedValue
 					}
-					return paramName + "=" + prefix + keyPart[:2] + "****" + keyPart[len(keyPart)-4:]
+					return paramName + "=" + prefix + keyPart[:2] + redactedValue + keyPart[len(keyPart)-4:]
 				}
 
 				return paramName + "=" + maskSensitiveData(value)
@@ -318,7 +323,7 @@ func MaskURL(url string) string {
 	// Also mask internal IPs/hosts
 	internalIPPattern := regexp.MustCompile(`((https?://)?)(10\.|192\.168\.|172\.(1[6-9]|2[0-9]|3[0-1])\.|127\.|localhost)([^/\s]*)`)
 	result = internalIPPattern.ReplaceAllStringFunc(result, func(match string) string {
-		return "****"
+		return redactedValue
 	})
 
 	return result

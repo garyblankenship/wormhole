@@ -110,7 +110,8 @@ func (b *StructuredRequestBuilder) Generate(ctx context.Context) (*types.Structu
 
 	// Add system prompt as first message if set
 	if b.request.SystemPrompt != "" {
-		messages := []types.Message{types.NewSystemMessage(b.request.SystemPrompt)}
+		messages := make([]types.Message, 0, 1+len(b.request.Messages))
+		messages = append(messages, types.NewSystemMessage(b.request.SystemPrompt))
 		messages = append(messages, b.request.Messages...)
 		b.request.Messages = messages
 	}

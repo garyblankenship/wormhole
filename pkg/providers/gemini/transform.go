@@ -507,7 +507,9 @@ func (g *Gemini) handleStream(stream io.ReadCloser) <-chan types.TextChunk {
 
 	go func() {
 		defer close(ch)
-		defer stream.Close()
+		defer func() {
+			_ = stream.Close()
+		}()
 
 		scanner := utils.NewSSEScanner(stream)
 		for scanner.Scan() {

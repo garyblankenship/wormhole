@@ -221,12 +221,12 @@ func (e *ToolExecutor) ExecuteAll(ctx context.Context, toolCalls []types.ToolCal
 			var startTime time.Time
 			if e.adaptiveLimiter != nil {
 				if !e.adaptiveLimiter.Acquire(ctx) {
-					// Context cancelled or timeout while waiting for slot
+					// Context canceled or timeout while waiting for slot
 					resultChan <- resultWithIndex{
 						index: idx,
 						result: types.ToolResult{
 							ToolCallID: tc.ID,
-							Error:      "concurrency limit exceeded or context cancelled",
+							Error:      "concurrency limit exceeded or context canceled",
 						},
 					}
 					return
@@ -235,12 +235,12 @@ func (e *ToolExecutor) ExecuteAll(ctx context.Context, toolCalls []types.ToolCal
 				startTime = time.Now()
 			} else if e.limiter != nil {
 				if !e.limiter.Acquire(ctx) {
-					// Context cancelled or timeout while waiting for slot
+					// Context canceled or timeout while waiting for slot
 					resultChan <- resultWithIndex{
 						index: idx,
 						result: types.ToolResult{
 							ToolCallID: tc.ID,
-							Error:      "concurrency limit exceeded or context cancelled",
+							Error:      "concurrency limit exceeded or context canceled",
 						},
 					}
 					return

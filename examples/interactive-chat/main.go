@@ -11,6 +11,8 @@ import (
 	"github.com/garyblankenship/wormhole/pkg/wormhole"
 )
 
+const providerOpenAI = "openai"
+
 func main() {
 	fmt.Println("=== QUANTUM CHAT INTERFACE ===")
 	fmt.Println("*BURP* Welcome to the interdimensional chat system")
@@ -23,14 +25,14 @@ func main() {
 
 	// Initialize the quantum tunnel network using functional options
 	client := wormhole.New(
-		wormhole.WithDefaultProvider("openai"),
+		wormhole.WithDefaultProvider(providerOpenAI),
 		wormhole.WithOpenAI(os.Getenv("OPENAI_API_KEY")),
 		wormhole.WithAnthropic(os.Getenv("ANTHROPIC_API_KEY")),
 		wormhole.WithGemini(os.Getenv("GEMINI_API_KEY")),
 	)
 
 	// Current dimension we're talking through
-	currentDimension := "openai"
+	currentDimension := providerOpenAI
 
 	// Conversation history maintained across dimensions
 	var messages []types.Message
@@ -109,7 +111,7 @@ func handleCommand(cmd string, currentDimension *string) {
 			return
 		}
 		dimension := parts[1]
-		if dimension == "openai" || dimension == "anthropic" || dimension == "gemini" {
+		if dimension == providerOpenAI || dimension == "anthropic" || dimension == "gemini" {
 			*currentDimension = dimension
 			fmt.Printf("\n⚡ Quantum tunnel recalibrated to %s dimension\n", dimension)
 			fmt.Println("This is what real science looks like, Morty- I mean, user.")
@@ -134,7 +136,7 @@ func handleCommand(cmd string, currentDimension *string) {
 
 func getModelForDimension(dimension string) string {
 	switch dimension {
-	case "openai":
+	case providerOpenAI:
 		return "gpt-5"
 	case "anthropic":
 		return "claude-sonnet-4-5"

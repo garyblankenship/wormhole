@@ -482,7 +482,7 @@ func (ve *ValidationErrors) Error() error {
 		}
 		builder.WriteString(e.Field)
 		builder.WriteString(" - ")
-		builder.WriteString(e.WormholeError.Details)
+		builder.WriteString(e.Details)
 	}
 	return ErrValidation.WithDetails(builder.String())
 }

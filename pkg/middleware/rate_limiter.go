@@ -355,7 +355,7 @@ func RateLimitMiddleware(requestsPerSecond int) Middleware {
 				return nil, wrapMiddlewareError("rate_limiter", "wait", err)
 			}
 			resp, err := next(ctx, req)
-			return resp, wrapIfNotWormholeError("rate_limiter", "execute", err)
+			return resp, wrapIfNotWormholeError("rate_limiter", err)
 		}
 	}
 }
@@ -380,7 +380,7 @@ func AdaptiveRateLimitMiddleware(initialRate, minRate, maxRate int, targetLatenc
 			// Record latency for adaptation
 			limiter.RecordLatency(time.Since(start))
 
-			return resp, wrapIfNotWormholeError("adaptive_rate_limiter", "execute", err)
+			return resp, wrapIfNotWormholeError("adaptive_rate_limiter", err)
 		}
 	}
 }
@@ -430,7 +430,7 @@ func HealthAwareAdaptiveRateLimitMiddleware(initialRate, minRate, maxRate int, t
 				limiter.RecordHealthMetrics(metrics)
 			}
 
-			return resp, wrapIfNotWormholeError("health_aware_adaptive_rate_limiter", "execute", err)
+			return resp, wrapIfNotWormholeError("health_aware_adaptive_rate_limiter", err)
 		}
 	}
 }
@@ -502,7 +502,7 @@ func ProviderAwareConcurrencyLimitMiddlewareWithConfig(config ProviderAwareConcu
 				limiter.Release()
 			}
 
-			return resp, wrapIfNotWormholeError("provider_aware_concurrency_limit", "execute", err)
+			return resp, wrapIfNotWormholeError("provider_aware_concurrency_limit", err)
 		}
 	}
 }

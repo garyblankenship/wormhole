@@ -105,7 +105,7 @@ func (b *BatchBuilder) Execute(ctx context.Context) []BatchResult {
 
 					// Acquire slot with provider/model awareness
 					if !adaptiveLimiter.AcquireWithProvider(ctx, provider, model) {
-						// Context expired or cancelled
+						// Context expired or canceled
 						resultCh <- batchResult{
 							index:    index,
 							response: nil,
@@ -237,7 +237,7 @@ func (b *BatchBuilder) ExecuteFirst(ctx context.Context) (*types.TextResponse, e
 
 					// Acquire slot with provider/model awareness
 					if !adaptiveLimiter.AcquireWithProvider(ctx, provider, model) {
-						// Context expired or cancelled, send error and continue
+						// Context expired or canceled, send error and continue
 						select {
 						case resultCh <- result{nil, ctx.Err()}:
 						case <-ctx.Done():

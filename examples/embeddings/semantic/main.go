@@ -72,7 +72,7 @@ func main() {
 	fmt.Println("Generating embeddings for documents...")
 
 	// Collect all content for batch processing
-	var contents []string
+	contents := make([]string, 0, len(documents))
 	for _, doc := range documents {
 		contents = append(contents, doc.Content)
 	}

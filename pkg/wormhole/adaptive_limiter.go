@@ -79,7 +79,7 @@ func NewAdaptiveLimiter(config AdaptiveConfig) *AdaptiveLimiter {
 }
 
 // Acquire attempts to acquire a slot in the limiter.
-// Returns true if acquired, false if context expired or cancelled.
+// Returns true if acquired, false if context expired or canceled.
 func (al *AdaptiveLimiter) Acquire(ctx context.Context) bool {
 	al.mu.RLock()
 	limiter := al.limiter

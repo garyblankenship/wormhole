@@ -240,7 +240,9 @@ func (p *Provider) handleTextToSpeech(ctx context.Context, request types.AudioRe
 	if err != nil {
 		return nil, err
 	}
-	defer body.Close()
+	defer func() {
+		_ = body.Close()
+	}()
 
 	audio, err := io.ReadAll(body)
 	if err != nil {

@@ -310,7 +310,8 @@ func (b *TextRequestBuilder) Generate(ctx context.Context) (*types.TextResponse,
 
 	// Add system prompt as first message if set
 	if b.request.SystemPrompt != "" {
-		messages := []types.Message{types.NewSystemMessage(b.request.SystemPrompt)}
+		messages := make([]types.Message, 0, 1+len(b.request.Messages))
+		messages = append(messages, types.NewSystemMessage(b.request.SystemPrompt))
 		messages = append(messages, b.request.Messages...)
 		b.request.Messages = messages
 	}
@@ -324,7 +325,8 @@ func (b *TextRequestBuilder) Generate(ctx context.Context) (*types.TextResponse,
 	}
 
 	// Build list of models to try (primary + fallbacks)
-	modelsToTry := []string{b.request.Model}
+	modelsToTry := make([]string, 0, 1+len(b.fallbackModels))
+	modelsToTry = append(modelsToTry, b.request.Model)
 	modelsToTry = append(modelsToTry, b.fallbackModels...)
 
 	var lastErr error
@@ -399,7 +401,8 @@ func (b *TextRequestBuilder) Stream(ctx context.Context) (<-chan types.StreamChu
 
 	// Add system prompt as first message if set
 	if b.request.SystemPrompt != "" {
-		messages := []types.Message{types.NewSystemMessage(b.request.SystemPrompt)}
+		messages := make([]types.Message, 0, 1+len(b.request.Messages))
+		messages = append(messages, types.NewSystemMessage(b.request.SystemPrompt))
 		messages = append(messages, b.request.Messages...)
 		b.request.Messages = messages
 	}

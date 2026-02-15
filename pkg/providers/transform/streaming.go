@@ -159,10 +159,7 @@ func (t *StreamingTransformer) ParseChunk(data []byte) (*types.TextChunk, error)
 				}
 			} else {
 				// Default tool call parsing
-				toolCalls, err := t.parseDefaultToolCalls(val)
-				if err != nil {
-					return nil, fmt.Errorf("failed to parse tool calls: %w", err)
-				}
+				toolCalls := t.parseDefaultToolCalls(val)
 				if len(toolCalls) > 0 {
 					// Always set plural ToolCalls field
 					chunk.ToolCalls = toolCalls
@@ -252,27 +249,21 @@ func (t *StreamingTransformer) ParseChunks(data []byte) ([]types.TextChunk, erro
 }
 
 // parseDefaultToolCalls parses tool calls from generic interface{}
-func (t *StreamingTransformer) parseDefaultToolCalls(data any) ([]types.ToolCall, error) {
+func (t *StreamingTransformer) parseDefaultToolCalls(data any) []types.ToolCall {
 	var toolCalls []types.ToolCall
 
 	switch v := data.(type) {
 	case []any:
 		for _, item := range v {
 			if m, ok := item.(map[string]any); ok {
-				tc, err := t.parseToolCallFromMap(m)
-				if err != nil {
-					return nil, err
-				}
+				tc := t.parseToolCallFromMap(m)
 				if tc != nil {
 					toolCalls = append(toolCalls, *tc)
 				}
 			}
 		}
 	case map[string]any:
-		tc, err := t.parseToolCallFromMap(v)
-		if err != nil {
-			return nil, err
-		}
+		tc := t.parseToolCallFromMap(v)
 		if tc != nil {
 			toolCalls = append(toolCalls, *tc)
 		}
@@ -282,10 +273,7 @@ func (t *StreamingTransformer) parseDefaultToolCalls(data any) ([]types.ToolCall
 			var arr []map[string]any
 			if err := json.Unmarshal([]byte(str), &arr); err == nil {
 				for _, m := range arr {
-					tc, err := t.parseToolCallFromMap(m)
-					if err != nil {
-						return nil, err
-					}
+					tc := t.parseToolCallFromMap(m)
 					if tc != nil {
 						toolCalls = append(toolCalls, *tc)
 					}
@@ -294,11 +282,11 @@ func (t *StreamingTransformer) parseDefaultToolCalls(data any) ([]types.ToolCall
 		}
 	}
 
-	return toolCalls, nil
+	return toolCalls
 }
 
 // parseToolCallFromMap parses a tool call from a map
-func (t *StreamingTransformer) parseToolCallFromMap(m map[string]any) (*types.ToolCall, error) {
+func (t *StreamingTransformer) parseToolCallFromMap(m map[string]any) *types.ToolCall {
 	tc := &types.ToolCall{}
 
 	if id, ok := m["id"].(string); ok {
@@ -342,7 +330,7 @@ func (t *StreamingTransformer) parseToolCallFromMap(m map[string]any) (*types.To
 		}
 	}
 
-	return tc, nil
+	return tc
 }
 
 // parseDefaultUsage parses usage information from generic interface{}

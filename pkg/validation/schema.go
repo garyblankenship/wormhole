@@ -6,6 +6,11 @@ import (
 	"github.com/garyblankenship/wormhole/pkg/types"
 )
 
+const (
+	// schemaTypeObject is the JSON schema type for objects
+	schemaTypeObject = "object"
+)
+
 // ValidateAgainstSchema validates tool arguments against a JSON Schema
 // It parses the schema map into appropriate SchemaInterface types and calls Validate
 func ValidateAgainstSchema(data map[string]any, schema map[string]any) error {
@@ -35,42 +40,42 @@ func parseSchema(schemaMap map[string]any) (types.SchemaInterface, error) {
 	if !hasType {
 		// If no type field, try to detect based on other fields
 		if _, hasProperties := schemaMap["properties"]; hasProperties {
-			typeField = "object"
+			typeField = schemaTypeObject
 		} else if _, hasItems := schemaMap["items"]; hasItems {
 			typeField = "array"
 		} else if _, hasEnum := schemaMap["enum"]; hasEnum {
 			typeField = "enum"
 		} else {
-			// Default to object for backward compatibility
-			typeField = "object"
+			// Default to schemaTypeObject for backward compatibility
+			typeField = schemaTypeObject
 		}
 	}
 
 	// Create schema based on type
 	switch typeField {
-	case "object":
+	case schemaTypeObject:
 		return parseObjectSchema(schemaMap)
 	case "array":
 		return parseArraySchema(schemaMap)
 	case "string":
-		return parseStringSchema(schemaMap)
+		return parseStringSchema(schemaMap), nil
 	case "number":
-		return parseNumberSchema(schemaMap)
+		return parseNumberSchema(schemaMap), nil
 	case "boolean":
-		return parseBooleanSchema(schemaMap)
+		return parseBooleanSchema(schemaMap), nil
 	case "enum":
-		return parseEnumSchema(schemaMap)
+		return parseEnumSchema(schemaMap), nil
 	default:
-		// Unknown type - attempt to parse as object as fallback
+		// Unknown type - attempt to parse as schemaTypeObject as fallback
 		return parseObjectSchema(schemaMap)
 	}
 }
 
-// parseObjectSchema parses an object schema from a map
+// parseObjectSchema parses an schemaTypeObject schema from a map
 func parseObjectSchema(schemaMap map[string]any) (*types.ObjectSchema, error) {
 	schema := &types.ObjectSchema{
 		BaseSchema: types.BaseSchema{
-			Type:        "object",
+			Type:        schemaTypeObject,
 			Description: getString(schemaMap, "description"),
 		},
 	}
@@ -137,7 +142,7 @@ func parseArraySchema(schemaMap map[string]any) (*types.ArraySchema, error) {
 }
 
 // parseStringSchema parses a string schema from a map
-func parseStringSchema(schemaMap map[string]any) (*types.StringSchema, error) {
+func parseStringSchema(schemaMap map[string]any) *types.StringSchema {
 	return &types.StringSchema{
 		BaseSchema: types.BaseSchema{
 			Type:        "string",
@@ -146,11 +151,11 @@ func parseStringSchema(schemaMap map[string]any) (*types.StringSchema, error) {
 		MinLength: getIntPtr(schemaMap, "minLength"),
 		MaxLength: getIntPtr(schemaMap, "maxLength"),
 		Pattern:   getString(schemaMap, "pattern"),
-	}, nil
+	}
 }
 
 // parseNumberSchema parses a number schema from a map
-func parseNumberSchema(schemaMap map[string]any) (*types.NumberSchema, error) {
+func parseNumberSchema(schemaMap map[string]any) *types.NumberSchema {
 	return &types.NumberSchema{
 		BaseSchema: types.BaseSchema{
 			Type:        "number",
@@ -158,21 +163,21 @@ func parseNumberSchema(schemaMap map[string]any) (*types.NumberSchema, error) {
 		},
 		Minimum: getFloat64Ptr(schemaMap, "minimum"),
 		Maximum: getFloat64Ptr(schemaMap, "maximum"),
-	}, nil
+	}
 }
 
 // parseBooleanSchema parses a boolean schema from a map
-func parseBooleanSchema(schemaMap map[string]any) (*types.BooleanSchema, error) {
+func parseBooleanSchema(schemaMap map[string]any) *types.BooleanSchema {
 	return &types.BooleanSchema{
 		BaseSchema: types.BaseSchema{
 			Type:        "boolean",
 			Description: getString(schemaMap, "description"),
 		},
-	}, nil
+	}
 }
 
 // parseEnumSchema parses an enum schema from a map
-func parseEnumSchema(schemaMap map[string]any) (*types.EnumSchema, error) {
+func parseEnumSchema(schemaMap map[string]any) *types.EnumSchema {
 	schema := &types.EnumSchema{
 		BaseSchema: types.BaseSchema{
 			Type:        "enum",
@@ -185,7 +190,7 @@ func parseEnumSchema(schemaMap map[string]any) (*types.EnumSchema, error) {
 		schema.Enum = enum
 	}
 
-	return schema, nil
+	return schema
 }
 
 // Helper functions to extract values from maps

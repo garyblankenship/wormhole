@@ -68,7 +68,7 @@ func RetryMiddleware(config RetryConfig) Middleware {
 
 				// Check if error is retryable using custom function
 				if config.RetryableFunc != nil && !config.RetryableFunc(err) {
-					return nil, wrapIfNotWormholeError("retry", "execute", err)
+					return nil, wrapIfNotWormholeError("retry", err)
 				}
 
 				// Don't wait after the last attempt
@@ -88,7 +88,7 @@ func RetryMiddleware(config RetryConfig) Middleware {
 				}
 			}
 
-			return nil, wrapIfNotWormholeError("retry", "execute", lastErr)
+			return nil, wrapIfNotWormholeError("retry", lastErr)
 		}
 	}
 }

@@ -75,7 +75,7 @@ func MetricsMiddleware(metrics *Metrics) Middleware {
 			duration := time.Since(start)
 			metrics.RecordRequest(duration, err)
 
-			return resp, wrapIfNotWormholeError("metrics", "execute", err)
+			return resp, wrapIfNotWormholeError("metrics", err)
 		}
 	}
 }
@@ -109,7 +109,7 @@ func EnhancedMetricsMiddleware(collector *EnhancedMetricsCollector) Middleware {
 			// Record with enhanced metrics
 			collector.RecordRequest(labels, duration, err, 0, 0, 0)
 
-			return resp, wrapIfNotWormholeError("metrics", "execute", err)
+			return resp, wrapIfNotWormholeError("metrics", err)
 		}
 	}
 }
@@ -128,7 +128,7 @@ func LoggingMiddleware(logger types.Logger) Middleware {
 				logger.Debug("Wormhole response", "response", resp)
 			}
 
-			return resp, wrapIfNotWormholeError("logging", "execute", err)
+			return resp, wrapIfNotWormholeError("logging", err)
 		}
 	}
 }
@@ -156,7 +156,7 @@ func TimeoutMiddleware(timeout time.Duration) Middleware {
 			case <-ctx.Done():
 				return nil, wrapMiddlewareError("timeout", "execute", ctx.Err())
 			case res := <-done:
-				return res.resp, wrapIfNotWormholeError("timeout", "execute", res.err)
+				return res.resp, wrapIfNotWormholeError("timeout", res.err)
 			}
 		}
 	}
@@ -358,7 +358,7 @@ func wrapMiddlewareError(middlewareName, operation string, err error) error {
 
 // wrapIfNotWormholeError wraps an error with middleware context unless it's already a WormholeError
 // This preserves the structured WormholeError while adding middleware context for other errors
-func wrapIfNotWormholeError(middlewareName, operation string, err error) error {
+func wrapIfNotWormholeError(middlewareName string, err error) error {
 	if err == nil {
 		return nil
 	}
@@ -371,7 +371,7 @@ func wrapIfNotWormholeError(middlewareName, operation string, err error) error {
 		return err
 	}
 	return &MiddlewareError{
-		Operation:  operation,
+		Operation:  "execute",
 		Middleware: middlewareName,
 		Cause:      err,
 		Timestamp:  time.Now(),

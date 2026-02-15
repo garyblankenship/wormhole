@@ -23,7 +23,7 @@ func NewConcurrencyLimiter(capacity int) *ConcurrencyLimiter {
 }
 
 // Acquire attempts to acquire a slot in the limiter
-// Returns true if acquired, false if context expired or cancelled
+// Returns true if acquired, false if context expired or canceled
 func (l *ConcurrencyLimiter) Acquire(ctx context.Context) bool {
 	select {
 	case l.sem <- struct{}{}:

@@ -269,7 +269,9 @@ func ProcessStream(
 ) <-chan types.TextChunk {
 	chunks := make(chan types.TextChunk, bufferSize)
 	go func() {
-		defer body.Close()
+		defer func() {
+			_ = body.Close()
+		}()
 		processor := NewStreamProcessor(body, transformer)
 		processor.Process(chunks)
 	}()

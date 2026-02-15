@@ -93,7 +93,7 @@ func (cb *CircuitBreaker) Execute(ctx context.Context, fn func() (any, error)) (
 	defer cb.mu.Unlock()
 
 	if err != nil {
-		return cb.handleError(result, wrapIfNotWormholeError("circuit_breaker", "execute", err))
+		return cb.handleError(result, wrapIfNotWormholeError("circuit_breaker", err))
 	}
 
 	return cb.handleSuccess(result), nil
@@ -155,7 +155,7 @@ func CircuitBreakerMiddleware(threshold int, timeout time.Duration) Middleware {
 			result, err := breaker.Execute(ctx, func() (any, error) {
 				return next(ctx, req)
 			})
-			return result, wrapIfNotWormholeError("circuit_breaker", "execute", err)
+			return result, wrapIfNotWormholeError("circuit_breaker", err)
 		}
 	}
 }

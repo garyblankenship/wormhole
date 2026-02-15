@@ -181,7 +181,7 @@ func CacheMiddleware(config CacheConfig) Middleware {
 			// Check if request is cacheable
 			if config.CacheableFunc != nil && !config.CacheableFunc(req) {
 				resp, err := next(ctx, req)
-				return resp, wrapIfNotWormholeError("cache", "execute", err)
+				return resp, wrapIfNotWormholeError("cache", err)
 			}
 
 			// Generate cache key
@@ -189,7 +189,7 @@ func CacheMiddleware(config CacheConfig) Middleware {
 			if err != nil {
 				// If we can't generate a key, just proceed without caching
 				resp, err := next(ctx, req)
-				return resp, wrapIfNotWormholeError("cache", "execute", err)
+				return resp, wrapIfNotWormholeError("cache", err)
 			}
 
 			// Check cache
@@ -200,7 +200,7 @@ func CacheMiddleware(config CacheConfig) Middleware {
 			// Execute request
 			resp, err := next(ctx, req)
 			if err != nil {
-				return nil, wrapIfNotWormholeError("cache", "execute", err)
+				return nil, wrapIfNotWormholeError("cache", err)
 			}
 
 			// Cache successful response

@@ -272,7 +272,7 @@ func (lb *LoadBalancer) Execute(ctx context.Context, req any) (any, error) {
 	// Update metrics
 	lb.updateProviderMetrics(provider, time.Since(start), err)
 
-	return resp, wrapIfNotWormholeError("load_balancer", "execute", err)
+	return resp, wrapIfNotWormholeError("load_balancer", err)
 }
 
 func (lb *LoadBalancer) updateProviderMetrics(provider *ProviderHandler, latency time.Duration, err error) {
@@ -402,7 +402,7 @@ func LoadBalancerMiddleware(strategy LoadBalanceStrategy, providers map[string]H
 	return func(next Handler) Handler {
 		return func(ctx context.Context, req any) (any, error) {
 			result, err := lb.Execute(ctx, req)
-			return result, wrapIfNotWormholeError("load_balancer", "execute", err)
+			return result, wrapIfNotWormholeError("load_balancer", err)
 		}
 	}
 }

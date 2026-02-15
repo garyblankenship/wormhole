@@ -81,8 +81,8 @@ func (a *WormholeToOrchestrationAdapter) CreateCompletion(ctx context.Context, r
 	}
 
 	// If no model specified, use default
-	if wormholeReq.BaseRequest.Model == "" {
-		wormholeReq.BaseRequest.Model = a.model
+	if wormholeReq.Model == "" {
+		wormholeReq.Model = a.model
 	}
 
 	// Call Wormhole provider
@@ -97,7 +97,7 @@ func (a *WormholeToOrchestrationAdapter) CreateCompletion(ctx context.Context, r
 		TokensUsed: resp.Usage.TotalTokens,
 		Cost:       a.estimateCostFromUsage(*resp.Usage),
 		Provider:   a.name,
-		Model:      wormholeReq.BaseRequest.Model,
+		Model:      wormholeReq.Model,
 		Duration:   time.Since(start),
 	}, nil
 }
@@ -118,8 +118,8 @@ func (a *WormholeToOrchestrationAdapter) CreateStreamingCompletion(ctx context.C
 	}
 
 	// If no model specified, use default
-	if wormholeReq.BaseRequest.Model == "" {
-		wormholeReq.BaseRequest.Model = a.model
+	if wormholeReq.Model == "" {
+		wormholeReq.Model = a.model
 	}
 
 	// Call Wormhole provider streaming
@@ -160,7 +160,7 @@ func (a *WormholeToOrchestrationAdapter) CreateStreamingCompletion(ctx context.C
 		TokensUsed: totalTokens,
 		Cost:       a.EstimateCost(req),
 		Provider:   a.name,
-		Model:      wormholeReq.BaseRequest.Model,
+		Model:      wormholeReq.Model,
 		Duration:   time.Since(start),
 	}, nil
 }

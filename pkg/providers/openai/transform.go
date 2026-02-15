@@ -94,12 +94,13 @@ func (p *Provider) transformMessages(messages []types.Message) []map[string]any 
 		if content, ok := openAIMsg["content"].([]types.MessagePart); ok {
 			parts := make([]map[string]any, len(content))
 			for j, part := range content {
-				if part.Type == "text" {
+				switch part.Type {
+				case "text":
 					parts[j] = map[string]any{
 						"type": "text",
 						"text": part.Text,
 					}
-				} else if part.Type == "image" {
+				case "image":
 					parts[j] = map[string]any{
 						"type":      "image_url",
 						"image_url": part.Data,

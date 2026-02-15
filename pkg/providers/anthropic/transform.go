@@ -100,12 +100,13 @@ func (p *Provider) buildContent(msg types.Message) []map[string]any {
 		})
 	case []types.MessagePart:
 		for _, part := range c {
-			if part.Type == contentTypeText {
+			switch part.Type {
+			case contentTypeText:
 				contentParts = append(contentParts, map[string]any{
 					"type": contentTypeText,
 					"text": part.Text,
 				})
-			} else if part.Type == "image" {
+			case "image":
 				contentParts = append(contentParts, map[string]any{
 					"type":   "image",
 					"source": part.Data,
@@ -182,9 +183,10 @@ func (p *Provider) transformTextResponse(response *messageResponse) *types.TextR
 
 	// Extract content from response
 	for _, content := range response.Content {
-		if content.Type == contentTypeText {
+		switch content.Type {
+		case contentTypeText:
 			text += content.Text
-		} else if content.Type == contentTypeToolUse {
+		case contentTypeToolUse:
 			args, _ := json.Marshal(content.Input)
 			toolCalls = append(toolCalls, types.ToolCall{
 				ID:   content.ID,

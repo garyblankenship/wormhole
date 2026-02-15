@@ -72,5 +72,6 @@ func NewCryptoSeededRand() (*mrand.Rand, error) {
 	if err := binary.Read(rand.Reader, binary.BigEndian, &seed); err != nil {
 		return nil, err
 	}
+	//nolint:gosec // G404: weak random acceptable for non-security-critical jitter and similar uses
 	return mrand.New(mrand.NewSource(seed)), nil
 }
