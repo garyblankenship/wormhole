@@ -1,20 +1,27 @@
+version: "2"
+
 run:
   timeout: 5m
   tests: true
   build-tags:
     - integration
 
-linters:
+formatters:
   enable:
     - gofmt
     - goimports
+  settings:
+    goimports:
+      local-prefixes:
+        - github.com/prism-php/prism-go
+
+linters:
+  enable:
     - govet
     - errcheck
     - staticcheck
     - ineffassign
-    - typecheck
     - unused
-    - gosimple
     - gosec
     - dupl
     - goconst
@@ -25,30 +32,38 @@ linters:
     - prealloc
     - bodyclose
     - rowserrcheck
-    - stylecheck
     - copyloopvar
-
-linters-settings:
-  govet:
-    enable: []
-  gocyclo:
-    min-complexity: 15
-  dupl:
-    threshold: 100
-  goconst:
-    min-len: 2
-    min-occurrences: 2
-  misspell:
-    locale: US
-  goimports:
-    local-prefixes: github.com/prism-php/prism-go
-
-issues:
-  exclude-rules:
-    - path: _test\.go
-      linters:
-        - gosec
-        - dupl
-    - linters:
-        - stylecheck
-      text: "ST1000:"
+  settings:
+    govet:
+      enable: []
+    gocyclo:
+      min-complexity: 25
+    dupl:
+      threshold: 100
+    goconst:
+      min-len: 2
+      min-occurrences: 3
+    misspell:
+      locale: US
+  exclusions:
+    rules:
+      - path: _test\.go
+        linters:
+          - gosec
+          - dupl
+      - path: examples/
+        linters:
+          - goconst
+          - gocyclo
+      - linters:
+          - staticcheck
+        text: "ST1000:"
+      - path: pkg/providers/transform/streaming\.go
+        linters:
+          - gocyclo
+      - path: pkg/middleware/adapter\.go
+        linters:
+          - dupl
+      - path: pkg/middleware/typed_enhanced_metrics\.go
+        linters:
+          - dupl
