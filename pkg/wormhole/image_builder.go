@@ -3,6 +3,7 @@ package wormhole
 import (
 	"context"
 	"fmt"
+	"maps"
 
 	"github.com/garyblankenship/wormhole/pkg/types"
 )
@@ -69,30 +70,54 @@ func (b *ImageRequestBuilder) ResponseFormat(format string) *ImageRequestBuilder
 
 // Generate executes the request and returns generated images
 func (b *ImageRequestBuilder) Generate(ctx context.Context) (*types.ImageResponse, error) {
-	provider, err := b.getProviderWithBaseURL()
-	if err != nil {
-		return nil, err
-	}
+	request := cloneImageRequest(b.request)
 
 	// Validate request
-	if b.request.Prompt == "" {
+	if request.Prompt == "" {
 		return nil, fmt.Errorf("no prompt provided")
 	}
-	if b.request.Model == "" {
+	if request.Model == "" {
 		return nil, fmt.Errorf("no model specified")
 	}
 
 	// Set defaults
-	if b.request.N == 0 {
-		b.request.N = 1
+	if request.N == 0 {
+		request.N = 1
 	}
 
-	// Apply type-safe middleware chain if configured
-	if b.getWormhole().providerMiddleware != nil {
-		handler := b.getWormhole().providerMiddleware.ApplyImage(provider.GenerateImage)
-		return handler(ctx, *b.request)
+	return executeTrackedRequest(ctx, b.getWormhole(), b.idempotencyScope("image.generate"), request, func(ctx context.Context) (*types.ImageResponse, error) {
+		provider, release, err := b.getProviderWithBaseURL()
+		if err != nil {
+			return nil, err
+		}
+		defer release()
+
+		if b.getWormhole().providerMiddleware != nil {
+			handler := b.getWormhole().providerMiddleware.ApplyImage(provider.GenerateImage)
+			return handler(ctx, *request)
+		}
+
+		return provider.GenerateImage(ctx, *request)
+	})
+}
+
+func cloneImageRequest(src *types.ImageRequest) *types.ImageRequest {
+	if src == nil {
+		return &types.ImageRequest{}
 	}
 
-	// No middleware configured, use provider directly
-	return provider.GenerateImage(ctx, *b.request)
+	cloned := &types.ImageRequest{
+		Model:          src.Model,
+		Prompt:         src.Prompt,
+		Size:           src.Size,
+		Quality:        src.Quality,
+		Style:          src.Style,
+		N:              src.N,
+		ResponseFormat: src.ResponseFormat,
+	}
+	if len(src.ProviderOptions) > 0 {
+		cloned.ProviderOptions = make(map[string]any, len(src.ProviderOptions))
+		maps.Copy(cloned.ProviderOptions, src.ProviderOptions)
+	}
+	return cloned
 }

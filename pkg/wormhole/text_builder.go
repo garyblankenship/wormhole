@@ -3,7 +3,7 @@ package wormhole
 import (
 	"context"
 	"encoding/json"
-	"maps"
+	"fmt"
 	"strings"
 
 	"github.com/garyblankenship/wormhole/pkg/types"
@@ -100,59 +100,7 @@ func (b *TextRequestBuilder) SystemPrompt(prompt string) *TextRequestBuilder {
 //	resp1, _ := base.Clone().Prompt("Question 1").Generate(ctx)
 //	resp2, _ := base.Clone().Prompt("Question 2").Generate(ctx)
 func (b *TextRequestBuilder) Clone() *TextRequestBuilder {
-	// Clone the request
-	clonedRequest := getTextRequest()
-	clonedRequest.Model = b.request.Model
-	clonedRequest.SystemPrompt = b.request.SystemPrompt
-	clonedRequest.ResponseFormat = b.request.ResponseFormat
-
-	// Clone pointer fields
-	if b.request.Temperature != nil {
-		temp := *b.request.Temperature
-		clonedRequest.Temperature = &temp
-	}
-	if b.request.TopP != nil {
-		topP := *b.request.TopP
-		clonedRequest.TopP = &topP
-	}
-	if b.request.MaxTokens != nil {
-		maxTokens := *b.request.MaxTokens
-		clonedRequest.MaxTokens = &maxTokens
-	}
-	if b.request.PresencePenalty != nil {
-		pp := *b.request.PresencePenalty
-		clonedRequest.PresencePenalty = &pp
-	}
-	if b.request.FrequencyPenalty != nil {
-		fp := *b.request.FrequencyPenalty
-		clonedRequest.FrequencyPenalty = &fp
-	}
-	if b.request.Seed != nil {
-		seed := *b.request.Seed
-		clonedRequest.Seed = &seed
-	}
-	if b.request.ToolChoice != nil {
-		tc := *b.request.ToolChoice
-		clonedRequest.ToolChoice = &tc
-	}
-
-	// Clone slices
-	if len(b.request.Messages) > 0 {
-		clonedRequest.Messages = make([]types.Message, len(b.request.Messages))
-		copy(clonedRequest.Messages, b.request.Messages)
-	}
-	if len(b.request.Stop) > 0 {
-		clonedRequest.Stop = make([]string, len(b.request.Stop))
-		copy(clonedRequest.Stop, b.request.Stop)
-	}
-	if len(b.request.Tools) > 0 {
-		clonedRequest.Tools = make([]types.Tool, len(b.request.Tools))
-		copy(clonedRequest.Tools, b.request.Tools)
-	}
-	if len(b.request.ProviderOptions) > 0 {
-		clonedRequest.ProviderOptions = make(map[string]any)
-		maps.Copy(clonedRequest.ProviderOptions, b.request.ProviderOptions)
-	}
+	clonedRequest := cloneTextRequest(b.request)
 
 	// Clone fallbackModels slice
 	var clonedFallbacks []string
@@ -303,48 +251,53 @@ func (b *TextRequestBuilder) WithFallback(models ...string) *TextRequestBuilder 
 
 // Generate executes the request and returns a response
 func (b *TextRequestBuilder) Generate(ctx context.Context) (*types.TextResponse, error) {
-	provider, err := b.getProviderWithBaseURL()
-	if err != nil {
-		return nil, err
-	}
+	baseRequest := cloneTextRequest(b.request)
+	prepareTextExecutionRequest(baseRequest)
 
-	// Add system prompt as first message if set
-	if b.request.SystemPrompt != "" {
-		messages := make([]types.Message, 0, 1+len(b.request.Messages))
-		messages = append(messages, types.NewSystemMessage(b.request.SystemPrompt))
-		messages = append(messages, b.request.Messages...)
-		b.request.Messages = messages
-	}
-
-	// Validate request
-	if len(b.request.Messages) == 0 {
+	if len(baseRequest.Messages) == 0 {
 		return nil, types.ErrInvalidRequest.WithDetails("no messages provided")
 	}
-	if b.request.Model == "" {
+	if baseRequest.Model == "" {
 		return nil, types.ErrInvalidRequest.WithDetails("no model specified")
 	}
 
 	// Build list of models to try (primary + fallbacks)
 	modelsToTry := make([]string, 0, 1+len(b.fallbackModels))
-	modelsToTry = append(modelsToTry, b.request.Model)
+	modelsToTry = append(modelsToTry, baseRequest.Model)
 	modelsToTry = append(modelsToTry, b.fallbackModels...)
-
-	var lastErr error
-	for _, model := range modelsToTry {
-		b.request.Model = model
-		resp, err := b.executeGenerate(ctx, provider)
-		if err == nil {
-			return resp, nil
-		}
-		lastErr = err
-		// Continue to next model on error
+	idempotencyRequest := struct {
+		Request        *types.TextRequest `json:"request"`
+		FallbackModels []string           `json:"fallback_models,omitempty"`
+	}{
+		Request:        baseRequest,
+		FallbackModels: append([]string(nil), b.fallbackModels...),
 	}
 
-	return nil, lastErr
+	return executeTrackedRequest(ctx, b.getWormhole(), b.idempotencyScope("text.generate"), idempotencyRequest, func(ctx context.Context) (*types.TextResponse, error) {
+		provider, release, err := b.getProviderWithBaseURL()
+		if err != nil {
+			return nil, err
+		}
+		defer release()
+
+		var lastErr error
+		for _, model := range modelsToTry {
+			request := cloneTextRequest(baseRequest)
+			request.Model = model
+
+			resp, err := b.executeGenerate(ctx, provider, request)
+			if err == nil {
+				return resp, nil
+			}
+			lastErr = err
+		}
+
+		return nil, lastErr
+	})
 }
 
 // executeGenerate performs the actual generation with the current request settings
-func (b *TextRequestBuilder) executeGenerate(ctx context.Context, provider types.Provider) (*types.TextResponse, error) {
+func (b *TextRequestBuilder) executeGenerate(ctx context.Context, provider types.Provider, request *types.TextRequest) (*types.TextResponse, error) {
 	// Check if we should enable automatic tool execution
 	wormhole := b.getWormhole()
 	shouldAutoExecuteTools := b.shouldAutoExecuteTools(wormhole)
@@ -359,7 +312,7 @@ func (b *TextRequestBuilder) executeGenerate(ctx context.Context, provider types
 
 		// ExecuteWithTools will handle middleware internally by calling provider.Text
 		// which goes through the middleware chain
-		return executor.ExecuteWithTools(ctx, *b.request, provider, maxIterations)
+		return executor.ExecuteWithTools(ctx, *request, provider, maxIterations)
 	}
 
 	// Standard execution without automatic tool handling
@@ -367,11 +320,11 @@ func (b *TextRequestBuilder) executeGenerate(ctx context.Context, provider types
 	// Apply type-safe middleware chain if configured
 	if wormhole.providerMiddleware != nil {
 		handler := wormhole.providerMiddleware.ApplyText(provider.Text)
-		return handler(ctx, *b.request)
+		return handler(ctx, *request)
 	}
 
 	// No middleware configured, use provider directly
-	return provider.Text(ctx, *b.request)
+	return provider.Text(ctx, *request)
 }
 
 // shouldAutoExecuteTools determines if automatic tool execution should be enabled
@@ -394,25 +347,24 @@ func (b *TextRequestBuilder) shouldAutoExecuteTools(wormhole *Wormhole) bool {
 
 // Stream executes the request and returns a streaming response
 func (b *TextRequestBuilder) Stream(ctx context.Context) (<-chan types.StreamChunk, error) {
-	provider, err := b.getProviderWithBaseURL()
-	if err != nil {
-		return nil, err
-	}
+	request := cloneTextRequest(b.request)
+	prepareTextExecutionRequest(request)
 
-	// Add system prompt as first message if set
-	if b.request.SystemPrompt != "" {
-		messages := make([]types.Message, 0, 1+len(b.request.Messages))
-		messages = append(messages, types.NewSystemMessage(b.request.SystemPrompt))
-		messages = append(messages, b.request.Messages...)
-		b.request.Messages = messages
-	}
-
-	// Validate request
-	if len(b.request.Messages) == 0 {
+	if len(request.Messages) == 0 {
 		return nil, types.ErrInvalidRequest.WithDetails("no messages provided")
 	}
-	if b.request.Model == "" {
+	if request.Model == "" {
 		return nil, types.ErrInvalidRequest.WithDetails("no model specified")
+	}
+
+	if !b.getWormhole().trackRequest() {
+		return nil, fmt.Errorf("client is shutting down")
+	}
+
+	provider, release, err := b.getProviderWithBaseURL()
+	if err != nil {
+		b.getWormhole().untrackRequest()
+		return nil, err
 	}
 
 	// Let the provider handle model validation at request time
@@ -422,11 +374,60 @@ func (b *TextRequestBuilder) Stream(ctx context.Context) (<-chan types.StreamChu
 	// Apply type-safe middleware chain if configured
 	if b.getWormhole().providerMiddleware != nil {
 		handler := b.getWormhole().providerMiddleware.ApplyStream(provider.Stream)
-		return handler(ctx, *b.request)
+		stream, err := handler(ctx, *request)
+		if err != nil {
+			release()
+			b.getWormhole().untrackRequest()
+			return nil, err
+		}
+		return wrapTrackedStream(ctx, b.getWormhole(), release, stream), nil
 	}
 
 	// No middleware configured, use provider directly
-	return provider.Stream(ctx, *b.request)
+	stream, err := provider.Stream(ctx, *request)
+	if err != nil {
+		release()
+		b.getWormhole().untrackRequest()
+		return nil, err
+	}
+	return wrapTrackedStream(ctx, b.getWormhole(), release, stream), nil
+}
+
+func cloneTextRequest(src *types.TextRequest) *types.TextRequest {
+	if src == nil {
+		return &types.TextRequest{}
+	}
+
+	cloned := &types.TextRequest{
+		BaseRequest: types.BaseRequest{
+			Model: src.Model,
+		},
+		SystemPrompt:   src.SystemPrompt,
+		ResponseFormat: src.ResponseFormat,
+	}
+
+	cloneBaseRequestFields(&cloned.BaseRequest, &src.BaseRequest)
+	if src.ToolChoice != nil {
+		toolChoice := *src.ToolChoice
+		cloned.ToolChoice = &toolChoice
+	}
+	if len(src.Messages) > 0 {
+		cloned.Messages = make([]types.Message, len(src.Messages))
+		copy(cloned.Messages, src.Messages)
+	}
+	if len(src.Tools) > 0 {
+		cloned.Tools = make([]types.Tool, len(src.Tools))
+		copy(cloned.Tools, src.Tools)
+	}
+
+	return cloned
+}
+
+func prepareTextExecutionRequest(request *types.TextRequest) {
+	if request == nil {
+		return
+	}
+	request.Messages = prepareExecutionMessages(request.SystemPrompt, request.Messages)
 }
 
 // ToJSON returns the request as JSON

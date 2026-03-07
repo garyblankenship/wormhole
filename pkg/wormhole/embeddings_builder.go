@@ -73,24 +73,7 @@ func (b *EmbeddingsRequestBuilder) ProviderOptions(options map[string]any) *Embe
 //	resp1, _ := base.Clone().Input("First text").Generate(ctx)
 //	resp2, _ := base.Clone().Input("Second text").Generate(ctx)
 func (b *EmbeddingsRequestBuilder) Clone() *EmbeddingsRequestBuilder {
-	clonedRequest := getEmbeddingsRequest()
-	clonedRequest.Model = b.request.Model
-
-	// Clone pointer fields
-	if b.request.Dimensions != nil {
-		dims := *b.request.Dimensions
-		clonedRequest.Dimensions = &dims
-	}
-
-	// Clone slices
-	if len(b.request.Input) > 0 {
-		clonedRequest.Input = make([]string, len(b.request.Input))
-		copy(clonedRequest.Input, b.request.Input)
-	}
-	if len(b.request.ProviderOptions) > 0 {
-		clonedRequest.ProviderOptions = make(map[string]any)
-		maps.Copy(clonedRequest.ProviderOptions, b.request.ProviderOptions)
-	}
+	clonedRequest := cloneEmbeddingsRequest(b.request)
 
 	return &EmbeddingsRequestBuilder{
 		CommonBuilder: CommonBuilder{
@@ -147,25 +130,51 @@ func (b *EmbeddingsRequestBuilder) Generate(ctx context.Context) (*types.Embeddi
 	// CRITICAL: Return request to pool to prevent memory leak
 	defer putEmbeddingsRequest(b.request)
 
-	provider, err := b.getProviderWithBaseURL()
-	if err != nil {
-		return nil, err
-	}
+	request := cloneEmbeddingsRequest(b.request)
 
 	// Validate request
-	if len(b.request.Input) == 0 {
+	if len(request.Input) == 0 {
 		return nil, types.NewValidationError("input", "required", nil, "no input provided")
 	}
-	if b.request.Model == "" {
+	if request.Model == "" {
 		return nil, types.NewValidationError("model", "required", nil, "no model specified")
 	}
 
-	// Apply type-safe middleware chain if configured
-	if b.getWormhole().providerMiddleware != nil {
-		handler := b.getWormhole().providerMiddleware.ApplyEmbeddings(provider.Embeddings)
-		return handler(ctx, *b.request)
+	return executeTrackedRequest(ctx, b.getWormhole(), b.idempotencyScope("embeddings.generate"), request, func(ctx context.Context) (*types.EmbeddingsResponse, error) {
+		provider, release, err := b.getProviderWithBaseURL()
+		if err != nil {
+			return nil, err
+		}
+		defer release()
+
+		if b.getWormhole().providerMiddleware != nil {
+			handler := b.getWormhole().providerMiddleware.ApplyEmbeddings(provider.Embeddings)
+			return handler(ctx, *request)
+		}
+
+		return provider.Embeddings(ctx, *request)
+	})
+}
+
+func cloneEmbeddingsRequest(src *types.EmbeddingsRequest) *types.EmbeddingsRequest {
+	if src == nil {
+		return &types.EmbeddingsRequest{}
 	}
 
-	// No middleware configured, use provider directly
-	return provider.Embeddings(ctx, *b.request)
+	cloned := &types.EmbeddingsRequest{
+		Model: src.Model,
+	}
+	if src.Dimensions != nil {
+		dimensions := *src.Dimensions
+		cloned.Dimensions = &dimensions
+	}
+	if len(src.Input) > 0 {
+		cloned.Input = make([]string, len(src.Input))
+		copy(cloned.Input, src.Input)
+	}
+	if len(src.ProviderOptions) > 0 {
+		cloned.ProviderOptions = make(map[string]any, len(src.ProviderOptions))
+		maps.Copy(cloned.ProviderOptions, src.ProviderOptions)
+	}
+	return cloned
 }

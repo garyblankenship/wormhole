@@ -1,6 +1,10 @@
 package wormhole
 
-import "github.com/garyblankenship/wormhole/pkg/types"
+import (
+	"maps"
+
+	"github.com/garyblankenship/wormhole/pkg/types"
+)
 
 // CommonBuilder contains shared fields and methods for all request builders
 type CommonBuilder struct {
@@ -42,30 +46,82 @@ func (cb *CommonBuilder) setBaseURL(url string) {
 	cb.baseURL = url
 }
 
-// getProviderWithBaseURL gets the provider, creating a temporary one with custom baseURL if specified
-func (cb *CommonBuilder) getProviderWithBaseURL() (types.Provider, error) {
-	// If no custom baseURL, use normal provider
+// getProviderWithBaseURL gets a provider lease for the duration of a request.
+// When BaseURL is overridden, a temporary provider is created with the full
+// configured provider settings preserved and only BaseURL changed.
+func (cb *CommonBuilder) getProviderWithBaseURL() (types.Provider, func(), error) {
 	if cb.getBaseURL() == "" {
-		return cb.getWormhole().getProvider(cb.getProvider())
+		return cb.getWormhole().leaseProvider(cb.getProvider())
 	}
 
-	// Create a temporary OpenAI-compatible provider with custom baseURL
+	providerName, err := cb.getWormhole().resolveProviderName(cb.getProvider())
+	if err != nil {
+		return nil, nil, err
+	}
+
+	config, err := cb.getWormhole().configuredProviderConfig(providerName)
+	if err != nil {
+		return nil, nil, err
+	}
+	config.BaseURL = cb.getBaseURL()
+
+	provider, err := cb.getWormhole().createProviderWithConfig(providerName, config)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	return provider, func() { _ = provider.Close() }, nil
+}
+
+func (cb *CommonBuilder) idempotencyScope(operation string) string {
 	providerName := cb.getProvider()
 	if providerName == "" {
 		providerName = cb.getWormhole().config.DefaultProvider
 	}
+	return operation + ":" + providerName + ":" + cb.getBaseURL()
+}
 
-	// Get existing provider config for API key
-	var apiKey string
-	if providerConfig, exists := cb.getWormhole().config.Providers[providerName]; exists {
-		apiKey = providerConfig.APIKey
+func cloneBaseRequestFields(dst, src *types.BaseRequest) {
+	if src.Temperature != nil {
+		temp := *src.Temperature
+		dst.Temperature = &temp
 	}
-
-	// Create temporary provider with custom baseURL
-	tempConfig := types.ProviderConfig{
-		APIKey:  apiKey,
-		BaseURL: cb.getBaseURL(),
+	if src.TopP != nil {
+		topP := *src.TopP
+		dst.TopP = &topP
 	}
+	if src.MaxTokens != nil {
+		maxTokens := *src.MaxTokens
+		dst.MaxTokens = &maxTokens
+	}
+	if src.PresencePenalty != nil {
+		presencePenalty := *src.PresencePenalty
+		dst.PresencePenalty = &presencePenalty
+	}
+	if src.FrequencyPenalty != nil {
+		frequencyPenalty := *src.FrequencyPenalty
+		dst.FrequencyPenalty = &frequencyPenalty
+	}
+	if src.Seed != nil {
+		seed := *src.Seed
+		dst.Seed = &seed
+	}
+	if len(src.Stop) > 0 {
+		dst.Stop = make([]string, len(src.Stop))
+		copy(dst.Stop, src.Stop)
+	}
+	if len(src.ProviderOptions) > 0 {
+		dst.ProviderOptions = make(map[string]any, len(src.ProviderOptions))
+		maps.Copy(dst.ProviderOptions, src.ProviderOptions)
+	}
+}
 
-	return cb.getWormhole().createOpenAICompatibleProvider(tempConfig)
+func prepareExecutionMessages(systemPrompt string, messages []types.Message) []types.Message {
+	if systemPrompt == "" {
+		return messages
+	}
+	result := make([]types.Message, 0, 1+len(messages))
+	result = append(result, types.NewSystemMessage(systemPrompt))
+	result = append(result, messages...)
+	return result
 }

@@ -13,6 +13,34 @@ type AudioRequestBuilder struct {
 	provider string
 }
 
+func audioResponseToSTT(resp types.AudioResponse) *types.SpeechToTextResponse {
+	return &types.SpeechToTextResponse{
+		ID:       resp.ID,
+		Model:    resp.Model,
+		Text:     resp.Text,
+		Created:  resp.Created,
+		Metadata: resp.Metadata,
+	}
+}
+
+func audioResponseToTTS(resp types.AudioResponse) *types.TextToSpeechResponse {
+	return &types.TextToSpeechResponse{
+		ID:       resp.ID,
+		Model:    resp.Model,
+		Audio:    resp.Audio,
+		Format:   resp.Format,
+		Created:  resp.Created,
+		Metadata: resp.Metadata,
+	}
+}
+
+func resolveAudioProvider(provider string, w *Wormhole) string {
+	if provider == "" {
+		return w.config.DefaultProvider
+	}
+	return provider
+}
+
 // Using sets the provider to use
 func (b *AudioRequestBuilder) Using(provider string) *AudioRequestBuilder {
 	b.provider = provider
@@ -77,11 +105,6 @@ func (b *SpeechToTextBuilder) Temperature(temp float32) *SpeechToTextBuilder {
 
 // Transcribe executes the request and returns transcribed text
 func (b *SpeechToTextBuilder) Transcribe(ctx context.Context) (*types.SpeechToTextResponse, error) {
-	provider, err := b.wormhole.getProvider(b.provider)
-	if err != nil {
-		return nil, err
-	}
-
 	// Validate request
 	if len(b.request.Audio) == 0 {
 		return nil, fmt.Errorf("no audio data provided")
@@ -94,41 +117,36 @@ func (b *SpeechToTextBuilder) Transcribe(ctx context.Context) (*types.SpeechToTe
 	audioRequest := types.AudioRequest{
 		Type:        types.AudioRequestTypeSTT,
 		Model:       b.request.Model,
-		Input:       b.request.Audio,
+		Input:       append([]byte(nil), b.request.Audio...),
 		Language:    b.request.Language,
 		Prompt:      b.request.Prompt,
 		Temperature: b.request.Temperature,
 	}
 
-	// Apply type-safe middleware chain if configured
-	if b.wormhole.providerMiddleware != nil {
-		handler := b.wormhole.providerMiddleware.ApplyAudio(provider.Audio)
-		audioResp, err := handler(ctx, audioRequest)
+	providerScope := resolveAudioProvider(b.provider, b.wormhole)
+
+	return executeTrackedRequest(ctx, b.wormhole, "audio.stt:"+providerScope, audioRequest, func(ctx context.Context) (*types.SpeechToTextResponse, error) {
+		provider, release, err := b.wormhole.leaseProvider(b.provider)
 		if err != nil {
 			return nil, err
 		}
-		// Convert back to SpeechToTextResponse
-		return &types.SpeechToTextResponse{
-			ID:       audioResp.ID,
-			Model:    audioResp.Model,
-			Text:     audioResp.Text,
-			Created:  audioResp.Created,
-			Metadata: audioResp.Metadata,
-		}, nil
-	}
+		defer release()
 
-	// No middleware configured, use provider directly
-	audioResp, err := provider.Audio(ctx, audioRequest)
-	if err != nil {
-		return nil, err
-	}
-	return &types.SpeechToTextResponse{
-		ID:       audioResp.ID,
-		Model:    audioResp.Model,
-		Text:     audioResp.Text,
-		Created:  audioResp.Created,
-		Metadata: audioResp.Metadata,
-	}, nil
+		if b.wormhole.providerMiddleware != nil {
+			handler := b.wormhole.providerMiddleware.ApplyAudio(provider.Audio)
+			audioResp, err := handler(ctx, audioRequest)
+			if err != nil {
+				return nil, err
+			}
+			return audioResponseToSTT(*audioResp), nil
+		}
+
+		audioResp, err := provider.Audio(ctx, audioRequest)
+		if err != nil {
+			return nil, err
+		}
+		return audioResponseToSTT(*audioResp), nil
+	})
 }
 
 // TextToSpeechBuilder builds text-to-speech requests
@@ -170,11 +188,6 @@ func (b *TextToSpeechBuilder) ResponseFormat(format string) *TextToSpeechBuilder
 
 // Generate executes the request and returns audio
 func (b *TextToSpeechBuilder) Generate(ctx context.Context) (*types.TextToSpeechResponse, error) {
-	provider, err := b.wormhole.getProvider(b.provider)
-	if err != nil {
-		return nil, err
-	}
-
 	// Validate request
 	if b.request.Input == "" {
 		return nil, fmt.Errorf("no input text provided")
@@ -197,35 +210,28 @@ func (b *TextToSpeechBuilder) Generate(ctx context.Context) (*types.TextToSpeech
 		ProviderOptions: b.request.ProviderOptions,
 	}
 
-	// Apply type-safe middleware chain if configured
-	if b.wormhole.providerMiddleware != nil {
-		handler := b.wormhole.providerMiddleware.ApplyAudio(provider.Audio)
-		audioResp, err := handler(ctx, audioRequest)
+	providerScope := resolveAudioProvider(b.provider, b.wormhole)
+
+	return executeTrackedRequest(ctx, b.wormhole, "audio.tts:"+providerScope, audioRequest, func(ctx context.Context) (*types.TextToSpeechResponse, error) {
+		provider, release, err := b.wormhole.leaseProvider(b.provider)
 		if err != nil {
 			return nil, err
 		}
-		// Convert back to TextToSpeechResponse
-		return &types.TextToSpeechResponse{
-			ID:       audioResp.ID,
-			Model:    audioResp.Model,
-			Audio:    audioResp.Audio,
-			Format:   audioResp.Format,
-			Created:  audioResp.Created,
-			Metadata: audioResp.Metadata,
-		}, nil
-	}
+		defer release()
 
-	// No middleware configured, use provider directly
-	audioResp, err := provider.Audio(ctx, audioRequest)
-	if err != nil {
-		return nil, err
-	}
-	return &types.TextToSpeechResponse{
-		ID:       audioResp.ID,
-		Model:    audioResp.Model,
-		Audio:    audioResp.Audio,
-		Format:   audioResp.Format,
-		Created:  audioResp.Created,
-		Metadata: audioResp.Metadata,
-	}, nil
+		if b.wormhole.providerMiddleware != nil {
+			handler := b.wormhole.providerMiddleware.ApplyAudio(provider.Audio)
+			audioResp, err := handler(ctx, audioRequest)
+			if err != nil {
+				return nil, err
+			}
+			return audioResponseToTTS(*audioResp), nil
+		}
+
+		audioResp, err := provider.Audio(ctx, audioRequest)
+		if err != nil {
+			return nil, err
+		}
+		return audioResponseToTTS(*audioResp), nil
+	})
 }

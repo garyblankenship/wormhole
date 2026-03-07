@@ -103,38 +103,33 @@ func (b *StructuredRequestBuilder) MaxTokens(tokens int) *StructuredRequestBuild
 
 // Generate executes the request and returns a structured response
 func (b *StructuredRequestBuilder) Generate(ctx context.Context) (*types.StructuredResponse, error) {
-	provider, err := b.getProviderWithBaseURL()
-	if err != nil {
-		return nil, err
-	}
+	request := cloneStructuredRequest(b.request)
+	prepareStructuredExecutionRequest(request)
 
-	// Add system prompt as first message if set
-	if b.request.SystemPrompt != "" {
-		messages := make([]types.Message, 0, 1+len(b.request.Messages))
-		messages = append(messages, types.NewSystemMessage(b.request.SystemPrompt))
-		messages = append(messages, b.request.Messages...)
-		b.request.Messages = messages
-	}
-
-	// Validate request
-	if len(b.request.Messages) == 0 {
+	if len(request.Messages) == 0 {
 		return nil, fmt.Errorf("no messages provided")
 	}
-	if b.request.Model == "" {
+	if request.Model == "" {
 		return nil, fmt.Errorf("no model specified")
 	}
-	if b.request.Schema == nil {
+	if request.Schema == nil {
 		return nil, fmt.Errorf("no schema provided")
 	}
 
-	// Apply type-safe middleware chain if configured
-	if b.getWormhole().providerMiddleware != nil {
-		handler := b.getWormhole().providerMiddleware.ApplyStructured(provider.Structured)
-		return handler(ctx, *b.request)
-	}
+	return executeTrackedRequest(ctx, b.getWormhole(), b.idempotencyScope("structured.generate"), request, func(ctx context.Context) (*types.StructuredResponse, error) {
+		provider, release, err := b.getProviderWithBaseURL()
+		if err != nil {
+			return nil, err
+		}
+		defer release()
 
-	// No middleware configured, use provider directly
-	return provider.Structured(ctx, *b.request)
+		if b.getWormhole().providerMiddleware != nil {
+			handler := b.getWormhole().providerMiddleware.ApplyStructured(provider.Structured)
+			return handler(ctx, *request)
+		}
+
+		return provider.Structured(ctx, *request)
+	})
 }
 
 // GenerateAs executes the request and unmarshals the response into the provided type
@@ -204,4 +199,39 @@ func (b *StructuredRequestBuilder) MustValidate() *StructuredRequestBuilder {
 		panic(err)
 	}
 	return b
+}
+
+func cloneStructuredRequest(src *types.StructuredRequest) *types.StructuredRequest {
+	if src == nil {
+		return &types.StructuredRequest{}
+	}
+
+	cloned := &types.StructuredRequest{
+		BaseRequest: types.BaseRequest{
+			Model: src.Model,
+		},
+		SystemPrompt: src.SystemPrompt,
+		SchemaName:   src.SchemaName,
+		Mode:         src.Mode,
+	}
+
+	cloneBaseRequestFields(&cloned.BaseRequest, &src.BaseRequest)
+	if len(src.Messages) > 0 {
+		cloned.Messages = make([]types.Message, len(src.Messages))
+		copy(cloned.Messages, src.Messages)
+	}
+	if schemaBytes, ok := src.Schema.([]byte); ok {
+		cloned.Schema = append([]byte(nil), schemaBytes...)
+	} else {
+		cloned.Schema = src.Schema
+	}
+
+	return cloned
+}
+
+func prepareStructuredExecutionRequest(request *types.StructuredRequest) {
+	if request == nil {
+		return
+	}
+	request.Messages = prepareExecutionMessages(request.SystemPrompt, request.Messages)
 }
