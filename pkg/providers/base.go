@@ -1,6 +1,7 @@
 package providers
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -250,15 +251,26 @@ func (p *BaseProvider) DoRequest(ctx context.Context, method, url string, body a
 // buildRequest creates an HTTP request with headers and body
 func (p *BaseProvider) buildRequest(ctx context.Context, method, url string, body any) (*http.Request, error) {
 	// Marshal request body if provided
-	reqBody, err := p.marshalRequestBody(body)
+	payload, err := p.marshalRequestBody(body)
 	if err != nil {
 		return nil, err
+	}
+
+	var reqBody io.Reader
+	if payload != nil {
+		reqBody = bytes.NewReader(payload)
 	}
 
 	// Create request
 	req, err := http.NewRequestWithContext(ctx, method, url, reqBody)
 	if err != nil {
 		return nil, types.Errorf("create request", err)
+	}
+	if payload != nil {
+		req.GetBody = func() (io.ReadCloser, error) {
+			return io.NopCloser(bytes.NewReader(payload)), nil
+		}
+		req.ContentLength = int64(len(payload))
 	}
 
 	// Set headers
@@ -269,22 +281,21 @@ func (p *BaseProvider) buildRequest(ctx context.Context, method, url string, bod
 	return req, nil
 }
 
-// marshalRequestBody converts request body to io.Reader using pooled byte slices
-func (p *BaseProvider) marshalRequestBody(body any) (io.Reader, error) {
+// marshalRequestBody converts a request body to an owned byte slice that can be replayed.
+func (p *BaseProvider) marshalRequestBody(body any) ([]byte, error) {
 	if body == nil {
 		return nil, nil
 	}
 
-	// Use pooled JSON marshaling
-	bytes, err := pool.Marshal(body)
+	pooledBytes, err := pool.Marshal(body)
 	if err != nil {
 		return nil, types.Errorf("marshal request body", err)
 	}
+	defer pool.Return(pooledBytes)
 
-	// Create pooled reader that will return slice to pool after reading
-	// Note: pooledBytesReader uses requestBodyPool, but we want to use pool.Return
-	// So we need a custom reader that calls pool.Return
-	return &jsonPooledReader{bytes: bytes}, nil
+	owned := make([]byte, len(pooledBytes))
+	copy(owned, pooledBytes)
+	return owned, nil
 }
 
 // setRequestHeaders sets common and custom headers
@@ -416,11 +427,11 @@ func (p *BaseProvider) isRetryableStatus(statusCode int) bool {
 func (p *BaseProvider) StreamRequest(ctx context.Context, method, url string, body any) (io.ReadCloser, error) {
 	var reqBody io.Reader
 	if body != nil {
-		var err error
-		reqBody, err = p.marshalRequestBody(body)
+		payload, err := p.marshalRequestBody(body)
 		if err != nil {
 			return nil, err
 		}
+		reqBody = bytes.NewReader(payload)
 	}
 
 	req, err := http.NewRequestWithContext(ctx, method, url, reqBody)
@@ -445,7 +456,7 @@ func (p *BaseProvider) StreamRequest(ctx context.Context, method, url string, bo
 
 	resp, err := p.httpClient.Do(req)
 	if err != nil {
-		return nil, p.WrapError(types.ErrorCodeNetwork, "request failed", err)
+		return nil, p.handleRequestError(ctx, err)
 	}
 
 	if resp.StatusCode >= 400 {
@@ -607,8 +618,10 @@ func (p *BaseProvider) isTimeoutError(err error) bool {
 
 // Close implements io.Closer interface for BaseProvider
 func (p *BaseProvider) Close() error {
-	// No resources to clean up in BaseProvider
-	// httpClient is created as a pointer to http.Client, which has no Close() method
-	// retryClient doesn't need cleanup as it wraps http.Client
+	if p.httpClient != nil && p.httpClient.Transport != nil {
+		if transport, ok := p.httpClient.Transport.(interface{ CloseIdleConnections() }); ok {
+			transport.CloseIdleConnections()
+		}
+	}
 	return nil
 }

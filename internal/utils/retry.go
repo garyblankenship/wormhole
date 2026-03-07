@@ -88,6 +88,17 @@ func (r *RetryableHTTPClient) Do(req *http.Request) (*http.Response, error) {
 	for attempt := 0; attempt <= r.Config.MaxRetries; attempt++ {
 		// Clone request for retry attempts
 		reqClone := req.Clone(req.Context())
+		if req.Body != nil {
+			if req.GetBody != nil {
+				body, err := req.GetBody()
+				if err != nil {
+					return nil, fmt.Errorf("recreate request body: %w", err)
+				}
+				reqClone.Body = body
+			} else if attempt > 0 {
+				return nil, fmt.Errorf("request body is not replayable for retry attempt %d", attempt+1)
+			}
+		}
 
 		// Execute request
 		resp, err := r.Client.Do(reqClone)

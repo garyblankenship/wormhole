@@ -64,9 +64,10 @@ func (g *Gemini) Text(ctx context.Context, request types.TextRequest) (*types.Te
 		return nil, err
 	}
 
+	modelName := normalizeModelResource(request.Model)
 	endpoint := fmt.Sprintf("%s/models/%s:generateContent?key=%s",
 		g.GetBaseURL(),
-		request.Model,
+		modelName,
 		g.apiKey,
 	)
 
@@ -85,9 +86,10 @@ func (g *Gemini) Stream(ctx context.Context, request types.TextRequest) (<-chan 
 		return nil, err
 	}
 
+	modelName := normalizeModelResource(request.Model)
 	endpoint := fmt.Sprintf("%s/models/%s:streamGenerateContent?key=%s",
 		g.GetBaseURL(),
-		request.Model,
+		modelName,
 		g.apiKey,
 	)
 
@@ -106,9 +108,10 @@ func (g *Gemini) Structured(ctx context.Context, request types.StructuredRequest
 		return nil, err
 	}
 
+	modelName := normalizeModelResource(request.Model)
 	endpoint := fmt.Sprintf("%s/models/%s:generateContent?key=%s",
 		g.GetBaseURL(),
-		request.Model,
+		modelName,
 		g.apiKey,
 	)
 
@@ -124,6 +127,8 @@ func (g *Gemini) Structured(ctx context.Context, request types.StructuredRequest
 func (g *Gemini) Embeddings(ctx context.Context, request types.EmbeddingsRequest) (*types.EmbeddingsResponse, error) {
 	// More flexible model validation - check for known embedding models or "embedding" in name
 	isEmbeddingModel := strings.Contains(request.Model, "embedding") ||
+		request.Model == "models/gemini-embedding-001" ||
+		request.Model == "gemini-embedding-001" ||
 		request.Model == "models/embedding-001" ||
 		request.Model == "embedding-001" ||
 		strings.HasSuffix(request.Model, ":embedding")
@@ -133,10 +138,11 @@ func (g *Gemini) Embeddings(ctx context.Context, request types.EmbeddingsRequest
 	}
 
 	payload := g.buildEmbeddingsPayload(request)
+	modelName := normalizeModelResource(request.Model)
 
 	endpoint := fmt.Sprintf("%s/models/%s:batchEmbedContents?key=%s",
 		g.GetBaseURL(),
-		request.Model,
+		modelName,
 		g.apiKey,
 	)
 
@@ -246,9 +252,11 @@ func (g *Gemini) buildStructuredPayload(request types.StructuredRequest) (map[st
 // buildEmbeddingsPayload builds the request payload for embeddings
 func (g *Gemini) buildEmbeddingsPayload(request types.EmbeddingsRequest) map[string]any {
 	requests := make([]map[string]any, len(request.Input))
+	modelName := "models/" + normalizeModelResource(request.Model)
 
 	for i, input := range request.Input {
 		requests[i] = map[string]any{
+			"model": modelName,
 			"content": map[string]any{
 				"parts": []map[string]any{
 					{"text": input},
@@ -270,4 +278,8 @@ func (g *Gemini) buildEmbeddingsPayload(request types.EmbeddingsRequest) map[str
 	return map[string]any{
 		"requests": requests,
 	}
+}
+
+func normalizeModelResource(model string) string {
+	return strings.TrimPrefix(model, "models/")
 }
