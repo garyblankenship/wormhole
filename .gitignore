@@ -175,3 +175,8 @@ docs/workspace/
 
 # Work directory (specs, audits, research, scratch)
 .work/
+
+# Analysis and audit reports (dev artifacts)
+*_REPORT.md
+AUDIT.md
+REVIEW.md
