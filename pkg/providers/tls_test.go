@@ -304,3 +304,47 @@ func TestTransportCacheMetrics(t *testing.T) {
 		t.Log("Note: All transports were already cached from previous tests")
 	}
 }
+
+func TestTransportCacheEvictionBounded(t *testing.T) {
+	transportCache.Lock()
+	oldTransports := transports
+	oldHits := transportCacheHits.Load()
+	oldMisses := transportCacheMisses.Load()
+	transports = make(map[string]*cachedTransport)
+	transportCacheHits.Store(0)
+	transportCacheMisses.Store(0)
+	transportCache.Unlock()
+
+	defer func() {
+		transportCache.Lock()
+		transports = oldTransports
+		transportCacheHits.Store(oldHits)
+		transportCacheMisses.Store(oldMisses)
+		transportCache.Unlock()
+	}()
+
+	firstConfig := DefaultHTTPTransportConfig()
+	firstConfig.MaxIdleConns = 1000
+	firstKey := firstConfig.CacheKey("https://host-0.example")
+
+	for i := 0; i < maxCachedTransports+8; i++ {
+		cfg := DefaultHTTPTransportConfig()
+		cfg.MaxIdleConns = 1000 + i
+		client := NewSecureHTTPClient(30*time.Second, nil, &cfg, "https://host-"+string(rune('a'+(i%26)))+".example/"+time.Duration(i).String())
+		if client == nil {
+			t.Fatal("NewSecureHTTPClient returned nil")
+		}
+	}
+
+	metrics := GetTransportCacheMetrics()
+	if metrics.Size != maxCachedTransports {
+		t.Fatalf("expected cache size %d, got %d", maxCachedTransports, metrics.Size)
+	}
+
+	transportCache.RLock()
+	_, exists := transports[firstKey]
+	transportCache.RUnlock()
+	if exists {
+		t.Fatalf("expected oldest transport %q to be evicted", firstKey)
+	}
+}

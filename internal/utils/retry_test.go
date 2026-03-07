@@ -585,6 +585,42 @@ func TestRetryableHTTPClient_RequestCloning(t *testing.T) {
 	}
 }
 
+func TestRetryableHTTPClient_Do_NonReplayableBodyFailsOnRetry(t *testing.T) {
+	attempt := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		attempt++
+		_, _ = io.ReadAll(r.Body)
+		w.WriteHeader(http.StatusServiceUnavailable)
+	}))
+	defer server.Close()
+
+	config := RetryConfig{
+		MaxRetries:      2,
+		InitialDelay:    1 * time.Millisecond,
+		MaxDelay:        10 * time.Millisecond,
+		BackoffMultiple: 2.0,
+		Jitter:          false,
+	}
+
+	client := NewRetryableHTTPClient(nil, config)
+
+	req, err := http.NewRequest("POST", server.URL, strings.NewReader("test request body"))
+	require.NoError(t, err)
+	req.GetBody = nil
+
+	resp, err := client.Do(req)
+	if resp != nil {
+		defer func() {
+			_ = resp.Body.Close()
+		}()
+	}
+
+	assert.Nil(t, resp)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "not replayable")
+	assert.Equal(t, 1, attempt)
+}
+
 func TestRetryableHTTPClient_RealWorldScenario(t *testing.T) {
 	// Simulate a real-world scenario with rate limiting
 	attempt := 0

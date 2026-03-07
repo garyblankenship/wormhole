@@ -44,6 +44,7 @@ func TestErrorHandlingBasic(t *testing.T) {
 	require.Error(t, err, "QuickOllama without base URL should return error")
 	assert.Contains(t, err.Error(), "base URL", "Error should mention base URL")
 
+	t.Setenv("OPENROUTER_API_KEY", "")
 	_, err = wormhole.QuickOpenRouter("") // Empty API key
 	require.Error(t, err, "QuickOpenRouter without API key should return error")
 	assert.Contains(t, err.Error(), "API key", "Error should mention API key")

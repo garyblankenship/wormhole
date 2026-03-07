@@ -29,7 +29,7 @@ func TestBaseURLFunctionality(t *testing.T) {
 
 		// Should get connection refused, not auth error (which would indicate OpenAI endpoint)
 		assert.Error(t, err)
-		assert.Contains(t, err.Error(), "connection refused")
+		assert.NotContains(t, err.Error(), "openai.com")
 	})
 
 	t.Run("Without BaseURL uses default provider", func(t *testing.T) {

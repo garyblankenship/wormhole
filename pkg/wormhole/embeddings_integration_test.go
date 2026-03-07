@@ -229,7 +229,7 @@ func testGeminiEmbeddings(t *testing.T, client *Wormhole, ctx context.Context) {
 	t.Run("basic embedding", func(t *testing.T) {
 		resp, err := client.Embeddings().
 			Using("gemini").
-			Model("embedding-001").
+			Model("gemini-embedding-001").
 			Input("Test Gemini embeddings").
 			Generate(ctx)
 

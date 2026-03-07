@@ -170,6 +170,32 @@ func (m *mockProviderAwareLimiter) AcquireWithProvider(ctx context.Context, prov
 	return m.acquireWithProviderReturnValue
 }
 
+func (m *mockProviderAwareLimiter) AcquireToken(ctx context.Context) (func(), bool) {
+	m.acquireCalls = append(m.acquireCalls, acquireCall{ctx: ctx})
+	if m.acquireShouldFail {
+		return nil, false
+	}
+	if !m.acquireReturnValue {
+		return nil, false
+	}
+	return func() {
+		m.releaseCalls = append(m.releaseCalls, releaseCall{})
+	}, true
+}
+
+func (m *mockProviderAwareLimiter) AcquireTokenWithProvider(ctx context.Context, provider, model string) (func(), bool) {
+	m.acquireCalls = append(m.acquireCalls, acquireCall{ctx: ctx})
+	if m.acquireWithProviderShouldFail {
+		return nil, false
+	}
+	if !m.acquireWithProviderReturnValue {
+		return nil, false
+	}
+	return func() {
+		m.releaseCalls = append(m.releaseCalls, releaseCall{provider: provider, model: model})
+	}, true
+}
+
 func (m *mockProviderAwareLimiter) Release() {
 	m.releaseCalls = append(m.releaseCalls, releaseCall{})
 }

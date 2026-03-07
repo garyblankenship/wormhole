@@ -1037,7 +1037,7 @@ func TestIntegration_OpenRouter(t *testing.T) {
 
 		// Should get auth error, not model validation error
 		assert.Error(t, err)
-		assert.Contains(t, err.Error(), "auth", "Should get auth error, not model validation error")
+		assert.Contains(t, strings.ToLower(err.Error()), "auth", "Should get auth error, not model validation error")
 	})
 
 	t.Run("openrouter timeout handling", func(t *testing.T) {

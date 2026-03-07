@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/garyblankenship/wormhole/pkg/middleware"
+	"github.com/stretchr/testify/assert"
 )
 
 func TestPIDController(t *testing.T) {
@@ -231,4 +232,123 @@ func TestEnhancedAdaptiveLimiterModelLevel(t *testing.T) {
 			t.Errorf("Expected at least 3 model entries, got %d", len(modelStats))
 		}
 	}
+}
+
+func TestAcquireTokenBasic(t *testing.T) {
+	config := DefaultEnhancedAdaptiveConfig()
+	config.AdjustmentInterval = 100 * time.Millisecond
+	config.QueryInterval = 0
+
+	limiter := NewEnhancedAdaptiveLimiter(config)
+	defer limiter.Stop()
+
+	ctx := context.Background()
+
+	// Test global AcquireToken
+	release, ok := limiter.AcquireToken(ctx)
+	if !ok {
+		t.Fatal("Expected to acquire global token")
+	}
+	if release == nil {
+		t.Fatal("Expected non-nil release function")
+	}
+	release() // Should not panic
+
+	// Test provider-aware AcquireToken
+	release, ok = limiter.AcquireTokenWithProvider(ctx, "openai", "gpt-4")
+	if !ok {
+		t.Fatal("Expected to acquire provider token")
+	}
+	if release == nil {
+		t.Fatal("Expected non-nil release function")
+	}
+	release() // Should not panic
+}
+
+func TestAcquireTokenContextCanceled(t *testing.T) {
+	config := DefaultEnhancedAdaptiveConfig()
+	config.InitialCapacity = 1
+	config.MaxCapacity = 1
+	config.AdjustmentInterval = 100 * time.Millisecond
+	config.QueryInterval = 0
+
+	limiter := NewEnhancedAdaptiveLimiter(config)
+	defer limiter.Stop()
+
+	ctx := context.Background()
+
+	// Acquire the only slot
+	release, ok := limiter.AcquireToken(ctx)
+	if !ok {
+		t.Fatal("Expected to acquire slot")
+	}
+
+	// Try to acquire again with canceled context — should fail
+	canceledCtx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	_, ok = limiter.AcquireToken(canceledCtx)
+	if ok {
+		t.Fatal("Expected acquire to fail with canceled context")
+	}
+
+	release() // Free the slot
+}
+
+func TestAcquireTokenSurvivesLimiterSwap(t *testing.T) {
+	config := DefaultEnhancedAdaptiveConfig()
+	config.InitialCapacity = 5
+	config.MinCapacity = 1
+	config.MaxCapacity = 20
+	config.AdjustmentInterval = 50 * time.Millisecond
+	config.QueryInterval = 0
+
+	limiter := NewEnhancedAdaptiveLimiter(config)
+	defer limiter.Stop()
+
+	ctx := context.Background()
+
+	// Acquire a token — the release function captures the current limiter instance
+	release, ok := limiter.AcquireTokenWithProvider(ctx, "openai", "gpt-4")
+	if !ok {
+		t.Fatal("Expected to acquire token")
+	}
+
+	// Record high latencies to trigger capacity adjustment
+	for i := 0; i < 20; i++ {
+		limiter.RecordLatencyWithProvider(2*time.Second, "openai", "gpt-4", nil)
+	}
+
+	// Wait for adjustment loop to swap the limiter
+	time.Sleep(150 * time.Millisecond)
+
+	// Release should still work — it targets the original limiter instance
+	release() // Must not panic
+}
+
+func TestEnhancedAdaptiveLimiterEvictsIdleModelStates(t *testing.T) {
+	config := DefaultEnhancedAdaptiveConfig()
+	config.EnableModelLevel = true
+	config.QueryInterval = 0
+	config.AdjustmentInterval = time.Hour
+	config.IdleStateTTL = 10 * time.Millisecond
+
+	limiter := NewEnhancedAdaptiveLimiter(config)
+	defer limiter.Stop()
+
+	stale := limiter.getOrCreateState("openai", "gpt-4")
+	fresh := limiter.getOrCreateState("anthropic", "claude-3")
+
+	stale.mu.Lock()
+	stale.lastSeen = time.Now().Add(-time.Hour)
+	stale.mu.Unlock()
+
+	fresh.mu.Lock()
+	fresh.lastSeen = time.Now()
+	fresh.mu.Unlock()
+
+	limiter.evictIdleStates()
+
+	assert.Nil(t, limiter.getState("openai", "gpt-4"))
+	assert.NotNil(t, limiter.getState("anthropic", "claude-3"))
 }
