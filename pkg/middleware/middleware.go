@@ -299,17 +299,34 @@ func AvailableMiddleware() []MiddlewareInfo {
 // This interface allows middleware to work with any limiter implementation
 // without creating import cycles
 type ProviderAwareLimiter interface {
-	// Acquire acquires a slot from the global limiter
+	// Acquire acquires a slot from the global limiter.
+	//
+	// Deprecated: Use AcquireToken instead to prevent race conditions.
 	Acquire(ctx context.Context) bool
 
-	// AcquireWithProvider acquires a slot with provider/model awareness
+	// AcquireWithProvider acquires a slot with provider/model awareness.
+	//
+	// Deprecated: Use AcquireTokenWithProvider instead to prevent race conditions.
 	AcquireWithProvider(ctx context.Context, provider, model string) bool
 
-	// Release releases a slot to the global limiter
+	// Release releases a slot to the global limiter.
+	//
+	// Deprecated: Use the release function returned by AcquireToken instead.
 	Release()
 
-	// ReleaseWithProvider releases a slot with provider/model awareness
+	// ReleaseWithProvider releases a slot with provider/model awareness.
+	//
+	// Deprecated: Use the release function returned by AcquireTokenWithProvider instead.
 	ReleaseWithProvider(provider, model string)
+
+	// AcquireToken acquires a slot and returns a release function that captures
+	// the specific limiter instance, preventing race conditions if capacity
+	// adjustment swaps the limiter between acquire and release.
+	AcquireToken(ctx context.Context) (release func(), ok bool)
+
+	// AcquireTokenWithProvider acquires a slot with provider/model awareness
+	// and returns a release function that captures the specific limiter instance.
+	AcquireTokenWithProvider(ctx context.Context, provider, model string) (release func(), ok bool)
 
 	// RecordLatency records latency for global limiter
 	RecordLatency(latency time.Duration)

@@ -472,16 +472,17 @@ func ProviderAwareConcurrencyLimitMiddlewareWithConfig(config ProviderAwareConcu
 				}
 			}
 
-			// If provider-aware mode is enabled and provider is available, use provider-aware methods
-			acquired := false
+			// Acquire slot using token-based pattern to prevent race conditions
+			// when capacity adjustment swaps the limiter between acquire and release.
+			var release func()
+			var ok bool
 			if enableProviderAware && provider != "" {
-				acquired = limiter.AcquireWithProvider(ctx, provider, model)
+				release, ok = limiter.AcquireTokenWithProvider(ctx, provider, model)
 			} else {
-				// Fallback to global limiting if provider info not available or provider-aware mode is disabled
-				acquired = limiter.Acquire(ctx)
+				release, ok = limiter.AcquireToken(ctx)
 			}
 
-			if !acquired {
+			if !ok {
 				// Acquire returns false only when context is canceled or timeout occurs
 				// (the limiter blocks until slot is available or context canceled)
 				return nil, wrapMiddlewareError("provider_aware_concurrency_limit", "acquire", ctx.Err())
@@ -494,13 +495,12 @@ func ProviderAwareConcurrencyLimitMiddlewareWithConfig(config ProviderAwareConcu
 			// Record latency for adaptive adjustments
 			if enableProviderAware && provider != "" {
 				limiter.RecordLatencyWithProvider(latency, provider, model, err)
-				// Release provider-specific slot
-				limiter.ReleaseWithProvider(provider, model)
 			} else {
-				// Fallback to global methods
 				limiter.RecordLatency(latency)
-				limiter.Release()
 			}
+
+			// Release slot (uses the exact limiter instance from acquire)
+			release()
 
 			return resp, wrapIfNotWormholeError("provider_aware_concurrency_limit", err)
 		}
