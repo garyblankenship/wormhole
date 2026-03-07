@@ -54,6 +54,7 @@ type ProviderAdaptiveState struct {
 
 	// Timing
 	lastAdjustment time.Time
+	lastSeen       time.Time
 }
 
 // NewProviderAdaptiveState creates a new state tracker
@@ -78,6 +79,7 @@ func NewProviderAdaptiveState(key ProviderKey, targetLatency time.Duration,
 		targetLatency:   targetLatency,
 		minCapacity:     minCapacity,
 		maxCapacity:     maxCapacity,
+		lastSeen:        time.Now(),
 	}
 }
 
@@ -85,6 +87,7 @@ func NewProviderAdaptiveState(key ProviderKey, targetLatency time.Duration,
 func (s *ProviderAdaptiveState) RecordLatency(latency time.Duration, err error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	s.lastSeen = time.Now()
 
 	// Update latency ring buffer (for moving average)
 	if old := s.latencyRing.Value; old != nil {
@@ -212,12 +215,13 @@ func (s *ProviderAdaptiveState) AdjustCapacity() (newCapacity int, changed bool)
 	newCapacity = max(s.minCapacity, min(s.maxCapacity, newCapacity))
 
 	if newCapacity != s.currentCapacity {
+		oldCapacity := s.currentCapacity
 		s.limiter = NewConcurrencyLimiter(newCapacity)
 		s.currentCapacity = newCapacity
 		s.lastAdjustment = now
 
 		// Reset tracking after significant change (20% or more)
-		if math.Abs(float64(newCapacity-s.currentCapacity)) > float64(s.currentCapacity)*0.2 {
+		if math.Abs(float64(newCapacity-oldCapacity)) > float64(oldCapacity)*0.2 {
 			s.resetTracking()
 		}
 
@@ -266,5 +270,26 @@ func (s *ProviderAdaptiveState) AcquireToken(ctx context.Context) (release func(
 	if !limiter.Acquire(ctx) {
 		return nil, false
 	}
+
+	s.mu.Lock()
+	s.lastSeen = time.Now()
+	s.mu.Unlock()
 	return limiter.Release, true
+}
+
+// LastSeen returns the last time this state observed activity.
+func (s *ProviderAdaptiveState) LastSeen() time.Time {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.lastSeen
+}
+
+// InUse returns the current number of acquired slots for this state.
+func (s *ProviderAdaptiveState) InUse() int {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	if s.limiter == nil {
+		return 0
+	}
+	return s.limiter.InUse()
 }

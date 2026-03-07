@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"maps"
 	"os"
 	"sort"
 	"strings"
@@ -139,7 +140,6 @@ type Wormhole struct {
 	providerFactories  map[string]types.ProviderFactory // Factory functions for creating providers
 	providers          map[string]*cachedProvider       // Cached provider instances with ref counting
 	providersMutex     sync.RWMutex
-	closeOnce          sync.Once // Ensures Close() is idempotent
 	config             Config
 	providerMiddleware *types.ProviderMiddlewareChain // Type-safe middleware chain
 	toolRegistry       *ToolRegistry                  // Registry of available tools for function calling
@@ -160,7 +160,8 @@ type Wormhole struct {
 	shuttingDown   atomic.Bool    // Atomic flag for shutdown state
 
 	// Idempotency cache
-	idempotencyCache sync.Map // Thread-safe cache for idempotent responses
+	idempotencyMu    sync.Mutex
+	idempotencyCache map[string]*idempotencyEntry
 }
 
 // IdempotencyConfig holds configuration for idempotent request handling
@@ -215,6 +216,7 @@ func New(opts ...Option) *Wormhole {
 		config:            config,
 		toolRegistry:      NewToolRegistry(),
 		shutdownChan:      make(chan struct{}),
+		idempotencyCache:  make(map[string]*idempotencyEntry),
 	}
 
 	// Initialize model discovery service if enabled
@@ -331,105 +333,14 @@ func (p *Wormhole) Provider(name string) (types.Provider, error) {
 	if p.shuttingDown.Load() {
 		return nil, fmt.Errorf("client is shutting down")
 	}
-
-	// Track this request
-	if !p.trackRequest() {
-		return nil, fmt.Errorf("client is shutting down")
-	}
-	defer p.untrackRequest()
-
-	// First, try to read with read lock
-	p.providersMutex.RLock()
-	if cp, exists := p.providers[name]; exists {
-		// Increment reference count and update last used time (atomic)
-		atomic.AddInt32(&cp.refCount, 1)
-		atomic.StoreInt64(&cp.lastUsed, time.Now().UnixNano())
-		p.cacheHits.Add(1)
-		p.providersMutex.RUnlock()
-		return cp.provider, nil
-	}
-	p.providersMutex.RUnlock()
-
-	// Provider doesn't exist, need to create it with write lock
-	p.providersMutex.Lock()
-	defer p.providersMutex.Unlock()
-
-	// Double-check after acquiring write lock (another goroutine might have created it)
-	if cp, exists := p.providers[name]; exists {
-		// Increment reference count and update last used time (atomic)
-		atomic.AddInt32(&cp.refCount, 1)
-		atomic.StoreInt64(&cp.lastUsed, time.Now().UnixNano())
-		p.cacheHits.Add(1)
-		return cp.provider, nil
-	}
-
-	// Get the factory for the requested provider
-	factory, exists := p.providerFactories[name]
-	if !exists {
-		// Check if it's a custom provider added via With... methods
-		if _, configExists := p.config.Providers[name]; configExists {
-			// Assume it's an OpenAI-compatible provider for backward compatibility
-			factory = func(c types.ProviderConfig) (types.Provider, error) {
-				return openai.New(c), nil
-			}
-		} else {
-			return nil, types.ErrProviderNotFound.
-				WithProvider(name).
-				WithDetails(p.formatProviderHint(name))
-		}
-	}
-
-	// Get provider config
-	config, exists := p.config.Providers[name]
-	if !exists {
-		return nil, types.ErrProviderNotFound.
-			WithProvider(name).
-			WithDetails(p.formatProviderHint(name))
-	}
-
-	// Validate API key format before creating provider
-	if config.APIKey != "" {
-		if err := validateAPIKey(name, config.APIKey); err != nil {
-			return nil, fmt.Errorf("invalid API key for provider %s: %w", name, err)
-		}
-	}
-
-	// Apply DefaultTimeout if provider config doesn't have explicit timeout
-	// Special case: if DefaultTimeout is 0 (unlimited), only apply to configs without explicit timeout
-	if config.Timeout == 0 && p.config.DefaultTimeout != 0 {
-		config.Timeout = int(p.config.DefaultTimeout.Seconds())
-	} else if config.Timeout == 0 && p.config.DefaultTimeout == 0 {
-		// Unlimited timeout requested - only apply when provider config is also 0
-		config.Timeout = 0
-	}
-
-	// Use the factory to create the provider instance
-	provider, err := factory(config)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create provider %s: %w", name, err)
-	}
-
-	// Create cached provider wrapper
-	cp := &cachedProvider{
-		provider: provider,
-		lastUsed: time.Now().UnixNano(),
-		refCount: 1,
-	}
-
-	// Cache the provider
-	p.providers[name] = cp
-	p.cacheMisses.Add(1)
-	return provider, nil
+	return p.getOrCreateCachedProvider(name, false)
 }
 
 // getProvider returns the provider to use for a request
 func (p *Wormhole) getProvider(override string) (types.Provider, error) {
-	providerName := override
-	if providerName == "" {
-		providerName = p.config.DefaultProvider
-	}
-	if providerName == "" {
-		return nil, fmt.Errorf("no provider specified and no default provider configured")
+	providerName, err := p.resolveProviderName(override)
+	if err != nil {
+		return nil, err
 	}
 	return p.Provider(providerName)
 }
@@ -442,7 +353,9 @@ func (p *Wormhole) releaseProvider(name string) {
 	p.providersMutex.RUnlock()
 
 	if exists {
-		atomic.AddInt32(&cp.refCount, -1)
+		if atomic.AddInt32(&cp.refCount, -1) < 0 {
+			atomic.StoreInt32(&cp.refCount, 0)
+		}
 	}
 }
 
@@ -458,7 +371,12 @@ func (p *Wormhole) releaseProvider(name string) {
 //
 //	resp, err := handle.Text(ctx, request)
 func (p *Wormhole) ProviderWithHandle(name string) (*ProviderHandle, error) {
-	provider, err := p.Provider(name)
+	providerName, err := p.resolveProviderName(name)
+	if err != nil {
+		return nil, err
+	}
+
+	provider, err := p.getOrCreateCachedProvider(providerName, true)
 	if err != nil {
 		return nil, err
 	}
@@ -466,15 +384,163 @@ func (p *Wormhole) ProviderWithHandle(name string) (*ProviderHandle, error) {
 	return &ProviderHandle{
 		Provider: provider,
 		wormhole: p,
-		name:     name,
+		name:     providerName,
 	}, nil
 }
 
-// createOpenAICompatibleProvider creates a temporary OpenAI provider with custom config
-func (p *Wormhole) createOpenAICompatibleProvider(config types.ProviderConfig) (types.Provider, error) {
-	// Create temporary OpenAI provider with custom BaseURL
-	openAIProvider := openai.New(config)
-	return openAIProvider, nil
+// leaseProvider acquires a provider handle for the duration of a request.
+func (p *Wormhole) leaseProvider(override string) (types.Provider, func(), error) {
+	handle, err := p.ProviderWithHandle(override)
+	if err != nil {
+		return nil, nil, err
+	}
+	return handle.Provider, func() { _ = handle.Close() }, nil
+}
+
+func (p *Wormhole) resolveProviderName(override string) (string, error) {
+	providerName := override
+	if providerName == "" {
+		providerName = p.config.DefaultProvider
+	}
+	if providerName == "" && len(p.config.Providers) == 1 {
+		for name := range p.config.Providers {
+			providerName = name
+		}
+	}
+	if providerName == "" {
+		return "", fmt.Errorf("no provider specified and no default provider configured")
+	}
+	return providerName, nil
+}
+
+func (p *Wormhole) providerFactoryFor(name string) (types.ProviderFactory, error) {
+	factory, exists := p.providerFactories[name]
+	if exists {
+		return factory, nil
+	}
+
+	if _, configExists := p.config.Providers[name]; configExists {
+		return func(c types.ProviderConfig) (types.Provider, error) {
+			return openai.New(c), nil
+		}, nil
+	}
+
+	return nil, types.ErrProviderNotFound.
+		WithProvider(name).
+		WithDetails(p.formatProviderHint(name))
+}
+
+func (p *Wormhole) configuredProviderConfig(name string) (types.ProviderConfig, error) {
+	config, exists := p.config.Providers[name]
+	if !exists {
+		return types.ProviderConfig{}, types.ErrProviderNotFound.
+			WithProvider(name).
+			WithDetails(p.formatProviderHint(name))
+	}
+	return cloneProviderConfig(config), nil
+}
+
+func cloneProviderConfig(config types.ProviderConfig) types.ProviderConfig {
+	cloned := config
+	if len(config.Headers) > 0 {
+		cloned.Headers = make(map[string]string, len(config.Headers))
+		maps.Copy(cloned.Headers, config.Headers)
+	}
+	if len(config.Params) > 0 {
+		cloned.Params = make(map[string]any, len(config.Params))
+		maps.Copy(cloned.Params, config.Params)
+	}
+	if config.MaxRetries != nil {
+		maxRetries := *config.MaxRetries
+		cloned.MaxRetries = &maxRetries
+	}
+	if config.RetryDelay != nil {
+		retryDelay := *config.RetryDelay
+		cloned.RetryDelay = &retryDelay
+	}
+	if config.RetryMaxDelay != nil {
+		retryMaxDelay := *config.RetryMaxDelay
+		cloned.RetryMaxDelay = &retryMaxDelay
+	}
+	return cloned
+}
+
+func (p *Wormhole) applyDefaultTimeout(config types.ProviderConfig) types.ProviderConfig {
+	if config.Timeout == 0 && p.config.DefaultTimeout != 0 {
+		config.Timeout = int(p.config.DefaultTimeout.Seconds())
+	}
+	return config
+}
+
+func (p *Wormhole) createProviderWithConfig(name string, config types.ProviderConfig) (types.Provider, error) {
+	factory, err := p.providerFactoryFor(name)
+	if err != nil {
+		return nil, err
+	}
+
+	if config.APIKey != "" {
+		if err := validateAPIKey(name, config.APIKey); err != nil {
+			return nil, fmt.Errorf("invalid API key for provider %s: %w", name, err)
+		}
+	}
+
+	provider, err := factory(p.applyDefaultTimeout(config))
+	if err != nil {
+		return nil, fmt.Errorf("failed to create provider %s: %w", name, err)
+	}
+
+	return provider, nil
+}
+
+func (p *Wormhole) getOrCreateCachedProvider(name string, acquireRef bool) (types.Provider, error) {
+	p.providersMutex.RLock()
+	if cp, exists := p.providers[name]; exists {
+		if acquireRef {
+			atomic.AddInt32(&cp.refCount, 1)
+		}
+		atomic.StoreInt64(&cp.lastUsed, time.Now().UnixNano())
+		p.cacheHits.Add(1)
+		p.providersMutex.RUnlock()
+		return cp.provider, nil
+	}
+	p.providersMutex.RUnlock()
+
+	config, err := p.configuredProviderConfig(name)
+	if err != nil {
+		return nil, err
+	}
+
+	provider, err := p.createProviderWithConfig(name, config)
+	if err != nil {
+		return nil, err
+	}
+
+	refCount := int32(0)
+	if acquireRef {
+		refCount = 1
+	}
+
+	p.providersMutex.Lock()
+	defer p.providersMutex.Unlock()
+	if cp, exists := p.providers[name]; exists {
+		if acquireRef {
+			atomic.AddInt32(&cp.refCount, 1)
+		}
+		atomic.StoreInt64(&cp.lastUsed, time.Now().UnixNano())
+		p.cacheHits.Add(1)
+		if err := provider.Close(); err != nil && p.config.Logger != nil {
+			p.config.Logger.Warn("error closing duplicate provider", "provider", name, "error", err)
+		}
+		return cp.provider, nil
+	}
+
+	p.providers[name] = &cachedProvider{
+		provider: provider,
+		lastUsed: time.Now().UnixNano(),
+		refCount: refCount,
+	}
+	p.cacheMisses.Add(1)
+	return provider, nil
 }
 
 // formatProviderHint returns a helpful error message with configured providers listed
@@ -789,48 +855,80 @@ const (
 //	    // Use tool calling
 //	}
 func (p *Wormhole) ProviderCapabilities(provider string) *Capabilities {
+	if resolved, err := p.resolveProviderName(provider); err == nil {
+		provider = resolved
+	}
+
+	if configuredProvider, err := p.Provider(provider); err == nil {
+		return capabilitiesFromModelCapabilities(provider, configuredProvider.SupportedCapabilities())
+	}
+
+	return conservativeProviderCapabilities(provider)
+}
+
+// ModelCapabilities returns capabilities for a specific provider/model pair.
+// When discovery metadata is available, this is more precise than ProviderCapabilities.
+func (p *Wormhole) ModelCapabilities(provider, model string) (*Capabilities, error) {
+	if provider == "" {
+		return nil, fmt.Errorf("provider must be specified")
+	}
+	if model == "" {
+		return nil, fmt.Errorf("model must be specified")
+	}
+
+	if p.discoveryService != nil {
+		models, err := p.discoveryService.GetModels(context.Background(), provider)
+		if err == nil {
+			for _, info := range models {
+				if info != nil && info.ID == model {
+					return capabilitiesFromModelCapabilities(provider, info.Capabilities), nil
+				}
+			}
+		}
+	}
+
+	return p.ProviderCapabilities(provider), nil
+}
+
+func capabilitiesFromModelCapabilities(provider string, modelCaps []types.ModelCapability) *Capabilities {
+	caps := &Capabilities{
+		provider: provider,
+		caps:     make(map[Capability]bool),
+	}
+
+	for _, capability := range modelCaps {
+		switch capability {
+		case types.CapabilityText, types.CapabilityChat:
+			caps.caps[CapabilityText] = true
+		case types.CapabilityStructured:
+			caps.caps[CapabilityStructured] = true
+		case types.CapabilityEmbeddings:
+			caps.caps[CapabilityEmbeddings] = true
+		case types.CapabilityImages:
+			caps.caps[CapabilityImages] = true
+		case types.CapabilityAudio:
+			caps.caps[CapabilityAudio] = true
+		case types.CapabilityFunctions:
+			caps.caps[CapabilityToolCalling] = true
+		case types.CapabilityStream:
+			caps.caps[CapabilityStreaming] = true
+		case types.CapabilityVision:
+			caps.caps[CapabilityVision] = true
+		}
+	}
+
+	return caps
+}
+
+func conservativeProviderCapabilities(provider string) *Capabilities {
 	caps := &Capabilities{
 		provider: provider,
 		caps:     make(map[Capability]bool),
 	}
 
 	switch provider {
-	case providerOpenAI:
+	case providerOpenAI, providerAnthropic, providerGemini, providerOpenRouter, providerOllama:
 		caps.caps[CapabilityText] = true
-		caps.caps[CapabilityStructured] = true
-		caps.caps[CapabilityEmbeddings] = true
-		caps.caps[CapabilityImages] = true
-		caps.caps[CapabilityAudio] = true
-		caps.caps[CapabilityToolCalling] = true
-		caps.caps[CapabilityStreaming] = true
-		caps.caps[CapabilityVision] = true
-	case providerAnthropic:
-		caps.caps[CapabilityText] = true
-		caps.caps[CapabilityStructured] = true
-		caps.caps[CapabilityToolCalling] = true
-		caps.caps[CapabilityStreaming] = true
-		caps.caps[CapabilityVision] = true
-		caps.caps[CapabilityCodeExecution] = true
-	case providerGemini:
-		caps.caps[CapabilityText] = true
-		caps.caps[CapabilityStructured] = true
-		caps.caps[CapabilityEmbeddings] = true
-		caps.caps[CapabilityImages] = true
-		caps.caps[CapabilityToolCalling] = true
-		caps.caps[CapabilityStreaming] = true
-		caps.caps[CapabilityVision] = true
-		caps.caps[CapabilityCodeExecution] = true
-	case providerOllama:
-		caps.caps[CapabilityText] = true
-		caps.caps[CapabilityEmbeddings] = true
-		caps.caps[CapabilityStreaming] = true
-	case providerOpenRouter:
-		// OpenRouter proxies to multiple providers, so it has broad capabilities
-		caps.caps[CapabilityText] = true
-		caps.caps[CapabilityStructured] = true
-		caps.caps[CapabilityToolCalling] = true
-		caps.caps[CapabilityStreaming] = true
-		caps.caps[CapabilityVision] = true
 	}
 
 	return caps
@@ -908,39 +1006,7 @@ func (c *Capabilities) SupportsAudio() bool {
 // It cleans up all cached providers and stops the discovery service
 // This is an immediate close - for graceful shutdown, use Shutdown(ctx) instead
 func (p *Wormhole) Close() error {
-	var errs []error
-	p.closeOnce.Do(func() {
-		// Signal shutdown if not already signaled
-		if !p.shuttingDown.Load() {
-			close(p.shutdownChan)
-			p.shuttingDown.Store(true)
-		}
-
-		// Cleanup providers
-		p.providersMutex.Lock()
-		defer p.providersMutex.Unlock()
-		for name, cp := range p.providers {
-			if err := cp.provider.Close(); err != nil {
-				errs = append(errs, fmt.Errorf("provider %s: %w", name, err))
-			}
-			delete(p.providers, name)
-		}
-
-		// Stop discovery service
-		if p.discoveryService != nil {
-			if err := p.discoveryService.Stop(); err != nil {
-				errs = append(errs, fmt.Errorf("discovery service: %w", err))
-			}
-		}
-
-		// Cleanup tool registry resources if needed
-		// (currently tool registry has no resources to clean up)
-	})
-
-	if len(errs) > 0 {
-		return fmt.Errorf("errors during cleanup: %v", errs)
-	}
-	return nil
+	return p.Shutdown(context.Background())
 }
 
 // Shutdown gracefully shuts down the Wormhole client with zero-downtime support
@@ -967,11 +1033,7 @@ func (p *Wormhole) Close() error {
 func (p *Wormhole) Shutdown(ctx context.Context) error {
 	var shutdownErr error
 	p.shutdownOnce.Do(func() {
-		// Mark as shutting down to reject new requests
-		p.shuttingDown.Store(true)
-
-		// Signal shutdown to all components
-		close(p.shutdownChan)
+		p.signalShutdown()
 
 		// Wait for in-flight requests to complete or context timeout
 		done := make(chan struct{})
@@ -1022,6 +1084,16 @@ func (p *Wormhole) Shutdown(ctx context.Context) error {
 	return shutdownErr
 }
 
+func (p *Wormhole) signalShutdown() {
+	p.shuttingDown.Store(true)
+	select {
+	case <-p.shutdownChan:
+		return
+	default:
+		close(p.shutdownChan)
+	}
+}
+
 // IsShuttingDown returns true if the client is in shutdown process
 func (p *Wormhole) IsShuttingDown() bool {
 	return p.shuttingDown.Load()
@@ -1034,6 +1106,10 @@ func (p *Wormhole) trackRequest() bool {
 		return false
 	}
 	p.activeRequests.Add(1)
+	if p.shuttingDown.Load() {
+		p.activeRequests.Done()
+		return false
+	}
 	return true
 }
 
@@ -1044,10 +1120,9 @@ func (p *Wormhole) untrackRequest() {
 
 // ClearIdempotencyCache clears all cached idempotent responses
 func (p *Wormhole) ClearIdempotencyCache() {
-	p.idempotencyCache.Range(func(key, value any) bool {
-		p.idempotencyCache.Delete(key)
-		return true
-	})
+	p.idempotencyMu.Lock()
+	defer p.idempotencyMu.Unlock()
+	clear(p.idempotencyCache)
 }
 
 // CleanupStaleProviders cleans up providers that haven't been used for a while
