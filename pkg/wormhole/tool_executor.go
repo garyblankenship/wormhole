@@ -21,6 +21,7 @@ type ToolExecutor struct {
 	adaptiveLimiter *AdaptiveLimiter
 	circuitBreaker  *SimpleCircuitBreaker
 	retryExecutor   *RetryExecutor
+	configErr       error
 }
 
 // NewToolExecutor creates a new ToolExecutor with the given registry and default safety config
@@ -31,11 +32,16 @@ func NewToolExecutor(registry *ToolRegistry) *ToolExecutor {
 // NewToolExecutorWithConfig creates a new ToolExecutor with custom safety configuration
 func NewToolExecutorWithConfig(registry *ToolRegistry, config ToolSafetyConfig) *ToolExecutor {
 	// Validate and apply defaults
-	_ = config.Validate() // #nosec G104 - Validate always returns nil
+	validationErr := config.Validate()
 
 	executor := &ToolExecutor{
 		registry:     registry,
 		safetyConfig: config,
+		configErr:    validationErr,
+	}
+
+	if validationErr != nil {
+		return executor
 	}
 
 	// Initialize concurrency limiter if configured
@@ -72,6 +78,13 @@ func NewToolExecutorWithConfig(registry *ToolRegistry, config ToolSafetyConfig) 
 // Returns:
 //   - ToolResult with the execution result or error
 func (e *ToolExecutor) Execute(ctx context.Context, toolCall types.ToolCall) types.ToolResult {
+	if e.configErr != nil {
+		return types.ToolResult{
+			ToolCallID: toolCall.ID,
+			Error:      e.configErr.Error(),
+		}
+	}
+
 	// Check circuit breaker if enabled
 	if e.circuitBreaker != nil && e.circuitBreaker.IsTripped() {
 		return types.ToolResult{
@@ -97,7 +110,7 @@ func (e *ToolExecutor) Execute(ctx context.Context, toolCall types.ToolCall) typ
 	args := toolCall.Arguments
 
 	// Validate arguments against schema if schema is provided
-	if definition.Tool.InputSchema != nil {
+	if e.safetyConfig.EnableInputValidation && definition.Tool.InputSchema != nil {
 		if err := validation.ValidateAgainstSchema(args, definition.Tool.InputSchema); err != nil {
 			// Record failure for circuit breaker
 			if e.circuitBreaker != nil {

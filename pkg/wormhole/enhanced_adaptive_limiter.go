@@ -3,6 +3,7 @@ package wormhole
 import (
 	"context"
 	"log"
+	"sort"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -34,6 +35,8 @@ type EnhancedAdaptiveConfig struct {
 	// State management
 	EnableModelLevel bool   // Track per-model vs per-provider only
 	PersistenceFile  string // Optional: save/load state
+	IdleStateTTL     time.Duration
+	MaxModelStates   int
 }
 
 // ProviderSetting holds provider-specific configuration
@@ -57,6 +60,8 @@ func DefaultEnhancedAdaptiveConfig() EnhancedAdaptiveConfig {
 		QueryInterval:      15 * time.Second,
 		PIDConfig:          DefaultPIDConfig(),
 		EnableModelLevel:   false, // Start with provider-level only
+		IdleStateTTL:       time.Hour,
+		MaxModelStates:     1024,
 	}
 }
 
@@ -142,17 +147,24 @@ func NewEnhancedAdaptiveLimiter(config EnhancedAdaptiveConfig) *EnhancedAdaptive
 
 // Acquire acquires a slot from the global limiter (backward compatible).
 //
-// Deprecated: Use AcquireToken instead to prevent race conditions.
+// Deprecated: Use AcquireToken instead to prevent race conditions when
+// capacity adjustment swaps the limiter between acquire and release.
+// This method now delegates to AcquireToken internally for safety, but
+// callers must still pair with Release() which may hit a different limiter.
 func (l *EnhancedAdaptiveLimiter) Acquire(ctx context.Context) bool {
-	return l.globalState.Limiter().Acquire(ctx)
+	_, ok := l.globalState.AcquireToken(ctx)
+	return ok
 }
 
 // AcquireWithProvider acquires a slot with provider/model awareness.
 //
 // Deprecated: Use AcquireTokenWithProvider instead to prevent race conditions.
+// This method now delegates to AcquireToken internally for safety, but
+// callers must still pair with ReleaseWithProvider() which may hit a different limiter.
 func (l *EnhancedAdaptiveLimiter) AcquireWithProvider(ctx context.Context, provider, model string) bool {
 	state := l.getOrCreateState(provider, model)
-	return state.Limiter().Acquire(ctx)
+	_, ok := state.AcquireToken(ctx)
+	return ok
 }
 
 // Release releases a slot to the global limiter.
@@ -415,6 +427,67 @@ func (l *EnhancedAdaptiveLimiter) adjustAllCapacities() {
 	// Log adjustments if any occurred
 	if len(providerAdjustments) > 0 || len(modelAdjustments) > 0 {
 		l.logAdjustments(globalCapacity, providerAdjustments, modelAdjustments)
+	}
+
+	l.evictIdleStates()
+}
+
+func (l *EnhancedAdaptiveLimiter) evictIdleStates() {
+	if l.config.IdleStateTTL <= 0 {
+		return
+	}
+
+	cutoff := time.Now().Add(-l.config.IdleStateTTL)
+
+	l.mu.Lock()
+	defer l.mu.Unlock()
+
+	for provider, state := range l.providerStates {
+		if _, pinned := l.config.ProviderSettings[provider]; pinned {
+			continue
+		}
+		if state.InUse() > 0 || state.LastSeen().After(cutoff) {
+			continue
+		}
+		delete(l.providerStates, provider)
+	}
+
+	if !l.config.EnableModelLevel {
+		return
+	}
+
+	for key, state := range l.modelStates {
+		if state.InUse() > 0 || state.LastSeen().After(cutoff) {
+			continue
+		}
+		delete(l.modelStates, key)
+	}
+
+	if l.config.MaxModelStates <= 0 || len(l.modelStates) <= l.config.MaxModelStates {
+		return
+	}
+
+	type stateInfo struct {
+		key      string
+		lastSeen time.Time
+	}
+
+	candidates := make([]stateInfo, 0, len(l.modelStates))
+	for key, state := range l.modelStates {
+		if state.InUse() > 0 {
+			continue
+		}
+		candidates = append(candidates, stateInfo{key: key, lastSeen: state.LastSeen()})
+	}
+
+	sort.Slice(candidates, func(i, j int) bool {
+		return candidates[i].lastSeen.Before(candidates[j].lastSeen)
+	})
+
+	for len(l.modelStates) > l.config.MaxModelStates && len(candidates) > 0 {
+		candidate := candidates[0]
+		candidates = candidates[1:]
+		delete(l.modelStates, candidate.key)
 	}
 }
 

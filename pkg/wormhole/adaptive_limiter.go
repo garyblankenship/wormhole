@@ -84,11 +84,8 @@ func NewAdaptiveLimiter(config AdaptiveConfig) *AdaptiveLimiter {
 // Deprecated: Use AcquireToken instead to prevent race conditions when
 // the limiter is swapped during capacity adjustment.
 func (al *AdaptiveLimiter) Acquire(ctx context.Context) bool {
-	al.mu.RLock()
-	limiter := al.limiter
-	al.mu.RUnlock()
-
-	return limiter.Acquire(ctx)
+	_, ok := al.AcquireToken(ctx)
+	return ok
 }
 
 // Release releases a slot in the limiter.

@@ -1,6 +1,7 @@
 package wormhole
 
 import (
+	"fmt"
 	"time"
 )
 
@@ -108,6 +109,8 @@ func DefaultToolSafetyConfig() ToolSafetyConfig {
 
 // Validate validates the safety configuration
 func (c *ToolSafetyConfig) Validate() error {
+	var unsupported []string
+
 	if c.MaxConcurrentTools < 0 {
 		c.MaxConcurrentTools = 0
 	}
@@ -146,10 +149,22 @@ func (c *ToolSafetyConfig) Validate() error {
 	if c.MaxCPUTime < 0 {
 		c.MaxCPUTime = 0
 	}
+	if c.MaxMemoryMB > 0 {
+		unsupported = append(unsupported, "MaxMemoryMB")
+	}
+	if c.MaxCPUTime > 0 {
+		unsupported = append(unsupported, "MaxCPUTime")
+	}
+	if c.EnableResourceIsolation {
+		unsupported = append(unsupported, "EnableResourceIsolation")
+	}
 	if c.MaxToolOutputSize < 0 {
 		c.MaxToolOutputSize = 0
 	} else if c.MaxToolOutputSize == 0 {
 		c.MaxToolOutputSize = 10 * 1024 * 1024 // Default to 10MB if 0
+	}
+	if len(unsupported) > 0 {
+		return fmt.Errorf("unsupported tool safety settings: %v", unsupported)
 	}
 	return nil
 }

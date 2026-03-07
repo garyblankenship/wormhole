@@ -48,6 +48,11 @@ func (l *ConcurrencyLimiter) Capacity() int {
 	return cap(l.sem)
 }
 
+// InUse returns the current number of acquired slots.
+func (l *ConcurrencyLimiter) InUse() int {
+	return len(l.sem)
+}
+
 // SimpleCircuitBreaker implements a basic circuit breaker pattern
 type SimpleCircuitBreaker struct {
 	mu               sync.RWMutex
