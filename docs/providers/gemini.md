@@ -30,10 +30,10 @@ func main() {
     ctx := context.Background()
 
     // Simple text generation
-    response, err := client.Text().
-        Model("gemini-2.5-flash").
-        Prompt("Hello, Gemini!").
-        Generate(ctx)
+response, err := client.Text().
+    Model("gemini-2.5-flash").
+    Prompt("Hello, Gemini!").
+    Generate(ctx)
 
     if err != nil {
         panic(err)
@@ -219,7 +219,7 @@ Generate embeddings for semantic search and similarity:
 
 ```go
 response, err := client.Embeddings().
-    Model("text-embedding-004").
+    Model("gemini-embedding-001").
     Input([]string{
         "Hello world",
         "Natural language processing",

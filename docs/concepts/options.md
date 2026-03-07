@@ -12,6 +12,8 @@ Wormhole uses the **functional options pattern** for client configuration. This 
 - **Type safety** - compile-time validation of configuration
 - **Future-proof** - add new options without changing the API
 
+In practice, this makes client setup both composable and extensible as your application grows.
+
 ## The Options Pattern
 
 ### Basic Concept
@@ -114,6 +116,66 @@ client := wormhole.New(
 - **Groq**: `WithGroq(apiKey)`
 - **Mistral**: `WithMistral(config)`
 - **OpenRouter**: `WithOpenAICompatible("openrouter", "https://openrouter.ai/api/v1", config)`
+
+#### WithGroq
+
+Configure Groq using its OpenAI-compatible API:
+
+```go
+client := wormhole.New(
+    wormhole.WithGroq("gsk_..."),
+)
+```
+
+#### WithMistral
+
+Configure Mistral using the built-in OpenAI-compatible adapter:
+
+```go
+client := wormhole.New(
+    wormhole.WithMistral(types.ProviderConfig{APIKey: "mistral-key"}),
+)
+```
+
+#### WithOllama
+
+Configure a local Ollama server:
+
+```go
+client := wormhole.New(
+    wormhole.WithOllama(types.ProviderConfig{BaseURL: "http://localhost:11434"}),
+)
+```
+
+#### WithLMStudio
+
+Configure LM Studio as a local OpenAI-compatible provider:
+
+```go
+client := wormhole.New(
+    wormhole.WithLMStudio(types.ProviderConfig{BaseURL: "http://localhost:1234/v1"}),
+)
+```
+
+#### WithVLLM
+
+Configure a vLLM deployment:
+
+```go
+client := wormhole.New(
+    wormhole.WithVLLM(types.ProviderConfig{BaseURL: "http://localhost:8000/v1"}),
+)
+```
+
+#### WithOllamaOpenAI
+
+Configure Ollama through its OpenAI-compatible endpoint:
+
+```go
+client := wormhole.New(
+    wormhole.WithOllamaOpenAI(types.ProviderConfig{BaseURL: "http://localhost:11434/v1"}),
+)
+```
 
 #### WithCustomProvider
 

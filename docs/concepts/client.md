@@ -2,7 +2,7 @@
 
 ## Overview
 
-The `Wormhole` client is the main entry point for interacting with LLM providers. It provides a unified interface for accessing multiple providers (OpenAI, Anthropic, Gemini, Ollama, OpenRouter) through a single, idiomatic Go API.
+The Wormhole client is the main entry point for interacting with LLM providers. It provides a unified interface for accessing multiple providers (OpenAI, Anthropic, Gemini, Ollama, OpenRouter) through a single, idiomatic Go API.
 
 ## Unified Client Interface
 

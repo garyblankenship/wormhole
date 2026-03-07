@@ -13,7 +13,7 @@ import (
 // 2. Given gemini.md exists, when scanning, then all supported Gemini models are listed
 // 3. Given gemini.md exists, when reviewing, then Gemini-specific features are documented
 
-const geminiDocPath = "providers/gemini.md"
+const geminiDocPath = "gemini.md"
 
 func TestGeminiDocumentation(t *testing.T) {
 	// Read the documentation file
@@ -99,9 +99,9 @@ func testClientCreation(t *testing.T, doc string) {
 				"func main()",
 				"context.Background()",
 				"client.Text()",
-				".Model(",
-				".Prompt(",
-				".Generate(ctx)",
+				"Model(",
+				"Prompt(",
+				"Generate(ctx)",
 			},
 			description:   "Should include complete runnable example",
 			exampleNeeded: true,
@@ -236,7 +236,7 @@ func testSpecificFeatures(t *testing.T, doc string) {
 			required: []string{
 				"### System Instructions",
 				"systemInstruction",
-				".SystemPrompt(",
+				"SystemPrompt(",
 			},
 			description:   "Should document system instructions feature",
 			exampleNeeded: true,
@@ -247,7 +247,7 @@ func testSpecificFeatures(t *testing.T, doc string) {
 				"### Multimodal Input",
 				"image and audio input",
 				"types.ImageMedia",
-				".Media(",
+				"Media(",
 			},
 			description:   "Should document multimodal capabilities",
 			exampleNeeded: true,
@@ -259,8 +259,8 @@ func testSpecificFeatures(t *testing.T, doc string) {
 				"function calling",
 				"types.Tool",
 				"ToolFunction",
-				".Tools(",
-				".ToolChoice(",
+				"Tools(",
+				"ToolChoice(",
 				"response.ToolCalls",
 			},
 			description:   "Should document function/tool calling with example",
@@ -270,9 +270,9 @@ func testSpecificFeatures(t *testing.T, doc string) {
 			name: "Structured Output",
 			required: []string{
 				"### Structured Output",
-				".Structured()",
-				".SchemaName(",
-				".GenerateAs(",
+				"Structured()",
+				"SchemaName(",
+				"GenerateAs(",
 			},
 			description:   "Should document structured output feature",
 			exampleNeeded: true,
@@ -281,8 +281,8 @@ func testSpecificFeatures(t *testing.T, doc string) {
 			name: "Embeddings",
 			required: []string{
 				"### Embeddings",
-				".Embeddings()",
-				"text-embedding-004",
+				"Embeddings()",
+				"gemini-embedding-001",
 				"SEMANTIC_SIMILARITY",
 				"ProviderOptions",
 			},
@@ -293,7 +293,7 @@ func testSpecificFeatures(t *testing.T, doc string) {
 			name: "Streaming",
 			required: []string{
 				"### Streaming",
-				".Stream(",
+				"Stream(",
 				"chunk.Delta",
 			},
 			description:   "Should document streaming responses",

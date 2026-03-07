@@ -2,11 +2,12 @@ package main
 
 import (
 	"os"
-	"path/filepath"
 	"regexp"
 	"strings"
 	"testing"
 )
+
+const optionsDocPath = "options.md"
 
 // DocumentValidation provides helpers for validating documentation content.
 type DocumentValidation struct {
@@ -155,8 +156,7 @@ func TestOptionsDocExplainsFunctionalOptionsPattern(t *testing.T) {
 		},
 	}
 
-	path := filepath.Join("docs", "concepts", "options.md")
-	doc, err := NewDocumentValidation(path)
+	doc, err := NewDocumentValidation(optionsDocPath)
 	if err != nil {
 		t.Fatalf("failed to read documentation: %v", err)
 	}
@@ -173,8 +173,7 @@ func TestOptionsDocExplainsFunctionalOptionsPattern(t *testing.T) {
 
 // TestOptionsDocListsAllOptionFunctions verifies all option functions are documented.
 func TestOptionsDocListsAllOptionFunctions(t *testing.T) {
-	path := filepath.Join("docs", "concepts", "options.md")
-	doc, err := NewDocumentValidation(path)
+	doc, err := NewDocumentValidation(optionsDocPath)
 	if err != nil {
 		t.Fatalf("failed to read documentation: %v", err)
 	}
@@ -271,8 +270,7 @@ func TestOptionsDocHasCompositionExamples(t *testing.T) {
 		},
 	}
 
-	path := filepath.Join("docs", "concepts", "options.md")
-	doc, err := NewDocumentValidation(path)
+	doc, err := NewDocumentValidation(optionsDocPath)
 	if err != nil {
 		t.Fatalf("failed to read documentation: %v", err)
 	}
@@ -329,8 +327,7 @@ func TestOptionsDocHasProviderConfigurationExamples(t *testing.T) {
 		},
 	}
 
-	path := filepath.Join("docs", "concepts", "options.md")
-	doc, err := NewDocumentValidation(path)
+	doc, err := NewDocumentValidation(optionsDocPath)
 	if err != nil {
 		t.Fatalf("failed to read documentation: %v", err)
 	}
@@ -378,8 +375,7 @@ func TestOptionsDocHasBehaviorOptions(t *testing.T) {
 		},
 	}
 
-	path := filepath.Join("docs", "concepts", "options.md")
-	doc, err := NewDocumentValidation(path)
+	doc, err := NewDocumentValidation(optionsDocPath)
 	if err != nil {
 		t.Fatalf("failed to read documentation: %v", err)
 	}
@@ -401,8 +397,7 @@ func TestOptionsDocHasBehaviorOptions(t *testing.T) {
 
 // TestOptionsDocHasEnvironmentVariableExamples verifies env var configuration is documented.
 func TestOptionsDocHasEnvironmentVariableExamples(t *testing.T) {
-	path := filepath.Join("docs", "concepts", "options.md")
-	doc, err := NewDocumentValidation(path)
+	doc, err := NewDocumentValidation(optionsDocPath)
 	if err != nil {
 		t.Fatalf("failed to read documentation: %v", err)
 	}
@@ -424,8 +419,7 @@ func TestOptionsDocHasEnvironmentVariableExamples(t *testing.T) {
 
 // TestOptionsDocHasBestPractices verifies best practices section exists.
 func TestOptionsDocHasBestPractices(t *testing.T) {
-	path := filepath.Join("docs", "concepts", "options.md")
-	doc, err := NewDocumentValidation(path)
+	doc, err := NewDocumentValidation(optionsDocPath)
 	if err != nil {
 		t.Fatalf("failed to read documentation: %v", err)
 	}
@@ -446,8 +440,7 @@ func TestOptionsDocHasBestPractices(t *testing.T) {
 
 // TestOptionsDocHasProductionAndTestExamples verifies production and test configuration examples.
 func TestOptionsDocHasProductionAndTestExamples(t *testing.T) {
-	path := filepath.Join("docs", "concepts", "options.md")
-	doc, err := NewDocumentValidation(path)
+	doc, err := NewDocumentValidation(optionsDocPath)
 	if err != nil {
 		t.Fatalf("failed to read documentation: %v", err)
 	}
@@ -480,8 +473,7 @@ func TestOptionsDocHasProductionAndTestExamples(t *testing.T) {
 
 // TestOptionsDocStructure verifies the document has proper structure.
 func TestOptionsDocStructure(t *testing.T) {
-	path := filepath.Join("docs", "concepts", "options.md")
-	doc, err := NewDocumentValidation(path)
+	doc, err := NewDocumentValidation(optionsDocPath)
 	if err != nil {
 		t.Fatalf("failed to read documentation: %v", err)
 	}
@@ -511,8 +503,7 @@ func TestOptionsDocStructure(t *testing.T) {
 
 // TestOptionsDocCodeBlocksAreGo verifies code examples are in Go.
 func TestOptionsDocCodeBlocksAreGo(t *testing.T) {
-	path := filepath.Join("docs", "concepts", "options.md")
-	doc, err := NewDocumentValidation(path)
+	doc, err := NewDocumentValidation(optionsDocPath)
 	if err != nil {
 		t.Fatalf("failed to read documentation: %v", err)
 	}
