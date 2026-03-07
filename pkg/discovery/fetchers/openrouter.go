@@ -120,8 +120,6 @@ func inferCapabilitiesFromModality(modality string) []types.ModelCapability {
 
 	if strings.Contains(modality, "text->text") || strings.Contains(modality, "->text") {
 		capabilities = append(capabilities, types.CapabilityText, types.CapabilityChat)
-		// Most text models support functions and structured output
-		capabilities = append(capabilities, types.CapabilityFunctions, types.CapabilityStructured)
 	}
 
 	if strings.Contains(modality, "image") {

@@ -85,7 +85,6 @@ func (f *OpenAIFetcher) FetchModels(ctx context.Context) ([]*types.ModelInfo, er
 			Name:         formatModelName(m.ID),
 			Provider:     "openai",
 			Capabilities: inferOpenAICapabilities(m.ID),
-			MaxTokens:    inferMaxTokens(m.ID),
 		})
 	}
 
@@ -95,37 +94,20 @@ func (f *OpenAIFetcher) FetchModels(ctx context.Context) ([]*types.ModelInfo, er
 // inferOpenAICapabilities determines capabilities from model ID
 func inferOpenAICapabilities(modelID string) []types.ModelCapability {
 	switch {
-	case strings.HasPrefix(modelID, "gpt-"):
+	case strings.HasPrefix(modelID, "text-embedding-"):
+		return []types.ModelCapability{types.CapabilityEmbeddings}
+	case strings.HasPrefix(modelID, "dall-e-"), strings.HasPrefix(modelID, "gpt-image-"), strings.HasPrefix(modelID, "sora-"):
+		return []types.ModelCapability{types.CapabilityImages}
+	case strings.HasPrefix(modelID, "whisper-"), strings.HasPrefix(modelID, "tts-"), strings.HasPrefix(modelID, "gpt-audio"), strings.HasPrefix(modelID, "gpt-realtime"):
+		return []types.ModelCapability{types.CapabilityAudio}
+	case strings.HasPrefix(modelID, "gpt-"), strings.HasPrefix(modelID, "o1"), strings.HasPrefix(modelID, "o3"), strings.HasPrefix(modelID, "o4"):
 		return []types.ModelCapability{
 			types.CapabilityText,
 			types.CapabilityChat,
-			types.CapabilityFunctions,
-			types.CapabilityStructured,
+			types.CapabilityStream,
 		}
-	case strings.HasPrefix(modelID, "text-embedding-"):
-		return []types.ModelCapability{types.CapabilityEmbeddings}
-	case strings.HasPrefix(modelID, "whisper-"):
-		return []types.ModelCapability{types.CapabilityAudio}
-	case strings.HasPrefix(modelID, "dall-e-"):
-		return []types.ModelCapability{types.CapabilityImages}
-	case strings.HasPrefix(modelID, "tts-"):
-		return []types.ModelCapability{types.CapabilityAudio}
 	default:
 		return []types.ModelCapability{types.CapabilityText}
-	}
-}
-
-// inferMaxTokens estimates max tokens from model ID
-func inferMaxTokens(modelID string) int {
-	switch {
-	case strings.Contains(modelID, "gpt-5"), strings.Contains(modelID, "gpt-4"):
-		return 128000 // GPT-5 and GPT-4 have 128k context
-	case strings.Contains(modelID, "gpt-3.5-turbo"):
-		return 16384
-	case strings.HasPrefix(modelID, "text-embedding-"):
-		return 8191
-	default:
-		return 8192 // Default fallback
 	}
 }
 
