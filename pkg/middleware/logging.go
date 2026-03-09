@@ -21,14 +21,7 @@ type LoggingConfig struct {
 
 // DefaultLoggingConfig returns sensible defaults
 func DefaultLoggingConfig(logger types.Logger) LoggingConfig {
-	return LoggingConfig{
-		Logger:       logger,
-		LogRequests:  true,
-		LogResponses: true,
-		LogTiming:    true,
-		LogErrors:    true,
-		RedactKeys:   []string{"api_key", "apikey", "token", "authorization"},
-	}
+	return newDebugLoggingConfig(logger)
 }
 
 // DetailedLoggingMiddleware creates request/response logging middleware with configuration
@@ -37,26 +30,21 @@ func DetailedLoggingMiddleware(config LoggingConfig) Middleware {
 		return func(ctx context.Context, req any) (any, error) {
 			start := time.Now()
 
-			// Log request if enabled
 			if config.LogRequests {
-				logRequest(config, req)
+				logRequestDetails(config, req)
 			}
 
-			// Execute request
 			resp, err := next(ctx, req)
 			duration := time.Since(start)
 
-			// Log timing if enabled
 			if config.LogTiming {
 				config.Logger.Debug("Request completed", "duration", duration)
 			}
 
-			// Log response if enabled
 			if config.LogResponses && resp != nil {
-				logResponse(config, resp, duration)
+				logResponseDetails(config, resp, duration)
 			}
 
-			// Log error if enabled and error occurred
 			if config.LogErrors && err != nil {
 				logError(config, err, duration)
 			}
@@ -68,116 +56,7 @@ func DetailedLoggingMiddleware(config LoggingConfig) Middleware {
 
 // DebugLoggingMiddleware creates verbose debug logging
 func DebugLoggingMiddleware(logger types.Logger) Middleware {
-	config := LoggingConfig{
-		Logger:       logger,
-		LogRequests:  true,
-		LogResponses: true,
-		LogTiming:    true,
-		LogErrors:    true,
-		RedactKeys:   []string{"api_key", "apikey", "token", "authorization"},
-	}
-
-	return DetailedLoggingMiddleware(config)
-}
-
-// logRequest logs the outgoing request
-func logRequest(config LoggingConfig, req any) {
-	sanitized := redactSensitiveData(req, config.RedactKeys)
-
-	switch r := req.(type) {
-	case *types.TextRequest:
-		config.Logger.Debug("Text request", "model", r.Model)
-		if len(r.Messages) > 0 {
-			config.Logger.Debug("Messages", "count", len(r.Messages))
-			for i, msg := range r.Messages {
-				config.Logger.Debug("Message",
-					"index", i,
-					"role", msg.GetRole(),
-					"content", truncateString(getMessageContent(msg), 100))
-			}
-		}
-		if r.Temperature != nil {
-			config.Logger.Debug("Temperature", "value", *r.Temperature)
-		}
-		if r.MaxTokens != nil {
-			config.Logger.Debug("Max tokens", "value", *r.MaxTokens)
-		}
-		if len(r.Tools) > 0 {
-			config.Logger.Debug("Tools available", "count", len(r.Tools))
-		}
-
-	case *types.StructuredRequest:
-		config.Logger.Debug("Structured request", "model", r.Model)
-		if r.Schema != nil {
-			config.Logger.Debug("Schema provided for structured output")
-		}
-
-	case *types.EmbeddingsRequest:
-		config.Logger.Debug("Embeddings request", "model", r.Model, "input_count", len(r.Input))
-
-	default:
-		// Generic logging for unknown request types
-		if jsonData, err := json.MarshalIndent(sanitized, "", "  "); err == nil {
-			config.Logger.Debug("Request", "data", string(jsonData))
-		}
-	}
-}
-
-// logResponse logs the response details
-func logResponse(config LoggingConfig, resp any, duration time.Duration) {
-	switch r := resp.(type) {
-	case *types.TextResponse:
-		config.Logger.Debug("Text response received", "duration", duration, "model", r.Model)
-		config.Logger.Debug("Text details", "length", len(r.Text), "finish_reason", r.FinishReason)
-
-		if r.Usage != nil {
-			config.Logger.Debug("Token usage",
-				"prompt_tokens", r.Usage.PromptTokens,
-				"completion_tokens", r.Usage.CompletionTokens,
-				"total_tokens", r.Usage.TotalTokens)
-
-			// Log cost if available
-			if cost, err := types.EstimateModelCost(r.Model, r.Usage.PromptTokens, r.Usage.CompletionTokens); err == nil && cost > 0 {
-				config.Logger.Debug("Estimated cost", "cost", cost)
-			}
-		}
-
-		if len(r.ToolCalls) > 0 {
-			config.Logger.Debug("Tool calls", "count", len(r.ToolCalls))
-			for i, call := range r.ToolCalls {
-				config.Logger.Debug("Tool call", "index", i, "name", call.Name)
-			}
-		}
-
-		// Log preview of response text
-		preview := truncateString(r.Text, 200)
-		config.Logger.Debug("Preview", "text", preview)
-
-	case *types.StructuredResponse:
-		config.Logger.Debug("Structured response received", "duration", duration, "model", r.Model)
-		config.Logger.Debug("Structured data received")
-
-		if r.Usage != nil {
-			config.Logger.Debug("Token usage",
-				"prompt_tokens", r.Usage.PromptTokens,
-				"completion_tokens", r.Usage.CompletionTokens,
-				"total_tokens", r.Usage.TotalTokens)
-		}
-
-	case *types.EmbeddingsResponse:
-		config.Logger.Debug("Embeddings response received", "duration", duration, "model", r.Model)
-		config.Logger.Debug("Embeddings details", "count", len(r.Embeddings))
-		if len(r.Embeddings) > 0 {
-			config.Logger.Debug("Dimensions", "value", len(r.Embeddings[0].Embedding))
-		}
-
-		if r.Usage != nil {
-			config.Logger.Debug("Token usage", "total_tokens", r.Usage.TotalTokens)
-		}
-
-	default:
-		config.Logger.Debug("Response received", "duration", duration)
-	}
+	return DetailedLoggingMiddleware(newDebugLoggingConfig(logger))
 }
 
 // logError logs error details
