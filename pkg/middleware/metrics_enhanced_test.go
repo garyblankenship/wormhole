@@ -208,22 +208,16 @@ func TestTypedEnhancedMetricsMiddleware(t *testing.T) {
 	})
 
 	t.Run("extracts labels from context", func(t *testing.T) {
-		collector := NewEnhancedMetricsCollector(nil)
-		middleware := NewTypedEnhancedMetricsMiddleware(collector)
-
 		ctx := context.WithValue(context.Background(), CtxKeyWormholeProvider, "openai")
 
-		labels := middleware.extractLabels(ctx, "text", "gpt-4")
+		labels := requestLabelsFromContext(ctx, "text", "gpt-4")
 		assert.Equal(t, "openai", labels.Provider)
 		assert.Equal(t, "gpt-4", labels.Model)
 		assert.Equal(t, "text", labels.Method)
 	})
 
 	t.Run("falls back to unknown provider", func(t *testing.T) {
-		collector := NewEnhancedMetricsCollector(nil)
-		middleware := NewTypedEnhancedMetricsMiddleware(collector)
-
-		labels := middleware.extractLabels(context.Background(), "stream", "claude-3")
+		labels := requestLabelsFromContext(context.Background(), "stream", "claude-3")
 		assert.Equal(t, "unknown", labels.Provider)
 		assert.Equal(t, "claude-3", labels.Model)
 		assert.Equal(t, "stream", labels.Method)

@@ -68,13 +68,9 @@ func (c *Chain) Add(middleware Middleware) {
 func MetricsMiddleware(metrics *Metrics) Middleware {
 	return func(next Handler) Handler {
 		return func(ctx context.Context, req any) (any, error) {
-			start := time.Now()
-
-			resp, err := next(ctx, req)
-
-			duration := time.Since(start)
-			metrics.RecordRequest(duration, err)
-
+			resp, err := withMeasuredRequest(ctx, req, next, func(resp any, err error, duration time.Duration) {
+				metrics.RecordRequest(duration, err)
+			})
 			return resp, wrapIfNotWormholeError("metrics", err)
 		}
 	}
@@ -84,31 +80,9 @@ func MetricsMiddleware(metrics *Metrics) Middleware {
 func EnhancedMetricsMiddleware(collector *EnhancedMetricsCollector) Middleware {
 	return func(next Handler) Handler {
 		return func(ctx context.Context, req any) (any, error) {
-			start := time.Now()
-
-			resp, err := next(ctx, req)
-
-			duration := time.Since(start)
-
-			// Extract labels from context or request if possible
-			var labels *RequestLabels
-			// Try to extract from context first
-			if provider, ok := ctx.Value(CtxKeyProvider).(string); ok {
-				if model, ok := ctx.Value(CtxKeyModel).(string); ok {
-					if method, ok := ctx.Value(CtxKeyMethod).(string); ok {
-						labels = &RequestLabels{
-							Provider:  provider,
-							Model:     model,
-							Method:    method,
-							ErrorType: "", // Will be detected by error detector
-						}
-					}
-				}
-			}
-
-			// Record with enhanced metrics
-			collector.RecordRequest(labels, duration, err, 0, 0, 0)
-
+			resp, err := withMeasuredRequest(ctx, req, next, func(resp any, err error, duration time.Duration) {
+				collector.RecordRequest(requestLabelsFromContext(ctx, "", ""), duration, err, 0, 0, 0)
+			})
 			return resp, wrapIfNotWormholeError("metrics", err)
 		}
 	}
@@ -397,10 +371,8 @@ func wrapIfNotWormholeError(middlewareName string, err error) error {
 
 // IsMiddlewareError checks if an error is a MiddlewareError or contains one
 func IsMiddlewareError(err error) bool {
-	if _, ok := err.(*MiddlewareError); ok {
-		return true
-	}
-	return false
+	var me *MiddlewareError
+	return errors.As(err, &me)
 }
 
 // AsMiddlewareError extracts a MiddlewareError from an error

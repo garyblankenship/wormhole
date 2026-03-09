@@ -40,80 +40,46 @@ func NewProviderChain(middlewares ...ProviderMiddleware) *ProviderMiddlewareChai
 	}
 }
 
-// ApplyText applies the middleware chain to a text handler
+// applyChain applies a slice of middlewares in reverse order to handler,
+// using wrap to dispatch the per-middleware Apply* call. Early-returns when
+// the slice is empty so callers pay no allocation cost for the common case.
+func applyChain[H any](middlewares []ProviderMiddleware, handler H, wrap func(ProviderMiddleware, H) H) H {
+	if len(middlewares) == 0 {
+		return handler
+	}
+	result := handler
+	for i := len(middlewares) - 1; i >= 0; i-- {
+		result = wrap(middlewares[i], result)
+	}
+	return result
+}
+
+// ApplyText applies the middleware chain to a text handler.
 func (c *ProviderMiddlewareChain) ApplyText(handler TextHandler) TextHandler {
-	if len(c.middlewares) == 0 {
-		return handler
-	}
-
-	result := handler
-	for i := len(c.middlewares) - 1; i >= 0; i-- {
-		result = c.middlewares[i].ApplyText(result)
-	}
-	return result
+	return applyChain(c.middlewares, handler, func(mw ProviderMiddleware, h TextHandler) TextHandler { return mw.ApplyText(h) })
 }
 
-// ApplyStream applies the middleware chain to a stream handler
+// ApplyStream applies the middleware chain to a stream handler.
 func (c *ProviderMiddlewareChain) ApplyStream(handler StreamHandler) StreamHandler {
-	if len(c.middlewares) == 0 {
-		return handler
-	}
-
-	result := handler
-	for i := len(c.middlewares) - 1; i >= 0; i-- {
-		result = c.middlewares[i].ApplyStream(result)
-	}
-	return result
+	return applyChain(c.middlewares, handler, func(mw ProviderMiddleware, h StreamHandler) StreamHandler { return mw.ApplyStream(h) })
 }
 
-// ApplyStructured applies the middleware chain to a structured handler
+// ApplyStructured applies the middleware chain to a structured handler.
 func (c *ProviderMiddlewareChain) ApplyStructured(handler StructuredHandler) StructuredHandler {
-	if len(c.middlewares) == 0 {
-		return handler
-	}
-
-	result := handler
-	for i := len(c.middlewares) - 1; i >= 0; i-- {
-		result = c.middlewares[i].ApplyStructured(result)
-	}
-	return result
+	return applyChain(c.middlewares, handler, func(mw ProviderMiddleware, h StructuredHandler) StructuredHandler { return mw.ApplyStructured(h) })
 }
 
-// ApplyEmbeddings applies the middleware chain to an embeddings handler
+// ApplyEmbeddings applies the middleware chain to an embeddings handler.
 func (c *ProviderMiddlewareChain) ApplyEmbeddings(handler EmbeddingsHandler) EmbeddingsHandler {
-	if len(c.middlewares) == 0 {
-		return handler
-	}
-
-	result := handler
-	for i := len(c.middlewares) - 1; i >= 0; i-- {
-		result = c.middlewares[i].ApplyEmbeddings(result)
-	}
-	return result
+	return applyChain(c.middlewares, handler, func(mw ProviderMiddleware, h EmbeddingsHandler) EmbeddingsHandler { return mw.ApplyEmbeddings(h) })
 }
 
-// ApplyAudio applies the middleware chain to an audio handler
+// ApplyAudio applies the middleware chain to an audio handler.
 func (c *ProviderMiddlewareChain) ApplyAudio(handler AudioHandler) AudioHandler {
-	if len(c.middlewares) == 0 {
-		return handler
-	}
-
-	result := handler
-	for i := len(c.middlewares) - 1; i >= 0; i-- {
-		result = c.middlewares[i].ApplyAudio(result)
-	}
-	return result
+	return applyChain(c.middlewares, handler, func(mw ProviderMiddleware, h AudioHandler) AudioHandler { return mw.ApplyAudio(h) })
 }
 
-// ApplyImage applies the middleware chain to an image handler
+// ApplyImage applies the middleware chain to an image handler.
 func (c *ProviderMiddlewareChain) ApplyImage(handler ImageHandler) ImageHandler {
-	if len(c.middlewares) == 0 {
-		return handler
-	}
-
-	result := handler
-	for i := len(c.middlewares) - 1; i >= 0; i-- {
-		result = c.middlewares[i].ApplyImage(result)
-	}
-	return result
+	return applyChain(c.middlewares, handler, func(mw ProviderMiddleware, h ImageHandler) ImageHandler { return mw.ApplyImage(h) })
 }

@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/garyblankenship/wormhole/internal/utils"
+	providerTransform "github.com/garyblankenship/wormhole/pkg/providers/transform"
 	"github.com/garyblankenship/wormhole/pkg/types"
 )
 
@@ -302,18 +303,7 @@ func (p *Provider) convertUsage(u usage) *types.Usage {
 }
 
 func (p *Provider) mapFinishReason(reason string) types.FinishReason {
-	switch reason {
-	case "stop":
-		return types.FinishReasonStop
-	case "length":
-		return types.FinishReasonLength
-	case "tool_calls", "function_call":
-		return types.FinishReasonToolCalls
-	case "content_filter":
-		return types.FinishReasonContentFilter
-	default:
-		return types.FinishReasonStop
-	}
+	return providerTransform.MapFinishReason(reason)
 }
 
 // transformToolChoice converts tool choice to OpenAI format

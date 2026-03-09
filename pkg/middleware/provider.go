@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/garyblankenship/wormhole/pkg/types"
@@ -102,99 +103,59 @@ func (m *ProviderMetricsMiddleware) GetMetrics() *ProviderMetrics {
 	return m.metrics
 }
 
+func (m *ProviderMetricsMiddleware) recordRequest(counter *int64, elapsed time.Duration, err error) {
+	atomic.AddInt64(counter, 1)
+	atomic.AddInt64(&m.metrics.TotalLatencyMs, elapsed.Milliseconds())
+	if err != nil {
+		atomic.AddInt64(&m.metrics.TotalErrors, 1)
+	}
+}
+
 func (m *ProviderMetricsMiddleware) ApplyText(next types.TextHandler) types.TextHandler {
 	return func(ctx context.Context, request types.TextRequest) (*types.TextResponse, error) {
-		start := time.Now()
-		m.metrics.TextRequests++
-
-		resp, err := next(ctx, request)
-
-		m.metrics.TotalLatencyMs += int64(time.Since(start).Milliseconds())
-		if err != nil {
-			m.metrics.TotalErrors++
-		}
-
-		return resp, err
+		return withMeasuredRequest(ctx, request, next, func(_ *types.TextResponse, err error, d time.Duration) {
+			m.recordRequest(&m.metrics.TextRequests, d, err)
+		})
 	}
 }
 
 func (m *ProviderMetricsMiddleware) ApplyStream(next types.StreamHandler) types.StreamHandler {
 	return func(ctx context.Context, request types.TextRequest) (<-chan types.TextChunk, error) {
-		start := time.Now()
-		m.metrics.StreamRequests++
-
-		stream, err := next(ctx, request)
-
-		m.metrics.TotalLatencyMs += int64(time.Since(start).Milliseconds())
-		if err != nil {
-			m.metrics.TotalErrors++
-		}
-
-		return stream, err
+		return withMeasuredRequest(ctx, request, next, func(_ <-chan types.TextChunk, err error, d time.Duration) {
+			m.recordRequest(&m.metrics.StreamRequests, d, err)
+		})
 	}
 }
 
 func (m *ProviderMetricsMiddleware) ApplyStructured(next types.StructuredHandler) types.StructuredHandler {
 	return func(ctx context.Context, request types.StructuredRequest) (*types.StructuredResponse, error) {
-		start := time.Now()
-		m.metrics.StructuredRequests++
-
-		resp, err := next(ctx, request)
-
-		m.metrics.TotalLatencyMs += int64(time.Since(start).Milliseconds())
-		if err != nil {
-			m.metrics.TotalErrors++
-		}
-
-		return resp, err
+		return withMeasuredRequest(ctx, request, next, func(_ *types.StructuredResponse, err error, d time.Duration) {
+			m.recordRequest(&m.metrics.StructuredRequests, d, err)
+		})
 	}
 }
 
 func (m *ProviderMetricsMiddleware) ApplyEmbeddings(next types.EmbeddingsHandler) types.EmbeddingsHandler {
 	return func(ctx context.Context, request types.EmbeddingsRequest) (*types.EmbeddingsResponse, error) {
-		start := time.Now()
-		m.metrics.EmbeddingsRequests++
-
-		resp, err := next(ctx, request)
-
-		m.metrics.TotalLatencyMs += int64(time.Since(start).Milliseconds())
-		if err != nil {
-			m.metrics.TotalErrors++
-		}
-
-		return resp, err
+		return withMeasuredRequest(ctx, request, next, func(_ *types.EmbeddingsResponse, err error, d time.Duration) {
+			m.recordRequest(&m.metrics.EmbeddingsRequests, d, err)
+		})
 	}
 }
 
 func (m *ProviderMetricsMiddleware) ApplyAudio(next types.AudioHandler) types.AudioHandler {
 	return func(ctx context.Context, request types.AudioRequest) (*types.AudioResponse, error) {
-		start := time.Now()
-		m.metrics.AudioRequests++
-
-		resp, err := next(ctx, request)
-
-		m.metrics.TotalLatencyMs += int64(time.Since(start).Milliseconds())
-		if err != nil {
-			m.metrics.TotalErrors++
-		}
-
-		return resp, err
+		return withMeasuredRequest(ctx, request, next, func(_ *types.AudioResponse, err error, d time.Duration) {
+			m.recordRequest(&m.metrics.AudioRequests, d, err)
+		})
 	}
 }
 
 func (m *ProviderMetricsMiddleware) ApplyImage(next types.ImageHandler) types.ImageHandler {
 	return func(ctx context.Context, request types.ImageRequest) (*types.ImageResponse, error) {
-		start := time.Now()
-		m.metrics.ImageRequests++
-
-		resp, err := next(ctx, request)
-
-		m.metrics.TotalLatencyMs += int64(time.Since(start).Milliseconds())
-		if err != nil {
-			m.metrics.TotalErrors++
-		}
-
-		return resp, err
+		return withMeasuredRequest(ctx, request, next, func(_ *types.ImageResponse, err error, d time.Duration) {
+			m.recordRequest(&m.metrics.ImageRequests, d, err)
+		})
 	}
 }
 

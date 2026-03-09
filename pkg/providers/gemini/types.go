@@ -1,7 +1,5 @@
 package gemini
 
-import "github.com/garyblankenship/wormhole/pkg/types"
-
 // Gemini API response types
 type geminiTextResponse struct {
 	Candidates     []candidate     `json:"candidates"`
@@ -128,12 +126,3 @@ type embedding struct {
 	Values []float64 `json:"values"`
 }
 
-// Finish reason mappings
-var finishReasonMap = map[string]types.FinishReason{
-	"STOP":                      types.FinishReasonStop,
-	"MAX_TOKENS":                types.FinishReasonLength,
-	"SAFETY":                    types.FinishReasonContentFilter,
-	"RECITATION":                types.FinishReasonContentFilter,
-	"OTHER":                     types.FinishReasonOther,
-	"FINISH_REASON_UNSPECIFIED": types.FinishReasonOther,
-}

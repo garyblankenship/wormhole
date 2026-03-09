@@ -373,19 +373,7 @@ func (t *StreamingTransformer) parseDefaultUsage(data any) (*types.Usage, error)
 
 // mapDefaultFinishReason maps a finish reason string to FinishReason enum
 func (t *StreamingTransformer) mapDefaultFinishReason(reason string) types.FinishReason {
-	reason = strings.ToLower(reason)
-	switch reason {
-	case "stop", "end_turn":
-		return types.FinishReasonStop
-	case "length", "max_tokens":
-		return types.FinishReasonLength
-	case "tool_calls", "function_call", "tool_use":
-		return types.FinishReasonToolCalls
-	case "content_filter":
-		return types.FinishReasonContentFilter
-	default:
-		return types.FinishReasonStop
-	}
+	return MapFinishReason(reason)
 }
 
 // Predefined configurations for common providers
@@ -399,22 +387,9 @@ func NewOpenAIStreamingTransformer() *StreamingTransformer {
 		UsagePath:         "usage",
 		IDPath:            "id",
 		ModelPath:         "model",
-		FinishReasonAdapter: func(reason string) types.FinishReason {
-			switch reason {
-			case "stop":
-				return types.FinishReasonStop
-			case "length":
-				return types.FinishReasonLength
-			case "tool_calls", "function_call":
-				return types.FinishReasonToolCalls
-			case "content_filter":
-				return types.FinishReasonContentFilter
-			default:
-				return types.FinishReasonStop
-			}
-		},
-		ReturnsBatch: false,
-		ChunkType:    "text_chunk",
+		FinishReasonAdapter: MapFinishReason,
+		ReturnsBatch:        false,
+		ChunkType:           "text_chunk",
 	})
 }
 
@@ -426,20 +401,9 @@ func NewAnthropicStreamingTransformer() *StreamingTransformer {
 		TextFieldPath:    "delta.text",
 		FinishReasonPath: "delta.stop_reason",
 		UsagePath:        "usage",
-		FinishReasonAdapter: func(reason string) types.FinishReason {
-			switch reason {
-			case "end_turn":
-				return types.FinishReasonStop
-			case "max_tokens":
-				return types.FinishReasonLength
-			case "tool_use":
-				return types.FinishReasonToolCalls
-			default:
-				return types.FinishReasonStop
-			}
-		},
-		ReturnsBatch: false,
-		ChunkType:    "stream_chunk",
+		FinishReasonAdapter: MapFinishReason,
+		ReturnsBatch:        false,
+		ChunkType:           "stream_chunk",
 	})
 }
 

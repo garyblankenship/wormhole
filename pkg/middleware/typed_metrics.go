@@ -61,221 +61,133 @@ func NewTypedMetrics() *TypedMetrics {
 // ApplyText wraps text generation calls with metrics collection
 func (m *TypedMetricsMiddleware) ApplyText(next types.TextHandler) types.TextHandler {
 	return func(ctx context.Context, request types.TextRequest) (*types.TextResponse, error) {
-		start := time.Now()
-
-		resp, err := next(ctx, request)
-
-		duration := time.Since(start)
-		m.recordTextRequest(duration, err)
-
-		return resp, err
+		return withMeasuredRequest(ctx, request, next, func(_ *types.TextResponse, err error, duration time.Duration) {
+			m.recordTextRequest(duration, err)
+		})
 	}
 }
 
 // ApplyStream wraps streaming calls with metrics collection
 func (m *TypedMetricsMiddleware) ApplyStream(next types.StreamHandler) types.StreamHandler {
 	return func(ctx context.Context, request types.TextRequest) (<-chan types.TextChunk, error) {
-		start := time.Now()
-
-		stream, err := next(ctx, request)
-
-		duration := time.Since(start)
-		m.recordStreamRequest(duration, err)
-
-		return stream, err
+		return withMeasuredRequest(ctx, request, next, func(_ <-chan types.TextChunk, err error, duration time.Duration) {
+			m.recordStreamRequest(duration, err)
+		})
 	}
 }
 
 // ApplyStructured wraps structured output calls with metrics collection
 func (m *TypedMetricsMiddleware) ApplyStructured(next types.StructuredHandler) types.StructuredHandler {
 	return func(ctx context.Context, request types.StructuredRequest) (*types.StructuredResponse, error) {
-		start := time.Now()
-
-		resp, err := next(ctx, request)
-
-		duration := time.Since(start)
-		m.recordStructuredRequest(duration, err)
-
-		return resp, err
+		return withMeasuredRequest(ctx, request, next, func(_ *types.StructuredResponse, err error, duration time.Duration) {
+			m.recordStructuredRequest(duration, err)
+		})
 	}
 }
 
 // ApplyEmbeddings wraps embeddings calls with metrics collection
 func (m *TypedMetricsMiddleware) ApplyEmbeddings(next types.EmbeddingsHandler) types.EmbeddingsHandler {
 	return func(ctx context.Context, request types.EmbeddingsRequest) (*types.EmbeddingsResponse, error) {
-		start := time.Now()
-
-		resp, err := next(ctx, request)
-
-		duration := time.Since(start)
-		m.recordEmbeddingsRequest(duration, err)
-
-		return resp, err
+		return withMeasuredRequest(ctx, request, next, func(_ *types.EmbeddingsResponse, err error, duration time.Duration) {
+			m.recordEmbeddingsRequest(duration, err)
+		})
 	}
 }
 
 // ApplyAudio wraps audio calls with metrics collection
 func (m *TypedMetricsMiddleware) ApplyAudio(next types.AudioHandler) types.AudioHandler {
 	return func(ctx context.Context, request types.AudioRequest) (*types.AudioResponse, error) {
-		start := time.Now()
-
-		resp, err := next(ctx, request)
-
-		duration := time.Since(start)
-		m.recordAudioRequest(duration, err)
-
-		return resp, err
+		return withMeasuredRequest(ctx, request, next, func(_ *types.AudioResponse, err error, duration time.Duration) {
+			m.recordAudioRequest(duration, err)
+		})
 	}
 }
 
 // ApplyImage wraps image generation calls with metrics collection
 func (m *TypedMetricsMiddleware) ApplyImage(next types.ImageHandler) types.ImageHandler {
 	return func(ctx context.Context, request types.ImageRequest) (*types.ImageResponse, error) {
-		start := time.Now()
+		return withMeasuredRequest(ctx, request, next, func(_ *types.ImageResponse, err error, duration time.Duration) {
+			m.recordImageRequest(duration, err)
+		})
+	}
+}
 
-		resp, err := next(ctx, request)
-
-		duration := time.Since(start)
-		m.recordImageRequest(duration, err)
-
-		return resp, err
+// recordRequest is a shared helper that atomically increments counters for a single operation type.
+func recordRequest(reqs, errs, dur *int64, duration time.Duration, err error) {
+	atomic.AddInt64(reqs, 1)
+	atomic.AddInt64(dur, int64(duration))
+	if err != nil {
+		atomic.AddInt64(errs, 1)
 	}
 }
 
 // Metrics recording methods
 
 func (m *TypedMetricsMiddleware) recordTextRequest(duration time.Duration, err error) {
-	atomic.AddInt64(&m.metrics.textRequests, 1)
-	atomic.AddInt64(&m.metrics.textDuration, int64(duration))
-
-	if err != nil {
-		atomic.AddInt64(&m.metrics.textErrors, 1)
-	}
+	recordRequest(&m.metrics.textRequests, &m.metrics.textErrors, &m.metrics.textDuration, duration, err)
 }
 
 func (m *TypedMetricsMiddleware) recordStreamRequest(duration time.Duration, err error) {
-	atomic.AddInt64(&m.metrics.streamRequests, 1)
-	atomic.AddInt64(&m.metrics.streamDuration, int64(duration))
-
-	if err != nil {
-		atomic.AddInt64(&m.metrics.streamErrors, 1)
-	}
+	recordRequest(&m.metrics.streamRequests, &m.metrics.streamErrors, &m.metrics.streamDuration, duration, err)
 }
 
 func (m *TypedMetricsMiddleware) recordStructuredRequest(duration time.Duration, err error) {
-	atomic.AddInt64(&m.metrics.structuredRequests, 1)
-	atomic.AddInt64(&m.metrics.structuredDuration, int64(duration))
-
-	if err != nil {
-		atomic.AddInt64(&m.metrics.structuredErrors, 1)
-	}
+	recordRequest(&m.metrics.structuredRequests, &m.metrics.structuredErrors, &m.metrics.structuredDuration, duration, err)
 }
 
 func (m *TypedMetricsMiddleware) recordEmbeddingsRequest(duration time.Duration, err error) {
-	atomic.AddInt64(&m.metrics.embeddingsRequests, 1)
-	atomic.AddInt64(&m.metrics.embeddingsDuration, int64(duration))
-
-	if err != nil {
-		atomic.AddInt64(&m.metrics.embeddingsErrors, 1)
-	}
+	recordRequest(&m.metrics.embeddingsRequests, &m.metrics.embeddingsErrors, &m.metrics.embeddingsDuration, duration, err)
 }
 
 func (m *TypedMetricsMiddleware) recordAudioRequest(duration time.Duration, err error) {
-	atomic.AddInt64(&m.metrics.audioRequests, 1)
-	atomic.AddInt64(&m.metrics.audioDuration, int64(duration))
-
-	if err != nil {
-		atomic.AddInt64(&m.metrics.audioErrors, 1)
-	}
+	recordRequest(&m.metrics.audioRequests, &m.metrics.audioErrors, &m.metrics.audioDuration, duration, err)
 }
 
 func (m *TypedMetricsMiddleware) recordImageRequest(duration time.Duration, err error) {
-	atomic.AddInt64(&m.metrics.imageRequests, 1)
-	atomic.AddInt64(&m.metrics.imageDuration, int64(duration))
+	recordRequest(&m.metrics.imageRequests, &m.metrics.imageErrors, &m.metrics.imageDuration, duration, err)
+}
 
-	if err != nil {
-		atomic.AddInt64(&m.metrics.imageErrors, 1)
+// getStats is a shared helper that atomically reads counters and computes average duration.
+func getStats(reqs, errs, dur *int64) (requests, errors int64, avgDuration time.Duration) {
+	requests = atomic.LoadInt64(reqs)
+	errors = atomic.LoadInt64(errs)
+	totalDuration := atomic.LoadInt64(dur)
+	if requests > 0 {
+		avgDuration = time.Duration(totalDuration / requests)
 	}
+	return
 }
 
 // TypedMetrics getter methods
 
 // GetTextStats returns current text generation metrics
 func (m *TypedMetrics) GetTextStats() (requests int64, errors int64, avgDuration time.Duration) {
-	requests = atomic.LoadInt64(&m.textRequests)
-	errors = atomic.LoadInt64(&m.textErrors)
-	totalDurationNs := atomic.LoadInt64(&m.textDuration)
-
-	if requests > 0 {
-		avgDuration = time.Duration(totalDurationNs / requests)
-	}
-
-	return
+	return getStats(&m.textRequests, &m.textErrors, &m.textDuration)
 }
 
 // GetStreamStats returns current streaming metrics
 func (m *TypedMetrics) GetStreamStats() (requests int64, errors int64, avgDuration time.Duration) {
-	requests = atomic.LoadInt64(&m.streamRequests)
-	errors = atomic.LoadInt64(&m.streamErrors)
-	totalDurationNs := atomic.LoadInt64(&m.streamDuration)
-
-	if requests > 0 {
-		avgDuration = time.Duration(totalDurationNs / requests)
-	}
-
-	return
+	return getStats(&m.streamRequests, &m.streamErrors, &m.streamDuration)
 }
 
 // GetStructuredStats returns current structured output metrics
 func (m *TypedMetrics) GetStructuredStats() (requests int64, errors int64, avgDuration time.Duration) {
-	requests = atomic.LoadInt64(&m.structuredRequests)
-	errors = atomic.LoadInt64(&m.structuredErrors)
-	totalDurationNs := atomic.LoadInt64(&m.structuredDuration)
-
-	if requests > 0 {
-		avgDuration = time.Duration(totalDurationNs / requests)
-	}
-
-	return
+	return getStats(&m.structuredRequests, &m.structuredErrors, &m.structuredDuration)
 }
 
 // GetEmbeddingsStats returns current embeddings metrics
 func (m *TypedMetrics) GetEmbeddingsStats() (requests int64, errors int64, avgDuration time.Duration) {
-	requests = atomic.LoadInt64(&m.embeddingsRequests)
-	errors = atomic.LoadInt64(&m.embeddingsErrors)
-	totalDurationNs := atomic.LoadInt64(&m.embeddingsDuration)
-
-	if requests > 0 {
-		avgDuration = time.Duration(totalDurationNs / requests)
-	}
-
-	return
+	return getStats(&m.embeddingsRequests, &m.embeddingsErrors, &m.embeddingsDuration)
 }
 
 // GetAudioStats returns current audio metrics
 func (m *TypedMetrics) GetAudioStats() (requests int64, errors int64, avgDuration time.Duration) {
-	requests = atomic.LoadInt64(&m.audioRequests)
-	errors = atomic.LoadInt64(&m.audioErrors)
-	totalDurationNs := atomic.LoadInt64(&m.audioDuration)
-
-	if requests > 0 {
-		avgDuration = time.Duration(totalDurationNs / requests)
-	}
-
-	return
+	return getStats(&m.audioRequests, &m.audioErrors, &m.audioDuration)
 }
 
 // GetImageStats returns current image generation metrics
 func (m *TypedMetrics) GetImageStats() (requests int64, errors int64, avgDuration time.Duration) {
-	requests = atomic.LoadInt64(&m.imageRequests)
-	errors = atomic.LoadInt64(&m.imageErrors)
-	totalDurationNs := atomic.LoadInt64(&m.imageDuration)
-
-	if requests > 0 {
-		avgDuration = time.Duration(totalDurationNs / requests)
-	}
-
-	return
+	return getStats(&m.imageRequests, &m.imageErrors, &m.imageDuration)
 }
 
 // GetAllStats returns comprehensive metrics across all operation types
@@ -323,27 +235,15 @@ func (m *TypedMetrics) GetAllStats() map[string]interface{} {
 
 // Reset clears all metrics counters
 func (m *TypedMetrics) Reset() {
-	atomic.StoreInt64(&m.textRequests, 0)
-	atomic.StoreInt64(&m.textErrors, 0)
-	atomic.StoreInt64(&m.textDuration, 0)
-
-	atomic.StoreInt64(&m.streamRequests, 0)
-	atomic.StoreInt64(&m.streamErrors, 0)
-	atomic.StoreInt64(&m.streamDuration, 0)
-
-	atomic.StoreInt64(&m.structuredRequests, 0)
-	atomic.StoreInt64(&m.structuredErrors, 0)
-	atomic.StoreInt64(&m.structuredDuration, 0)
-
-	atomic.StoreInt64(&m.embeddingsRequests, 0)
-	atomic.StoreInt64(&m.embeddingsErrors, 0)
-	atomic.StoreInt64(&m.embeddingsDuration, 0)
-
-	atomic.StoreInt64(&m.audioRequests, 0)
-	atomic.StoreInt64(&m.audioErrors, 0)
-	atomic.StoreInt64(&m.audioDuration, 0)
-
-	atomic.StoreInt64(&m.imageRequests, 0)
-	atomic.StoreInt64(&m.imageErrors, 0)
-	atomic.StoreInt64(&m.imageDuration, 0)
+	fields := []*int64{
+		&m.textRequests, &m.textErrors, &m.textDuration,
+		&m.streamRequests, &m.streamErrors, &m.streamDuration,
+		&m.structuredRequests, &m.structuredErrors, &m.structuredDuration,
+		&m.embeddingsRequests, &m.embeddingsErrors, &m.embeddingsDuration,
+		&m.audioRequests, &m.audioErrors, &m.audioDuration,
+		&m.imageRequests, &m.imageErrors, &m.imageDuration,
+	}
+	for _, f := range fields {
+		atomic.StoreInt64(f, 0)
+	}
 }

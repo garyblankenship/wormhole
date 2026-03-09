@@ -19,137 +19,86 @@ func NewTypedEnhancedMetricsMiddleware(collector *EnhancedMetricsCollector) *Typ
 	}
 }
 
-// extractLabels extracts labels from context
-func (m *TypedEnhancedMetricsMiddleware) extractLabels(ctx context.Context, method, model string) *RequestLabels {
-	provider := "unknown"
-
-	// Try to extract provider from context
-	if ctx != nil {
-		if p, ok := ctx.Value(CtxKeyWormholeProvider).(string); ok {
-			provider = p
-		} else if p, ok := ctx.Value(CtxKeyProvider).(string); ok {
-			provider = p
-		}
-	}
-
-	return &RequestLabels{
-		Provider:  provider,
-		Model:     model,
-		Method:    method,
-		ErrorType: "", // Will be detected by error detector
-	}
-}
-
 // ApplyText wraps text generation calls with enhanced metrics collection
 func (m *TypedEnhancedMetricsMiddleware) ApplyText(next types.TextHandler) types.TextHandler {
 	return func(ctx context.Context, request types.TextRequest) (*types.TextResponse, error) {
-		start := time.Now()
-
-		resp, err := next(ctx, request)
-
-		duration := time.Since(start)
-
-		// Extract labels from context and request
-		labels := m.extractLabels(ctx, "text", request.Model)
-
-		// Estimate token counts if available
-		inputTokens := estimateInputTokens(request.Messages)
-		outputTokens := 0
-		if resp != nil {
-			// Get text from response
-			outputTokens = estimateOutputTokens(resp.Text)
-		}
-
-		m.collector.RecordRequest(labels, duration, err, 0, inputTokens, outputTokens)
-
-		return resp, err
+		return withMeasuredRequest(ctx, request, next, func(resp *types.TextResponse, err error, duration time.Duration) {
+			outputTokens := 0
+			if resp != nil {
+				outputTokens = estimateTextTokens(resp.Text)
+			}
+			m.collector.RecordRequest(
+				requestLabelsFromContext(ctx, "text", request.Model),
+				duration,
+				err,
+				0,
+				estimateInputTokens(request.Messages),
+				outputTokens,
+			)
+		})
 	}
 }
 
 // ApplyStream wraps streaming calls with enhanced metrics collection
 func (m *TypedEnhancedMetricsMiddleware) ApplyStream(next types.StreamHandler) types.StreamHandler {
 	return func(ctx context.Context, request types.TextRequest) (<-chan types.TextChunk, error) {
-		start := time.Now()
-
-		stream, err := next(ctx, request)
-
-		duration := time.Since(start)
-
-		// Extract labels from context and request
-		labels := m.extractLabels(ctx, "stream", request.Model)
-
-		// Estimate input tokens
-		inputTokens := estimateInputTokens(request.Messages)
-
-		m.collector.RecordRequest(labels, duration, err, 0, inputTokens, 0)
-
-		return stream, err
+		return withMeasuredRequest(ctx, request, next, func(_ <-chan types.TextChunk, err error, duration time.Duration) {
+			m.collector.RecordRequest(
+				requestLabelsFromContext(ctx, "stream", request.Model),
+				duration,
+				err,
+				0,
+				estimateInputTokens(request.Messages),
+				0,
+			)
+		})
 	}
 }
 
 // ApplyStructured wraps structured output calls with enhanced metrics collection
 func (m *TypedEnhancedMetricsMiddleware) ApplyStructured(next types.StructuredHandler) types.StructuredHandler {
 	return func(ctx context.Context, request types.StructuredRequest) (*types.StructuredResponse, error) {
-		start := time.Now()
-
-		resp, err := next(ctx, request)
-
-		duration := time.Since(start)
-
-		// Extract labels from context and request
-		labels := m.extractLabels(ctx, "structured", request.Model)
-
-		// Estimate token counts
-		inputTokens := estimateInputTokens(request.Messages)
-		outputTokens := 0
-		if resp != nil {
-			// Structured output size estimation
-			outputTokens = estimateStructuredOutputTokens(resp.Content)
-		}
-
-		m.collector.RecordRequest(labels, duration, err, 0, inputTokens, outputTokens)
-
-		return resp, err
+		return withMeasuredRequest(ctx, request, next, func(resp *types.StructuredResponse, err error, duration time.Duration) {
+			outputTokens := 0
+			if resp != nil {
+				outputTokens = estimateStructuredOutputTokens(resp.Content)
+			}
+			m.collector.RecordRequest(
+				requestLabelsFromContext(ctx, "structured", request.Model),
+				duration,
+				err,
+				0,
+				estimateInputTokens(request.Messages),
+				outputTokens,
+			)
+		})
 	}
 }
 
 // ApplyEmbeddings wraps embeddings calls with enhanced metrics collection
 func (m *TypedEnhancedMetricsMiddleware) ApplyEmbeddings(next types.EmbeddingsHandler) types.EmbeddingsHandler {
 	return func(ctx context.Context, request types.EmbeddingsRequest) (*types.EmbeddingsResponse, error) {
-		start := time.Now()
-
-		resp, err := next(ctx, request)
-
-		duration := time.Since(start)
-
-		// Extract labels from context and request
-		labels := m.extractLabels(ctx, "embeddings", request.Model)
-
-		// Estimate input tokens
 		inputTokens := 0
 		for _, text := range request.Input {
 			inputTokens += estimateTextTokens(text)
 		}
 
-		m.collector.RecordRequest(labels, duration, err, 0, inputTokens, 0)
-
-		return resp, err
+		return withMeasuredRequest(ctx, request, next, func(_ *types.EmbeddingsResponse, err error, duration time.Duration) {
+			m.collector.RecordRequest(
+				requestLabelsFromContext(ctx, "embeddings", request.Model),
+				duration,
+				err,
+				0,
+				inputTokens,
+				0,
+			)
+		})
 	}
 }
 
 // ApplyAudio wraps audio calls with enhanced metrics collection
 func (m *TypedEnhancedMetricsMiddleware) ApplyAudio(next types.AudioHandler) types.AudioHandler {
 	return func(ctx context.Context, request types.AudioRequest) (*types.AudioResponse, error) {
-		start := time.Now()
-
-		resp, err := next(ctx, request)
-
-		duration := time.Since(start)
-
-		// Extract labels from context and request
-		labels := m.extractLabels(ctx, "audio", request.Model)
-
-		// Audio requests typically have input
 		inputTokens := 0
 		if request.Type == "tts" {
 			if text, ok := request.Input.(string); ok {
@@ -157,30 +106,32 @@ func (m *TypedEnhancedMetricsMiddleware) ApplyAudio(next types.AudioHandler) typ
 			}
 		}
 
-		m.collector.RecordRequest(labels, duration, err, 0, inputTokens, 0)
-
-		return resp, err
+		return withMeasuredRequest(ctx, request, next, func(_ *types.AudioResponse, err error, duration time.Duration) {
+			m.collector.RecordRequest(
+				requestLabelsFromContext(ctx, "audio", request.Model),
+				duration,
+				err,
+				0,
+				inputTokens,
+				0,
+			)
+		})
 	}
 }
 
 // ApplyImage wraps image generation calls with enhanced metrics collection
 func (m *TypedEnhancedMetricsMiddleware) ApplyImage(next types.ImageHandler) types.ImageHandler {
 	return func(ctx context.Context, request types.ImageRequest) (*types.ImageResponse, error) {
-		start := time.Now()
-
-		resp, err := next(ctx, request)
-
-		duration := time.Since(start)
-
-		// Extract labels from context and request
-		labels := m.extractLabels(ctx, "image", request.Model)
-
-		// Image requests may have prompt text
-		inputTokens := estimateTextTokens(request.Prompt)
-
-		m.collector.RecordRequest(labels, duration, err, 0, inputTokens, 0)
-
-		return resp, err
+		return withMeasuredRequest(ctx, request, next, func(_ *types.ImageResponse, err error, duration time.Duration) {
+			m.collector.RecordRequest(
+				requestLabelsFromContext(ctx, "image", request.Model),
+				duration,
+				err,
+				0,
+				estimateTextTokens(request.Prompt),
+				0,
+			)
+		})
 	}
 }
 
@@ -196,11 +147,6 @@ func estimateInputTokens(messages []types.Message) int {
 		}
 	}
 	return total
-}
-
-// estimateOutputTokens estimates tokens from output text
-func estimateOutputTokens(text string) int {
-	return estimateTextTokens(text)
 }
 
 // estimateStructuredOutputTokens estimates tokens from structured output

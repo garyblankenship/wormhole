@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/garyblankenship/wormhole/internal/utils"
+	providerTransform "github.com/garyblankenship/wormhole/pkg/providers/transform"
 	"github.com/garyblankenship/wormhole/pkg/types"
 )
 
@@ -272,16 +273,7 @@ func (p *Provider) convertUsage(u messageUsage) *types.Usage {
 }
 
 func (p *Provider) mapStopReason(reason string) types.FinishReason {
-	switch reason {
-	case "end_turn":
-		return types.FinishReasonStop
-	case "max_tokens":
-		return types.FinishReasonLength
-	case "tool_use":
-		return types.FinishReasonToolCalls
-	default:
-		return types.FinishReasonStop
-	}
+	return providerTransform.MapFinishReason(reason)
 }
 
 func (p *Provider) schemaToTool(schema json.RawMessage, name string) (*types.Tool, error) {

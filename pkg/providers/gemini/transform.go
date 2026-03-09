@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/garyblankenship/wormhole/internal/utils"
+	providerTransform "github.com/garyblankenship/wormhole/pkg/providers/transform"
 	"github.com/garyblankenship/wormhole/pkg/types"
 )
 
@@ -335,10 +336,7 @@ func (g *Gemini) transformTextResponse(response *geminiTextResponse) (*types.Tex
 		}
 	}
 
-	finishReason := types.FinishReasonStop
-	if mappedReason, ok := finishReasonMap[candidate.FinishReason]; ok {
-		finishReason = mappedReason
-	}
+	finishReason := providerTransform.MapFinishReason(candidate.FinishReason)
 
 	result := &types.TextResponse{
 		Text:         text,
@@ -465,10 +463,7 @@ func (g *Gemini) processStreamCandidate(candidate candidate) []types.TextChunk {
 	}
 
 	if candidate.FinishReason != "" {
-		finishReason := types.FinishReasonStop
-		if mapped, ok := finishReasonMap[candidate.FinishReason]; ok {
-			finishReason = mapped
-		}
+		finishReason := providerTransform.MapFinishReason(candidate.FinishReason)
 		chunks = append(chunks, types.TextChunk{
 			FinishReason: &finishReason,
 			Model:        "gemini",
