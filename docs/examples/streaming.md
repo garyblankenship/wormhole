@@ -28,7 +28,7 @@ func main() {
 
     // Start streaming
     stream, err := client.Text().                   // [4] Create text request builder
-        Model("gpt-4o").                            // [4a] Specify model to use
+        Model("gpt-5.2").                            // [4a] Specify model to use
         Prompt("Write a haiku about Go programming"). // [4b] Set the user prompt
         Stream(ctx)                                 // [4c] Execute request, returns read-only channel
     if err != nil {
@@ -73,7 +73,7 @@ Always check for errors during streaming:
 
 ```go
 stream, err := client.Text().                    // [1] Build streaming request
-    Model("gpt-4o").
+    Model("gpt-5.2").
     Prompt("Tell me a story").
     Stream(ctx)                                  // [1a] Returns error immediately if setup fails
 if err != nil {
@@ -115,7 +115,7 @@ For applications that need both real-time output and the final result, use `Stre
 
 ```go
 chunks, getResult, err := client.Text().         // [1] Build streaming request
-    Model("gpt-4o").
+    Model("gpt-5.2").
     Prompt("Explain goroutines in detail").
     StreamAndAccumulate(ctx)                     // [2] Returns: channel, accumulator func, error
 if err != nil {
@@ -155,7 +155,7 @@ Use `IsDone()` to detect when streaming is complete:
 
 ```go
 stream, _ := client.Text().                       // [1] Create streaming request
-    Model("gpt-4o").
+    Model("gpt-5.2").
     Prompt("Count to 10").
     Stream(ctx)
 
@@ -207,7 +207,7 @@ Cancel streaming by canceling the context:
 ctx, cancel := context.WithCancel(context.Background())  // [1] Create cancellable context
 
 stream, _ := client.Text().                               // [2] Start streaming with cancellable context
-    Model("gpt-4o").
+    Model("gpt-5.2").
     Prompt("Write a very long story").
     Stream(ctx)
 
@@ -317,7 +317,7 @@ func streamHandler(w http.ResponseWriter, r *http.Request) {
 
     // Start streaming
     stream, err := client.Text().                    // [6] Create streaming request
-        Model("gpt-4o").
+        Model("gpt-5.2").
         Prompt(prompt).
         Stream(ctx)
     if err != nil {
@@ -390,7 +390,7 @@ client.RegisterTool(                                   // [1] Register tool for 
 )
 
 stream, _ := client.Text().                            // [3] Start streaming with tool available
-    Model("gpt-4o").
+    Model("gpt-5.2").
     Prompt("What time is it?").
     Stream(ctx)
 
@@ -435,7 +435,7 @@ Always ensure streams are properly cleaned up:
 ```go
 func streamWithCleanup(ctx context.Context) error {
     stream, err := client.Text().                    // [1] Create stream
-        Model("gpt-4o").
+        Model("gpt-5.2").
         Prompt("Hello").
         Stream(ctx)
     if err != nil {

@@ -7,7 +7,7 @@
 ```go
 // Builder pattern
 resp, err := client.Text().
-    Model("gpt-4o").
+    Model("gpt-5.2").
     Prompt("Hello, world!").
     Temperature(0.7).
     MaxTokens(100).
@@ -56,7 +56,7 @@ var person struct {
 }
 
 resp, err := client.Structured().
-    Model("gpt-4o").
+    Model("gpt-5.2").
     Schema(schema).
     Prompt("Describe a person").
     GenerateInto(ctx, &person)
@@ -155,7 +155,7 @@ client := wormhole.New(
 
 // Claude-specific features (tool calling, code execution)
 resp, err := client.Text().
-    Model("claude-3-5-sonnet").
+    Model("claude-sonnet-4-5").
     Prompt("Write Go code").
     Generate(ctx)
 ```
@@ -169,7 +169,7 @@ client := wormhole.New(
 
 // Gemini multimodal support
 resp, err := client.Text().
-    Model("gemini-1.5-pro").
+    Model("gemini-2.5-pro").
     PromptWithImage("Describe this image", imageBytes).
     Generate(ctx)
 ```
@@ -192,8 +192,8 @@ resp, err := client.Text().
 ### Simple Batch
 ```go
 results := client.Batch().
-    Add(client.Text().Model("gpt-4o").Prompt("Q1")).
-    Add(client.Text().Model("gpt-4o").Prompt("Q2")).
+    Add(client.Text().Model("gpt-5.2").Prompt("Q1")).
+    Add(client.Text().Model("gpt-5.2").Prompt("Q2")).
     Concurrency(5).
     Execute(ctx)
 ```
@@ -209,9 +209,9 @@ responses, errors := client.Batch().
 ```go
 // First successful response wins
 resp, err := client.Batch().
-    Add(client.Text().Model("gpt-4o").Prompt("Q")).
-    Add(client.Text().Model("claude-3-5-sonnet").Prompt("Q")).
-    Add(client.Text().Model("gemini-1.5-pro").Prompt("Q")).
+    Add(client.Text().Model("gpt-5.2").Prompt("Q")).
+    Add(client.Text().Model("claude-sonnet-4-5").Prompt("Q")).
+    Add(client.Text().Model("gemini-2.5-pro").Prompt("Q")).
     ExecuteFirst(ctx)
 ```
 
@@ -243,7 +243,7 @@ client.RegisterTool(
 ### Tool-Enabled Text Generation
 ```go
 resp, err := client.Text().
-    Model("gpt-4o").
+    Model("gpt-5.2").
     Prompt("What's the weather in Paris?").
     EnableToolExecution().
     Generate(ctx)
@@ -254,7 +254,7 @@ resp, err := client.Text().
 ### Multi-Iteration Tool Execution
 ```go
 resp, err := client.Text().
-    Model("gpt-4o").
+    Model("gpt-5.2").
     Prompt("Plan a vacation").
     EnableToolExecution().
     MaxToolIterations(5). // Up to 5 rounds of tool calling
@@ -266,7 +266,7 @@ resp, err := client.Text().
 ### Text Streaming
 ```go
 ch, err := client.Text().
-    Model("gpt-4o").
+    Model("gpt-5.2").
     Prompt("Tell a story").
     Stream(ctx)
 
@@ -286,7 +286,7 @@ for chunk := range ch {
 ### Structured Streaming
 ```go
 ch, err := client.Structured().
-    Model("gpt-4o").
+    Model("gpt-5.2").
     Schema(schema).
     Prompt("Generate structured data").
     Stream(ctx)
@@ -330,8 +330,8 @@ client := wormhole.New(
 ### Fallback Models
 ```go
 resp, err := client.Text().
-    Model("gpt-4o").
-    FallbackModels("gpt-4o-mini", "gpt-3.5-turbo").
+    Model("gpt-5.2").
+    FallbackModels("gpt-5.1-mini", "gpt-5.1-mini").
     Prompt("Important question").
     Generate(ctx)
 ```
@@ -384,7 +384,7 @@ client := wormhole.New(
 ```go
 // Reuse builder configuration
 baseBuilder := client.Text().
-    Model("gpt-4o").
+    Model("gpt-5.2").
     Temperature(0.7)
 
 resp1, _ := baseBuilder.Clone().Prompt("Q1").Generate(ctx)

@@ -76,7 +76,7 @@ go build -o example main.go
 ```
 
 ### Prerequisites
-- Go 1.22+
+- Go 1.23+
 - API keys for desired providers (OpenAI, Anthropic, etc.)
 - Environment variables or direct configuration
 
@@ -95,7 +95,7 @@ Wormhole has evolved from initial concept to production-ready SDK:
 
 - **v1.0.0** - Initial release with core provider support
 - **v1.2.0** - Architectural improvements and thread safety
-- **v1.3.1** - Current version with comprehensive middleware and enterprise features
+- **v1.8.3** - Current version with adaptive rate limiting, lifecycle management, and production hardeningeatures
 
 ### Historical Context
 Originally developed as part of the Meesix AI platform, Wormhole emerged from the need for:

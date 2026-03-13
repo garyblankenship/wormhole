@@ -495,7 +495,7 @@ for _, toolCall := range response.ToolCalls {
 **Solutions**:
 - ✅ Make tool descriptions clear and specific
 - ✅ Verify schema matches expected inputs
-- ✅ Check model supports function calling (gpt-3.5-turbo+, gpt-5+, claude-3+, claude-sonnet-4-5)
+- ✅ Check model supports function calling (gpt-5+, o3+, claude-sonnet-4-5+, gemini-2.5+)
 - ✅ Use explicit prompts: "Use the get_weather tool to..."
 
 ### Infinite Tool Loops

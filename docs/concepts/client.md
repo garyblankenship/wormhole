@@ -18,7 +18,7 @@ client := wormhole.New(
 
 // Request creation with builder pattern
 resp, err := client.Text().
-    Model("gpt-4o").
+    Model("gpt-5.2").
     Prompt("Explain quantum computing").
     Generate(ctx)
 ```
@@ -42,7 +42,7 @@ Request builders automatically delegate to the appropriate provider:
 
 ```go
 // Uses default provider
-resp, _ := client.Text().Model("gpt-4o").Prompt("Hello").Generate(ctx)
+resp, _ := client.Text().Model("gpt-5.2").Prompt("Hello").Generate(ctx)
 
 // Override provider for this request
 resp, _ := client.Text().
@@ -90,13 +90,13 @@ client := wormhole.New(
 ```go
 // Simple request
 resp, err := client.Text().
-    Model("gpt-4o").
+    Model("gpt-5.2").
     Prompt("Explain Go's concurrency model").
     Generate(ctx)
 
 // Streaming
 stream, err := client.Text().
-    Model("gpt-4o").
+    Model("gpt-5.2").
     Prompt("Tell me a story").
     Stream(ctx)
 
@@ -152,7 +152,7 @@ for _, prompt := range prompts {
     wg.Add(1)
     go func(p string) {
         defer wg.Done()
-        resp, _ := client.Text().Model("gpt-4o").Prompt(p).Generate(ctx)
+        resp, _ := client.Text().Model("gpt-5.2").Prompt(p).Generate(ctx)
         // Handle response...
     }(prompt)
 }
@@ -283,7 +283,7 @@ client.RegisterTool(
 
 // Use tools in requests
 resp, _ := client.Text().
-    Model("gpt-4o").
+    Model("gpt-5.2").
     Prompt("What's the weather in Tokyo?").
     WithAutoExecution(10).  // Auto-execute tool calls
     Generate(ctx)
@@ -322,7 +322,7 @@ fmt.Printf("Active: %d, Limited: %d, Rejected: %d\n",
 The client uses **structured error types** with context enrichment:
 
 ```go
-resp, err := client.Text().Model("gpt-4o").Prompt("Hello").Generate(ctx)
+resp, err := client.Text().Model("gpt-5.2").Prompt("Hello").Generate(ctx)
 if err != nil {
     var wErr *types.WormholeError
     if errors.As(err, &wErr) {

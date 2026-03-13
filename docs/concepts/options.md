@@ -206,7 +206,7 @@ client := wormhole.New(
 )
 
 // Uses "openai" by default
-resp, _ := client.Text().Model("gpt-4o").Prompt("Hello").Generate(ctx)
+resp, _ := client.Text().Model("gpt-5.2").Prompt("Hello").Generate(ctx)
 
 // Override for specific request
 resp, _ := client.Text().Using("anthropic").Model("claude-sonnet-4-5").Prompt("Hello").Generate(ctx)

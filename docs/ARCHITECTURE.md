@@ -153,7 +153,7 @@ CommonBuilder (shared config, provider override, validation)
 - Clone support (`.Clone()` for builder reuse)
 
 **Advanced Features**:
-- **Fallback Models**: `.WithFallback("gpt-4o-mini")` auto-retries on primary failure
+- **Fallback Models**: `.WithFallback("gpt-5.1-mini")` auto-retries on primary failure
 - **Tool Auto-Execution**: `.WithAutoExecution(10)` runs multi-turn tool calling loop
 - **Stream & Accumulate**: `.StreamAndAccumulate(ctx)` returns channel + final text getter
 - **Conversation Builder**: `.Conversation(conv)` for multi-turn chats
@@ -382,7 +382,7 @@ wormhole.RegisterTypedTool(client, "get_weather", "Get weather",
 
 // Auto-execute tools in conversation
 resp, _ := client.Text().
-    Model("gpt-4o").
+    Model("gpt-5.2").
     Prompt("What's the weather in NYC?").
     WithAutoExecution(10).  // Max 10 tool call rounds
     Generate(ctx)
@@ -423,7 +423,7 @@ err := pool.Unmarshal(jsonBytes, &target)
 
 ```
 1. Client Call
-   client.Text().Model("gpt-4o").Prompt("Hello").Generate(ctx)
+   client.Text().Model("gpt-5.2").Prompt("Hello").Generate(ctx)
 
 2. Builder Validation
    TextRequestBuilder.Validate()
@@ -460,7 +460,7 @@ err := pool.Unmarshal(jsonBytes, &target)
 
 ```
 1. Client Call
-   stream, _ := client.Text().Model("gpt-4o").Prompt("Hello").Stream(ctx)
+   stream, _ := client.Text().Model("gpt-5.2").Prompt("Hello").Stream(ctx)
 
 2. Provider Streaming Request
    POST /chat/completions with stream=true

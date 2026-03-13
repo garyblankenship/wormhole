@@ -470,7 +470,7 @@ final, _ := client.Text().
 ```go
 // Avoid vendor lock-in by testing across providers
 providers := map[string][]string{
-    "openai":     {"openai/gpt-5-mini", "openai/gpt-4o"},
+    "openai":     {"openai/gpt-5-mini", "openai/gpt-5.2"},
     "anthropic":  {"anthropic/claude-sonnet-4-5", "anthropic/claude-haiku-4-5"},
     "google":     {"google/gemini-2.5-flash", "google/gemini-2.5-pro"},
     "meta":       {"meta-llama/llama-3.1-70b-instruct"},

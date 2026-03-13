@@ -37,7 +37,7 @@ This example demonstrates how to use Wormhole with OpenRouter, the multi-provide
 - `openai/gpt-5-mini` - OpenAI's efficient model
 - `anthropic/claude-sonnet-4-5` - Anthropic's flagship
 - `meta-llama/llama-3.1-8b-instruct` - Meta's open model
-- `google/gemini-pro` - Google's offering
+- `google/gemini-2.5-flash` - Google's offering
 - `mistralai/mixtral-8x7b-instruct` - Mistral's mixture-of-experts
 
 ## What You'll See
