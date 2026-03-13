@@ -119,11 +119,10 @@ response, err := client.Text().
 Anthropic requires the `max_tokens` field to be set. The SDK defaults to 4096 if not specified:
 
 ```go
-maxTokens := 1024
 response, err := client.Text().
     Model("claude-sonnet-4-5").
     Prompt("Summarize this text").
-    MaxTokens(&maxTokens).
+    MaxTokens(1024).
     Generate(ctx)
 ```
 
@@ -231,10 +230,10 @@ response, err := client.Text().
     Generate(ctx)
 
 if err != nil {
-    var apiErr *types.ProviderError
+    var apiErr *types.WormholeError
     if errors.As(err, &apiErr) {
         fmt.Printf("Provider error: %s\n", apiErr.Message)
-        fmt.Printf("Error type: %s\n", apiErr.Type)
+        fmt.Printf("Error code: %s\n", apiErr.Code)
     }
     return
 }

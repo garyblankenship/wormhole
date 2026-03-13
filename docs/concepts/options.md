@@ -41,7 +41,7 @@ client := wormhole.New(
     wormhole.WithOpenAI(apiKey),
     wormhole.WithAnthropic(apiKey),
     wormhole.WithDefaultProvider("openai"),
-    wormhole.WithDebugLogging(true),
+    wormhole.WithDebugLogging(),
 )
 ```
 
@@ -283,13 +283,8 @@ import "github.com/garyblankenship/wormhole/pkg/middleware"
 client := wormhole.New(
     wormhole.WithOpenAI(apiKey),
     wormhole.WithProviderMiddleware(
-        middleware.NewCircuitBreaker(middleware.CircuitBreakerConfig{
-            FailureThreshold: 5,
-            RecoveryTimeout:  30 * time.Second,
-        }),
-        middleware.NewRateLimiter(middleware.RateLimiterConfig{
-            RequestsPerSecond: 10,
-        }),
+        middleware.NewCircuitBreaker(5, 30*time.Second),
+        middleware.RateLimitMiddleware(10),
     ),
 )
 ```
@@ -466,9 +461,7 @@ var ProductionOpts = []wormhole.Option{
     wormhole.WithProviderFromEnv("anthropic"),
     wormhole.WithTimeout(60 * time.Second),
     wormhole.WithProviderMiddleware(
-        middleware.NewCircuitBreaker(middleware.CircuitBreakerConfig{
-            FailureThreshold: 5,
-        }),
+        middleware.NewCircuitBreaker(5, 30*time.Second),
     ),
 }
 
@@ -634,13 +627,8 @@ func NewProductionClient() (*wormhole.Wormhole, error) {
 
         // Production middleware
         wormhole.WithProviderMiddleware(
-            middleware.NewCircuitBreaker(middleware.CircuitBreakerConfig{
-                FailureThreshold: 5,
-                RecoveryTimeout:  30 * time.Second,
-            }),
-            middleware.NewRateLimiter(middleware.RateLimiterConfig{
-                RequestsPerSecond: 10,
-            }),
+            middleware.NewCircuitBreaker(5, 30*time.Second),
+            middleware.RateLimitMiddleware(10),
         ),
 
         // Discovery settings
@@ -669,5 +657,4 @@ func NewTestClient(apiKey string) *wormhole.Wormhole {
 ## See Also
 
 - [Client Architecture](./client.md) - Client lifecycle and usage
-- [Middleware](../middleware/overview.md) - Middleware configuration
 - [Errors](./errors.md) - Error handling and types

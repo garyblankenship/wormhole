@@ -142,6 +142,5 @@ All request builders support these common methods:
 
 ## See Also
 
-- [Quick Start Guide](../getting-started.md)
 - [Examples](../examples/)
 - [pkg.go.dev documentation](https://pkg.go.dev/github.com/garyblankenship/wormhole)

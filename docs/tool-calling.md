@@ -522,4 +522,4 @@ for _, toolCall := range response.ToolCalls {
 
 - [Main README](../README.md) - Full Wormhole documentation
 - [Examples](../examples/tool_calling/) - Complete working examples
-- [API Reference](../API.md) - Complete API documentation
+- [API Reference](api/README.md) - API overview

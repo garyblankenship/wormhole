@@ -271,11 +271,10 @@ Gemini uses `generationConfig` for parameters. The SDK automatically maps standa
 Example:
 
 ```go
-maxTokens := 1024
 response, err := client.Text().
     Model("gemini-2.5-flash").
     Prompt("Summarize this text").
-    MaxTokens(&maxTokens).
+    MaxTokens(1024).
     Temperature(0.7).
     TopP(0.9).
     Stop([]string{"\n\n"}).

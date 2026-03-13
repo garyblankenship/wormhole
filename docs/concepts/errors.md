@@ -144,7 +144,7 @@ if errors.As(err, &validErr) {
 Use built-in type-checking helpers:
 
 ```go
-import "github.com/user/wormhole/pkg/types"
+import "github.com/garyblankenship/wormhole/pkg/types"
 
 if types.IsAuthError(err) {
     // Handle authentication failures
@@ -172,7 +172,7 @@ if types.IsMiddlewareError(err) {
 Check for specific error instances:
 
 ```go
-import "github.com/user/wormhole/pkg/types"
+import "github.com/garyblankenship/wormhole/pkg/types"
 
 if errors.Is(err, types.ErrInvalidAPIKey) {
     // Prompt for new API key
@@ -199,7 +199,7 @@ err := fmt.Errorf("operation failed: %w", originalErr)
 ### Wormhole Error Wrapping
 
 ```go
-import "github.com/user/wormhole/pkg/types"
+import "github.com/garyblankenship/wormhole/pkg/types"
 
 // Create new WormholeError
 err := types.Errorf(ErrorCodeAuth, "authentication failed", originalErr)
@@ -313,7 +313,7 @@ config := &middleware.RetryConfig{
 Get suggested retry delay from error:
 
 ```go
-import "github.com/user/wormhole/pkg/types"
+import "github.com/garyblankenship/wormhole/pkg/types"
 
 delay, ok := types.GetRetryAfter(err)
 if ok {
@@ -325,7 +325,7 @@ if ok {
 ### Using Retry Middleware
 
 ```go
-import "github.com/user/wormhole/pkg/middleware"
+import "github.com/garyblankenship/wormhole/pkg/middleware"
 
 client := &http.Client{Timeout: 30 * time.Second}
 
@@ -349,7 +349,7 @@ resp, err := retryClient.Do(req)
 Use predefined errors for common cases:
 
 ```go
-import "github.com/user/wormhole/pkg/types"
+import "github.com/garyblankenship/wormhole/pkg/types"
 
 var (
     ErrInvalidAPIKey    = types.ErrInvalidAPIKey
@@ -366,7 +366,7 @@ var (
 Convert HTTP status codes to WormholeErrors:
 
 ```go
-import "github.com/user/wormhole/pkg/providers"
+import "github.com/garyblankenship/wormhole/pkg/providers"
 
 statusCode := 429
 err := providers.HTTPStatusToError(statusCode)
@@ -376,7 +376,7 @@ err := providers.HTTPStatusToError(statusCode)
 ### Custom Error Creation
 
 ```go
-import "github.com/user/wormhole/pkg/types"
+import "github.com/garyblankenship/wormhole/pkg/types"
 
 // Simple error
 err := types.NewWormholeError(
@@ -450,6 +450,4 @@ if err := DoWork(); err != nil {
 
 ## See Also
 
-- [Middleware](./middleware.md) - Error handling in middleware layers
-- [Providers](../providers/overview.md) - Provider-specific error handling
-- [Rate Limiting](./rate-limiting.md) - Handling rate limit errors
+- [Providers](../providers/anthropic.md) - Provider-specific error handling

@@ -177,7 +177,7 @@ resp, err := client.Text().
 ### Ollama (Local)
 ```go
 client := wormhole.New(
-    wormhole.WithOllama("http://localhost:11434"),
+    wormhole.WithOllama(types.ProviderConfig{BaseURL: "http://localhost:11434"}),
     wormhole.WithDefaultProvider("ollama"),
 )
 

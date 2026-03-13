@@ -19,7 +19,7 @@ Wormhole is a production-ready Go SDK providing a unified interface to multiple 
 | Provider | Text | Streaming | Structured | Embeddings | Notes |
 |----------|------|-----------|------------|------------|-------|
 | **OpenAI** | ✅ | ✅ | ✅ | ✅ | GPT-4, GPT-5, full feature set |
-| **Anthropic** | ✅ | ✅ | ✅ | ❌ | Claude 3.5 Sonnet/Opus |
+| **Anthropic** | ✅ | ✅ | ✅ | ❌ | Claude 4.5 family |
 | **Gemini** | ✅ | ✅ | ✅ | ✅ | Google's AI models |
 | **OpenRouter** | ✅ | ✅ | ✅ | ✅ | 200+ models, unified access |
 | **Groq** | ✅ | ✅ | ✅ | ❌ | Fast inference, OpenAI-compatible |
@@ -69,7 +69,7 @@ Current API focuses on `Text()` and `Structured()` generation. Missing:
 
 #### 2. Advanced Orchestration
 Provides foundational blocks but lacks higher-level abstractions:
-- Native function calling/tool use
+- ✅ **Native function calling/tool use** (ALREADY IMPLEMENTED - see tool-calling.md)
 - Chain orchestration
 - RAG components and helpers
 
@@ -89,7 +89,7 @@ Provides foundational blocks but lacks higher-level abstractions:
 **Implementation**:
 ```go
 response, err := client.Embeddings().
-    Provider("openai").
+    Using("openai").
     Model("text-embedding-3-small").
     Input("Turn text into vectors", "Because math is beautiful").
     Dimensions(512). // Optional: customize dimensions
@@ -124,7 +124,7 @@ documents := []string{
 }
 
 docResponse, _ := client.Embeddings().
-    Provider("openai").
+    Using("openai").
     Model("text-embedding-3-small").
     Input(documents...).
     Generate(ctx)
@@ -132,7 +132,7 @@ docResponse, _ := client.Embeddings().
 // Step 2: Embed user queries and find similar documents
 query := "coding languages"
 queryResponse, _ := client.Embeddings().
-    Provider("openai").
+    Using("openai").
     Model("text-embedding-3-small").
     Input(query).
     Generate(ctx)
@@ -497,7 +497,7 @@ client := wormhole.New(
 3. Enable debug logging:
 ```go
 client := wormhole.New(
-    wormhole.WithDebugLogging(true),
+    wormhole.WithDebugLogging(),
 )
 ```
 

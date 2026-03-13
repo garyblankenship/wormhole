@@ -68,7 +68,7 @@ client := wormhole.New(
     wormhole.WithOpenAI("sk-..."),
     wormhole.WithAnthropic("sk-ant-..."),
     wormhole.WithDefaultProvider("openai"),
-    wormhole.WithDebugLogging(true),
+    wormhole.WithDebugLogging(),
 )
 ```
 
@@ -79,9 +79,9 @@ client := wormhole.New(
 | `WithOpenAI(key)` | Configure OpenAI provider |
 | `WithAnthropic(key)` | Configure Anthropic provider |
 | `WithGemini(key)` | Configure Google Gemini provider |
-| `WithOllama(baseURL)` | Configure local Ollama provider |
+| `WithOllama(config)` | Configure local Ollama provider |
 | `WithDefaultProvider(name)` | Set default provider for requests |
-| `WithDebugLogging(bool)` | Enable debug logging |
+| `WithDebugLogging(logger...)` | Enable debug logging |
 | `WithProviderMiddleware(...)` | Add middleware chain |
 | `WithCustomProvider(name, factory)` | Register custom provider |
 
