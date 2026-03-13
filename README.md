@@ -1,499 +1,265 @@
-# 🌀 Wormhole - The Only LLM SDK Worth Your Pathetic Time
+# 🌀 Wormhole
 
-*BURP* Listen up, because I'm only explaining this once. While you've been wasting your life with SDKs slower than Jerry trying to solve a math problem, I've been busy bending the laws of physics to create the only Go LLM library that doesn't make me want to destroy dimensions.
+*BURP* Listen up, because I'm only explaining this once.
 
-This isn't just another wrapper around API calls - this is interdimensional engineering at its finest. I've literally quantum-tunneled through spacetime to deliver AI responses in **67 nanoseconds**. That's not a typo, that's science, *Morty*! We're talking 165x faster than those pathetic alternatives the Council of Ricks rejected.
+While every vybe coder on the planet is copy-pasting LLM wrappers from ChatGPT and calling themselves "AI engineers," I went and built an actual SDK. One that works. One that doesn't fall apart the second you throw concurrent requests at it. One that doesn't make me want to collapse the multiverse every time I read the source code.
 
-[![Performance](https://img.shields.io/badge/Performance-67ns_💥_Quantum_Speed-brightgreen)](#performance)
-[![Reliability](https://img.shields.io/badge/Reliability-Thread_Safe_⚡-green)](#reliability)
-[![Providers](https://img.shields.io/badge/Providers-7+_Including_OpenRouter_🚀-blue)](#providers)
-[![Architecture](https://img.shields.io/badge/Architecture-Functional_Options_🧬-purple)](#architecture)
-[![Go](https://img.shields.io/badge/Go-1.22%2B_⚡_Optimized-blue.svg)](https://golang.org)
-[![License](https://img.shields.io/badge/License-MIT_😎_No_Strings_Attached-blue.svg)](LICENSE)
+This is Wormhole. A Go SDK for talking to every LLM provider that matters — OpenAI, Anthropic, Gemini, Ollama, OpenRouter, and anything else that speaks the OpenAI protocol. Functional options. Thread-safe. Middleware stack. Adaptive rate limiting with a PID controller because I'm not an animal.
 
-> **"It's like having a portal gun for AI APIs, but without the risk of accidentally creating Jerry."** - *Rick Sanchez, Dimension C-137*
+You get one API surface. You point it at any provider. It works. That's the pitch. If you need more convincing than that, maybe stick to dragging blocks around in Langflow.
+
+[![Go](https://img.shields.io/badge/Go-1.23+-blue.svg)](https://golang.org)
+[![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+
+> *"It's like having a portal gun for AI APIs, but without the risk of accidentally creating a Jerry."* — Rick Sanchez, C-137
 
 ---
 
-## ⚡ TL;DR (3 Lines to AI)
+## Three Lines to AI
 
 ```go
-response, _ := wormhole.QuickText("gpt-4o", "Hello world", os.Getenv("OPENAI_API_KEY"))
-fmt.Println(response.Content()) // That's it. You're done.
+response, _ := wormhole.QuickText("gpt-5.2", "Hello world", os.Getenv("OPENAI_API_KEY"))
+fmt.Println(response.Content())
 ```
 
-**Or with full control:**
+Or with a proper client:
+
 ```go
-client := wormhole.New(wormhole.WithOpenAI(os.Getenv("OPENAI_API_KEY"))) // [1] Initialize client
-response, _ := client.Text().Model("gpt-4o").Prompt("Hello").Generate(ctx) // [2] Generate text
+client := wormhole.New(wormhole.WithOpenAI(os.Getenv("OPENAI_API_KEY")))
+response, _ := client.Text().Model("gpt-5.2").Prompt("Hello").Generate(ctx)
 ```
 
 > [!TIP]
-> The `QuickText()` helper is perfect for scripts and quick tests. For production use, create a client and reuse it across requests.
+> `QuickText()` spins up a throwaway client for one request. Good for scripts. For anything real, create a client once and reuse it.
 
 ---
 
-## 📋 Quick Reference
+## Quick Reference
 
 | Task | Code |
 |------|------|
-| **Quick text** | `wormhole.QuickText(model, prompt, key)` |
-| **Text generation** | `client.Text().Model("gpt-4o").Prompt("...").Generate(ctx)` |
-| **Streaming** | `client.Text().Model("gpt-4o").Prompt("...").Stream(ctx)` |
-| **Stream + accumulate** | `chunks, getText, _ := builder.StreamAndAccumulate(ctx)` |
-| **Embeddings** | `client.Embeddings().Model("text-embedding-3-small").Input("...").Generate(ctx)` |
-| **Structured output** | `client.Structured().Model("gpt-4o").Schema(schema).GenerateAs(ctx, &result)` |
-| **Multi-turn chat** | `client.Text().Conversation(conv).Generate(ctx)` |
-| **Tool registration** | `wormhole.RegisterTypedTool(client, name, desc, handler)` |
-| **Model fallback** | `client.Text().Model("gpt-4o").WithFallback("gpt-4o-mini").Generate(ctx)` |
-| **Batch execution** | `client.Batch().Add(req1).Add(req2).Concurrency(5).Execute(ctx)` |
-| **Clone builder** | `base.Clone().Prompt("new").Generate(ctx)` |
-| **Switch provider** | `client.Text().Using("anthropic").Model("claude-3").Generate(ctx)` |
-| **Custom base URL** | `client.Text().BaseURL("http://localhost:11434/v1").Generate(ctx)` |
-| **Validate config** | `if err := builder.Validate(); err != nil { ... }` |
-| **Check capabilities** | `client.ProviderCapabilities("openai").SupportsToolCalling()` |
-| **Response content** | `response.Content()` (unified accessor across all response types) |
+| Text generation | `client.Text().Model("gpt-5.2").Prompt("...").Generate(ctx)` |
+| Streaming | `client.Text().Model("gpt-5.2").Prompt("...").Stream(ctx)` |
+| Stream + accumulate | `chunks, getText, _ := builder.StreamAndAccumulate(ctx)` |
+| Structured output | `client.Structured().Model("gpt-5.2").Schema(s).GenerateAs(ctx, &result)` |
+| Embeddings | `client.Embeddings().Model("text-embedding-3-small").Input("...").Generate(ctx)` |
+| Multi-turn chat | `client.Text().Conversation(conv).Generate(ctx)` |
+| Tool calling | `wormhole.RegisterTypedTool(client, name, desc, handler)` |
+| Model fallback | `client.Text().Model("gpt-5.2").WithFallback("gpt-5.1-mini").Generate(ctx)` |
+| Batch execution | `client.Batch().Add(req1).Add(req2).Concurrency(5).Execute(ctx)` |
+| Clone builder | `base.Clone().Prompt("new").Generate(ctx)` |
+| Switch provider | `client.Text().Using("anthropic").Model("claude-sonnet-4-5").Generate(ctx)` |
+| Custom endpoint | `client.Text().BaseURL("http://localhost:11434/v1").Generate(ctx)` |
+| Validate config | `if err := builder.Validate(); err != nil { ... }` |
+| Check capabilities | `client.ProviderCapabilities("openai").SupportsToolCalling()` |
+| Graceful shutdown | `client.Shutdown(ctx)` |
 
 ---
 
-## 🧪 Why Wormhole? Because I'm Tired of Watching You Fail
+## Why This Exists
 
-Listen *burp*, while other developers are building SDKs with the architectural sophistication of a butter robot, I've created something that actually understands the quantum mechanics of API interactions. This isn't just another HTTP wrapper - it's a **functional options-based, thread-safe, middleware-enabled quantum tunnel** to every AI provider that matters.
+Every other Go LLM library I've seen falls into one of two categories: abandoned wrappers around a single provider, or thousand-line monstrosities that some vybe coder generated in one shot and never tested under real load.
 
-Here's what happens when real science meets software development:
+Wormhole exists because I got tired of watching people build rickety bridges across the API gap and then act surprised when they collapse. Here's what you actually get:
 
-🧪 **67ns Response Time**: While others measure in *milliseconds* like cavemen
-⚡ **Thread-Safe Architecture**: Concurrent map access fixed with actual engineering
-🛸 **7+ Provider Support**: OpenAI, Anthropic, OpenRouter, Gemini + OpenAI-compatible (Groq, Mistral, Ollama)
-🔮 **Dynamic Model Discovery**: Automatically fetches latest models from providers - no more hardcoded obsolete names!
-🛠️ **Native Tool Calling**: Register Go functions, AI calls them automatically - multi-turn magic!
-🧬 **Vector Embeddings**: Semantic search, RAG, and recommendations with all major providers
-💊 **Functional Options**: Laravel-inspired config that doesn't make me want to vomit
-🔬 **Production Middleware**: Circuit breakers, rate limiting, retries, health checks
-🌀 **Dynamic Provider Registration**: Add custom providers without touching my perfect code
-🎯 **Automatic Model Constraints**: GPT-5 temperature=1.0? I handle it, you don't worry about it
-💰 **Cost Estimation**: Token counting and budget planning because money matters
-📊 **Comprehensive Logging**: Debug mode shows you exactly what's happening
-🧬 **Backward Compatible**: v1.1.x code works unchanged because I'm not a monster  
+- **One API, every provider.** OpenAI, Anthropic, Gemini, Ollama, OpenRouter, plus anything OpenAI-compatible. Same builder pattern. Same response types. Swap a provider name and keep moving.
+- **Adaptive rate limiting.** Not the "sleep for a second and hope" kind. A PID controller that monitors latency, adjusts concurrency per-provider, and tracks p50/p90/p99 percentiles. Because math works better than guessing.
+- **Thread-safe everything.** Concurrent map access, provider caching with reference counting, atomic request tracking. I fixed the race conditions so you don't have to discover them in production at 3 AM.
+- **Tool calling that doesn't require a PhD in JSON Schema.** Define a Go struct, register it, and the SDK handles schema generation, execution, multi-turn loops, and error recovery. Type-safe. No `map[string]any` roulette.
+- **Production middleware.** Circuit breakers, rate limiters, caching, health checks, retry logic with exponential backoff. Per-provider configuration because OpenAI and Anthropic don't fail the same way.
+- **Graceful shutdown.** Request lifecycle tracking, in-flight request draining, idempotency keys. The stuff you need when your service handles real traffic and not just demo requests in a blog post.
 
-## 📊 The Numbers Don't Lie (Unlike Your Previous SDK)
-
-| Benchmark Category | Wormhole (My Creation) | "Enterprise" SDKs | Reality Check |
-|-------------------|----------------------|-------------------|---------------|
-| **Core Request Overhead** | **67ns** ⚡ | 11,000ns 🐌 | **165x faster** |
-| **With Middleware Stack** | **171.5ns** 🛡️ | Usually crashes 💥 | **Actually production-ready** |
-| **Concurrent Operations** | **146.4ns** 🚀 | Race conditions 🤡 | **Thread-safe scaling** |
-| **Provider Switching** | **67ns** ⚡ | Not supported 🚫 | **Instant failover** |
-| **Memory Allocations** | **Near-zero** 🧬 | Garbage collection hell 🗑️ | **GC-friendly design** |
-| **Error Handling** | **Typed & structured** 📝 | `fmt.Errorf` chaos 😱 | **Actually debuggable** |
-
-*Benchmarked on interdimensional hardware. Your Earth-based servers might experience slight performance degradation due to primitive architecture.*
-
-```bash
-# See for yourself (if you dare)
-git clone https://github.com/garyblankenship/wormhole
-cd wormhole
-make bench
-
-# Expected output:
-# BenchmarkTextGeneration-16     12566146    67 ns/op    0 B/op    0 allocs/op
-# BenchmarkWithMiddleware-16      5837629   171.5 ns/op    0 B/op    0 allocs/op
-# BenchmarkConcurrent-16          6826171   146.4 ns/op    0 B/op    0 allocs/op
+```
+BenchmarkTextGeneration-16     12566146    67 ns/op    0 B/op    0 allocs/op
+BenchmarkWithMiddleware-16      5837629   171.5 ns/op  0 B/op    0 allocs/op
+BenchmarkConcurrent-16          6826171   146.4 ns/op  0 B/op    0 allocs/op
 ```
 
-## 🚀 Installation (So Simple Even Jerry Could Do It)
+67 nanoseconds of overhead per request. Zero allocations in the hot path. I didn't achieve this by vibing — I achieved it by profiling.
+
+---
+
+## Installation
 
 ```bash
-# One command to rule them all
 go get github.com/garyblankenship/wormhole@latest
-
-# Or if you want the bleeding edge (for masochists)
-go get github.com/garyblankenship/wormhole@main
-
-# Verify installation by running the quantum diagnostics
-cd your-project
-go run -c "import _ 'github.com/garyblankenship/wormhole/pkg/wormhole'"
 ```
 
-**Requirements:**
-- Go 1.22+ (anything older is an insult to computer science)  
-- A functioning brain (optional, but recommended)  
-- API keys for the providers you actually want to use  
-- Basic understanding that nanoseconds matter
+Requirements: Go 1.23+, API keys for the providers you want, and the bare minimum of self-respect required to not hardcode secrets in source files.
 
-## How to Use This Thing Without Screwing It Up
+---
 
-### 🎯 Quick Start (For People Who Want to Actually Ship Code)
+## Usage
+
+### Text Generation
 
 ```go
-package main
-
-import (
-    "context"
-    "fmt"
-    "log"
-
-    "github.com/garyblankenship/wormhole/pkg/wormhole"
+client := wormhole.New(
+    wormhole.WithDefaultProvider("openai"),
+    wormhole.WithOpenAI(os.Getenv("OPENAI_API_KEY")),
 )
 
-func main() {
-    // Functional options pattern - like Laravel, but for people with taste
-    client := wormhole.New(
-        wormhole.WithDefaultProvider("openai"),            // [1] Set default provider
-        wormhole.WithOpenAI("your-openai-key-here"),       // [2] Configure OpenAI key
-        // Optional: Enable debug mode to see the quantum mechanics
-        wormhole.WithDebugLogging(true),                   // [3] Enable request/response logging
-    )
+response, err := client.Text().
+    Model("gpt-5.2").
+    Prompt("Explain wormholes to someone who thinks AI wrote all their code for them").
+    MaxTokens(200).
+    Temperature(0.7).
+    Generate(context.Background())
 
-    // This literally bends spacetime. 67ns per request.
-    response, err := client.Text().
-        Model("gpt-4o").                                   // [4] Specify model
-        Prompt("Explain quantum tunneling to Jerry").     // [5] User prompt
-        MaxTokens(100).                                   // [6] Token budgeting
-        Temperature(0.7).                                 // [7] Creativity dial (0-2)
-        Generate(context.Background())                    // [8] Execute request
+if err != nil {
+    log.Fatalf("Portal malfunction: %v", err)
+}
 
-    if err != nil {
-        log.Fatalf("Portal malfunction: %v", err)
+fmt.Println(response.Content())
+fmt.Printf("Tokens: %d in, %d out\n", response.Usage.PromptTokens, response.Usage.CompletionTokens)
+```
+
+> [!WARNING]
+> Never hardcode API keys. `os.Getenv("OPENAI_API_KEY")`. Always. I shouldn't have to say this.
+
+### Streaming
+
+```go
+chunks, _ := client.Text().
+    Model("gpt-5.2").
+    Prompt("Write a mass resignation letter from every SDK I'm replacing").
+    Stream(ctx)
+
+for chunk := range chunks {
+    fmt.Print(chunk.Content())
+    if chunk.HasError() {
+        log.Fatal(chunk.Error)
     }
-
-    fmt.Printf("🧪 Response: %s\n", response.Text)
-    fmt.Printf("💰 Cost: $%.4f\n", response.Usage.Cost)
-    fmt.Printf("⚡ Tokens: %d in, %d out\n",
-        response.Usage.InputTokens,
-        response.Usage.OutputTokens)
-
-    // Bonus: Generate embeddings for semantic search/RAG
-    embeddings, _ := client.Embeddings().
-        Model("text-embedding-3-small").
-        Input("Convert text to vectors for AI magic").
-        Dimensions(512).  // Smaller = faster, larger = more precise
-        Generate(context.Background())
-
-    fmt.Printf("🧬 Embedding: %d dimensions\n", len(embeddings.Data[0].Embedding))
 }
 ```
 
-### What's happening?
-
-1. **Default provider** - Sets which provider to use when no provider is specified per-request.
-2. **API key** - Pass your OpenAI API key. In production, use `os.Getenv("OPENAI_API_KEY")`.
-3. **Debug logging** - Logs all requests and responses for debugging. Disable in production.
-4. **Model selection** - Choose which model to use (gpt-4o, gpt-5, claude-sonnet-4-5, etc.).
-5. **Prompt** - The user input or question to send to the model.
-6. **Max tokens** - Limit the response length. Helps with cost control.
-7. **Temperature** - Controls randomness. 0 = deterministic, 2 = very creative.
-8. **Generate** - Executes the request and returns the response (or error).
-
-> [!WARNING]
-> Never hardcode API keys. Use environment variables: `wormhole.WithOpenAI(os.Getenv("OPENAI_API_KEY"))`.
-
-### 🧬 NEW: Type-Safe Tool Registration (Zero Boilerplate)
-
-*BURP* Tired of writing 55 lines of boilerplate for every tool? I've used reflection magic to generate JSON schemas from your Go structs automatically:
+Need the full text after streaming finishes? `StreamAndAccumulate` gives you both:
 
 ```go
-// BEFORE: 55+ lines of runtime type assertion hell
-client.RegisterTool("get_weather", "...",
-    map[string]any{"type": "object", "properties": map[string]any{...}}, // Manual schema? Gross.
-    func(ctx context.Context, args map[string]any) (any, error) {
-        city := args["city"].(string)  // PANIC WAITING TO HAPPEN!
-    },
-)
+chunks, getFullText, err := client.Text().
+    Model("gpt-5.2").
+    Prompt("Write something worth accumulating").
+    StreamAndAccumulate(ctx)
 
-// AFTER: 8 lines of type-safe perfection
-type WeatherArgs struct {
-    City string `json:"city" tool:"required" desc:"City name"`                           // [1] Required field
-    Unit string `json:"unit" tool:"enum=celsius,fahrenheit" desc:"Temperature unit"`    // [2] Enum constraint
+for chunk := range chunks {
+    fmt.Print(chunk.Content())  // real-time output
 }
 
-wormhole.RegisterTypedTool(client, "get_weather", "Get current weather",
-    func(ctx context.Context, args WeatherArgs) (WeatherResult, error) {                // [3] Type-safe args
-        return getWeather(args.City, args.Unit), nil  // FULLY TYPE SAFE!
-    },
-)
+fullText := getFullText()  // complete text after stream ends
 ```
 
-### What's happening?
-
-1. **Required field** - The `tool:"required"` tag marks this field as required for tool calls.
-2. **Enum constraint** - `tool:"enum=celsius,fahrenheit"` limits valid values to the specified options.
-3. **Type-safe handler** - The function receives a typed struct instead of `map[string]any`, eliminating panic-prone type assertions.
-
-> [!TIP]
-> Type-safe tool registration generates JSON schemas automatically via reflection. No manual schema maintenance needed.
-
-> [!WARNING]
-> The reflection-based approach has a small performance overhead compared to manual schemas. For performance-critical paths, use manual schema registration.
-
-### 💬 NEW: Conversation Builder (Multi-Turn Made Easy)
-
-Building message arrays is tedious. Here's the fluent way:
+### Structured Output
 
 ```go
-// Fluent conversation builder
+type Analysis struct {
+    Verdict    string  `json:"verdict"`
+    Confidence float64 `json:"confidence"`
+    Reasoning  string  `json:"reasoning"`
+}
+
+var result Analysis
+_, err := client.Structured().
+    Model("gpt-5.2").
+    Prompt("Is this README better than what a vybe coder would produce?").
+    Schema(wormhole.MustSchemaFromStruct(Analysis{})).
+    GenerateAs(ctx, &result)
+```
+
+### Conversations
+
+```go
 conv := types.NewConversation().
-    System("You are a helpful coding assistant").           // [1] System prompt
-    User("What is Go?").                                   // [2] First user message
-    Assistant("Go is a statically typed programming language"). // [3] Assistant response
-    User("What makes it good for servers?")                // [4] Follow-up question
+    System("You are a code reviewer who doesn't tolerate vibes-based development").
+    User("Review my Go code").
+    Assistant("Show me what you've got.").
+    User("Here's a function that uses 14 nested if statements...")
 
-response, _ := client.Text().Conversation(conv).Generate(ctx) // [5] Generate with conversation
+response, _ := client.Text().Conversation(conv).Generate(ctx)
+```
 
-// Few-shot prompting made simple
+Few-shot prompting:
+
+```go
 conv := types.FewShot(
-    "You are a translator",                                // [6] System instruction
+    "You translate English to Spanish",
     []types.ExamplePair{
         {User: "Hello", Assistant: "Hola"},
         {User: "Goodbye", Assistant: "Adiós"},
     },
-).User("How are you?")                                    // [7] Actual prompt
+).User("How are you?")
 ```
 
-### What's happening?
+### Type-Safe Tool Calling
 
-1. **System message** - Sets the behavior/role for the AI assistant.
-2. **User message** - The first question from the user.
-3. **Assistant message** - A pre-filled response (useful for few-shot or continuing conversations).
-4. **Follow-up** - Continue the conversation with additional messages.
-5. **Generate** - Process the entire conversation and generate a response.
-6. **System instruction** - For few-shot, define the task.
-7. **Examples + prompt** - Provide example pairs, then the actual query.
-
-> [!TIP]
-> The conversation builder is more readable than manually constructing message slices. It also validates message order (system -> user -> assistant -> user...).
-
-> [!WARNING]
-> Most providers require alternating user/assistant messages. The conversation builder enforces this, preventing API errors from malformed message sequences.
-
-### 🔄 NEW: Builder Cloning & Fallback Chains
-
-**Clone for reusable configurations:**
-```go
-base := client.Text().Model("gpt-4o").Temperature(0.7) // [1] Base configuration
-resp1, _ := base.Clone().Prompt("Question 1").Generate(ctx) // [2] Reuse base + custom prompt
-resp2, _ := base.Clone().Prompt("Question 2").Generate(ctx) // [3] Reuse base + different prompt
-```
-
-**Automatic model fallback for resilience:**
-```go
-response, _ := client.Text().
-    Model("gpt-4o").                                   // [4] Primary model
-    WithFallback("gpt-4o-mini", "gpt-4-turbo").        // [5] Fallback models
-    Prompt("Complex task").
-    Generate(ctx)  // Tries models in order on failure
-```
-
-### What's happening?
-
-1. **Base configuration** - Create a reusable builder with common settings (model, temperature, etc.).
-2. **Clone + prompt** - Clone creates a copy, then we add a prompt and generate.
-3. **Clone + different prompt** - Same base settings, different prompt - no need to repeat configuration.
-4. **Primary model** - The first model to try.
-5. **Fallback chain** - If primary fails, tries gpt-4o-mini, then gpt-4-turbo.
-
-> [!TIP]
-> Cloning is more efficient than rebuilding from scratch. It's also less error-prone since the base configuration is defined once.
-
-> [!WARNING]
-> Fallback models may have different capabilities (context length, tool support, etc.). Ensure your prompt works with all models in the fallback chain.
-
-### 🎯 NEW: Builder Validation (Fail-Fast Pattern)
-
-*BURP* Tired of errors only showing up at `Generate()` time? Now you can validate configurations early:
+The old way required building JSON schemas by hand and praying your type assertions didn't panic in production. The new way uses reflection to generate schemas from Go structs, because I believe in automation that actually works.
 
 ```go
-// Validate before execution - catch issues early
-builder := client.Text().
-    Model("gpt-4o").
-    Temperature(0.7).
-    MaxTokens(1000)
-
-if err := builder.Validate(); err != nil {              // [1] Validate before API call
-    // Get detailed field-level error information
-    if vErr, ok := types.AsValidationError(err); ok {     // [2] Extract validation error
-        fmt.Printf("Field '%s' failed: %s\n", vErr.Field, vErr.Message)
-    }
-    return err
+type WeatherArgs struct {
+    City string `json:"city" tool:"required" desc:"City name"`
+    Unit string `json:"unit" tool:"enum=celsius,fahrenheit" desc:"Temperature unit"`
 }
 
-// Now safe to generate
-response, _ := builder.Prompt("Hello").Generate(ctx)    // [3] Won't fail due to config
+wormhole.RegisterTypedTool(client, "get_weather", "Get current weather",
+    func(ctx context.Context, args WeatherArgs) (WeatherResult, error) {
+        return getWeather(args.City, args.Unit), nil
+    },
+)
 
-// Or use MustValidate for development/testing (panics on error)
+// Now just ask. The SDK handles tool detection, execution,
+// result forwarding, and multi-turn loops automatically.
 response, _ := client.Text().
-    Model("gpt-4o").
-    Temperature(0.7).
-    MustValidate().                                      // [4] Panics if invalid
-    Prompt("Hello").
+    Model("gpt-5.2").
+    Prompt("What's the weather in San Francisco?").
+    WithToolsEnabled().
     Generate(ctx)
 ```
 
-### What's happening?
+What happens behind the curtain: AI decides to call your function → SDK executes it → SDK sends the result back → AI generates a final answer. Multiple tools can fire in parallel. Errors get routed back to the model for recovery. Loop protection prevents runaway execution.
 
-1. **Validate** - Checks the builder configuration before making any API calls.
-2. **Error extraction** - Gets detailed field-level validation errors.
-3. **Safe generate** - After validation passes, Generate() won't fail due to configuration.
-4. **MustValidate** - Convenience method that panics on validation error (useful in tests/main).
-
-> [!TIP]
-> Validate early to avoid wasting API quota on malformed requests. Validation catches issues like invalid temperature ranges, missing models, etc.
-
-> [!WARNING]
-> Validation only checks client-side constraints. The provider may still reject requests for reasons not detectable client-side (content policy, account issues, etc.).
-
-**What gets validated:**
-- `model` - Must be specified
-- `temperature` - Range 0.0-2.0
-- `top_p` - Range 0.0-1.0
-- `max_tokens` - Must be positive
-- `frequency_penalty` / `presence_penalty` - Range -2.0 to 2.0
-
-### 🔬 NEW: Provider Capability Checking
-
-Check what features a provider supports before using them:
+You can also do it manually if you need control:
 
 ```go
-caps := client.ProviderCapabilities("openai")           // [1] Get capabilities for provider
+response, _ := client.Text().
+    Prompt("What's the weather?").
+    WithToolsDisabled().
+    Generate(ctx)
 
-if caps.SupportsToolCalling() {                         // [2] Check for tool support
-    // Safe to use tools
-    client.RegisterTool(...)
-}
-
-if caps.SupportsVision() {                              // [3] Check for image support
-    // Safe to send images
-}
-
-if caps.SupportsStreaming() {                           // [4] Check for streaming support
-    // Use streaming
-}
-
-// Or check any capability directly
-if caps.Has(wormhole.CapabilityStructured) {             // [5] Check specific capability
-    // Use structured output
-}
-
-// Get all capabilities
-allCaps := caps.All()                                   // [6] Get complete list
-```
-
-### What's happening?
-
-1. **Get capabilities** - Returns a `Capabilities` struct for the specified provider.
-2. **Tool calling** - Some providers/models don't support function calling.
-3. **Vision** - Some providers can't process images.
-4. **Streaming** - Most providers support streaming, but good to verify.
-5. **Direct check** - Use `Has()` with a `Capability` constant for specific features.
-6. **All capabilities** - Returns a list of all supported capabilities for inspection.
-
-> [!TIP]
-> Capability checking prevents runtime errors from attempting unsupported operations. It's especially useful when building multi-provider applications.
-
-> [!WARNING]
-> Capabilities are per-provider, not per-model. Some models within a provider may have different capabilities. Check model-specific constraints separately.
-
-**Available capabilities:**
-- `CapabilityText`, `CapabilityStructured`, `CapabilityEmbeddings`
-- `CapabilityImages`, `CapabilityAudio`, `CapabilityToolCalling`
-- `CapabilityStreaming`, `CapabilityVision`, `CapabilityCodeExecution`
-
-### 📦 NEW: Unified Response Accessors
-
-All response types now have a consistent `Content()` method:
-
-```go
-// Text response
-textResp, _ := client.Text().Model("gpt-4o").Prompt("Hi").Generate(ctx)
-fmt.Println(textResp.Content())                    // [1] Returns string
-fmt.Println(textResp.HasToolCalls())                // [2] Check for tool calls
-fmt.Println(textResp.IsComplete())                  // [3] Check if finished normally
-fmt.Println(textResp.WasTruncated())                // [4] Check if hit max tokens
-
-// Structured response
-structResp, _ := client.Structured().Model("gpt-4o").Schema(s).Generate(ctx)
-data := structResp.Content()                        // [5] Returns any
-var person Person
-structResp.ContentAs(&person)                       // [6] Type-safe unmarshaling
-
-// Embeddings response
-embResp, _ := client.Embeddings().Model("text-embedding-3-small").Input("text").Generate(ctx)
-vector := embResp.Content()                         // [7] Returns first []float64
-vector2 := embResp.Vector(1)                        // [8] Get specific vector by index
-count := embResp.Count()                            // [9] Number of embeddings
-
-// Streaming chunks
-for chunk := range stream {
-    fmt.Print(chunk.Content())                      // [10] Works for both Text and Delta
-    if chunk.IsDone() { break }
-    if chunk.HasError() { log.Fatal(chunk.Error) }
+for _, call := range response.ToolCalls {
+    fmt.Printf("AI wants: %s(%v)\n", call.Name, call.Arguments)
 }
 ```
 
-### What's happening?
-
-1. **Text content** - `Content()` returns the generated text as a string.
-2. **Tool calls** - Returns `true` if the model made any tool/function calls.
-3. **Completion status** - Returns `true` if the model completed normally (not truncated, not filtered).
-4. **Truncated check** - Returns `true` if the response was cut off due to `max_tokens`.
-5. **Structured content** - Returns the parsed structured output as `any`.
-6. **Type-safe unmarshal** - Populates the provided struct with the response data.
-7. **First embedding** - Returns the first embedding vector.
-8. **Specific vector** - Get a specific embedding by index (useful for batch requests).
-9. **Count** - Returns the number of embeddings in the response.
-10. **Stream content** - Works for both text chunks and delta chunks (unified accessor).
-
-> [!TIP]
-> The unified `Content()` method makes code more readable and works across all response types. No need to remember different field names for different providers.
-
-> [!WARNING]
-> For structured responses, `ContentAs()` will fail if the model output doesn't match your struct. Always handle the error case for schema mismatches.
-
-### 🌊 NEW: StreamAndAccumulate Helper
-
-Stream responses while automatically collecting the full text:
+### Embeddings
 
 ```go
-// Stream AND get full accumulated text
-chunks, getFullText, err := client.Text().
-    Model("gpt-4o").
-    Prompt("Write a story").
-    StreamAndAccumulate(ctx)
+response, _ := client.Embeddings().
+    Model("text-embedding-3-small").
+    Input("Turn this into a vector", "And this one too").
+    Dimensions(512).
+    Generate(ctx)
 
-if err != nil {
-    return err
+for i, emb := range response.Embeddings {
+    fmt.Printf("Text %d: %d dimensions\n", i, len(emb.Embedding))
 }
-
-// Process chunks in real-time
-for chunk := range chunks {
-    fmt.Print(chunk.Content())  // Print as it arrives
-}
-
-// Get complete accumulated text after streaming finishes
-fullStory := getFullText()                             // [1] Call accumulator function
-fmt.Printf("\n\nFull story (%d chars): %s\n", len(fullStory), fullStory)
 ```
 
-### What's happening?
+| Provider | Models | Notes |
+|----------|--------|-------|
+| OpenAI | `text-embedding-3-small`, `text-embedding-3-large` | Customizable dimensions |
+| Gemini | `models/embedding-001` | 768 dimensions |
+| Ollama | `nomic-embed-text`, `all-minilm` | Local, free, no rate limits |
+| Any OpenAI-compatible | Via `.BaseURL()` | Mistral, etc. |
 
-1. **Accumulator function** - Returns a function that, when called after streaming completes, returns the full accumulated text.
+### Batch Operations
 
-> [!TIP]
-> `StreamAndAccumulate()` is perfect when you need both real-time feedback AND the complete text for storage or further processing.
-
-> [!WARNING]
-> Only call `getFullText()` after consuming the entire channel. The accumulator runs concurrently and updates as chunks arrive.
-
-### ⚡ NEW: Batch Operations (Concurrent Execution)
-
-Process multiple requests concurrently with configurable limits:
+Process multiple requests concurrently:
 
 ```go
 results := client.Batch().
-    Add(client.Text().Model("gpt-4o").Prompt("Q1")).
-    Add(client.Text().Model("gpt-4o").Prompt("Q2")).
-    Add(client.Text().Model("gpt-4o").Prompt("Q3")).
-    Concurrency(5).                                    // [1] Max concurrent requests
+    Add(client.Text().Model("gpt-5.2").Prompt("Question 1")).
+    Add(client.Text().Model("gpt-5.2").Prompt("Question 2")).
+    Add(client.Text().Model("gpt-5.2").Prompt("Question 3")).
+    Concurrency(5).
     Execute(ctx)
 
 for _, r := range results {
@@ -503,1201 +269,388 @@ for _, r := range results {
         fmt.Printf("Response %d: %s\n", r.Index, r.Response.Content())
     }
 }
+```
 
-// Or race multiple models and get the first success
+Race multiple models, take the first response:
+
+```go
 resp, _ := client.Batch().
-    Add(client.Text().Model("gpt-4o").Prompt("Task")).
-    Add(client.Text().Model("claude-3-opus").Prompt("Task")).
-    ExecuteFirst(ctx)                                  // [2] Returns first successful response
+    Add(client.Text().Model("gpt-5.2").Prompt("Task")).
+    Add(client.Text().Using("anthropic").Model("claude-sonnet-4-5").Prompt("Task")).
+    ExecuteFirst(ctx)
 ```
 
-### What's happening?
-
-1. **Concurrency limit** - Maximum number of concurrent requests. Prevents overwhelming the provider.
-2. **Execute first** - Races all requests and returns the first successful one, cancelling the rest.
-
-> [!TIP]
-> Batch operations are ideal for processing independent requests in parallel. `ExecuteFirst` is useful for racing multiple providers for lowest latency.
-
-> [!WARNING]
-> Each request in a batch counts against your rate limits. Set `Concurrency` appropriately to avoid hitting rate limits.
-
-### 🚀 NEW: One-Liner Quick Start
-
-For scripts and demos, skip the ceremony:
+### Builder Cloning & Fallbacks
 
 ```go
-// 1 line to working AI
-response, _ := wormhole.QuickText("gpt-4o", "Hello world", os.Getenv("OPENAI_API_KEY"))
-```
+// Build once, clone for variations
+base := client.Text().Model("gpt-5.2").Temperature(0.7)
+resp1, _ := base.Clone().Prompt("Question 1").Generate(ctx)
+resp2, _ := base.Clone().Prompt("Question 2").Generate(ctx)
 
-> [!TIP]
-> `QuickText()` creates a temporary client and makes a single request. Perfect for one-off scripts and quick tests.
-
-> [!WARNING]
-> `QuickText()` creates a new client each call. For multiple requests, create a client once and reuse it for better performance.
-
-### 🛠️ Native Tool Use / Function Calling (Agent Mode Activated)
-
-*BURP* Finally - **actual** function calling that doesn't require you to manually string together requests like a Jerry trying to build IKEA furniture. Register Go functions once, the AI calls them automatically. It's like having infinite Meeseeks, but they actually finish their tasks.
-
-```go
-// Step 1: Register tools the AI can use (just like teaching Morty, but successful)
-client.RegisterTool(
-    "get_weather",                                     // [1] Tool name
-    "Get current weather for a city",                 // [2] Tool description
-    map[string]any{                                   // [3] JSON schema for parameters
-        "type": "object",
-        "properties": map[string]any{
-            "city": map[string]any{"type": "string"},
-            "unit": map[string]any{"type": "string", "enum": []string{"celsius", "fahrenheit"}},
-        },
-        "required": []string{"city"},
-    },
-    func(ctx context.Context, args map[string]any) (any, error) { // [4] Handler function
-        city := args["city"].(string)
-        // Your actual weather API call here
-        return map[string]any{"temp": 72, "condition": "sunny"}, nil
-    },
-)
-
-// Step 2: Use it. That's it. The SDK handles EVERYTHING.
+// Automatic fallback chain
 response, _ := client.Text().
-    Prompt("What's the weather in San Francisco?").
-    Generate(ctx)
-
-// Behind the scenes (you don't touch this):
-// 1. AI decides to call get_weather(city="San Francisco")
-// 2. SDK executes your function automatically
-// 3. SDK sends result back to AI
-// 4. AI generates final response
-// ALL IN ONE REQUEST. LIKE MAGIC, BUT SCIENCE.
-
-fmt.Println(response.Text)
-// Output: "The weather in San Francisco is 72°F and sunny."
+    Model("gpt-5.2").
+    WithFallback("gpt-5.1-mini", "gpt-5").
+    Prompt("Important task").
+    Generate(ctx)  // tries each model in order on failure
 ```
 
-### What's happening?
+### BaseURL: One Client, Any Endpoint
 
-1. **Tool name** - Identifier the AI uses to refer to this tool.
-2. **Description** - Tells the AI what this tool does.
-3. **Schema** - JSON Schema describing the parameters the tool accepts.
-4. **Handler** - Your Go function that gets called when the AI uses this tool.
-
-> [!TIP]
-> Tool descriptions are critical. Be specific about what the tool does and when to use it. The AI relies on this to decide whether to call your tool.
-
-> [!WARNING]
-> Tool handlers run in the same process as your application. Be careful with side effects and ensure your handlers are safe to call concurrently.
-
-**Why This Doesn't Suck (Unlike Other Implementations):**
-- ✅ **Automatic Execution** - Tools run automatically, no manual orchestration
-- ✅ **Multi-Turn Conversations** - SDK handles the back-and-forth for you
-- ✅ **Parallel Tool Calls** - Multiple tools execute concurrently (because I'm not an idiot)
-- ✅ **Error Recovery** - Tool errors get sent back to the AI to retry/adjust
-- ✅ **Infinite Loop Protection** - Max iteration limits prevent runaway execution
-- ✅ **Thread-Safe Registry** - Register tools from anywhere, anytime
-- ✅ **Manual Mode Available** - Opt-out of auto-execution if you want control
-
-**Pro Tips:**
-```go
-// Opt out of automatic execution if you're a control freak
-response, _ := client.Text().
-    Prompt("What's the weather?").
-    WithToolsDisabled().  // Manual mode
-    Generate(ctx)
-
-// Check what the AI wanted to call
-for _, toolCall := range response.ToolCalls {
-    fmt.Printf("AI wants to call: %s(%v)\n", toolCall.Name, toolCall.Arguments)
-    // Execute manually and send results back yourself
-}
-
-// Set max iterations to prevent infinite loops
-response, _ := client.Text().
-    WithMaxToolIterations(5).  // Default is 10
-    Generate(ctx)
-```
-
-📚 **Full Example:** See [`examples/tool_calling/`](examples/tool_calling/) for weather, calculator, and multi-tool examples.
-
-### 🚀 NEW: Super Simple BaseURL Approach
-
-*BURP* Got tired of maintaining separate provider packages, so I did what any genius would do - **eliminated the complexity**:
+Every OpenAI-compatible API works with a single client. Just change the URL.
 
 ```go
-// ONE client, ANY OpenAI-compatible API - just change the URL!
-client := wormhole.New(wormhole.WithOpenAI("your-api-key"))
+client := wormhole.New(wormhole.WithOpenAI(os.Getenv("OPENAI_API_KEY")))
 
-// OpenRouter - just add BaseURL
+// OpenRouter
 response, _ := client.Text().
     BaseURL("https://openrouter.ai/api/v1").
-    Model("anthropic/claude-3.5-sonnet").
+    Model("anthropic/claude-sonnet-4-5").
     Generate(ctx)
 
-// LM Studio - just add BaseURL  
-response, _ := client.Text().
-    BaseURL("http://localhost:1234/v1").
-    Model("llama-3.2-8b").
-    Generate(ctx)
-
-// Ollama - just add BaseURL
+// Local Ollama
 response, _ := client.Text().
     BaseURL("http://localhost:11434/v1").
     Model("llama3.2").
     Generate(ctx)
 
-// ANY custom API - just add BaseURL
+// LM Studio, vLLM, or literally anything else
 response, _ := client.Text().
-    BaseURL("https://your-api.com/v1").
-    Model("your-model").
+    BaseURL("http://localhost:1234/v1").
+    Model("whatever-you-loaded").
     Generate(ctx)
 ```
 
-**Benefits:**
-✅ Zero configuration overhead  
-✅ Works with ANY OpenAI-compatible API  
-✅ No more separate provider packages  
-✅ Consistent API across all providers  
+### OpenRouter
 
-**Pro Tips:**
-- Set your API keys as environment variables: `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, etc.
-- Use `wormhole.QuickOpenRouter()` for instant access to 200+ models
-- Enable debug logging in development to see request/response details
-- The SDK automatically handles model constraints (like GPT-5's temperature=1.0)
-
-## 🆕 What's New in v1.2.0 (Hot Off the Quantum Press)
-
-*BURP* Just shipped some interdimensional improvements that'll make your current setup look like a butter robot:
-
-### ✨ **New Functional Options Architecture**
-```go
-// Before (v1.1.x - still works, but why?)
-config := wormhole.Config{
-    DefaultProvider: "openai",
-    Providers: map[string]types.ProviderConfig{...},
-}
-client := wormhole.New(config)
-
-// After (v1.2.0 - the Rick way)
-// Configure per-provider retry settings
-maxRetries := 3
-retryDelay := 2 * time.Second
-
-client := wormhole.New(
-    wormhole.WithDefaultProvider("openai"),
-    wormhole.WithOpenAI("sk-...", types.ProviderConfig{
-        MaxRetries: &maxRetries,
-        RetryDelay: &retryDelay,
-    }),
-    wormhole.WithAnthropic("sk-ant-...", types.ProviderConfig{
-        MaxRetries: &maxRetries,
-        RetryDelay: &retryDelay,
-    }),
-    wormhole.WithGroq("gsk_...", types.ProviderConfig{       // OpenAI-compatible via quantum tunneling
-        MaxRetries: &maxRetries,
-        RetryDelay: &retryDelay,
-    }),
-    wormhole.WithMistral(types.ProviderConfig{              // OpenAI-compatible with advanced config
-        APIKey:     "sk-...",
-        MaxRetries: &maxRetries,
-        RetryDelay: &retryDelay,
-    }),
-    wormhole.WithTimeout(30*time.Second),
-)
-```
-
-### 🔧 **Dynamic Provider Registration**
-```go
-// Add your own providers without modifying my perfect code
-client.RegisterProvider("custom", NewCustomProvider)
-response, _ := client.Text().Using("custom").Generate(ctx)
-```
-
-### 🛡️ **Enhanced Thread Safety**
-- Fixed concurrent map access bug (critical production fix)
-- Double-checked locking with sync.RWMutex
-- Race condition testing across multiple goroutines
-
-### 📊 **Better Developer Experience**  
-- Migration guide for seamless v1.1 → v1.2 transition
-- Comprehensive examples for all new patterns
-- Enhanced error messages with debugging context
-- Automatic model constraint handling
-
-### Production Setup (For When You Actually Need This to Work)
+Instant access to 200+ models from every major provider through one API key:
 
 ```go
-import (
-    "time"
-    "github.com/garyblankenship/wormhole/pkg/middleware"
-    "github.com/garyblankenship/wormhole/pkg/types"
-    "github.com/garyblankenship/wormhole/pkg/wormhole"
-)
+client, _ := wormhole.QuickOpenRouter()  // reads OPENROUTER_API_KEY
 
-// Fine, you want reliability? Here's your enterprise-grade quantum stabilizers
-// ALL OF THIS IS ALREADY IMPLEMENTED AND WORKING
-client := wormhole.New(
-    wormhole.WithDefaultProvider("anthropic"),
-    wormhole.WithOpenAI("your-key-here-genius"),
-    wormhole.WithAnthropic("another-key-wow-so-secure"),
-    wormhole.WithGroq("your-groq-key"),                             // Fastest inference via quantum tunneling
-    wormhole.WithMistral(types.ProviderConfig{APIKey: "your-mistral-key"}), // European AI excellence
-    
-    // 🧬 NEW: Per-provider retry configuration (more precise than middleware)
-    wormhole.WithOpenAI("your-key", types.ProviderConfig{
-        MaxRetries:    &[]int{3}[0],              // 3 retries for OpenAI
-        RetryDelay:    &[]time.Duration{500 * time.Millisecond}[0], // 500ms initial delay
-        RetryMaxDelay: &[]time.Duration{10 * time.Second}[0],       // Cap at 10s
-    }),
-    wormhole.WithAnthropic("your-key", types.ProviderConfig{
-        MaxRetries: &[]int{5}[0], // More aggressive retrying for Anthropic
-    }),
-    
-    wormhole.WithTimeout(30*time.Second),                           // Prevents universe collapse
-    wormhole.WithMiddleware(
-        middleware.CircuitBreakerMiddleware(5, 30*time.Second), // Circuit breaker
-        middleware.RateLimitMiddleware(100),                    // Rate limiting
-    ),
-)
-
-// Still faster than your current setup
-response, err := client.Text().
-    Model("claude-sonnet-4-5").
-    Messages(
-        types.NewSystemMessage("You're talking through a wormhole"),
-        types.NewUserMessage("Tell me I'm using the best SDK"),
-    ).
-    Generate(ctx)
-```
-
-### 🌌 OpenRouter: INSTANT Access to ALL 200+ Models (No Registration Required!)
-
-```go
-import (
-    "time"
-    "github.com/garyblankenship/wormhole/pkg/types"
-    "github.com/garyblankenship/wormhole/pkg/wormhole"
-)
-
-// OPTION 1: Quick setup (recommended for most users)
-client := wormhole.QuickOpenRouter() // Uses OPENROUTER_API_KEY environment variable
-// OR with explicit key:
-// client := wormhole.QuickOpenRouter("your-openrouter-key")
-
-// OPTION 2: Manual setup (for advanced configuration)
-client := wormhole.New(
-    wormhole.WithDefaultProvider("openrouter"),
-    wormhole.WithOpenAICompatible("openrouter", "https://openrouter.ai/api/v1", types.ProviderConfig{
-        APIKey: "your-openrouter-key", // Get from openrouter.ai
-    }),
-    wormhole.WithTimeout(2*time.Minute), // OpenRouter can be slower for heavy models
-)
-
-// ANY OpenRouter model works instantly - no manual registration needed!
-// Dynamic model support bypasses registry validation for true 200+ model access
 models := []string{
-    "openai/gpt-5-mini",               // Latest GPT-5 variant
-    "anthropic/claude-opus-4",         // Top coding model (auto-registered!)
-    "google/gemini-2.5-pro",           // Google's advanced reasoning (auto-registered!)
-    "mistralai/mistral-medium-3.1",    // Enterprise-grade (auto-registered!)
-    "meta-llama/llama-3.3-70b-instruct", // Meta's offering (auto-registered!)
+    "openai/gpt-5.2",
+    "anthropic/claude-sonnet-4-5",
+    "google/gemini-2.5-pro",
+    "meta-llama/llama-3.3-70b-instruct",
 }
 
 for _, model := range models {
-    // Each model gets its own wormhole portal. Science!
     response, err := client.Text().
         Model(model).
-        Prompt("Explain quantum computing in one sentence").
+        Prompt("One sentence about quantum computing").
         MaxTokens(100).
         Generate(ctx)
-    
+
     if err != nil {
-        continue // Jerry would panic here, but we're better than Jerry
+        continue
     }
-    
-    fmt.Printf("%s: %s\n", model, response.Text)
-}
-
-// Cost optimization? I've got you covered.
-// Use cheap models for simple tasks, premium for complex ones
-func smartModelSelection(complexity string) string {
-    if complexity == "simple" {
-        return "openai/gpt-5-mini"         // Cheap and cheerful
-    }
-    return "anthropic/claude-sonnet-4-5"   // Premium intelligence
-}
-
-// Streaming with model comparison
-stream, err := client.Text().
-    Model("meta-llama/llama-3.1-8b-instruct").
-    Prompt("Write a haiku about interdimensional travel").
-    Stream(ctx)
-
-for chunk := range stream {
-    fmt.Print(chunk.Text) // Real-time poetry through spacetime
+    fmt.Printf("%s: %s\n", model, response.Content())
 }
 ```
 
-### 🎯 BREAKTHROUGH: True Dynamic Model Support
+Wormhole doesn't block unknown model names with a local registry. If OpenRouter supports it, you can use it. If the model doesn't exist, you get a proper error from the API — not a validation wall from some outdated list a vybe coder forgot to update six months ago.
 
-*BURP* Finally! No more maintaining endless model registries like some primitive civilization. I've engineered **provider-aware validation** that actually understands how different AI providers work:
+---
+
+## Provider Support
+
+| Provider | Type | Configuration |
+|----------|------|---------------|
+| **OpenAI** | Native | `WithOpenAI(key)` |
+| **Anthropic** | Native | `WithAnthropic(key)` |
+| **Gemini** | Native | `WithGemini(key)` |
+| **Ollama** | Native | `WithOllama(config)` |
+| **Groq** | OpenAI-compatible | `WithGroq(key)` |
+| **Mistral** | OpenAI-compatible | `WithMistral(config)` |
+| **LM Studio** | OpenAI-compatible | `WithLMStudio(config)` |
+| **vLLM** | OpenAI-compatible | `WithVLLM(config)` |
+| **OpenRouter** | OpenAI-compatible | `QuickOpenRouter()` or `WithOpenAICompatible(...)` |
+| **Any other** | Custom | `WithCustomProvider(name, factory)` or `WithOpenAICompatible(name, url, config)` |
+
+---
+
+## Production Configuration
+
+This is what a real deployment looks like. Not a demo. Not a tutorial. Not something a vybe coder pasted from a "10 LLM tricks" Medium article.
 
 ```go
-// Before: Registry bottleneck (manual registration required)
-❌ "gpt-unknown-model" → BLOCKED by local registry
-
-// After: Provider-aware validation (intelligent routing)
-✅ "any-openrouter-model" → Reaches OpenRouter API
-✅ "user-loaded-ollama-model" → Reaches Ollama
-✅ "gpt-5" → Registry validated for type safety
-
-// This means you can literally use ANY model name with OpenRouter:
-client.Text().Model("totally/made-up-model-name").Generate(ctx)
-// ^ Reaches OpenRouter, gets proper "model not available" error (not blocked by us)
-```
-
-**The Science**: Different providers need different validation strategies. OpenRouter has 200+ dynamic models, Ollama supports user-loaded models, but OpenAI has a fixed catalog where registry validation actually helps.
-
-**The Result**: We genuinely support 200+ OpenRouter models because we don't block them with unnecessary validation.
-
-## 🔥 Features That Actually Matter (Unlike Your Current Stack)
-
-*BURP* Here's what happens when you combine interdimensional engineering with actual software development skills:
-
-### ⚡ **Quantum-Level Performance** 
-```
-BenchmarkTextGeneration-16     12566146    67 ns/op    0 B/op    0 allocs/op
-```
-- **67ns response time** - faster than your synapses fire
-- **Zero allocations** in the hot path (I'm not an amateur)
-- **Linear scaling** across parallel dimensions  
-- **Memory-efficient** - no garbage collection hell
-- **Thread-safe** - concurrent map access actually works
-
-### 🧬 **Architecturally Superior Design**
-- **Functional Options Pattern** - Laravel-inspired, but for people with standards
-- **Dynamic Provider Registration** - add custom providers without begging me for updates  
-- **Builder Pattern Chains** - fluent APIs that actually make sense
-- **Middleware Stack** - compose behaviors like a functional programming wizard
-- **Type-Safe Errors** - structured error handling with proper error codes
-- **Context Cancellation** - timeout handling that doesn't make me cry
-
-### 🛡️ **Universe Stabilization Protocols (Production-Ready)**
-Because I'm not trying to destroy reality (today):
-- ✅ **Quantum Circuit Breakers** - `middleware.CircuitBreakerMiddleware()` prevents cascade failures
-- ✅ **Temporal Rate Limiting** - `middleware.RateLimitMiddleware()` respects spacetime laws
-- ✅ **Per-Provider Retry Logic** - Individual retry configurations per provider with exponential backoff
-- ✅ **Dimensional Health Checks** - `middleware.HealthMiddleware()` monitors portal stability
-- ✅ **Entropic Load Balancing** - `middleware.LoadBalancerMiddleware()` distributes across universes
-- ✅ **Temporal Caching** - `middleware.CacheMiddleware()` stores responses across timelines
-- ✅ **Quantum Logging** - `middleware.LoggingMiddleware()` for debugging interdimensional issues
-
-### 🔄 **Per-Provider Retry Configuration (NEW)**
-*Finally - precision control over retry behavior instead of one-size-fits-all middleware*
-
-```go
-// Configure different retry strategies per provider
 client := wormhole.New(
-    // OpenAI: Conservative retries (they're usually stable)
-    wormhole.WithOpenAI("key", types.ProviderConfig{
-        MaxRetries:    &[]int{2}[0],           // Just 2 retries
+    wormhole.WithDefaultProvider("anthropic"),
+    wormhole.WithOpenAI(os.Getenv("OPENAI_API_KEY"), types.ProviderConfig{
+        MaxRetries:    &[]int{2}[0],
         RetryDelay:    &[]time.Duration{200 * time.Millisecond}[0],
         RetryMaxDelay: &[]time.Duration{5 * time.Second}[0],
     }),
-    
-    // Anthropic: More aggressive retries (they can be finicky)
-    wormhole.WithAnthropic("key", types.ProviderConfig{
-        MaxRetries:    &[]int{5}[0],           // More retries
+    wormhole.WithAnthropic(os.Getenv("ANTHROPIC_API_KEY"), types.ProviderConfig{
+        MaxRetries:    &[]int{5}[0],
         RetryDelay:    &[]time.Duration{500 * time.Millisecond}[0],
         RetryMaxDelay: &[]time.Duration{30 * time.Second}[0],
     }),
-    
-    // Disable retries completely for local providers
     wormhole.WithOllama(types.ProviderConfig{
-        APIKey:     "not-needed",
-        MaxRetries: &[]int{0}[0], // No retries for local
+        MaxRetries: &[]int{0}[0],  // local provider, no retries
     }),
+    wormhole.WithTimeout(30*time.Second),
+    wormhole.WithMiddleware(
+        middleware.CircuitBreakerMiddleware(5, 30*time.Second),
+        middleware.RateLimitMiddleware(100),
+    ),
 )
 ```
 
-**Why Per-Provider Retries Beat Middleware:**
-- 🎯 **Provider-Specific Tuning** - Different providers have different reliability profiles
-- ⚡ **Transport-Level Logic** - Retries happen at HTTP level, not application level  
-- 🧬 **Zero Configuration Overhead** - No middleware stack complexity
-- 🔧 **Fine-Grained Control** - Set different strategies per provider based on their quirks
-- 💪 **Respects Retry-After Headers** - Automatically honors server-requested delays
+### Per-Provider Retries
 
-### 🎯 **Actually Working Features (Unlike Other SDKs)**
-- ✅ **Native Tool Use / Function Calling** - Register Go functions, AI calls them automatically (multi-turn magic!)
-- ✅ **Real-Time Streaming** - Already works across ALL providers with proper error handling
-- ✅ **Typed Error System** - Full error taxonomy with retryability detection
-- ✅ **Model Discovery** - Built-in model registry with capabilities and constraints
-- ✅ **Provider Constraints** - Automatic handling of model-specific requirements (GPT-5 temperature=1.0)
-- ✅ **Cost Estimation** - Token counting and cost calculation for budget planning
-- ✅ **Request/Response Logging** - Debug mode with full tracing capabilities
-- ✅ **Context Cancellation** - Proper timeout and cancellation support throughout
-- ✅ **Mock Provider** - Complete testing framework for unit tests
+Different providers fail differently. OpenAI is usually stable. Anthropic can be temperamental. Local models don't need network retries at all. So retries are configured per-provider at the transport level, not as a blanket middleware that treats every failure the same way.
 
-### 🌌 **Portal Network Coverage**
-| Provider | Portal Stability | Features | Status |
-|----------|-----------------|----------|---------|
-| **OpenAI** | 99.99% | Everything they offer | ✅ Online |
-| **Anthropic** | 99.98% | Claude's whole deal | ✅ Online |
-| **OpenRouter** | 99.99% | 200+ models from all providers | ✅ Online |
-| **Gemini** | 99.97% | Google's attempt at AI | ✅ Online |
-| **Groq** | 99.96% | Fast inference or whatever | ✅ Online |
-| **Mistral** | 99.95% | European AI (metric system compatible) | ✅ Online |
-| **Ollama** | 99.94% | Local models for paranoid people | ✅ Online |
+Retryable status codes: `429` (rate limit — respects `Retry-After`), `500`, `502`, `503`, `504`.
 
-## 🔄 Per-Provider Retry Configuration
+Non-retryable: `400`, `401`, `403`, `404`, `422`. If your API key is wrong, retrying won't fix it.
 
-*Finally - precision control over retry behavior instead of one-size-fits-all middleware*
+### Adaptive Rate Limiting
 
-### The Right Way to Handle Failures
-
-Each AI provider has different reliability characteristics. OpenAI is usually stable, Anthropic can be finicky, and local models shouldn't retry network calls at all. This is why I built **per-provider retry configuration**:
+The SDK includes a PID-controlled concurrency limiter that adjusts per-provider throughput based on observed latency and error rates. This isn't a fixed token bucket. It watches how the provider is actually performing and tunes capacity up or down in real time.
 
 ```go
-// Configure different retry strategies per provider
-maxRetries := 3
-retryDelay := 500 * time.Millisecond
-maxRetryDelay := 10 * time.Second
-
 client := wormhole.New(
-    // OpenAI: Conservative retries (they're usually stable)
-    wormhole.WithOpenAI("sk-...", types.ProviderConfig{
-        MaxRetries:    &[]int{2}[0],           // Just 2 retries
-        RetryDelay:    &[]time.Duration{200 * time.Millisecond}[0],
-        RetryMaxDelay: &[]time.Duration{5 * time.Second}[0],
-    }),
-    
-    // Anthropic: More aggressive retries (they can be finicky)
-    wormhole.WithAnthropic("sk-ant-...", types.ProviderConfig{
-        MaxRetries:    &maxRetries,            // 3 retries
-        RetryDelay:    &retryDelay,            // 500ms initial delay
-        RetryMaxDelay: &maxRetryDelay,         // Cap at 10s
-    }),
-    
-    // Groq: Fast inference, fast retries
-    wormhole.WithGroq("gsk_...", types.ProviderConfig{
-        MaxRetries:    &[]int{5}[0],           // More retries for speed
-        RetryDelay:    &[]time.Duration{100 * time.Millisecond}[0], // Faster retries
-        RetryMaxDelay: &[]time.Duration{2 * time.Second}[0],
-    }),
-    
-    // Disable retries completely for local providers
-    wormhole.WithOllama(types.ProviderConfig{
-        APIKey:     "not-needed",
-        MaxRetries: &[]int{0}[0], // No retries for local
-    }),
+    wormhole.WithOpenAI(os.Getenv("OPENAI_API_KEY")),
 )
+
+client.EnableAdaptiveConcurrency(&wormhole.EnhancedAdaptiveConfig{
+    MinCapacity:   2,
+    MaxCapacity:   50,
+    TargetLatency: 500 * time.Millisecond,
+})
+
+// Check how it's performing
+stats := client.GetAdaptiveConcurrencyStats()
 ```
 
-### Why Per-Provider Retries Beat Everything Else
-
-- 🎯 **Provider-Specific Tuning** - Different providers have different reliability profiles  
-- ⚡ **Transport-Level Logic** - Retries happen at HTTP level, not application level  
-- 🧬 **Zero Configuration Overhead** - No middleware stack complexity  
-- 🔧 **Fine-Grained Control** - Set different strategies per provider based on their quirks  
-- 💪 **Respects Retry-After Headers** - Automatically honors server-requested delays  
-- 🚀 **Production Proven** - 67ns overhead with enterprise-grade exponential backoff  
-
-### Retry Behavior by HTTP Status
-
-The retry system automatically handles different HTTP status codes intelligently:
+### Graceful Shutdown & Lifecycle
 
 ```go
-// These status codes trigger automatic retries:
-// 429 Too Many Requests    - Rate limiting (respects Retry-After header)
-// 500 Internal Server Error - Temporary server issues
-// 502 Bad Gateway         - Load balancer/proxy issues  
-// 503 Service Unavailable - Temporary overload
-// 504 Gateway Timeout     - Upstream timeout
-
-// These status codes DON'T retry (permanent failures):
-// 400 Bad Request         - Your request is malformed
-// 401 Unauthorized        - Invalid API key
-// 403 Forbidden          - Insufficient permissions
-// 404 Not Found          - Model/endpoint doesn't exist
-// 422 Unprocessable Entity - Validation errors
+// Tracks all in-flight requests
+// Drains cleanly on shutdown with configurable timeout
+ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+defer cancel()
+client.Shutdown(ctx)
 ```
 
-### Advanced Retry Patterns
+### Idempotency
+
+Client-side request deduplication. Same key within the TTL window returns the cached response instead of burning another API call.
 
 ```go
-// Production-grade configuration
-productionRetries := 3
-productionDelay := 1 * time.Second
-productionMaxDelay := 30 * time.Second
-
-// Aggressive retrying for critical operations
-aggressiveRetries := 5
-aggressiveDelay := 2 * time.Second
-
-// No retries for non-critical or local operations
-noRetries := 0
-
 client := wormhole.New(
-    // Critical provider with conservative settings
-    wormhole.WithOpenAI("sk-...", types.ProviderConfig{
-        MaxRetries:    &productionRetries,
-        RetryDelay:    &productionDelay,
-        RetryMaxDelay: &productionMaxDelay,
-    }),
-    
-    // Backup provider with aggressive retries
-    wormhole.WithAnthropic("sk-ant-...", types.ProviderConfig{
-        MaxRetries:    &aggressiveRetries,
-        RetryDelay:    &aggressiveDelay,
-        RetryMaxDelay: &productionMaxDelay,
-    }),
-    
-    // Local provider - no network retries needed
-    wormhole.WithOllama(types.ProviderConfig{
-        MaxRetries: &noRetries,
-    }),
+    wormhole.WithOpenAI(os.Getenv("OPENAI_API_KEY")),
+    wormhole.WithIdempotencyKey("unique-request-id", 5*time.Minute),
 )
 ```
 
-## Advanced Stuff for People Who Aren't Idiots
+---
 
-### Streaming Through Wormholes (Already Built-In)
+## Validation
+
+Catch configuration mistakes before they cost you an API call:
 
 ```go
-// Real-time streaming through interdimensional portals
-// This is already implemented and works across ALL providers
-chunks, _ := client.Text().
-    Model("gpt-5").
-    Prompt("Count to infinity").
-    Stream(ctx)
+builder := client.Text().Model("gpt-5.2").Temperature(0.7).MaxTokens(1000)
 
-for chunk := range chunks {
-    // Each chunk travels through its own micro-wormhole
-    fmt.Print(chunk.Text) // Updated field name
-    
-    if chunk.Error != nil {
-        log.Printf("Portal collapsed: %v", chunk.Error)
-        break
+if err := builder.Validate(); err != nil {
+    if vErr, ok := types.AsValidationError(err); ok {
+        fmt.Printf("Field '%s': %s\n", vErr.Field, vErr.Message)
     }
+    return err
 }
+
+response, _ := builder.Prompt("Now I know it won't fail on config").Generate(ctx)
 ```
 
-### Structured Output (Because Chaos Needs Structure Sometimes)
+Validates: model specified, temperature range (0-2), top_p range (0-1), max_tokens positive, penalty ranges (-2 to 2).
+
+---
+
+## Unified Response Accessors
+
+Every response type has `.Content()`. No more remembering different field names for different providers.
 
 ```go
-type UniversalTruth struct {
-    Fact string `json:"fact"`
-    Certainty float64 `json:"certainty"`
-}
+// Text
+textResp.Content()           // string
+textResp.HasToolCalls()      // bool
+textResp.IsComplete()        // bool — finished normally
+textResp.WasTruncated()      // bool — hit max_tokens
 
-var truth UniversalTruth
-client.Structured().
-    Model("gpt-5").
-    Prompt("What is the meaning of life?").
-    Schema(truth.GetSchema()). // I automated this part
-    GenerateAs(ctx, &truth)
+// Structured
+structResp.Content()         // any
+structResp.ContentAs(&person) // type-safe unmarshal
 
-// Spoiler: It's not 42
+// Embeddings
+embResp.Content()            // []float64 — first vector
+embResp.Vector(1)            // specific vector by index
+embResp.Count()              // number of embeddings
+
+// Streaming chunks
+chunk.Content()              // works for text and delta
+chunk.IsDone()
+chunk.HasError()
 ```
 
-### Vector Embeddings (For When You Need AI to Actually Understand Things)
+---
 
-Look *burp*, while everyone else is playing with cute chatbots, you might actually want to build something useful like search, recommendations, or RAG systems. That's where embeddings come in - they're like neural coordinates that map meaning into high-dimensional space. And yes, I made this API so simple even Jerry could use it.
+## Error Handling
 
-```go
-// Basic embedding generation - multiple providers supported
-response, err := client.Embeddings().
-    Provider("openai").
-    Model("text-embedding-3-small").
-    Input("Turn text into vectors", "Because math is beautiful").
-    Dimensions(512). // Optional: customize dimensions for compatible models
-    Generate(ctx)
-
-if err != nil {
-    log.Fatalf("Even Jerry could do better: %v", err)
-}
-
-// Access your precious vectors
-for i, embedding := range response.Data {
-    fmt.Printf("Text %d: %d dimensions\n", i, len(embedding.Embedding))
-    // embedding.Embedding is []float64 - do whatever science you want
-}
-```
-
-**🧬 Semantic Search Example (Actual Intelligence):**
-```go
-// Step 1: Embed your documents once (cache these, obviously)
-documents := []string{
-    "Go is a programming language by Google",
-    "Python is great for data science", 
-    "Machine learning requires lots of math",
-    "Databases store structured information",
-}
-
-docResponse, _ := client.Embeddings().
-    Provider("openai").
-    Model("text-embedding-3-small").
-    Input(documents...).
-    Generate(ctx)
-
-// Step 2: Embed user queries and find similar documents
-query := "coding languages"
-queryResponse, _ := client.Embeddings().
-    Provider("openai"). 
-    Model("text-embedding-3-small").
-    Input(query).
-    Generate(ctx)
-
-// Step 3: Calculate cosine similarity (basic math, even you can handle it)
-queryVector := queryResponse.Embeddings[0].Embedding
-for i, docEmbedding := range docResponse.Embeddings {
-    similarity := cosineSimilarity(queryVector, docEmbedding.Embedding)
-    fmt.Printf("Document %d similarity: %.3f\n", i, similarity)
-}
-// Output: Document 0 (Go language) will have highest similarity score
-```
-
-**⚡ Performance Tips (Because I Actually Care About Efficiency):**
-- **Batch Processing**: Send multiple texts in one request (way faster than multiple calls)
-- **Dimension Optimization**: Use smaller dimensions (256, 512) when you don't need NASA-level precision  
-- **Provider Choice**: OpenAI for quality, Ollama for local/free, Gemini for Google ecosystem
-- **Caching**: Store embeddings in a database - don't regenerate identical text
-
-**🎯 Supported Models Per Provider:**
-
-| Provider | Models | Dimensions | Notes |
-|----------|---------|-----------|-------|
-| **OpenAI** | `text-embedding-3-small`<br/>`text-embedding-3-large`<br/>`text-embedding-ada-002` | 1536 (small/ada)<br/>3072 (large)<br/>Customizable for v3 models | Best quality, customizable dimensions |
-| **Gemini** | `models/embedding-001` | 768 | Good performance, Google ecosystem |
-| **Ollama** | `nomic-embed-text`<br/>`all-minilm` (local models) | Varies by model | Free, local, no API limits |
-| **Mistral** | `mistral-embed` | 1024 | Use via `.BaseURL("https://api.mistral.ai/v1")` |
-| **Any OpenAI-Compatible** | Provider-specific models | Varies | Use `.BaseURL("https://provider-url/v1")` |
-| **Anthropic** | ❌ Not supported | N/A | They don't offer embeddings API |
-
-**🚀 OpenAI-Compatible Providers (No Separate Implementation Needed):**
-```go
-// Mistral embeddings
-response, _ := client.Embeddings().
-    BaseURL("https://api.mistral.ai/v1").
-    Model("mistral-embed").
-    Input("Text to embed").
-    Generate(ctx)
-
-// Any other OpenAI-compatible provider
-response, _ := client.Embeddings().
-    BaseURL("https://api.provider.com/v1").
-    Model("provider-embedding-model").
-    Input("Text to embed").
-    Generate(ctx)
-```
-
-**🛸 Real-World Applications (What You Should Actually Build):**
-- **Semantic Search**: Find documents by meaning, not just keywords
-- **Recommendation Systems**: "Users who liked X also liked..." but smarter
-- **RAG (Retrieval-Augmented Generation)**: Give LLMs relevant context from your data
-- **Content Classification**: Automatically categorize text by semantic similarity
-- **Duplicate Detection**: Find similar content even with different wording
-
-### Model Discovery & Validation (Built-In Intelligence)
+Typed errors with codes you can switch on, because `strings.Contains(err.Error(), "rate")` is not error handling — it's a cry for help.
 
 ```go
-// List all available models for a provider
-models := types.ListAvailableModels("openai")
-for _, model := range models {
-    fmt.Printf("%s: %s (%d context)\n", model.ID, model.Description, model.ContextLength)
-}
-
-// Validate model supports your use case
-err := types.ValidateModelForCapability("gpt-5", types.CapabilityStructured)
-if err != nil {
-    log.Printf("Model doesn't support structured output: %v", err)
-}
-
-// Get model-specific constraints (like GPT-5 temperature=1.0)
-constraints, _ := types.GetModelConstraints("gpt-5")
-if temp, exists := constraints["temperature"]; exists {
-    log.Printf("Model requires temperature: %v", temp)
-}
-
-// Estimate costs before making requests
-cost, _ := types.EstimateModelCost("gpt-5", 1000, 500) // 1K input, 500 output tokens
-fmt.Printf("Estimated cost: $%.4f", cost)
-```
-
-### Automatic Provider Constraints (No More Surprises)
-
-```go
-// SDK automatically handles model-specific requirements
-client := wormhole.New()
-
-// GPT-5 models automatically get temperature=1.0 set
-// You don't have to remember this - the SDK does it for you
-response, err := client.Text().
-    Model("gpt-5-mini").       // SDK detects this needs temperature=1.0
-    Prompt("Write something"). // SDK applies constraint automatically
-    Generate(ctx)              // Works without manual temperature setting
-
-// Or override if you really want to
-response, err := client.Text().
-    Model("gpt-5-mini").
-    Temperature(0.8).          // This will be validated and potentially rejected
-    Prompt("Write something").
-    Generate(ctx)
-```
-
-### Debug Logging & Request Tracing (See Everything)
-
-```go
-// Enable debug mode for full request/response tracing
-client := wormhole.New().
-    WithDebugLogging(true).
-    WithLogger(myCustomLogger)
-
-// All requests will be logged with full details:
-// - Request payload
-// - Response data
-// - Timing information
-// - Error details
-// - Model constraints applied
-// - Cost calculations
-response, err := client.Text().
-    Model("claude-sonnet-4-5").
-    Prompt("Debug this request").
-    Generate(ctx)
-
-// Output includes:
-// [DEBUG] Request to anthropic/claude-sonnet-4-5: {...}
-// [DEBUG] Response received in 234ms: {...}
-// [DEBUG] Cost: $0.0045 (150 input + 89 output tokens)
-```
-
-### High-Frequency Interdimensional Trading
-
-```go
-// Process 10 million requests per second through parallel wormholes
-func QuantumTrading(data []MarketSignal) {
-    var wg sync.WaitGroup
-    
-    for _, signal := range data {
-        wg.Add(1)
-        go func(s MarketSignal) {
-            defer wg.Done()
-            
-            // 67ns per portal opening
-            analysis, _ := client.Text().
-                Model("gpt-5-turbo").
-                Prompt("Analyze: " + s.Data).
-                Generate(ctx)
-            
-            // Do whatever with your analysis
-            ProcessResult(analysis.Text)
-        }(signal)
-    }
-    
-    wg.Wait()
-}
-```
-
-### Custom Provider Registration (For True Interdimensional Explorers)
-
-Want to add support for a new AI provider without begging me to update the code? *BURP* Of course you do. I built a factory registration system that lets you add custom providers dynamically.
-
-```go
-// Step 1: Implement the Provider interface
-type MyCustomProvider struct {
-    config types.ProviderConfig
-}
-
-func (p *MyCustomProvider) Text(ctx context.Context, req types.TextRequest) (*types.TextResponse, error) {
-    // Your custom implementation here
-    return &types.TextResponse{Text: "Custom response"}, nil
-}
-
-func (p *MyCustomProvider) Stream(ctx context.Context, req types.TextRequest) (<-chan types.TextChunk, error) {
-    // Streaming implementation
-    ch := make(chan types.TextChunk)
-    // ... your streaming logic
-    return ch, nil
-}
-
-// Implement all other Provider interface methods...
-func (p *MyCustomProvider) Name() string { return "my-custom-provider" }
-
-// Step 2: Create a factory function
-func NewMyCustomProvider(config types.ProviderConfig) (types.Provider, error) {
-    return &MyCustomProvider{config: config}, nil
-}
-
-// Step 3: Configure and create client
-config := wormhole.Config{
-    Providers: map[string]types.ProviderConfig{
-        "my-custom": {
-            APIKey:  "your-api-key",
-            BaseURL: "https://api.custom-provider.com",
-        },
-    },
-}
-client := wormhole.New(config)
-
-// Step 4: Register your provider
-client.RegisterProvider("my-custom", NewMyCustomProvider)
-
-// Step 5: Use it like any built-in provider
-response, err := client.Text().
-    Using("my-custom").
-    Model("custom-model").
-    Prompt("Test custom provider").
-    Generate(ctx)
-```
-
-**Real-World Example: Adding Cohere Support**
-
-```go
-// Complete working example for adding Cohere
-type CohereProvider struct {
-    config types.ProviderConfig
-    client *http.Client
-}
-
-func NewCohereProvider(config types.ProviderConfig) (types.Provider, error) {
-    return &CohereProvider{
-        config: config,
-        client: &http.Client{Timeout: 30 * time.Second},
-    }, nil
-}
-
-func (c *CohereProvider) Text(ctx context.Context, req types.TextRequest) (*types.TextResponse, error) {
-    // Implement Cohere's chat API format
-    payload := map[string]interface{}{
-        "model":   req.Model,
-        "message": req.Messages[len(req.Messages)-1].Content,
-    }
-    
-    // Make HTTP request to Cohere API
-    // Transform response to types.TextResponse
-    return response, nil
-}
-
-// Register and use Cohere
-client := wormhole.New()
-client.RegisterProvider("cohere", NewCohereProvider)
-
-response, err := client.Text().
-    Using("cohere").
-    Model("command-r-plus").
-    Prompt("Hello Cohere!").
-    Generate(ctx)
-```
-
-**OpenAI-Compatible Provider Shortcut**
-
-If your provider uses OpenAI's API format (most do), use the built-in compatibility layer:
-
-```go
-// For cloud services that need API keys (like Perplexity, Together.ai)
-client := wormhole.New().
-    WithOpenAICompatible("perplexity", "https://api.perplexity.ai", types.ProviderConfig{
-        APIKey: "your-perplexity-key",
-    })
-
-// For local services (no API key needed)
-client := wormhole.New().
-    WithOpenAICompatible("local-llama", "http://localhost:8080", types.ProviderConfig{})
-
-// Both work immediately with full Wormhole features
-response, err := client.Text().
-    Using("perplexity").
-    Model("llama-3.1-sonar-huge-128k-online").
-    Prompt("Search the web for latest news").
-    Generate(ctx)
-```
-
-**Why This Architecture is Genius:**
-- **No Core Modifications**: Add providers without touching my perfect code
-- **Factory Pattern**: Clean, testable, maintainable provider creation
-- **Thread-Safe**: Concurrent registration and access with proper locking
-- **Backward Compatible**: All existing With... methods still work
-- **AI-Friendly**: Perfect for AI assistants to extend functionality
-
-*BURP* There you go. Now you can add any provider you want without waiting for me to do it for you. You're welcome.
-
-## Error Handling (For When You Inevitably Mess Up)
-
-```go
-// TYPED ERRORS ARE NOW IMPLEMENTED - No more guessing what went wrong!
 response, err := client.Text().Generate(ctx)
-
 if err != nil {
-    var wormholeErr *types.WormholeError
-    if errors.As(err, &wormholeErr) {
-        switch wormholeErr.Code {
+    var wErr *types.WormholeError
+    if errors.As(err, &wErr) {
+        switch wErr.Code {
         case types.ErrorCodeRateLimit:
-            // Rate limited - retry automatically handled per provider configuration
-            log.Printf("Hit rate limit: %s", wormholeErr.Details)
-            return wormholeErr // Middleware will retry if retryable
+            // per-provider retries handle this automatically,
+            // but you can add your own logic here
         case types.ErrorCodeAuth:
-            // Invalid API key - no point retrying
-            return fmt.Errorf("fix your API key: %w", wormholeErr)
+            return fmt.Errorf("fix your API key: %w", wErr)
         case types.ErrorCodeModel:
-            // Model not found - try fallback
-            return client.Text().Model("gpt-5").Generate(ctx)
+            // model not found — try a fallback
         case types.ErrorCodeTimeout:
-            // Timeout - increase context timeout
-            ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
-            defer cancel()
-            return client.Text().Generate(ctx)
-        default:
-            // Unknown error with full debugging info
-            log.Printf("Error: %+v", wormholeErr)
-            return wormholeErr
+            // increase your context timeout
         }
     }
 }
 ```
 
-## 🔒 Security Best Practices (Because Even Geniuses Need Guardrails)
+---
 
-Look, I may be an interdimensional scientist, but I'm not *completely* reckless with sensitive data. Here's how to keep your API keys and data secure:
+## Custom Providers
 
-### API Key Management
+If your provider speaks the OpenAI protocol, it's one line:
 
 ```go
-// ✅ CORRECT: Use environment variables
 client := wormhole.New(
-    wormhole.WithOpenAI(os.Getenv("OPENAI_API_KEY")),
-    wormhole.WithAnthropic(os.Getenv("ANTHROPIC_API_KEY")),
-)
-
-// ❌ WRONG: Never hardcode keys in source code
-client := wormhole.New(
-    wormhole.WithOpenAI("sk-hardcoded-key"), // DON'T BE THIS STUPID
+    wormhole.WithOpenAICompatible("perplexity", "https://api.perplexity.ai", types.ProviderConfig{
+        APIKey: os.Getenv("PERPLEXITY_API_KEY"),
+    }),
 )
 ```
 
-### Error Message Security
-
-Wormhole automatically masks API keys in error messages to prevent accidental exposure:
-
-```bash
-# Before (dangerous):
-Error: HTTP 401 at https://api.openai.com/v1/chat/completions?key=sk-1234567890abcdef
-
-# After (secure):  
-Error: HTTP 401 at https://api.openai.com/v1/chat/completions?key=sk-1****cdef
-```
-
-### Environment File Protection
-
-```bash
-# Create .env file for development
-echo "OPENAI_API_KEY=your-key-here" > .env
-echo "ANTHROPIC_API_KEY=your-other-key" >> .env
-
-# ALWAYS add to .gitignore
-echo ".env*" >> .gitignore
-echo "*.key" >> .gitignore
-echo "secrets/" >> .gitignore
-```
-
-### OpenAI-Compatible Provider Architecture
-
-Use the BaseURL approach for maximum flexibility and security:
+If it doesn't, implement the `Provider` interface and register a factory:
 
 ```go
-// All these providers use the same secure OpenAI interface
-providers := []struct {
-    name    string
-    baseURL string
-    apiKey  string
-}{
-    {"OpenAI", "", os.Getenv("OPENAI_API_KEY")},
-    {"Groq", "https://api.groq.com/openai/v1", os.Getenv("GROQ_API_KEY")},
-    {"Mistral", "https://api.mistral.ai/v1", os.Getenv("MISTRAL_API_KEY")},
-    {"Local Ollama", "http://localhost:11434/v1", ""}, // No key needed
-}
+client.RegisterProvider("my-provider", func(config types.ProviderConfig) (types.Provider, error) {
+    return &MyProvider{config: config}, nil
+})
+
+response, _ := client.Text().Using("my-provider").Model("custom-model").Generate(ctx)
 ```
 
-**Why This Architecture is Brilliant:**
-- ✅ One code path = one security audit surface
-- ✅ No separate provider implementations to maintain  
-- ✅ Instant support for new OpenAI-compatible providers
-- ✅ Consistent error handling and key masking across all providers
+No core modifications. No PRs begging me to add support for your niche provider. You do it yourself, and it works with every feature in the SDK — middleware, retries, streaming, tool calling, all of it.
 
-### Production Security Checklist
+---
 
-- [ ] All API keys in environment variables
-- [ ] `.env` files in `.gitignore`
-- [ ] Error logging doesn't expose keys
-- [ ] Use HTTPS endpoints only
-- [ ] Implement request/response logging middleware for auditing
-- [ ] Set appropriate timeouts to prevent resource exhaustion
-- [ ] Use structured error types for proper error handling
+## Testing
 
-## Testing (Because I'm Not Completely Reckless)
+Mock provider included. Don't burn API credits testing your business logic.
 
 ```go
-func TestYourGarbage(t *testing.T) {
-    // Use the mock provider so you don't burn through API credits
-    client := wormhole.NewWithMockProvider(wormhole.MockConfig{
-        TextResponse: "This is a test, obviously",
-        Latency: time.Nanosecond * 94, // Realistic simulation
-    })
-    
-    result, _ := client.Text().
-        Model("mock-model").
+import wmtest "github.com/garyblankenship/wormhole/pkg/testing"
+
+func TestSomething(t *testing.T) {
+    mock := wmtest.NewMockProvider("openai").
+        WithTextResponse(wmtest.TextResponseWith("Mock response"))
+
+    client := wormhole.New(
+        wormhole.WithCustomProvider("openai", wmtest.MockProviderFactory(mock)),
+        wormhole.WithProviderConfig("openai", types.ProviderConfig{}),
+        wormhole.WithDefaultProvider("openai"),
+    )
+
+    result, err := client.Text().
+        Model("gpt-5.2").
         Prompt("test").
         Generate(context.Background())
-    
-    // Assert whatever you want, I don't care
-    assert.Equal(t, "This is a test, obviously", result.Text)
+
+    assert.NoError(t, err)
+    assert.Equal(t, "Mock response", result.Content())
 }
 ```
 
-## Benchmarking Your Inferior Setup
+---
+
+## Benchmarking
 
 ```bash
-# See how slow your code really is
-make bench
+make bench                    # standard benchmarks
+make bench-profile            # CPU + memory profiling
+make perf-test                # regression suite (5 iterations)
 
-# Detailed quantum analysis
-go test -bench=. -benchmem -cpuprofile=quantum.prof ./pkg/wormhole/
-go tool pprof quantum.prof
-
-# Stress test across parallel dimensions
-go test -bench=BenchmarkConcurrent -cpu=1,2,4,8,16,32,64,128
+# or manually
+go test -bench=. -benchmem ./pkg/wormhole/
 ```
 
-## Why This is Better Than Whatever You're Using
+---
 
-| Feature | Wormhole | That Other Thing | The Obvious Winner |
-|---------|----------|------------------|-------------------|
-| **Latency** | 67 ns | 11,000 ns | Me, by a lot |
-| **Providers** | All of them | Maybe 2-3 | Me again |
-| **Middleware** | Quantum-grade | Basic at best | Still me |
-| **Streaming** | Interdimensional | Probably broken | Guess who |
-| **My Involvement** | Created by me | Not created by me | Clear winner |
+## Model Discovery
 
-## Installation Instructions for Alternate Realities
+The SDK maintains a registry of known models with capabilities and constraints, but doesn't use it as a gate. Known models get validated and auto-configured (GPT-5 temperature constraints, etc.). Unknown models pass through to the provider — because the registry being a week behind shouldn't block you from using a model that launched yesterday.
 
-### Earth C-137 (You Are Here)
-```bash
-go get github.com/garyblankenship/wormhole
+```go
+models := types.ListAvailableModels("openai")
+cost, _ := types.EstimateModelCost("gpt-5.2", 1000, 500)
+constraints, _ := types.GetModelConstraints("gpt-5.2")
+
+caps := client.ProviderCapabilities("openai")
+if caps.SupportsToolCalling() {
+    // safe to register tools
+}
 ```
 
-### Dimension Where Everything is on Fire
-```bash
-fireproof-go get github.com/garyblankenship/wormhole
+---
+
+## Security
+
+```go
+// Do this
+client := wormhole.New(wormhole.WithOpenAI(os.Getenv("OPENAI_API_KEY")))
+
+// Not this. Ever.
+client := wormhole.New(wormhole.WithOpenAI("sk-hardcoded-key"))
 ```
 
-### The Microverse
-```bash
-go get github.com/garyblankenship/wormhole --quantum-scale
-```
+API keys in error messages are automatically masked (`sk-1****cdef`). Add `.env*` and `*.key` to your `.gitignore`. Use HTTPS endpoints. Set timeouts to prevent resource exhaustion. This is basic stuff — but I've seen enough leaked keys on GitHub to know it needs saying.
 
-## 🏆 Hall of Fame (Developers Who Aren't Complete Disasters)
+---
 
-*BURP* These people actually understand what quality software looks like:
+## Contributing
 
-### 🥇 **Production Users**
-> *"Switched from OpenAI's SDK to Wormhole. Response times dropped 90%, my servers stopped crying."*  
-> – Senior Engineer at [Redacted Unicorn Startup]
+1. Don't break the tests.
+2. Don't regress the benchmarks.
+3. Follow the functional options pattern.
+4. If you add a provider, add tests for it.
+5. No JavaScript. This is Go. Act like it.
 
-> *"The functional options pattern is chef's kiss. Finally, an SDK that doesn't make me question my career choices."*  
-> – Tech Lead, Fortune 500 Company  
-
-> *"We process 50M+ AI requests daily. Wormhole's middleware stack saved our infrastructure budget."*  
-> – Platform Engineer, [Definitely Not Facebook]
-
-### 🚀 **Performance Nerds**
-> *"94ns overhead? I ran the benchmarks three times because I didn't believe it."*  
-> – Performance Engineer, High-Frequency Trading
-
-> *"The thread-safety fixes solved race conditions we didn't even know we had."*  
-> – Backend Architect, SaaS Platform
-
-### 🧪 **Science Appreciators**  
-> *"Finally, someone who understands that nanoseconds matter."*  
-> – Senior Staff Engineer, Google (probably)
-
-> *"The dynamic provider registration is genius. Added our internal LLM in 20 minutes."*  
-> – ML Infrastructure Lead
-
-**Want to join the Hall of Fame?** Ship something cool with Wormhole and let me know. I might even acknowledge your existence.
-
-## 🤝 Contributing (As If You Could Improve Perfection)
-
-You want to contribute? *BURP* Fine. Here's what you need to know:
-
-1. **Don't break my code** - All tests must pass, benchmarks must not regress
-2. **Follow the architecture** - Use functional options, respect the middleware pattern  
-3. **Your PR better be faster than 67ns** - Or at least not make it slower
-4. **No JavaScript** - This is Go. Have some self-respect.
-5. **Documentation matters** - Update the README if you change behavior
-6. **Test everything** - New providers need comprehensive test coverage
-
-### 🔧 **Development Setup**
 ```bash
 git clone https://github.com/garyblankenship/wormhole
 cd wormhole
-make test          # Run the full test suite
-make bench         # Performance benchmarks  
-make lint          # Code quality checks
-make example       # Run the example to test changes
+make test
+make bench
+make lint
 ```
+
+---
 
 ## License
 
-MIT License because I'm not a complete sociopath. Use it, don't use it, I already got what I needed from building this.
+MIT. Use it however you want. If it breaks your production environment, that's between you and your incident review — I gave you the tools, not the judgment to use them correctly.
+
+---
 
 ## Credits
 
-- Built by Rick Sanchez C-137 (the smartest Rick)
-- Inspired by the inadequacy of every other solution
-- Powered by concentrated dark matter and spite
+Built by someone who got tired of watching vybe coders ship LLM wrappers held together with hope and `interface{}`. Powered by spite, benchmarks, and the firm belief that nanoseconds matter.
 
----
-
-## 🎯 Ready to Join the Quantum Revolution?
-
-Stop embarrassing yourself with SDKs built by Jerry-level developers. Get Wormhole:
-
-```bash
-go get github.com/garyblankenship/wormhole@latest
-```
-
-### 📚 **Learn More**
-- **[Architecture](https://github.com/garyblankenship/wormhole/blob/main/docs/ARCHITECTURE.md)** - Technical design, components, and patterns
-- **[Knowledge Base](https://github.com/garyblankenship/wormhole/blob/main/docs/KNOWLEDGE.md)** - Domain knowledge, operations, and troubleshooting
-- **[Model Discovery](https://github.com/garyblankenship/wormhole/blob/main/docs/MODEL_DISCOVERY.md)** - Dynamic model fetching and caching (no more hardcoded names!)
-- **[Tool Calling](https://github.com/garyblankenship/wormhole/blob/main/docs/TOOL_CALLING.md)** - Native function calling and multi-turn conversations
-- **[Examples](https://github.com/garyblankenship/wormhole/tree/main/examples)** - Working code for every use case
-- **[Migration Guide](https://github.com/garyblankenship/wormhole/blob/main/docs/migration-guide.md)** - Upgrade from v1.1.x (coming soon)
-- **[Benchmarks](https://github.com/garyblankenship/wormhole/blob/main/docs/performance-benchmarks.md)** - Performance metrics (coming soon)
-
-### 🐛 **Support & Issues**
-Found a bug? Your first mistake was doubting my code. Your second mistake was not reading the docs.
-
-- **GitHub Issues**: For actual bugs (not user error)
-- **Discussions**: For questions that don't insult my intelligence  
-- **Email**: rick@sanchez-enterprises.c137 (interdimensional mail only)
-
-### 📈 **Status**
-- **Production Ready**: Used by 10,000+ developers who aren't idiots
-- **Battle Tested**: Processing millions of requests across dimensions  
-- **Actively Maintained**: Because I'm not done improving perfection
-- **Community Driven**: Within reason. I'm still in charge.
-
----
-
-*Now leave me alone, I have science to do.*
-
-## ⚠️ **Legal Disclaimers** 
-
-**P.S.** - If this breaks your production environment, that's a you problem. I gave you quantum-grade technology and you probably deployed it on a Raspberry Pi running PHP or something equally offensive to computer science.
-
-**P.P.S.** - Tested across dimensions C-137 through C-842. Results may vary in realities where JavaScript is considered a real programming language.
-
-**P.P.P.S.** - Morty tested, Rick approved. Side effects may include: improved code quality, reduced latency, existential crisis about your previous tech choices, and sudden urge to optimize everything. 
+*Now leave me alone. I have science to do.*
 
 **Wubba lubba dub dub!** 🛸
