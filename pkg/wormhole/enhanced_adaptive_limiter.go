@@ -133,11 +133,22 @@ func NewEnhancedAdaptiveLimiter(config EnhancedAdaptiveConfig) *EnhancedAdaptive
 		limiter.providerStates[provider] = state
 	}
 
+	// Initialize sub-managers
+	metricsObserver := &metricsObserver{
+		config:           config,
+		metricsCollector: limiter.metricsCollector,
+		limiter:          limiter,
+	}
+	capacityManager := &capacityManager{
+		config:  config,
+		limiter: limiter,
+	}
+
 	// Start adjustment goroutines
 	limiter.wg.Add(2)
-	go limiter.adjustmentLoop()
+	go capacityManager.Start(limiter.stopChan, &limiter.wg)
 	if config.QueryInterval > 0 {
-		go limiter.metricsQueryLoop()
+		go metricsObserver.Start(limiter.stopChan, &limiter.wg)
 	} else {
 		limiter.wg.Done()
 	}
@@ -373,25 +384,31 @@ func (l *EnhancedAdaptiveLimiter) getState(provider, model string) *ProviderAdap
 	return state
 }
 
-// adjustmentLoop periodically adjusts capacity for all tracked states
-func (l *EnhancedAdaptiveLimiter) adjustmentLoop() {
-	defer l.wg.Done()
+// capacityManager handles capacity adjustments and state eviction
+type capacityManager struct {
+	config  EnhancedAdaptiveConfig
+	limiter *EnhancedAdaptiveLimiter
+}
 
-	ticker := time.NewTicker(l.config.AdjustmentInterval)
+func (c *capacityManager) Start(stopChan <-chan struct{}, wg *sync.WaitGroup) {
+	defer wg.Done()
+
+	ticker := time.NewTicker(c.config.AdjustmentInterval)
 	defer ticker.Stop()
 
 	for {
 		select {
 		case <-ticker.C:
-			l.adjustAllCapacities()
-		case <-l.stopChan:
+			c.adjustAllCapacities()
+		case <-stopChan:
 			return
 		}
 	}
 }
 
 // adjustAllCapacities adjusts capacity for all tracked states
-func (l *EnhancedAdaptiveLimiter) adjustAllCapacities() {
+func (c *capacityManager) adjustAllCapacities() {
+	l := c.limiter
 	l.mu.RLock()
 
 	// Adjust global state
@@ -412,7 +429,7 @@ func (l *EnhancedAdaptiveLimiter) adjustAllCapacities() {
 
 	// Adjust model states (if enabled)
 	modelAdjustments := make(map[string]int)
-	if l.config.EnableModelLevel {
+	if c.config.EnableModelLevel {
 		for key, state := range l.modelStates {
 			newCapacity, changed := state.AdjustCapacity()
 			if changed {
@@ -426,24 +443,25 @@ func (l *EnhancedAdaptiveLimiter) adjustAllCapacities() {
 
 	// Log adjustments if any occurred
 	if len(providerAdjustments) > 0 || len(modelAdjustments) > 0 {
-		l.logAdjustments(globalCapacity, providerAdjustments, modelAdjustments)
+		c.logAdjustments(globalCapacity, providerAdjustments, modelAdjustments)
 	}
 
-	l.evictIdleStates()
+	c.evictIdleStates()
 }
 
-func (l *EnhancedAdaptiveLimiter) evictIdleStates() {
-	if l.config.IdleStateTTL <= 0 {
+func (c *capacityManager) evictIdleStates() {
+	if c.config.IdleStateTTL <= 0 {
 		return
 	}
 
-	cutoff := time.Now().Add(-l.config.IdleStateTTL)
+	cutoff := time.Now().Add(-c.config.IdleStateTTL)
+	l := c.limiter
 
 	l.mu.Lock()
 	defer l.mu.Unlock()
 
 	for provider, state := range l.providerStates {
-		if _, pinned := l.config.ProviderSettings[provider]; pinned {
+		if _, pinned := c.config.ProviderSettings[provider]; pinned {
 			continue
 		}
 		if state.InUse() > 0 || state.LastSeen().After(cutoff) {
@@ -452,7 +470,7 @@ func (l *EnhancedAdaptiveLimiter) evictIdleStates() {
 		delete(l.providerStates, provider)
 	}
 
-	if !l.config.EnableModelLevel {
+	if !c.config.EnableModelLevel {
 		return
 	}
 
@@ -463,7 +481,7 @@ func (l *EnhancedAdaptiveLimiter) evictIdleStates() {
 		delete(l.modelStates, key)
 	}
 
-	if l.config.MaxModelStates <= 0 || len(l.modelStates) <= l.config.MaxModelStates {
+	if c.config.MaxModelStates <= 0 || len(l.modelStates) <= c.config.MaxModelStates {
 		return
 	}
 
@@ -484,7 +502,7 @@ func (l *EnhancedAdaptiveLimiter) evictIdleStates() {
 		return candidates[i].lastSeen.Before(candidates[j].lastSeen)
 	})
 
-	for len(l.modelStates) > l.config.MaxModelStates && len(candidates) > 0 {
+	for len(l.modelStates) > c.config.MaxModelStates && len(candidates) > 0 {
 		candidate := candidates[0]
 		candidates = candidates[1:]
 		delete(l.modelStates, candidate.key)
@@ -492,7 +510,7 @@ func (l *EnhancedAdaptiveLimiter) evictIdleStates() {
 }
 
 // logAdjustments logs capacity adjustments
-func (l *EnhancedAdaptiveLimiter) logAdjustments(globalCapacity int,
+func (c *capacityManager) logAdjustments(globalCapacity int,
 	providerAdjustments map[string]int, modelAdjustments map[string]int) {
 
 	log.Printf("[EnhancedAdaptiveLimiter] Adjustments - Global: %d", globalCapacity)
@@ -506,35 +524,41 @@ func (l *EnhancedAdaptiveLimiter) logAdjustments(globalCapacity int,
 	}
 }
 
-// metricsQueryLoop periodically queries external metrics for enhanced control
-func (l *EnhancedAdaptiveLimiter) metricsQueryLoop() {
-	defer l.wg.Done()
+// metricsObserver handles observing external metrics
+type metricsObserver struct {
+	config           EnhancedAdaptiveConfig
+	metricsCollector *middleware.EnhancedMetricsCollector
+	limiter          *EnhancedAdaptiveLimiter
+}
 
-	if l.config.QueryInterval <= 0 {
+func (m *metricsObserver) Start(stopChan <-chan struct{}, wg *sync.WaitGroup) {
+	defer wg.Done()
+
+	if m.config.QueryInterval <= 0 {
 		return
 	}
 
-	ticker := time.NewTicker(l.config.QueryInterval)
+	ticker := time.NewTicker(m.config.QueryInterval)
 	defer ticker.Stop()
 
 	for {
 		select {
 		case <-ticker.C:
-			l.queryExternalMetrics()
-		case <-l.stopChan:
+			m.queryExternalMetrics()
+		case <-stopChan:
 			return
 		}
 	}
 }
 
 // queryExternalMetrics queries external metrics for enhanced control
-func (l *EnhancedAdaptiveLimiter) queryExternalMetrics() {
-	if l.metricsCollector == nil {
+func (m *metricsObserver) queryExternalMetrics() {
+	if m.metricsCollector == nil {
 		return
 	}
 
 	// Get all metrics from the collector
-	allStats := l.metricsCollector.GetAllStats()
+	allStats := m.metricsCollector.GetAllStats()
 
 	// Extract per-provider metrics if available
 	if perLabelStats, ok := allStats["per_label"].(map[string]interface{}); ok {
@@ -547,14 +571,14 @@ func (l *EnhancedAdaptiveLimiter) queryExternalMetrics() {
 				model := parts[1]
 
 				// Get state for this provider/model
-				state := l.getState(provider, model)
+				state := m.limiter.getState(provider, model)
 				if state == nil {
 					continue
 				}
 
 				// Extract metrics and potentially adjust PID parameters
 				if statsMap, ok := stats.(map[string]interface{}); ok {
-					l.enhanceControlWithMetrics(state, statsMap)
+					m.enhanceControlWithMetrics(state, statsMap)
 				}
 			}
 		}
@@ -568,7 +592,7 @@ func splitLabelKey(key string) []string {
 }
 
 // enhanceControlWithMetrics enhances control with external metrics
-func (l *EnhancedAdaptiveLimiter) enhanceControlWithMetrics(_ *ProviderAdaptiveState,
+func (m *metricsObserver) enhanceControlWithMetrics(_ *ProviderAdaptiveState,
 	stats map[string]interface{}) {
 
 	// Extract error rate from metrics
@@ -577,7 +601,7 @@ func (l *EnhancedAdaptiveLimiter) enhanceControlWithMetrics(_ *ProviderAdaptiveS
 			errorRate := float64(errors) / float64(requests)
 
 			// If error rate is persistently high, we might adjust PID parameters
-			if errorRate > l.config.ErrorRateThreshold {
+			if errorRate > m.config.ErrorRateThreshold {
 				// Could adjust PID gains here based on error rate
 				// For now, we just record it
 				log.Printf("[EnhancedAdaptiveLimiter] High error rate detected: %.2f", errorRate)

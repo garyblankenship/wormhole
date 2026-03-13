@@ -82,26 +82,3 @@ func (w *ProviderWrapper) Unwrap() Provider {
 	return w.provider
 }
 
-// ProviderError represents provider capability errors
-type ProviderError struct {
-	Message      string
-	ProviderName string
-}
-
-func (e *ProviderError) Error() string {
-	return e.Message + " (provider: " + e.ProviderName + ")"
-}
-
-// NewProviderError creates a new provider error
-func NewProviderError(message, providerName string) *ProviderError {
-	return &ProviderError{
-		Message:      message,
-		ProviderName: providerName,
-	}
-}
-
-// IsProviderError checks if an error is a provider error
-func IsProviderError(err error) bool {
-	_, ok := err.(*ProviderError)
-	return ok
-}

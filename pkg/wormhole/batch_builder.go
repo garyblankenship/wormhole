@@ -93,41 +93,16 @@ func (b *BatchBuilder) Execute(ctx context.Context) []BatchResult {
 			for index := range taskCh {
 				req := b.requests[index]
 
-				var resp *types.TextResponse
-				var err error
-				var start time.Time
-
-				// Use adaptive concurrency if enabled
-				if adaptiveLimiter != nil {
-					// Extract provider and model from request
-					provider := req.provider
-					model := req.request.Model
-
-					// Acquire slot with provider/model awareness
-					release, ok := adaptiveLimiter.AcquireTokenWithProvider(ctx, provider, model)
-					if !ok {
-						// Context expired or canceled
-						resultCh <- batchResult{
-							index:    index,
-							response: nil,
-							err:      ctx.Err(),
-						}
-						continue
+				resp, err := executeRequestWithLimiter(ctx, req, adaptiveLimiter)
+				if err == ctx.Err() && resp == nil {
+					// If ctx.Err() was returned due to context expiration or cancellation
+					// we just wrap it according to what we had before
+					resultCh <- batchResult{
+						index:    index,
+						response: nil,
+						err:      ctx.Err(),
 					}
-
-					// Record start time
-					start = time.Now()
-					resp, err = req.Generate(ctx)
-
-					// Record latency and error
-					latency := time.Since(start)
-					adaptiveLimiter.RecordLatencyWithProvider(latency, provider, model, err)
-
-					// Release slot (uses the exact limiter instance from acquire)
-					release()
-				} else {
-					// Use traditional fixed concurrency
-					resp, err = req.Generate(ctx)
+					continue
 				}
 
 				resultCh <- batchResult{
@@ -161,6 +136,29 @@ func (b *BatchBuilder) Execute(ctx context.Context) []BatchResult {
 	}
 
 	return results
+}
+
+func executeRequestWithLimiter(ctx context.Context, req *TextRequestBuilder, limiter *EnhancedAdaptiveLimiter) (*types.TextResponse, error) {
+	if limiter == nil {
+		return req.Generate(ctx)
+	}
+
+	provider := req.provider
+	model := req.request.Model
+
+	release, ok := limiter.AcquireTokenWithProvider(ctx, provider, model)
+	if !ok {
+		return nil, ctx.Err()
+	}
+	defer release()
+
+	start := time.Now()
+	resp, err := req.Generate(ctx)
+
+	latency := time.Since(start)
+	limiter.RecordLatencyWithProvider(latency, provider, model, err)
+
+	return resp, err
 }
 
 // batchResult internal struct for worker results
@@ -226,40 +224,13 @@ func (b *BatchBuilder) ExecuteFirst(ctx context.Context) (*types.TextResponse, e
 			for index := range taskCh {
 				req := b.requests[index]
 
-				var resp *types.TextResponse
-				var err error
-				var start time.Time
-
-				// Use adaptive concurrency if enabled
-				if adaptiveLimiter != nil {
-					// Extract provider and model from request
-					provider := req.provider
-					model := req.request.Model
-
-					// Acquire slot with provider/model awareness
-					release, ok := adaptiveLimiter.AcquireTokenWithProvider(ctx, provider, model)
-					if !ok {
-						// Context expired or canceled, send error and continue
-						select {
-						case resultCh <- result{nil, ctx.Err()}:
-						case <-ctx.Done():
-						}
-						continue
+				resp, err := executeRequestWithLimiter(ctx, req, adaptiveLimiter)
+				if err == ctx.Err() && resp == nil {
+					select {
+					case resultCh <- result{nil, ctx.Err()}:
+					case <-ctx.Done():
 					}
-
-					// Record start time
-					start = time.Now()
-					resp, err = req.Generate(ctx)
-
-					// Record latency and error
-					latency := time.Since(start)
-					adaptiveLimiter.RecordLatencyWithProvider(latency, provider, model, err)
-
-					// Release slot (uses the exact limiter instance from acquire)
-					release()
-				} else {
-					// Use traditional fixed concurrency
-					resp, err = req.Generate(ctx)
+					continue
 				}
 
 				select {

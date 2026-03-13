@@ -347,7 +347,11 @@ func TestEnhancedAdaptiveLimiterEvictsIdleModelStates(t *testing.T) {
 	fresh.lastSeen = time.Now()
 	fresh.mu.Unlock()
 
-	limiter.evictIdleStates()
+	manager := &capacityManager{
+		config:  config,
+		limiter: limiter,
+	}
+	manager.evictIdleStates()
 
 	assert.Nil(t, limiter.getState("openai", "gpt-4"))
 	assert.NotNil(t, limiter.getState("anthropic", "claude-3"))
