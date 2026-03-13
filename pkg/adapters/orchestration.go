@@ -65,11 +65,8 @@ func (a *WormholeToOrchestrationAdapter) Name() string {
 	return a.name
 }
 
-// CreateCompletion creates a completion using the Wormhole provider
-func (a *WormholeToOrchestrationAdapter) CreateCompletion(ctx context.Context, req OrchestrationCompletionRequest) (*OrchestrationCompletionResponse, error) {
-	start := time.Now()
-
-	// Convert orchestration request to Wormhole request
+// buildWormholeRequest converts an orchestration request to a Wormhole TextRequest.
+func (a *WormholeToOrchestrationAdapter) buildWormholeRequest(req OrchestrationCompletionRequest) types.TextRequest {
 	temp := float32(req.Temperature)
 	wormholeReq := types.TextRequest{
 		BaseRequest: types.BaseRequest{
@@ -80,10 +77,17 @@ func (a *WormholeToOrchestrationAdapter) CreateCompletion(ctx context.Context, r
 		Messages: []types.Message{types.NewUserMessage(req.Prompt)},
 	}
 
-	// If no model specified, use default
 	if wormholeReq.Model == "" {
 		wormholeReq.Model = a.model
 	}
+
+	return wormholeReq
+}
+
+// CreateCompletion creates a completion using the Wormhole provider
+func (a *WormholeToOrchestrationAdapter) CreateCompletion(ctx context.Context, req OrchestrationCompletionRequest) (*OrchestrationCompletionResponse, error) {
+	start := time.Now()
+	wormholeReq := a.buildWormholeRequest(req)
 
 	// Call Wormhole provider
 	resp, err := a.provider.Text(ctx, wormholeReq)
@@ -105,22 +109,7 @@ func (a *WormholeToOrchestrationAdapter) CreateCompletion(ctx context.Context, r
 // CreateStreamingCompletion creates a streaming completion using the Wormhole provider
 func (a *WormholeToOrchestrationAdapter) CreateStreamingCompletion(ctx context.Context, req OrchestrationCompletionRequest, callback OrchestrationStreamCallback) (*OrchestrationCompletionResponse, error) {
 	start := time.Now()
-
-	// Convert orchestration request to Wormhole request
-	temp := float32(req.Temperature)
-	wormholeReq := types.TextRequest{
-		BaseRequest: types.BaseRequest{
-			Model:       req.Model,
-			MaxTokens:   &req.MaxTokens,
-			Temperature: &temp,
-		},
-		Messages: []types.Message{types.NewUserMessage(req.Prompt)},
-	}
-
-	// If no model specified, use default
-	if wormholeReq.Model == "" {
-		wormholeReq.Model = a.model
-	}
+	wormholeReq := a.buildWormholeRequest(req)
 
 	// Call Wormhole provider streaming
 	stream, err := a.provider.Stream(ctx, wormholeReq)
@@ -165,36 +154,32 @@ func (a *WormholeToOrchestrationAdapter) CreateStreamingCompletion(ctx context.C
 	}, nil
 }
 
-// EstimateCost estimates the cost of a request
+// costPer1kTokens returns the cost per 1K tokens for a provider/model combination.
+func (a *WormholeToOrchestrationAdapter) costPer1kTokens(model string) float64 {
+	switch a.name {
+	case ProviderOpenAI:
+		switch model {
+		case "gpt-5":
+			return 0.0125
+		case "gpt-5-mini":
+			return 0.0001
+		default:
+			return 0.002
+		}
+	case ProviderAnthropic:
+		return 0.003
+	default:
+		return 0.001
+	}
+}
+
 func (a *WormholeToOrchestrationAdapter) EstimateCost(req OrchestrationCompletionRequest) float64 {
-	// Basic cost estimation - can be enhanced with actual pricing data
 	model := req.Model
 	if model == "" {
 		model = a.model
 	}
 
-	// Rough estimates based on typical pricing
-	var costPer1kTokens float64
-	switch a.name {
-	case ProviderOpenAI:
-		switch model {
-		case "gpt-5":
-			costPer1kTokens = 0.0125 // $1.25/M input = $0.00125/1K
-		case "gpt-5-mini":
-			costPer1kTokens = 0.0001
-		default:
-			costPer1kTokens = 0.0001
-		}
-	case ProviderAnthropic:
-		switch model {
-		case "claude-sonnet-4-5":
-			costPer1kTokens = 0.003 // $3/M input tokens
-		default:
-			costPer1kTokens = 0.003
-		}
-	default:
-		costPer1kTokens = 0.001 // Default low cost for unknown providers
-	}
+	rate := a.costPer1kTokens(model)
 
 	// Estimate tokens (rough: 4 chars = 1 token)
 	estimatedTokens := len(req.Prompt) / 4
@@ -204,7 +189,7 @@ func (a *WormholeToOrchestrationAdapter) EstimateCost(req OrchestrationCompletio
 		estimatedTokens += 500 // Default response size
 	}
 
-	return float64(estimatedTokens) * costPer1kTokens / 1000
+	return float64(estimatedTokens) * rate / 1000
 }
 
 // HealthCheck performs a health check on the provider
@@ -225,18 +210,5 @@ func (a *WormholeToOrchestrationAdapter) HealthCheck(ctx context.Context) error 
 
 // estimateCostFromUsage calculates cost from usage stats
 func (a *WormholeToOrchestrationAdapter) estimateCostFromUsage(usage types.Usage) float64 {
-	// This would ideally use actual pricing data
-	// For now, use rough estimates
-	var costPer1kTokens float64
-
-	switch a.name {
-	case ProviderOpenAI:
-		costPer1kTokens = 0.002
-	case ProviderAnthropic:
-		costPer1kTokens = 0.003
-	default:
-		costPer1kTokens = 0.001
-	}
-
-	return float64(usage.TotalTokens) * costPer1kTokens / 1000
+	return float64(usage.TotalTokens) * a.costPer1kTokens("") / 1000
 }
