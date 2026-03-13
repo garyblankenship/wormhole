@@ -3,10 +3,7 @@ package anthropic
 import (
 	"context"
 	"encoding/json"
-	"io"
-	"log"
 	"net/http"
-	"strings"
 
 	"github.com/garyblankenship/wormhole/internal/utils"
 	"github.com/garyblankenship/wormhole/pkg/providers"
@@ -14,12 +11,7 @@ import (
 	"github.com/garyblankenship/wormhole/pkg/types"
 )
 
-const (
-	defaultBaseURL   = "https://api.anthropic.com/v1"
-	anthropicVersion = "2023-06-01"
-	headerAPIKey     = "x-api-key"
-	headerVersion    = "anthropic-version"
-)
+const defaultBaseURL = "https://api.anthropic.com/v1"
 
 // Provider implements the Anthropic provider
 type Provider struct {
@@ -35,15 +27,11 @@ func New(config types.ProviderConfig) *Provider {
 		config.BaseURL = defaultBaseURL
 	}
 
-	// Add Anthropic-specific headers
-	if config.Headers == nil {
-		config.Headers = make(map[string]string)
-	}
-	config.Headers[headerVersion] = anthropicVersion
-	config.Headers[headerAPIKey] = config.APIKey
+	factory := &providers.AuthStrategyFactory{}
+	authStrategy := factory.CreateAuthStrategy("anthropic", config)
 
 	return &Provider{
-		BaseProvider:         providers.NewBaseProvider("anthropic", config),
+		BaseProvider:         providers.NewBaseProviderWithAuth("anthropic", config, nil, authStrategy, nil),
 		requestBuilder:       providers.NewRequestBuilder(),
 		responseTransform:    transform.NewResponseTransform(),
 		streamingTransformer: transform.NewAnthropicStreamingTransformer(),
@@ -68,7 +56,7 @@ func (p *Provider) Text(ctx context.Context, request types.TextRequest) (*types.
 	url := p.GetBaseURL() + "/messages"
 
 	var response messageResponse
-	err := p.doAnthropicRequest(ctx, http.MethodPost, url, payload, &response)
+	err := p.DoRequest(ctx, http.MethodPost, url, payload, &response)
 	if err != nil {
 		return nil, err
 	}
@@ -83,7 +71,7 @@ func (p *Provider) Stream(ctx context.Context, request types.TextRequest) (<-cha
 
 	url := p.GetBaseURL() + "/messages"
 
-	body, err := p.streamAnthropicRequest(ctx, http.MethodPost, url, payload)
+	body, err := p.StreamRequest(ctx, http.MethodPost, url, payload)
 	if err != nil {
 		return nil, err
 	}
@@ -162,109 +150,3 @@ func (p *Provider) Images(ctx context.Context, request types.ImagesRequest) (*ty
 	return nil, p.NotImplementedError("Images")
 }
 
-// doAnthropicRequest performs an HTTP request with Anthropic-specific headers
-func (p *Provider) doAnthropicRequest(ctx context.Context, method, url string, body any, result any) error {
-	// Use custom header handling for Anthropic
-	jsonBody, err := json.Marshal(body)
-	if err != nil {
-		return p.RequestError("failed to marshal request body", err)
-	}
-
-	req, err := http.NewRequestWithContext(ctx, method, url, strings.NewReader(string(jsonBody)))
-	if err != nil {
-		return p.RequestError("failed to create request", err)
-	}
-
-	// Set headers
-	req.Header.Set(types.HeaderContentType, types.ContentTypeJSON)
-	req.Header.Set(headerAPIKey, p.Config.APIKey)
-	req.Header.Set("anthropic-version", anthropicVersion)
-
-	for k, v := range p.Config.Headers {
-		if k != headerAPIKey && k != headerVersion {
-			req.Header.Set(k, v)
-		}
-	}
-
-	resp, err := p.GetHTTPClient().Do(req)
-	if err != nil {
-		return p.WrapError(types.ErrorCodeNetwork, "request failed", err)
-	}
-	defer func() {
-		if err := resp.Body.Close(); err != nil {
-			log.Printf("warning: failed to close response body: %v", err)
-		}
-	}()
-
-	respBody, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return p.RequestError("failed to read response body", err)
-	}
-
-	if resp.StatusCode >= 400 {
-		var apiError anthropicError
-		if err := json.Unmarshal(respBody, &apiError); err != nil {
-			err := types.HTTPStatusToError(resp.StatusCode, string(respBody))
-			err.Provider = p.Name()
-			return err
-		}
-		return apiError
-	}
-
-	if result != nil && len(respBody) > 0 {
-		if err := json.Unmarshal(respBody, result); err != nil {
-			return p.RequestError("failed to unmarshal response", err)
-		}
-	}
-
-	return nil
-}
-
-// streamAnthropicRequest performs a streaming HTTP request
-func (p *Provider) streamAnthropicRequest(ctx context.Context, method, url string, body any) (io.ReadCloser, error) {
-	jsonBody, err := json.Marshal(body)
-	if err != nil {
-		return nil, p.RequestError("failed to marshal request body", err)
-	}
-
-	req, err := http.NewRequestWithContext(ctx, method, url, strings.NewReader(string(jsonBody)))
-	if err != nil {
-		return nil, p.RequestError("failed to create request", err)
-	}
-
-	// Set headers
-	req.Header.Set(types.HeaderContentType, types.ContentTypeJSON)
-	req.Header.Set(headerAPIKey, p.Config.APIKey)
-	req.Header.Set("anthropic-version", anthropicVersion)
-	req.Header.Set(types.HeaderAccept, types.ContentTypeEventStream)
-	req.Header.Set(types.HeaderCacheControl, "no-cache")
-
-	for k, v := range p.Config.Headers {
-		if k != headerAPIKey && k != headerVersion {
-			req.Header.Set(k, v)
-		}
-	}
-
-	resp, err := p.GetHTTPClient().Do(req)
-	if err != nil {
-		return nil, p.WrapError(types.ErrorCodeNetwork, "request failed", err)
-	}
-
-	if resp.StatusCode >= 400 {
-		defer func() {
-			if err := resp.Body.Close(); err != nil {
-				log.Printf("warning: failed to close response body: %v", err)
-			}
-		}()
-		respBody, _ := io.ReadAll(resp.Body)
-		var apiError anthropicError
-		if err := json.Unmarshal(respBody, &apiError); err != nil {
-			err := types.HTTPStatusToError(resp.StatusCode, string(respBody))
-			err.Provider = p.Name()
-			return nil, err
-		}
-		return nil, apiError
-	}
-
-	return resp.Body, nil
-}

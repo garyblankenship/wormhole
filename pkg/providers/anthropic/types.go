@@ -52,12 +52,3 @@ type messageDeltaEvent struct {
 		Usage      messageUsage `json:"usage,omitempty"`
 	} `json:"delta"`
 }
-
-type anthropicError struct {
-	Type    string `json:"type"`
-	Message string `json:"message"`
-}
-
-func (e anthropicError) Error() string {
-	return e.Message
-}

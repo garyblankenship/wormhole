@@ -16,10 +16,7 @@ func TestAnthropicProvider(t *testing.T) {
 	provider := anthropic.New(config)
 	assert.NotNil(t, provider)
 	assert.Equal(t, "anthropic", provider.Name())
-
-	// Check that Anthropic-specific headers are set
-	assert.Equal(t, "2023-06-01", provider.Config.Headers["anthropic-version"])
-	assert.Equal(t, "test-key", provider.Config.Headers["x-api-key"])
+	assert.Equal(t, "https://api.anthropic.com/v1", provider.Config.BaseURL)
 }
 
 func TestMessageRoleMapping(t *testing.T) {

@@ -443,10 +443,13 @@ func TestAnthropicProvider_ErrorHandling(t *testing.T) {
 			}))
 			defer server.Close()
 
-			// Create provider
+			// Create provider with retries disabled so error responses are
+			// returned directly instead of being consumed by the retry loop.
+			noRetries := 0
 			provider := anthropic.New(types.ProviderConfig{
-				APIKey:  "test-api-key",
-				BaseURL: server.URL,
+				APIKey:     "test-api-key",
+				BaseURL:    server.URL,
+				MaxRetries: &noRetries,
 			})
 
 			// Create request
