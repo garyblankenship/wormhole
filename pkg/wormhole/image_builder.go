@@ -3,7 +3,6 @@ package wormhole
 import (
 	"context"
 	"fmt"
-	"maps"
 
 	"github.com/garyblankenship/wormhole/pkg/types"
 )
@@ -115,9 +114,6 @@ func cloneImageRequest(src *types.ImageRequest) *types.ImageRequest {
 		N:              src.N,
 		ResponseFormat: src.ResponseFormat,
 	}
-	if len(src.ProviderOptions) > 0 {
-		cloned.ProviderOptions = make(map[string]any, len(src.ProviderOptions))
-		maps.Copy(cloned.ProviderOptions, src.ProviderOptions)
-	}
+	cloned.ProviderOptions = cloneProviderOptions(src.ProviderOptions)
 	return cloned
 }

@@ -110,10 +110,18 @@ func cloneBaseRequestFields(dst, src *types.BaseRequest) {
 		dst.Stop = make([]string, len(src.Stop))
 		copy(dst.Stop, src.Stop)
 	}
-	if len(src.ProviderOptions) > 0 {
-		dst.ProviderOptions = make(map[string]any, len(src.ProviderOptions))
-		maps.Copy(dst.ProviderOptions, src.ProviderOptions)
+	dst.ProviderOptions = cloneProviderOptions(src.ProviderOptions)
+}
+
+// cloneProviderOptions returns a shallow copy of the provider options map.
+// Returns nil if the source is empty.
+func cloneProviderOptions(src map[string]any) map[string]any {
+	if len(src) == 0 {
+		return nil
 	}
+	dst := make(map[string]any, len(src))
+	maps.Copy(dst, src)
+	return dst
 }
 
 func prepareExecutionMessages(systemPrompt string, messages []types.Message) []types.Message {

@@ -2,7 +2,6 @@ package wormhole
 
 import (
 	"context"
-	"maps"
 
 	"github.com/garyblankenship/wormhole/pkg/types"
 )
@@ -172,9 +171,6 @@ func cloneEmbeddingsRequest(src *types.EmbeddingsRequest) *types.EmbeddingsReque
 		cloned.Input = make([]string, len(src.Input))
 		copy(cloned.Input, src.Input)
 	}
-	if len(src.ProviderOptions) > 0 {
-		cloned.ProviderOptions = make(map[string]any, len(src.ProviderOptions))
-		maps.Copy(cloned.ProviderOptions, src.ProviderOptions)
-	}
+	cloned.ProviderOptions = cloneProviderOptions(src.ProviderOptions)
 	return cloned
 }
