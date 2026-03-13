@@ -14,7 +14,7 @@
 //	)
 //
 //	response, err := client.Text().
-//	    Model("gpt-4o").
+//	    Model("gpt-5.2").
 //	    Prompt("Hello, world!").
 //	    Generate(context.Background())
 //	if err != nil {
@@ -25,9 +25,9 @@
 // # Supported Providers
 //
 // Built-in providers with dedicated configuration:
-//   - OpenAI (GPT-4, GPT-4o, o1 family) via WithOpenAI()
-//   - Anthropic (Claude 3.5, Claude 3 family) via WithAnthropic()
-//   - Google Gemini (Gemini Pro, Gemini Flash) via WithGemini()
+//   - OpenAI (GPT-5.2 family) via WithOpenAI()
+//   - Anthropic (Claude 4.5 family) via WithAnthropic()
+//   - Google Gemini (Gemini 2.5 family) via WithGemini()
 //   - Groq (fast inference) via WithGroq()
 //   - Mistral via WithMistral()
 //   - Ollama (local models) via WithOllama()
@@ -44,7 +44,7 @@
 //
 //	// Text generation
 //	client.Text().
-//	    Model("gpt-4o").
+//	    Model("gpt-5.2").
 //	    SystemPrompt("You are a helpful assistant").
 //	    Prompt("Explain quantum computing").
 //	    Temperature(0.7).
@@ -53,7 +53,7 @@
 //
 //	// Streaming
 //	stream, _ := client.Text().
-//	    Model("claude-3-5-sonnet").
+//	    Model("claude-sonnet-4-5").
 //	    Prompt("Write a story").
 //	    Stream(ctx)
 //	for chunk := range stream {
@@ -62,7 +62,7 @@
 //
 //	// Structured output
 //	client.Structured().
-//	    Model("gpt-4o").
+//	    Model("gpt-5.2").
 //	    Schema(mySchema).
 //	    Prompt("Extract entities").
 //	    Generate(ctx)
@@ -78,7 +78,7 @@
 // Validate builder configuration before making requests:
 //
 //	builder := client.Text().
-//	    Model("gpt-4o").
+//	    Model("gpt-5.2").
 //	    Temperature(0.7).
 //	    MaxTokens(1000)
 //
@@ -91,13 +91,13 @@
 //	}
 //
 //	// Or use MustValidate for tests (panics on error)
-//	client.Text().Model("gpt-4o").MustValidate().Prompt("Hi").Generate(ctx)
+//	client.Text().Model("gpt-5.2").MustValidate().Prompt("Hi").Generate(ctx)
 //
 // # Response Accessors
 //
 // All response types have unified Content() method:
 //
-//	textResp, _ := client.Text().Model("gpt-4o").Prompt("Hi").Generate(ctx)
+//	textResp, _ := client.Text().Model("gpt-5.2").Prompt("Hi").Generate(ctx)
 //	fmt.Println(textResp.Content())       // string
 //	fmt.Println(textResp.HasToolCalls())  // bool
 //	fmt.Println(textResp.IsComplete())    // bool (finished normally)
@@ -171,7 +171,7 @@
 //
 //	// Tools are automatically executed when the model requests them
 //	response, _ := client.Text().
-//	    Model("gpt-4o").
+//	    Model("gpt-5.2").
 //	    Prompt("What's the weather in Paris?").
 //	    Generate(ctx)
 //
@@ -197,7 +197,7 @@
 //	    wormhole.WithMiddleware(
 //	        middleware.NewLoggingMiddleware(logger),
 //	        middleware.NewCacheMiddleware(cache),
-//	        middleware.NewRateLimiterMiddleware(10, time.Second),
+//	        middleware.RateLimitMiddleware(10),
 //	    ),
 //	)
 //
@@ -214,7 +214,7 @@
 //	// Use any OpenAI-compatible endpoint
 //	client.Text().
 //	    BaseURL("https://openrouter.ai/api/v1").
-//	    Model("anthropic/claude-3-opus").
+//	    Model("anthropic/claude-opus-4-5").
 //	    Prompt("Hello").
 //	    Generate(ctx)
 //
