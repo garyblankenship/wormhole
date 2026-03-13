@@ -2,10 +2,7 @@ package fetchers
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
-	"log"
-	"net/http"
 	"strings"
 
 	"github.com/garyblankenship/wormhole/pkg/types"
@@ -15,7 +12,6 @@ import (
 type OpenAIFetcher struct {
 	apiKey  string
 	baseURL string
-	client  *http.Client
 }
 
 // NewOpenAIFetcher creates a new OpenAI model fetcher
@@ -23,7 +19,6 @@ func NewOpenAIFetcher(apiKey string) *OpenAIFetcher {
 	return &OpenAIFetcher{
 		apiKey:  apiKey,
 		baseURL: "https://api.openai.com/v1",
-		client:  &http.Client{},
 	}
 }
 
@@ -38,31 +33,12 @@ func (f *OpenAIFetcher) FetchModels(ctx context.Context) ([]*types.ModelInfo, er
 		return nil, fmt.Errorf("OpenAI API key not configured")
 	}
 
-	// Create request
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, f.baseURL+"/models", nil)
+	req, err := newGetRequest(ctx, f.baseURL+"/models")
 	if err != nil {
-		return nil, fmt.Errorf("failed to create request: %w", err)
+		return nil, err
 	}
-
-	// Add auth header
 	req.Header.Set("Authorization", "Bearer "+f.apiKey)
 
-	// Execute request
-	resp, err := f.client.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("failed to fetch models: %w", err)
-	}
-	defer func() {
-		if err := resp.Body.Close(); err != nil {
-			log.Printf("warning: failed to close response body: %v", err)
-		}
-	}()
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("API returned status %d", resp.StatusCode)
-	}
-
-	// Parse response
 	var response struct {
 		Object string `json:"object"`
 		Data   []struct {
@@ -73,8 +49,8 @@ func (f *OpenAIFetcher) FetchModels(ctx context.Context) ([]*types.ModelInfo, er
 		} `json:"data"`
 	}
 
-	if err := json.NewDecoder(resp.Body).Decode(&response); err != nil {
-		return nil, fmt.Errorf("failed to parse response: %w", err)
+	if err := fetchJSON(ctx, req, &response); err != nil {
+		return nil, err
 	}
 
 	// Convert to ModelInfo

@@ -2,10 +2,6 @@ package fetchers
 
 import (
 	"context"
-	"encoding/json"
-	"fmt"
-	"log"
-	"net/http"
 	"strings"
 
 	"github.com/garyblankenship/wormhole/pkg/types"
@@ -14,7 +10,6 @@ import (
 // OllamaFetcher fetches locally available models from Ollama
 type OllamaFetcher struct {
 	baseURL string
-	client  *http.Client
 }
 
 // NewOllamaFetcher creates a new Ollama model fetcher
@@ -24,7 +19,6 @@ func NewOllamaFetcher(baseURL string) *OllamaFetcher {
 	}
 	return &OllamaFetcher{
 		baseURL: baseURL,
-		client:  &http.Client{},
 	}
 }
 
@@ -35,28 +29,11 @@ func (f *OllamaFetcher) Name() string {
 
 // FetchModels retrieves all locally available models from Ollama
 func (f *OllamaFetcher) FetchModels(ctx context.Context) ([]*types.ModelInfo, error) {
-	// Create request (no auth required for local service)
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, f.baseURL+"/api/tags", nil)
+	req, err := newGetRequest(ctx, f.baseURL+"/api/tags")
 	if err != nil {
-		return nil, fmt.Errorf("failed to create request: %w", err)
+		return nil, err
 	}
 
-	// Execute request
-	resp, err := f.client.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("failed to fetch models (is Ollama running?): %w", err)
-	}
-	defer func() {
-		if err := resp.Body.Close(); err != nil {
-			log.Printf("warning: failed to close response body: %v", err)
-		}
-	}()
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("API returned status %d", resp.StatusCode)
-	}
-
-	// Parse response
 	var response struct {
 		Models []struct {
 			Name       string `json:"name"`
@@ -71,8 +48,8 @@ func (f *OllamaFetcher) FetchModels(ctx context.Context) ([]*types.ModelInfo, er
 		} `json:"models"`
 	}
 
-	if err := json.NewDecoder(resp.Body).Decode(&response); err != nil {
-		return nil, fmt.Errorf("failed to parse response: %w", err)
+	if err := fetchJSON(ctx, req, &response); err != nil {
+		return nil, err
 	}
 
 	// Convert to ModelInfo

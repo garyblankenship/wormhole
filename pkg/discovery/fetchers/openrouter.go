@@ -2,10 +2,6 @@ package fetchers
 
 import (
 	"context"
-	"encoding/json"
-	"fmt"
-	"log"
-	"net/http"
 	"strings"
 
 	"github.com/garyblankenship/wormhole/pkg/types"
@@ -17,14 +13,12 @@ const providerOpenRouter = "openrouter"
 // OpenRouterFetcher fetches models from OpenRouter API
 type OpenRouterFetcher struct {
 	baseURL string
-	client  *http.Client
 }
 
 // NewOpenRouterFetcher creates a new OpenRouter model fetcher
 func NewOpenRouterFetcher() *OpenRouterFetcher {
 	return &OpenRouterFetcher{
 		baseURL: "https://openrouter.ai/api/v1",
-		client:  &http.Client{},
 	}
 }
 
@@ -35,28 +29,11 @@ func (f *OpenRouterFetcher) Name() string {
 
 // FetchModels retrieves all available models from OpenRouter
 func (f *OpenRouterFetcher) FetchModels(ctx context.Context) ([]*types.ModelInfo, error) {
-	// Create request (no auth required for model listing)
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, f.baseURL+"/models", nil)
+	req, err := newGetRequest(ctx, f.baseURL+"/models")
 	if err != nil {
-		return nil, fmt.Errorf("failed to create request: %w", err)
+		return nil, err
 	}
 
-	// Execute request
-	resp, err := f.client.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("failed to fetch models: %w", err)
-	}
-	defer func() {
-		if err := resp.Body.Close(); err != nil {
-			log.Printf("warning: failed to close response body: %v", err)
-		}
-	}()
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("API returned status %d", resp.StatusCode)
-	}
-
-	// Parse response
 	var response struct {
 		Data []struct {
 			ID            string `json:"id"`
@@ -77,8 +54,8 @@ func (f *OpenRouterFetcher) FetchModels(ctx context.Context) ([]*types.ModelInfo
 		} `json:"data"`
 	}
 
-	if err := json.NewDecoder(resp.Body).Decode(&response); err != nil {
-		return nil, fmt.Errorf("failed to parse response: %w", err)
+	if err := fetchJSON(ctx, req, &response); err != nil {
+		return nil, err
 	}
 
 	// Convert to ModelInfo

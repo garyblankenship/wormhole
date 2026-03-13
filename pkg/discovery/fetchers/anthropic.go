@@ -2,10 +2,7 @@ package fetchers
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
-	"log"
-	"net/http"
 
 	"github.com/garyblankenship/wormhole/pkg/types"
 )
@@ -14,7 +11,6 @@ import (
 type AnthropicFetcher struct {
 	apiKey  string
 	baseURL string
-	client  *http.Client
 }
 
 // NewAnthropicFetcher creates a new Anthropic model fetcher
@@ -22,7 +18,6 @@ func NewAnthropicFetcher(apiKey string) *AnthropicFetcher {
 	return &AnthropicFetcher{
 		apiKey:  apiKey,
 		baseURL: "https://api.anthropic.com/v1",
-		client:  &http.Client{},
 	}
 }
 
@@ -37,32 +32,13 @@ func (f *AnthropicFetcher) FetchModels(ctx context.Context) ([]*types.ModelInfo,
 		return nil, fmt.Errorf("anthropic API key not configured")
 	}
 
-	// Create request
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, f.baseURL+"/models", nil)
+	req, err := newGetRequest(ctx, f.baseURL+"/models")
 	if err != nil {
-		return nil, fmt.Errorf("failed to create request: %w", err)
+		return nil, err
 	}
-
-	// Add required headers
 	req.Header.Set("x-api-key", f.apiKey)
 	req.Header.Set("anthropic-version", "2023-06-01")
 
-	// Execute request
-	resp, err := f.client.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("failed to fetch models: %w", err)
-	}
-	defer func() {
-		if err := resp.Body.Close(); err != nil {
-			log.Printf("warning: failed to close response body: %v", err)
-		}
-	}()
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("API returned status %d", resp.StatusCode)
-	}
-
-	// Parse response
 	var response struct {
 		Data []struct {
 			ID          string `json:"id"`
@@ -72,8 +48,8 @@ func (f *AnthropicFetcher) FetchModels(ctx context.Context) ([]*types.ModelInfo,
 		} `json:"data"`
 	}
 
-	if err := json.NewDecoder(resp.Body).Decode(&response); err != nil {
-		return nil, fmt.Errorf("failed to parse response: %w", err)
+	if err := fetchJSON(ctx, req, &response); err != nil {
+		return nil, err
 	}
 
 	// Convert to ModelInfo
