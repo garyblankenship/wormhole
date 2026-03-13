@@ -11,6 +11,11 @@ import (
 	"github.com/garyblankenship/wormhole/pkg/config"
 )
 
+// HTTPClient defines the interface for HTTP clients
+type HTTPClient interface {
+	Do(req *http.Request) (*http.Response, error)
+}
+
 // RetryConfig holds configuration for retry logic
 type RetryConfig struct {
 	MaxRetries      int           // Maximum number of retry attempts
@@ -51,11 +56,12 @@ func (e *RetryableError) Unwrap() error {
 // IsRetryableStatusCode determines if an HTTP status code should be retried
 func IsRetryableStatusCode(statusCode int) bool {
 	switch statusCode {
-	case http.StatusTooManyRequests, // 429 - Rate limited
-		http.StatusInternalServerError, // 500 - Internal server error
-		http.StatusBadGateway,          // 502 - Bad gateway
-		http.StatusServiceUnavailable,  // 503 - Service unavailable
-		http.StatusGatewayTimeout:      // 504 - Gateway timeout
+	case http.StatusRequestTimeout,     // 408 - Request timeout
+		http.StatusTooManyRequests,      // 429 - Rate limited
+		http.StatusInternalServerError,  // 500 - Internal server error
+		http.StatusBadGateway,           // 502 - Bad gateway
+		http.StatusServiceUnavailable,   // 503 - Service unavailable
+		http.StatusGatewayTimeout:       // 504 - Gateway timeout
 		return true
 	default:
 		return false
@@ -64,12 +70,12 @@ func IsRetryableStatusCode(statusCode int) bool {
 
 // RetryableHTTPClient wraps an HTTP client with retry logic
 type RetryableHTTPClient struct {
-	Client *http.Client
+	Client HTTPClient
 	Config RetryConfig
 }
 
 // NewRetryableHTTPClient creates a new retryable HTTP client
-func NewRetryableHTTPClient(client *http.Client, config RetryConfig) *RetryableHTTPClient {
+func NewRetryableHTTPClient(client HTTPClient, config RetryConfig) *RetryableHTTPClient {
 	if client == nil {
 		// Default to no timeout - let context timeouts handle this
 		client = &http.Client{}

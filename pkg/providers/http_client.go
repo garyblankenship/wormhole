@@ -21,6 +21,9 @@ import (
 	"github.com/garyblankenship/wormhole/pkg/types"
 )
 
+// HTTPClient is the interface for HTTP clients (alias for utils.HTTPClient).
+type HTTPClient = utils.HTTPClient
+
 // responseBodyPool pools byte slices for response bodies to reduce allocations.
 // Stores *[]byte so sync.Pool.Put receives a pointer type (SA6002).
 var responseBodyPool = sync.Pool{
@@ -91,16 +94,29 @@ type HTTPClientWrapper struct {
 	authStrategy AuthStrategy
 }
 
-// NewHTTPClientWrapper creates a new HTTPClientWrapper
-func NewHTTPClientWrapper(name string, providerConfig types.ProviderConfig, tlsConfig *config.TLSConfig, authStrategy AuthStrategy) *HTTPClientWrapper {
+// NewHTTPClientWrapper creates a new HTTPClientWrapper.
+// Pass a non-nil httpClient to inject a custom HTTP client (useful for testing).
+// Pass nil to use the default secure HTTP client.
+func NewHTTPClientWrapper(name string, providerConfig types.ProviderConfig, tlsConfig *config.TLSConfig, authStrategy AuthStrategy, httpClient HTTPClient) *HTTPClientWrapper {
 	w := &HTTPClientWrapper{
-        providerName: name,
+		providerName: name,
 		Config:       providerConfig,
 		tlsConfig:    tlsConfig,
 		authStrategy: authStrategy,
 	}
 
-	w.httpClient = NewSecureHTTPClient(w.GetHTTPTimeout(), tlsConfig, nil, providerConfig.BaseURL)
+	// Use injected client if provided, otherwise create default
+	if httpClient != nil {
+		// Type assertion to get the concrete *http.Client if possible
+		if hc, ok := httpClient.(*http.Client); ok {
+			w.httpClient = hc
+		} else {
+			// For non-standard HTTPClient implementations, create a concrete client for GetHTTPClient()
+			w.httpClient = NewSecureHTTPClient(w.GetHTTPTimeout(), tlsConfig, nil, providerConfig.BaseURL)
+		}
+	} else {
+		w.httpClient = NewSecureHTTPClient(w.GetHTTPTimeout(), tlsConfig, nil, providerConfig.BaseURL)
+	}
 
 	retryConfig := utils.DefaultRetryConfig()
 	if providerConfig.MaxRetries != nil {
@@ -113,7 +129,12 @@ func NewHTTPClientWrapper(name string, providerConfig types.ProviderConfig, tlsC
 		retryConfig.MaxDelay = *providerConfig.RetryMaxDelay
 	}
 
-	w.retryClient = utils.NewRetryableHTTPClient(w.httpClient, retryConfig)
+	// Use injected client for retry wrapper if provided, otherwise use the concrete httpClient
+	if httpClient != nil {
+		w.retryClient = utils.NewRetryableHTTPClient(httpClient, retryConfig)
+	} else {
+		w.retryClient = utils.NewRetryableHTTPClient(w.httpClient, retryConfig)
+	}
 
 	return w
 }
@@ -287,7 +308,7 @@ func (w *HTTPClientWrapper) buildErrorResponse(statusCode int, status, url strin
 	wormholeErr := types.NewWormholeError(
 		errorCode,
 		errorMessage,
-		w.isRetryableStatus(statusCode),
+		utils.IsRetryableStatusCode(statusCode),
 	).WithDetails(fmt.Sprintf("URL: %s\nResponse: %s", w.maskAPIKeyInURL(url), string(respBody)))
 
 	wormholeErr.StatusCode = statusCode
@@ -351,14 +372,6 @@ func (w *HTTPClientWrapper) mapHTTPStatusToErrorCode(statusCode int) types.Error
 	}
 }
 
-func (w *HTTPClientWrapper) isRetryableStatus(statusCode int) bool {
-	switch statusCode {
-	case 429, 500, 502, 503, 504, 408:
-		return true
-	default:
-		return false
-	}
-}
 
 
 func (w *HTTPClientWrapper) maskAPIKeyInURL(rawURL string) string {

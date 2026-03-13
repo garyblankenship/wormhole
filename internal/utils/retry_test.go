@@ -100,7 +100,10 @@ func TestNewRetryableHTTPClient(t *testing.T) {
 		retryClient := NewRetryableHTTPClient(nil, config)
 
 		assert.NotNil(t, retryClient.Client)
-		assert.Equal(t, 0*time.Second, retryClient.Client.Timeout)
+		// Type assert to access Timeout field
+		if hc, ok := retryClient.Client.(*http.Client); ok {
+			assert.Equal(t, 0*time.Second, hc.Timeout)
+		}
 		assert.Equal(t, config, retryClient.Config)
 	})
 }

@@ -26,16 +26,16 @@ type BaseProvider struct {
 
 // NewBaseProvider creates a new base provider with default secure TLS configuration
 func NewBaseProvider(name string, providerConfig types.ProviderConfig) *BaseProvider {
-	return NewBaseProviderWithAuth(name, providerConfig, nil, nil)
+	return NewBaseProviderWithAuth(name, providerConfig, nil, nil, nil)
 }
 
 // NewBaseProviderWithTLS creates a new base provider with custom TLS configuration
 func NewBaseProviderWithTLS(name string, providerConfig types.ProviderConfig, tlsConfig *config.TLSConfig) *BaseProvider {
-	return NewBaseProviderWithAuth(name, providerConfig, tlsConfig, nil)
+	return NewBaseProviderWithAuth(name, providerConfig, tlsConfig, nil, nil)
 }
 
 // NewBaseProviderWithAuth creates a new base provider with custom TLS and auth configuration
-func NewBaseProviderWithAuth(name string, providerConfig types.ProviderConfig, tlsConfig *config.TLSConfig, authStrategy AuthStrategy) *BaseProvider {
+func NewBaseProviderWithAuth(name string, providerConfig types.ProviderConfig, tlsConfig *config.TLSConfig, authStrategy AuthStrategy, httpClient HTTPClient) *BaseProvider {
 	if tlsConfig == nil {
 		tlsConfig = ExtractTLSConfigFromProviderConfig(providerConfig)
 	}
@@ -47,7 +47,7 @@ func NewBaseProviderWithAuth(name string, providerConfig types.ProviderConfig, t
 	bp := &BaseProvider{
 		BaseProvider:      types.NewBaseProvider(name),
 		Config:            providerConfig,
-		HTTPClientWrapper: NewHTTPClientWrapper(name, providerConfig, tlsConfig, authStrategy),
+		HTTPClientWrapper: NewHTTPClientWrapper(name, providerConfig, tlsConfig, authStrategy, httpClient),
 	}
 
 	return bp
@@ -60,7 +60,7 @@ func NewInsecureBaseProvider(name string, providerConfig types.ProviderConfig, s
 		insecureTLS = insecureTLS.WithInsecureSkipVerify(true)
 	}
 
-	return NewBaseProviderWithAuth(name, providerConfig, &insecureTLS, nil)
+	return NewBaseProviderWithAuth(name, providerConfig, &insecureTLS, nil, nil)
 }
 
 // GetBaseURL returns the base URL for the provider
