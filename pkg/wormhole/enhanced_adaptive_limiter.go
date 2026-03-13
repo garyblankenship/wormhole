@@ -203,27 +203,7 @@ func (l *EnhancedAdaptiveLimiter) getOrCreateState(provider, model string) *Prov
 	}
 
 	// Resolve settings outside the lock (config is immutable after init)
-	providerSetting, hasProviderSetting := l.config.ProviderSettings[provider]
-
-	var targetLatency time.Duration
-	var minCapacity, maxCapacity, initialCapacity int
-
-	if hasProviderSetting {
-		targetLatency = providerSetting.TargetLatency
-		minCapacity = providerSetting.MinCapacity
-		maxCapacity = providerSetting.MaxCapacity
-		initialCapacity = providerSetting.InitialCapacity
-	} else {
-		targetLatency = l.config.TargetLatency
-		minCapacity = l.config.MinCapacity
-		maxCapacity = l.config.MaxCapacity
-		initialCapacity = l.config.InitialCapacity
-	}
-
-	pidConfig := l.config.PIDConfig
-	if hasProviderSetting && providerSetting.PIDConfig != nil {
-		pidConfig = *providerSetting.PIDConfig
-	}
+	targetLatency, minCapacity, maxCapacity, initialCapacity, pidConfig := l.resolveProviderSettings(provider)
 
 	// Create new state
 	newState := NewProviderAdaptiveState(
@@ -250,29 +230,7 @@ func (l *EnhancedAdaptiveLimiter) getOrCreateState(provider, model string) *Prov
 
 // createProviderState creates a new provider-level state
 func (l *EnhancedAdaptiveLimiter) createProviderState(provider string) *ProviderAdaptiveState {
-	// Check if we have provider-specific settings
-	providerSetting, hasProviderSetting := l.config.ProviderSettings[provider]
-
-	var targetLatency time.Duration
-	var minCapacity, maxCapacity, initialCapacity int
-
-	if hasProviderSetting {
-		targetLatency = providerSetting.TargetLatency
-		minCapacity = providerSetting.MinCapacity
-		maxCapacity = providerSetting.MaxCapacity
-		initialCapacity = providerSetting.InitialCapacity
-	} else {
-		targetLatency = l.config.TargetLatency
-		minCapacity = l.config.MinCapacity
-		maxCapacity = l.config.MaxCapacity
-		initialCapacity = l.config.InitialCapacity
-	}
-
-	// Create PID config
-	pidConfig := l.config.PIDConfig
-	if hasProviderSetting && providerSetting.PIDConfig != nil {
-		pidConfig = *providerSetting.PIDConfig
-	}
+	targetLatency, minCapacity, maxCapacity, initialCapacity, pidConfig := l.resolveProviderSettings(provider)
 
 	// Create new state
 	state := NewProviderAdaptiveState(
@@ -295,6 +253,33 @@ func (l *EnhancedAdaptiveLimiter) createProviderState(provider string) *Provider
 	l.mu.Unlock()
 
 	return state
+}
+
+// resolveProviderSettings returns capacity/latency settings for a provider,
+// falling back to global config defaults when no provider-specific setting exists.
+func (l *EnhancedAdaptiveLimiter) resolveProviderSettings(provider string) (
+	targetLatency time.Duration, minCapacity, maxCapacity, initialCapacity int, pidConfig PIDConfig,
+) {
+	providerSetting, hasProviderSetting := l.config.ProviderSettings[provider]
+
+	if hasProviderSetting {
+		targetLatency = providerSetting.TargetLatency
+		minCapacity = providerSetting.MinCapacity
+		maxCapacity = providerSetting.MaxCapacity
+		initialCapacity = providerSetting.InitialCapacity
+	} else {
+		targetLatency = l.config.TargetLatency
+		minCapacity = l.config.MinCapacity
+		maxCapacity = l.config.MaxCapacity
+		initialCapacity = l.config.InitialCapacity
+	}
+
+	pidConfig = l.config.PIDConfig
+	if hasProviderSetting && providerSetting.PIDConfig != nil {
+		pidConfig = *providerSetting.PIDConfig
+	}
+
+	return
 }
 
 // getState gets existing state for provider/model

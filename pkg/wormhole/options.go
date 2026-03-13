@@ -13,6 +13,29 @@ import (
 // Option is a function that configures a Wormhole client.
 type Option func(*Config)
 
+func registerProvider(c *Config, name, apiKey string, cfgs ...types.ProviderConfig) {
+	if c.Providers == nil {
+		c.Providers = make(map[string]types.ProviderConfig)
+	}
+	var cfg types.ProviderConfig
+	if len(cfgs) > 0 {
+		cfg = cfgs[0]
+	}
+	cfg.APIKey = apiKey
+	c.Providers[name] = cfg
+}
+
+func registerOpenAICompatible(c *Config, name string, cfg types.ProviderConfig) {
+	if c.Providers == nil {
+		c.Providers = make(map[string]types.ProviderConfig)
+	}
+	if c.CustomFactories == nil {
+		c.CustomFactories = make(map[string]types.ProviderFactory)
+	}
+	c.Providers[name] = cfg
+	c.CustomFactories[name] = openAICompatibleFactory()
+}
+
 // WithDefaultProvider sets the default provider for requests.
 func WithDefaultProvider(name string) Option {
 	return func(c *Config) {
@@ -23,50 +46,21 @@ func WithDefaultProvider(name string) Option {
 // WithOpenAI configures the OpenAI provider.
 func WithOpenAI(apiKey string, config ...types.ProviderConfig) Option {
 	return func(c *Config) {
-		if c.Providers == nil {
-			c.Providers = make(map[string]types.ProviderConfig)
-		}
-
-		var cfg types.ProviderConfig
-		if len(config) > 0 {
-			cfg = config[0]
-		}
-		cfg.APIKey = apiKey
-		c.Providers["openai"] = cfg
-
-		// Models are now auto-registered globally in New() - no need to register here
+		registerProvider(c, "openai", apiKey, config...)
 	}
 }
 
 // WithAnthropic configures the Anthropic provider.
 func WithAnthropic(apiKey string, config ...types.ProviderConfig) Option {
 	return func(c *Config) {
-		if c.Providers == nil {
-			c.Providers = make(map[string]types.ProviderConfig)
-		}
-
-		var cfg types.ProviderConfig
-		if len(config) > 0 {
-			cfg = config[0]
-		}
-		cfg.APIKey = apiKey
-		c.Providers["anthropic"] = cfg
+		registerProvider(c, "anthropic", apiKey, config...)
 	}
 }
 
 // WithGemini configures the Gemini provider.
 func WithGemini(apiKey string, config ...types.ProviderConfig) Option {
 	return func(c *Config) {
-		if c.Providers == nil {
-			c.Providers = make(map[string]types.ProviderConfig)
-		}
-
-		var cfg types.ProviderConfig
-		if len(config) > 0 {
-			cfg = config[0]
-		}
-		cfg.APIKey = apiKey
-		c.Providers["gemini"] = cfg
+		registerProvider(c, "gemini", apiKey, config...)
 	}
 }
 
@@ -94,74 +88,36 @@ func WithOllama(config types.ProviderConfig) Option {
 		if c.Providers == nil {
 			c.Providers = make(map[string]types.ProviderConfig)
 		}
-		c.Providers["ollama"] = config
+		c.Providers["ollama"] = config // no APIKey override; caller sets it in config
 	}
 }
 
 // WithLMStudio configures the LMStudio provider.
 func WithLMStudio(config types.ProviderConfig) Option {
 	return func(c *Config) {
-		if c.Providers == nil {
-			c.Providers = make(map[string]types.ProviderConfig)
-		}
-		if c.CustomFactories == nil {
-			c.CustomFactories = make(map[string]types.ProviderFactory)
-		}
-
-		c.Providers["lmstudio"] = config
-		c.CustomFactories["lmstudio"] = openAICompatibleFactory()
+		registerOpenAICompatible(c, "lmstudio", config)
 	}
 }
 
 // WithVLLM configures the vLLM provider.
 func WithVLLM(config types.ProviderConfig) Option {
 	return func(c *Config) {
-		if c.Providers == nil {
-			c.Providers = make(map[string]types.ProviderConfig)
-		}
-		if c.CustomFactories == nil {
-			c.CustomFactories = make(map[string]types.ProviderFactory)
-		}
-
-		c.Providers["vllm"] = config
-		c.CustomFactories["vllm"] = openAICompatibleFactory()
+		registerOpenAICompatible(c, "vllm", config)
 	}
 }
 
 // WithOllamaOpenAI configures the Ollama OpenAI-compatible provider.
 func WithOllamaOpenAI(config types.ProviderConfig) Option {
 	return func(c *Config) {
-		if c.Providers == nil {
-			c.Providers = make(map[string]types.ProviderConfig)
-		}
-		if c.CustomFactories == nil {
-			c.CustomFactories = make(map[string]types.ProviderFactory)
-		}
-
-		c.Providers["ollama-openai"] = config
-		c.CustomFactories["ollama-openai"] = openAICompatibleFactory()
+		registerOpenAICompatible(c, "ollama-openai", config)
 	}
 }
 
 // WithOpenAICompatible configures a generic OpenAI-compatible provider.
 func WithOpenAICompatible(name, baseURL string, config types.ProviderConfig) Option {
 	return func(c *Config) {
-		if c.Providers == nil {
-			c.Providers = make(map[string]types.ProviderConfig)
-		}
-		if c.CustomFactories == nil {
-			c.CustomFactories = make(map[string]types.ProviderFactory)
-		}
-
-		// Set the baseURL in config
 		config.BaseURL = baseURL
-		c.Providers[name] = config
-
-		// Register the factory for this custom provider
-		c.CustomFactories[name] = openAICompatibleFactory()
-
-		// Models are now auto-registered globally in New() - no need to register here
-		// OpenRouter models are automatically available
+		registerOpenAICompatible(c, name, config)
 	}
 }
 
