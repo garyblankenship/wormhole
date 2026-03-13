@@ -1,12 +1,9 @@
 package ollama
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
-	"log"
 	"net/http"
 	"time"
 
@@ -36,7 +33,7 @@ func New(config types.ProviderConfig) (*Provider, error) {
 	}
 
 	return &Provider{
-		BaseProvider:         providers.NewBaseProvider("ollama", config),
+		BaseProvider:         providers.NewBaseProviderWithAuth("ollama", config, nil, &providers.NoAuthStrategy{}, nil),
 		requestBuilder:       providers.NewRequestBuilder(),
 		responseTransform:    transform.NewResponseTransform(),
 		streamingTransformer: transform.NewOllamaStreamingTransformer(),
@@ -61,7 +58,7 @@ func (p *Provider) Text(ctx context.Context, request types.TextRequest) (*types.
 	url := p.GetBaseURL() + "/api/chat"
 
 	var response chatResponse
-	err := p.doOllamaRequest(ctx, http.MethodPost, url, payload, &response)
+	err := p.DoRequest(ctx, http.MethodPost, url, payload, &response)
 	if err != nil {
 		return nil, err
 	}
@@ -76,7 +73,7 @@ func (p *Provider) Stream(ctx context.Context, request types.TextRequest) (<-cha
 
 	url := p.GetBaseURL() + "/api/chat"
 
-	body, err := p.streamOllamaRequest(ctx, http.MethodPost, url, payload)
+	body, err := p.StreamRequest(ctx, http.MethodPost, url, payload)
 	if err != nil {
 		return nil, err
 	}
@@ -172,7 +169,7 @@ func (p *Provider) processEmbeddingsSequentially(ctx context.Context, request ty
 		url := p.GetBaseURL() + "/api/embeddings"
 
 		var response embeddingsResponse
-		err := p.doOllamaRequest(ctx, http.MethodPost, url, payload, &response)
+		err := p.DoRequest(ctx, http.MethodPost, url, payload, &response)
 		if err != nil {
 			return nil, p.WrapError(types.ErrorCodeProvider, fmt.Sprintf("failed to get embedding for input %d", i), err)
 		}
@@ -218,7 +215,7 @@ func (p *Provider) processEmbeddingsConcurrently(ctx context.Context, request ty
 			url := p.GetBaseURL() + "/api/embeddings"
 
 			var response embeddingsResponse
-			err := p.doOllamaRequest(ctx, http.MethodPost, url, payload, &response)
+			err := p.DoRequest(ctx, http.MethodPost, url, payload, &response)
 
 			if err != nil {
 				results <- result{index: idx, err: p.WrapError(types.ErrorCodeProvider, fmt.Sprintf("failed to get embedding for input %d", idx), err)}
@@ -293,7 +290,7 @@ func (p *Provider) ListModels(ctx context.Context) (*modelsResponse, error) {
 	url := p.GetBaseURL() + "/api/tags"
 
 	var response modelsResponse
-	err := p.doOllamaRequest(ctx, http.MethodGet, url, nil, &response)
+	err := p.DoRequest(ctx, http.MethodGet, url, nil, &response)
 	if err != nil {
 		return nil, err
 	}
@@ -311,7 +308,7 @@ func (p *Provider) PullModel(ctx context.Context, model string) error {
 
 	// This is a streaming endpoint but we'll treat it as regular request for simplicity
 	var response map[string]any // Ollama returns various status messages
-	err := p.doOllamaRequest(ctx, http.MethodPost, url, payload, &response)
+	err := p.DoRequest(ctx, http.MethodPost, url, payload, &response)
 	if err != nil {
 		return p.WrapError(types.ErrorCodeProvider, fmt.Sprintf("failed to pull model %s", model), err)
 	}
@@ -328,7 +325,7 @@ func (p *Provider) ShowModel(ctx context.Context, model string) (map[string]any,
 	url := p.GetBaseURL() + "/api/show"
 
 	var response map[string]any
-	err := p.doOllamaRequest(ctx, http.MethodPost, url, payload, &response)
+	err := p.DoRequest(ctx, http.MethodPost, url, payload, &response)
 	if err != nil {
 		return nil, p.WrapError(types.ErrorCodeProvider, fmt.Sprintf("failed to show model %s", model), err)
 	}
@@ -345,111 +342,10 @@ func (p *Provider) DeleteModel(ctx context.Context, model string) error {
 	url := p.GetBaseURL() + "/api/delete"
 
 	var response map[string]any
-	err := p.doOllamaRequest(ctx, http.MethodDelete, url, payload, &response)
+	err := p.DoRequest(ctx, http.MethodDelete, url, payload, &response)
 	if err != nil {
 		return p.WrapError(types.ErrorCodeProvider, fmt.Sprintf("failed to delete model %s", model), err)
 	}
 
 	return nil
-}
-
-// doOllamaRequest performs HTTP requests without Bearer authentication
-func (p *Provider) doOllamaRequest(ctx context.Context, method, url string, body any, result any) error {
-	var reqBody io.Reader
-	if body != nil {
-		jsonBody, err := json.Marshal(body)
-		if err != nil {
-			return p.RequestError("failed to marshal request body", err)
-		}
-		reqBody = bytes.NewReader(jsonBody)
-	}
-
-	req, err := http.NewRequestWithContext(ctx, method, url, reqBody)
-	if err != nil {
-		return p.RequestError("failed to create request", err)
-	}
-
-	// Set headers - Ollama doesn't require authentication by default
-	req.Header.Set(types.HeaderContentType, types.ContentTypeJSON)
-
-	// Set custom headers from config
-	for k, v := range p.Config.Headers {
-		req.Header.Set(k, v)
-	}
-
-	resp, err := p.GetHTTPClient().Do(req)
-	if err != nil {
-		return p.WrapError(types.ErrorCodeNetwork, "request failed", err)
-	}
-	defer func() {
-		if err := resp.Body.Close(); err != nil {
-			log.Printf("warning: failed to close response body: %v", err)
-		}
-	}()
-
-	respBody, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return p.RequestError("failed to read response body", err)
-	}
-
-	if resp.StatusCode >= 400 {
-		// Ollama returns simple error messages, not structured like other APIs
-		err := types.HTTPStatusToError(resp.StatusCode, string(respBody))
-		err.Provider = p.Name()
-		return err
-	}
-
-	if result != nil && len(respBody) > 0 {
-		if err := json.Unmarshal(respBody, result); err != nil {
-			return p.RequestError("failed to unmarshal response", err)
-		}
-	}
-
-	return nil
-}
-
-// streamOllamaRequest performs streaming HTTP requests without Bearer authentication
-func (p *Provider) streamOllamaRequest(ctx context.Context, method, url string, body any) (io.ReadCloser, error) {
-	var reqBody io.Reader
-	if body != nil {
-		jsonBody, err := json.Marshal(body)
-		if err != nil {
-			return nil, p.RequestError("failed to marshal request body", err)
-		}
-		reqBody = bytes.NewReader(jsonBody)
-	}
-
-	req, err := http.NewRequestWithContext(ctx, method, url, reqBody)
-	if err != nil {
-		return nil, p.RequestError("failed to create request", err)
-	}
-
-	// Set headers
-	req.Header.Set(types.HeaderContentType, types.ContentTypeJSON)
-	req.Header.Set(types.HeaderAccept, types.ContentTypeEventStream)
-	req.Header.Set(types.HeaderCacheControl, "no-cache")
-
-	// Set custom headers from config
-	for k, v := range p.Config.Headers {
-		req.Header.Set(k, v)
-	}
-
-	resp, err := p.GetHTTPClient().Do(req)
-	if err != nil {
-		return nil, p.WrapError(types.ErrorCodeNetwork, "request failed", err)
-	}
-
-	if resp.StatusCode >= 400 {
-		defer func() {
-			if err := resp.Body.Close(); err != nil {
-				log.Printf("warning: failed to close response body: %v", err)
-			}
-		}()
-		respBody, _ := io.ReadAll(resp.Body)
-		err := types.HTTPStatusToError(resp.StatusCode, string(respBody))
-		err.Provider = p.Name()
-		return nil, err
-	}
-
-	return resp.Body, nil
 }
