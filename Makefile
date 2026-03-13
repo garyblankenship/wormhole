@@ -1,6 +1,6 @@
 .PHONY: all build test clean lint fmt help bench release prepare-release
 
-# Default target
+# Default target: format, lint, test, build
 all: fmt lint test build
 
 # Build the project
