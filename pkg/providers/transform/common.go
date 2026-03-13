@@ -84,7 +84,9 @@ func (t *ResponseTransform) ExtractToolCallsFromChoices(choices []map[string]any
 	return toolCalls
 }
 
-// ParseToolCallFromMap parses a tool call from a generic map
+// ParseToolCallFromMap parses a tool call from a generic map.
+// Handles both standard OpenAI-style format (id, type, function.name/arguments)
+// and provider-specific formats (name, args as map).
 func (t *ResponseTransform) ParseToolCallFromMap(toolCallMap map[string]any) *types.ToolCall {
 	tc := &types.ToolCall{}
 
@@ -100,16 +102,31 @@ func (t *ResponseTransform) ParseToolCallFromMap(toolCallMap map[string]any) *ty
 		tc.Function = &types.ToolCallFunction{}
 		if name, ok := functionMap["name"].(string); ok {
 			tc.Function.Name = name
+			tc.Name = name
 		}
 		if arguments, ok := functionMap["arguments"].(string); ok {
 			tc.Function.Arguments = arguments
+			var argsMap map[string]any
+			if err := json.Unmarshal([]byte(arguments), &argsMap); err == nil {
+				tc.Arguments = argsMap
+			}
 		}
 	}
 
-	// Parse raw arguments if function is not present
+	// Handle provider-specific formats (e.g. Gemini: name + args as map)
 	if tc.Function == nil {
-		if argumentsStr, ok := toolCallMap["arguments"].(string); ok {
-			// Try to parse JSON string into map[string]any
+		if name, ok := toolCallMap["name"].(string); ok {
+			tc.Name = name
+		}
+		if args, ok := toolCallMap["args"].(map[string]any); ok {
+			tc.Arguments = args
+			if argsBytes, err := json.Marshal(args); err == nil {
+				tc.Function = &types.ToolCallFunction{
+					Name:      tc.Name,
+					Arguments: string(argsBytes),
+				}
+			}
+		} else if argumentsStr, ok := toolCallMap["arguments"].(string); ok {
 			var argsMap map[string]any
 			if err := json.Unmarshal([]byte(argumentsStr), &argsMap); err == nil {
 				tc.Arguments = argsMap
