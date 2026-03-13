@@ -10,10 +10,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
-	"sort"
 	"strings"
-	"sync"
-	"sync/atomic"
 	"time"
 
 	"github.com/garyblankenship/wormhole/pkg/config"
@@ -102,77 +99,6 @@ func extractHostFromBaseURL(baseURL string) string {
 		return ""
 	}
 	return u.Host
-}
-
-var (
-	transportCache sync.RWMutex
-	transports     = make(map[string]*cachedTransport)
-
-	// Transport cache metrics
-	transportCacheHits   atomic.Int64
-	transportCacheMisses atomic.Int64
-)
-
-const maxCachedTransports = 64
-
-type cachedTransport struct {
-	transport    *http.Transport
-	lastUsedNano atomic.Int64
-}
-
-func getCachedTransport(key string) (*http.Transport, bool) {
-	transportCache.RLock()
-	defer transportCache.RUnlock()
-	entry, ok := transports[key]
-	if ok {
-		entry.lastUsedNano.Store(time.Now().UnixNano())
-		transportCacheHits.Add(1)
-		return entry.transport, true
-	}
-	return nil, false
-}
-
-func setCachedTransport(key string, transport *http.Transport) {
-	transportCache.Lock()
-	defer transportCache.Unlock()
-	if existing, ok := transports[key]; ok && existing.transport != nil {
-		existing.transport.CloseIdleConnections()
-	}
-	entry := &cachedTransport{transport: transport}
-	entry.lastUsedNano.Store(time.Now().UnixNano())
-	transports[key] = entry
-	evictOldestTransportsLocked()
-}
-
-func evictOldestTransportsLocked() {
-	if len(transports) <= maxCachedTransports {
-		return
-	}
-
-	type transportInfo struct {
-		key          string
-		lastUsedNano int64
-	}
-
-	entries := make([]transportInfo, 0, len(transports))
-	for key, entry := range transports {
-		entries = append(entries, transportInfo{key: key, lastUsedNano: entry.lastUsedNano.Load()})
-	}
-
-	sort.Slice(entries, func(i, j int) bool {
-		return entries[i].lastUsedNano < entries[j].lastUsedNano
-	})
-
-	for len(transports) > maxCachedTransports && len(entries) > 0 {
-		victim := entries[0]
-		entries = entries[1:]
-		if entry, ok := transports[victim.key]; ok {
-			if entry.transport != nil {
-				entry.transport.CloseIdleConnections()
-			}
-			delete(transports, victim.key)
-		}
-	}
 }
 
 // NewSecureHTTPClient creates a new HTTP client with secure TLS configuration
@@ -311,6 +237,26 @@ func (c HTTPTransportConfig) WithProxy(proxy func(*http.Request) (*url.URL, erro
 	return c
 }
 
+// validateNonNegativeInt returns a validation error if val is negative.
+func validateNonNegativeInt(name string, val int) error {
+	if val < 0 {
+		err := types.NewWormholeError(types.ErrorCodeValidation, name+" cannot be negative", false)
+		err.Details = fmt.Sprintf("%d", val)
+		return err
+	}
+	return nil
+}
+
+// validateNonNegativeDuration returns a validation error if val is negative.
+func validateNonNegativeDuration(name string, val time.Duration) error {
+	if val < 0 {
+		err := types.NewWormholeError(types.ErrorCodeValidation, name+" cannot be negative", false)
+		err.Details = fmt.Sprintf("%v", val)
+		return err
+	}
+	return nil
+}
+
 // Validate checks if the HTTP transport configuration is valid.
 // Returns an error if any setting is invalid.
 func (c HTTPTransportConfig) Validate() error {
@@ -320,133 +266,32 @@ func (c HTTPTransportConfig) Validate() error {
 		return err
 	}
 
-	if c.MaxIdleConns < 0 {
-		err := types.NewWormholeError(types.ErrorCodeValidation, "MaxIdleConns cannot be negative", false)
-		err.Details = fmt.Sprintf("%d", c.MaxIdleConns)
+	if err := validateNonNegativeInt("MaxIdleConns", c.MaxIdleConns); err != nil {
 		return err
 	}
-	if c.MaxIdleConnsPerHost < 0 {
-		err := types.NewWormholeError(types.ErrorCodeValidation, "MaxIdleConnsPerHost cannot be negative", false)
-		err.Details = fmt.Sprintf("%d", c.MaxIdleConnsPerHost)
+	if err := validateNonNegativeInt("MaxIdleConnsPerHost", c.MaxIdleConnsPerHost); err != nil {
 		return err
 	}
-	if c.MaxConnsPerHost < 0 {
-		err := types.NewWormholeError(types.ErrorCodeValidation, "MaxConnsPerHost cannot be negative", false)
-		err.Details = fmt.Sprintf("%d", c.MaxConnsPerHost)
+	if err := validateNonNegativeInt("MaxConnsPerHost", c.MaxConnsPerHost); err != nil {
 		return err
 	}
 
-	if c.IdleConnTimeout < 0 {
-		err := types.NewWormholeError(types.ErrorCodeValidation, "IdleConnTimeout cannot be negative", false)
-		err.Details = fmt.Sprintf("%v", c.IdleConnTimeout)
+	if err := validateNonNegativeDuration("IdleConnTimeout", c.IdleConnTimeout); err != nil {
 		return err
 	}
-	if c.DialTimeout < 0 {
-		err := types.NewWormholeError(types.ErrorCodeValidation, "DialTimeout cannot be negative", false)
-		err.Details = fmt.Sprintf("%v", c.DialTimeout)
+	if err := validateNonNegativeDuration("DialTimeout", c.DialTimeout); err != nil {
 		return err
 	}
-	if c.TLSHandshakeTimeout < 0 {
-		err := types.NewWormholeError(types.ErrorCodeValidation, "TLSHandshakeTimeout cannot be negative", false)
-		err.Details = fmt.Sprintf("%v", c.TLSHandshakeTimeout)
+	if err := validateNonNegativeDuration("TLSHandshakeTimeout", c.TLSHandshakeTimeout); err != nil {
 		return err
 	}
-	if c.ExpectContinueTimeout < 0 {
-		err := types.NewWormholeError(types.ErrorCodeValidation, "ExpectContinueTimeout cannot be negative", false)
-		err.Details = fmt.Sprintf("%v", c.ExpectContinueTimeout)
+	if err := validateNonNegativeDuration("ExpectContinueTimeout", c.ExpectContinueTimeout); err != nil {
 		return err
 	}
-	if c.ResponseHeaderTimeout < 0 {
-		err := types.NewWormholeError(types.ErrorCodeValidation, "ResponseHeaderTimeout cannot be negative", false)
-		err.Details = fmt.Sprintf("%v", c.ResponseHeaderTimeout)
+	if err := validateNonNegativeDuration("ResponseHeaderTimeout", c.ResponseHeaderTimeout); err != nil {
 		return err
 	}
 
 	return nil
 }
 
-// TransportCacheMetrics holds transport cache performance statistics
-type TransportCacheMetrics struct {
-	Hits   int64
-	Misses int64
-	Size   int
-}
-
-// GetTransportCacheMetrics returns current transport cache performance statistics
-func GetTransportCacheMetrics() TransportCacheMetrics {
-	transportCache.RLock()
-	defer transportCache.RUnlock()
-
-	return TransportCacheMetrics{
-		Hits:   transportCacheHits.Load(),
-		Misses: transportCacheMisses.Load(),
-		Size:   len(transports),
-	}
-}
-
-// ==================== TLS Configuration Extraction from ProviderConfig ====================
-
-// ExtractTLSConfigFromProviderConfig extracts TLS configuration from a ProviderConfig.
-// If the ProviderConfig contains TLS parameters in the Params map, they are converted
-// to a config.TLSConfig. Otherwise, returns nil (which will use default secure TLS).
-func ExtractTLSConfigFromProviderConfig(providerConfig types.ProviderConfig) *config.TLSConfig {
-	if !providerConfig.HasTLSConfig() {
-		return nil
-	}
-
-	tlsParams, ok := providerConfig.Params[types.TLSConfigParamKey].(map[string]any)
-	if !ok || len(tlsParams) == 0 {
-		return nil
-	}
-
-	// Start with default secure configuration
-	tlsConfig := config.DefaultTLSConfig()
-
-	// Apply parameters from ProviderConfig
-	for key, value := range tlsParams {
-		switch key {
-		case "min_version":
-			if v, ok := value.(float64); ok {
-				tlsConfig.MinVersion = uint16(v)
-			} else if v, ok := value.(uint16); ok {
-				tlsConfig.MinVersion = v
-			}
-		case "max_version":
-			if v, ok := value.(float64); ok {
-				tlsConfig.MaxVersion = uint16(v)
-			} else if v, ok := value.(uint16); ok {
-				tlsConfig.MaxVersion = v
-			}
-		case "cipher_suites":
-			if slice, ok := value.([]any); ok {
-				var cipherSuites []uint16
-				for _, item := range slice {
-					if v, ok := item.(float64); ok {
-						cipherSuites = append(cipherSuites, uint16(v))
-					} else if v, ok := item.(uint16); ok {
-						cipherSuites = append(cipherSuites, v)
-					}
-				}
-				if len(cipherSuites) > 0 {
-					tlsConfig.CipherSuites = cipherSuites
-				}
-			}
-		case "insecure_skip_verify":
-			if v, ok := value.(bool); ok {
-				tlsConfig.InsecureSkipVerify = v
-			}
-		case "server_name":
-			if v, ok := value.(string); ok {
-				tlsConfig.ServerName = v
-			}
-		case "handshake_timeout":
-			if v, ok := value.(float64); ok {
-				tlsConfig.HandshakeTimeout = time.Duration(v) * time.Second
-			} else if v, ok := value.(time.Duration); ok {
-				tlsConfig.HandshakeTimeout = v
-			}
-		}
-	}
-
-	return &tlsConfig
-}
