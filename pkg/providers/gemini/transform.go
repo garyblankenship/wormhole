@@ -17,6 +17,19 @@ const streamDoneMarker = "[DONE]"
 // Gemini role mappings
 const geminiRoleModel = "model"
 
+// convertUsage converts Gemini usage metadata to types.Usage.
+// Returns nil when metadata is absent.
+func convertUsage(meta *usageMetadata) *types.Usage {
+	if meta == nil {
+		return nil
+	}
+	return &types.Usage{
+		PromptTokens:     meta.PromptTokenCount,
+		CompletionTokens: meta.CandidatesTokenCount,
+		TotalTokens:      meta.TotalTokenCount,
+	}
+}
+
 // transformMessages converts types.Message to Gemini format
 func (g *Gemini) transformMessages(messages []types.Message) ([]map[string]any, error) {
 	contents := make([]map[string]any, 0, len(messages))
@@ -344,14 +357,7 @@ func (g *Gemini) transformTextResponse(response *geminiTextResponse) (*types.Tex
 		FinishReason: finishReason,
 	}
 
-	// Add usage if available
-	if response.UsageMetadata != nil {
-		result.Usage = &types.Usage{
-			PromptTokens:     response.UsageMetadata.PromptTokenCount,
-			CompletionTokens: response.UsageMetadata.CandidatesTokenCount,
-			TotalTokens:      response.UsageMetadata.TotalTokenCount,
-		}
-	}
+	result.Usage = convertUsage(response.UsageMetadata)
 
 	// Add metadata
 	result.Metadata = map[string]any{
@@ -403,14 +409,7 @@ func (g *Gemini) transformStructuredResponse(response *geminiTextResponse, schem
 		Raw:  text,
 	}
 
-	// Add usage if available
-	if response.UsageMetadata != nil {
-		result.Usage = &types.Usage{
-			PromptTokens:     response.UsageMetadata.PromptTokenCount,
-			CompletionTokens: response.UsageMetadata.CandidatesTokenCount,
-			TotalTokens:      response.UsageMetadata.TotalTokenCount,
-		}
-	}
+	result.Usage = convertUsage(response.UsageMetadata)
 
 	// Add metadata
 	result.Metadata = map[string]any{
