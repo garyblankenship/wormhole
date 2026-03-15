@@ -53,6 +53,7 @@ response, _ := client.Text().Model("gpt-5.2").Prompt("Hello").Generate(ctx)
 | Validate config | `if err := builder.Validate(); err != nil { ... }` |
 | Check capabilities | `client.ProviderCapabilities("openai").SupportsToolCalling()` |
 | Graceful shutdown | `client.Shutdown(ctx)` |
+| Proxy server | `wormhole serve --addr :8080` |
 
 ---
 
@@ -81,11 +82,97 @@ BenchmarkConcurrent-16          6826171   146.4 ns/op  0 B/op    0 allocs/op
 
 ## Installation
 
+### SDK
+
 ```bash
 go get github.com/garyblankenship/wormhole@latest
 ```
 
+### Binary
+
+```bash
+go build -o wormhole ./cmd/wormhole
+```
+
 Requirements: Go 1.23+, API keys for the providers you want, and the bare minimum of self-respect required to not hardcode secrets in source files.
+
+---
+
+## Proxy Server
+
+A universal OpenAI-compatible proxy that routes requests to every provider wormhole supports. Point Cursor, Continue, Open WebUI, LangChain, or any OpenAI SDK at it and it just works.
+
+### Quick Start
+
+```bash
+export OPENAI_API_KEY=sk-...
+export ANTHROPIC_API_KEY=sk-ant-...
+export GEMINI_API_KEY=...
+
+go build -o wormhole ./cmd/wormhole
+./wormhole serve --addr :8080
+```
+
+That's it. You now have a local OpenAI-compatible API server that talks to every provider.
+
+### Model Prefix Routing
+
+The prefix before the slash tells wormhole which provider to use. No configuration files. No YAML. The URL is the config.
+
+| Request model | Routes to | Provider |
+|---------------|-----------|----------|
+| `anthropic/claude-sonnet-4-5` | `claude-sonnet-4-5` | Anthropic |
+| `gemini/gemini-2.5-pro` | `gemini-2.5-pro` | Gemini |
+| `ollama/llama3.2` | `llama3.2` | Ollama |
+| `gpt-5.2` | `gpt-5.2` | default provider |
+
+Unprefixed models go to whatever you set with `--default-provider` (defaults to `openai`).
+
+### Streaming
+
+Works out of the box. The proxy passes SSE through unchanged.
+
+```bash
+curl http://localhost:8080/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "anthropic/claude-sonnet-4-5",
+    "stream": true,
+    "messages": [{"role": "user", "content": "What is a wormhole?"}]
+  }'
+```
+
+### Endpoints
+
+| Method | Path | Description |
+|--------|------|-------------|
+| POST | `/v1/chat/completions` | Chat completions (streaming + non-streaming) |
+| POST | `/v1/embeddings` | Embeddings generation |
+| GET | `/v1/models` | List available models |
+| GET | `/health` | Health check |
+
+### Auth
+
+By default the proxy accepts all requests. Set `WORMHOLE_API_KEY` to require a bearer token — so you can expose it without handing everyone your provider keys.
+
+```bash
+export WORMHOLE_API_KEY=my-proxy-secret
+./wormhole serve --addr :8080
+```
+
+Clients send it the usual way: `Authorization: Bearer my-proxy-secret`.
+
+### All middleware applies
+
+Circuit breakers, rate limiting, retries, adaptive concurrency — everything wormhole does for the SDK applies to the proxy too. It's the same stack. The HTTP layer is just a thin adapter on top.
+
+### CLI
+
+```
+wormhole serve [--addr :8080] [--default-provider openai]
+wormhole version
+wormhole help
+```
 
 ---
 
