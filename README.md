@@ -45,6 +45,7 @@ response, _ := client.Text().Model("gpt-5.2").Prompt("Hello").Generate(ctx)
 | Embeddings | `client.Embeddings().Model("text-embedding-3-small").Input("...").Generate(ctx)` |
 | Multi-turn chat | `client.Text().Conversation(conv).Generate(ctx)` |
 | Tool calling | `wormhole.RegisterTypedTool(client, name, desc, handler)` |
+| Agent loop | `client.Agent().Model("gpt-5.2").Run(ctx, "prompt")` |
 | Model fallback | `client.Text().Model("gpt-5.2").WithFallback("gpt-5.1-mini").Generate(ctx)` |
 | Batch execution | `client.Batch().Add(req1).Add(req2).Concurrency(5).Execute(ctx)` |
 | Clone builder | `base.Clone().Prompt("new").Generate(ctx)` |
@@ -315,6 +316,42 @@ for _, call := range response.ToolCalls {
     fmt.Printf("AI wants: %s(%v)\n", call.Name, call.Arguments)
 }
 ```
+
+### Agent Loop
+
+When you need the model to think, call tools, and keep going until it has an answer — not just one round of tool calls, but a full autonomous loop:
+
+```go
+result, err := client.Agent().
+    Model("gpt-5.2").
+    System("You are a research assistant").
+    MaxSteps(15).
+    OnStep(func(e wormhole.StepEvent) {
+        fmt.Printf("Step %d: %d tool calls, done=%v\n", e.Step, len(e.ToolCalls), e.Done)
+    }).
+    Run(ctx, "What's the weather in SF and NYC, then compare them?")
+
+fmt.Println(result.Response.Content())
+fmt.Printf("Completed in %d steps\n", result.TotalSteps)
+```
+
+Agent-scoped tools don't leak to the global client. Register them on the builder:
+
+```go
+type SearchArgs struct {
+    Query string `json:"query" tool:"required" desc:"Search query"`
+}
+
+builder := client.Agent().Model("gpt-5.2")
+wormhole.AgentAddTool(builder, "search", "Search the web",
+    func(ctx context.Context, args SearchArgs) (string, error) {
+        return doSearch(args.Query), nil
+    },
+)
+result, _ := builder.Run(ctx, "Find the latest Go release notes")
+```
+
+Tools registered globally via `RegisterTypedTool` are automatically available to agents. Agent-scoped tools override globals with the same name.
 
 ### Embeddings
 
