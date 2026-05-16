@@ -30,16 +30,16 @@ func main() {
     ctx := context.Background()
 
     // Simple text generation
-response, err := client.Text().
-    Model("gemini-2.5-flash").
-    Prompt("Hello, Gemini!").
-    Generate(ctx)
+    response, err := client.Text().
+        Model("gemini-2.5-flash").
+        Prompt("Hello, Gemini!").
+        Generate(ctx)
 
     if err != nil {
         panic(err)
     }
 
-    fmt.Println(response.Text)
+    fmt.Println(response.Content())
 }
 ```
 
@@ -251,9 +251,7 @@ if err != nil {
 }
 
 for chunk := range chunks {
-    if chunk.Delta != nil {
-        fmt.Print(chunk.Delta.Content)
-    }
+    fmt.Print(chunk.Content())
 }
 ```
 

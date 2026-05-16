@@ -30,10 +30,10 @@ The client provides typed builders for each request type:
 | Builder | Purpose | Methods |
 |---------|---------|---------|
 | **`Text()`** | Text generation & streaming | `Model()`, `Prompt()`, `Messages()`, `Stream()`, `Generate()` |
-| **`Structured()`** | Structured JSON output | `Model()`, `Prompt()`, `Schema()`, `ParseTo()` |
-| **`Embeddings()`** | Vector embeddings | `Model()`, `Text()`, `Embed()` |
+| **`Structured()`** | Structured JSON output | `Model()`, `Prompt()`, `Schema()`, `GenerateAs()` |
+| **`Embeddings()`** | Vector embeddings | `Model()`, `Input()`, `Generate()` |
 | **`Image()`** | Image generation | `Model()`, `Prompt()`, `Generate()` |
-| **`Audio()`** | Audio (TTS/STT) | `Model()`, `Text()`, `Generate()` |
+| **`Audio()`** | Audio (TTS/STT) | `SpeechToText().Audio().Transcribe()`, `TextToSpeech().Input().Generate()` |
 | **`Batch()`** | Concurrent execution | `Add()`, `Concurrency()`, `Execute()` |
 
 ### Provider Delegation

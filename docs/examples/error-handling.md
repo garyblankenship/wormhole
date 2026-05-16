@@ -81,22 +81,23 @@ func handleGenerateError(err error) {
 }
 
 func main() {
-    client, _ := wormhole.NewClient(
-        wormhole.WithProvider("gemini"),
-        wormhole.WithAPIKey("your-api-key"),
+    ctx := context.Background()
+    client := wormhole.New(
+        wormhole.WithGemini("your-api-key"),
+        wormhole.WithDefaultProvider("gemini"),
     )
 
-    builder := client.TextRequest().
-        WithModel("gemini-2.5-flash").
-        WithMessage("user", "Hello!")
+    builder := client.Text().
+        Model("gemini-2.5-flash").
+        Prompt("Hello!")
 
-    resp, err := builder.Generate()
+    resp, err := builder.Generate(ctx)
     if err != nil {
         handleGenerateError(err)                        // [11] Delegate error handling
         return
     }
 
-    fmt.Println(resp.Content)
+    fmt.Println(resp.Content())
 }
 ```
 
@@ -177,7 +178,7 @@ func shouldRetry(err error) bool {
 
 // Usage in retry loop
 for attempt := 0; attempt < 3; attempt++ {              // [3] Retry up to 3 times
-    resp, err := builder.Generate()
+    resp, err := builder.Generate(ctx)
     if err == nil {
         break                                            // [4] Success - exit loop
     }
@@ -320,12 +321,12 @@ func attemptOperation() error {
 ### Manual Retry with Exponential Backoff
 
 ```go
-func manualRetryWithBackoff(builder *wormhole.TextRequestBuilder) (*wormhole.TextResponse, error) {
+func manualRetryWithBackoff(ctx context.Context, builder *wormhole.TextRequestBuilder) (*types.TextResponse, error) {
     maxRetries := 3                                        // [1] Maximum retry attempts
     baseDelay := 1 * time.Second                           // [2] Starting delay
 
     for attempt := 0; attempt <= maxRetries; attempt++ {   // [3] Try up to maxRetries + 1
-        resp, err := builder.Generate()
+        resp, err := builder.Generate(ctx)
 
         if err == nil {
             return resp, nil                               // [4] Success - return immediately
@@ -380,9 +381,9 @@ func manualRetryWithBackoff(builder *wormhole.TextRequestBuilder) (*wormhole.Tex
 ### Context-Aware Retry
 
 ```go
-func contextAwareRetry(ctx context.Context, builder *wormhole.TextRequestBuilder) (*wormhole.TextResponse, error) {
+func contextAwareRetry(ctx context.Context, builder *wormhole.TextRequestBuilder) (*types.TextResponse, error) {
     for {
-        resp, err := builder.Generate()
+        resp, err := builder.Generate(ctx)
         if err == nil {
             return resp, nil                               // [1] Success - return
         }
@@ -439,9 +440,9 @@ Rate limiting errors require special handling to respect provider limits and avo
 ### Basic Rate Limit Handling
 
 ```go
-func handleRateLimit(builder *wormhole.TextRequestBuilder) (*wormhole.TextResponse, error) {
+func handleRateLimit(ctx context.Context, builder *wormhole.TextRequestBuilder) (*types.TextResponse, error) {
     for {
-        resp, err := builder.Generate()
+        resp, err := builder.Generate(ctx)
         if err == nil {
             return resp, nil                               // [1] Success - return
         }
@@ -532,20 +533,19 @@ import (
 )
 
 func rateLimitMiddlewareExample() {
-    client, _ := wormhole.NewClient(
-        wormhole.WithProvider("gemini"),
-        wormhole.WithAPIKey("your-api-key"),
+    ctx := context.Background()
+    client := wormhole.New(
+        wormhole.WithGemini("your-api-key"),
+        wormhole.WithDefaultProvider("gemini"),
+        wormhole.WithMiddleware(middleware.RateLimitMiddleware(10)),
     )
 
-    // Add rate limiting middleware (10 requests per second)
-    client.Use(middleware.RateLimitMiddleware(10))           // [1] Apply rate limiter
-
-    builder := client.TextRequest().
-        WithModel("gemini-2.5-flash").
-        WithMessage("user", "Hello!")
+    builder := client.Text().
+        Model("gemini-2.5-flash").
+        Prompt("Hello!")
 
     // The middleware will automatically handle rate limiting
-    resp, err := builder.Generate()
+    resp, err := builder.Generate(ctx)
     if err != nil {
         if types.IsRateLimitError(err) {
             // Handle rate limit (though middleware usually prevents this)
@@ -572,27 +572,28 @@ func rateLimitMiddlewareExample() {
 
 ```go
 func adaptiveRateLimitExample() {
-    client, _ := wormhole.NewClient(
-        wormhole.WithProvider("gemini"),
-        wormhole.WithAPIKey("your-api-key"),
-    )
+    ctx := context.Background()
 
     // Create adaptive rate limiter
     // Starts at 10 req/s, adjusts between 5-20 req/s based on latency
-    client.Use(middleware.AdaptiveRateLimitMiddleware(
-        10,                  // [1] initial rate (requests per second)
-        5,                   // [2] min rate (don't go below this)
-        20,                  // [3] max rate (don't exceed this)
-        500*time.Millisecond, // [4] target latency (adjust to maintain this)
-    ))
+    client := wormhole.New(
+        wormhole.WithGemini("your-api-key"),
+        wormhole.WithDefaultProvider("gemini"),
+        wormhole.WithMiddleware(middleware.AdaptiveRateLimitMiddleware(
+            10,                  // [1] initial rate (requests per second)
+            5,                   // [2] min rate (don't go below this)
+            20,                  // [3] max rate (don't exceed this)
+            500*time.Millisecond, // [4] target latency (adjust to maintain this)
+        )),
+    )
 
     // The rate limiter will automatically adjust based on response times
     for i := 0; i < 100; i++ {
-        builder := client.TextRequest().
-            WithModel("gemini-2.5-flash").
-            WithMessage("user", fmt.Sprintf("Message %d", i))
+        builder := client.Text().
+            Model("gemini-2.5-flash").
+            Prompt(fmt.Sprintf("Message %d", i))
 
-        resp, err := builder.Generate()
+        resp, err := builder.Generate(ctx)
         if err != nil {
             log.Printf("Request %d failed: %v", i, err)
             continue
@@ -637,11 +638,11 @@ func rateLimitBackoff(attempt int) time.Duration {
     return delay
 }
 
-func retryWithRateLimitBackoff(builder *wormhole.TextRequestBuilder) (*wormhole.TextResponse, error) {
+func retryWithRateLimitBackoff(ctx context.Context, builder *wormhole.TextRequestBuilder) (*types.TextResponse, error) {
     maxAttempts := 5                                         // [5] Maximum retry attempts
 
     for attempt := 0; attempt < maxAttempts; attempt++ {
-        resp, err := builder.Generate()
+        resp, err := builder.Generate(ctx)
         if err == nil {
             return resp, nil
         }
@@ -683,14 +684,15 @@ Validation errors occur when request parameters don't meet requirements.
 
 ```go
 func singleFieldValidation() {
-    client, _ := wormhole.NewClient(
-        wormhole.WithProvider("gemini"),
-        wormhole.WithAPIKey("your-api-key"),
+    ctx := context.Background()
+    client := wormhole.New(
+        wormhole.WithGemini("your-api-key"),
+        wormhole.WithDefaultProvider("gemini"),
     )
 
-    builder := client.TextRequest().
-        WithModel("gemini-2.5-flash").
-        WithMessage("user", "Hello!")
+    builder := client.Text().
+        Model("gemini-2.5-flash").
+        Prompt("Hello!")
 
     // Validate before generating
     if err := builder.Validate(); err != nil {            // [1] Validate builder configuration
@@ -702,7 +704,7 @@ func singleFieldValidation() {
         return
     }
 
-    resp, err := builder.Generate()
+    resp, err := builder.Generate(ctx)
     _ = resp
     _ = err
 }
@@ -847,12 +849,12 @@ func handleCircuitBreaker(err error) {
 ### Fallback Provider Strategy
 
 ```go
-func generateWithFallback(client *wormhole.Client, model string, prompt string) (*wormhole.TextResponse, error) {
+func generateWithFallback(ctx context.Context, client *wormhole.Wormhole, model string, prompt string) (*types.TextResponse, error) {
     // Try primary provider
-    resp, err := client.TextRequest().
-        WithModel(model).
-        WithMessage("user", prompt).
-        Generate()
+    resp, err := client.Text().
+        Model(model).
+        Prompt(prompt).
+        Generate(ctx)
 
     if err == nil {
         return resp, nil                                // [1] Primary success
@@ -863,10 +865,11 @@ func generateWithFallback(client *wormhole.Client, model string, prompt string) 
         log.Println("Primary provider circuit is open. Trying fallback...")
 
         // Switch to a different provider/model
-        resp, err = client.TextRequest().
-            WithModel("gemini-2.5-flash").               // [3] Fallback model
-            WithMessage("user", prompt).
-            Generate()
+        resp, err = client.Text().
+            Using("gemini").
+            Model("gemini-2.5-flash").                  // [3] Fallback model
+            Prompt(prompt).
+            Generate(ctx)
 
         if err == nil {
             return resp, nil                            // [4] Fallback success

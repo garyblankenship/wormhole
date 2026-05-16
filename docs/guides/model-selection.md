@@ -161,7 +161,7 @@ import (
 )
 
 // Cache responses for identical queries
-func generateWithCache(client *wormhole.Client, prompt string) (string, error) {
+func generateWithCache(client *wormhole.Wormhole, prompt string) (string, error) {
     // Check cache first
     if cached, found := cache.Get(prompt); found {
         return cached, nil
@@ -178,8 +178,8 @@ func generateWithCache(client *wormhole.Client, prompt string) (string, error) {
     }
 
     // Cache for future use
-    cache.Set(prompt, response.Text, 1*time.Hour)
-    return response.Text, nil
+    cache.Set(prompt, response.Content(), 1*time.Hour)
+    return response.Content(), nil
 }
 ```
 
@@ -348,9 +348,7 @@ chunks, err := client.Text().
     Stream(ctx)
 
 for chunk := range chunks {
-    if chunk.Delta != nil {
-        sendToUser(chunk.Delta.Content) // Real-time delivery
-    }
+    sendToUser(chunk.Content()) // Real-time delivery
 }
 ```
 

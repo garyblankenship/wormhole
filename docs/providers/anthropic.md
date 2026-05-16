@@ -39,7 +39,7 @@ func main() {
         panic(err)
     }
 
-    fmt.Println(response.Text)
+    fmt.Println(response.Content())
 }
 ```
 
@@ -213,9 +213,7 @@ if err != nil {
 }
 
 for chunk := range chunks {
-    if chunk.Delta != nil {
-        fmt.Print(chunk.Delta.Content)
-    }
+    fmt.Print(chunk.Content())
 }
 ```
 

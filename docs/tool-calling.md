@@ -63,7 +63,7 @@ response, err := client.Text().
     Prompt("What's the weather in San Francisco?").
     Generate(context.Background())
 
-fmt.Println(response.Text)
+fmt.Println(response.Content())
 // Output: "The weather in San Francisco is 72°F and sunny with 65% humidity."
 ```
 
@@ -459,7 +459,7 @@ for chunk := range stream {
         // Tool calls in streaming mode
     }
 
-    fmt.Print(chunk.Text)
+    fmt.Print(chunk.Content())
 }
 ```
 

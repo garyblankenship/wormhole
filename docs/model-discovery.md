@@ -20,11 +20,15 @@ Wormhole's dynamic model discovery system automatically fetches and caches avail
 package main
 
 import (
+    "context"
     "fmt"
+
     "github.com/garyblankenship/wormhole/pkg/wormhole"
 )
 
 func main() {
+    ctx := context.Background()
+
     // Model discovery is enabled by default
     client := wormhole.New(
         wormhole.WithOpenAI("your-api-key"),
@@ -46,10 +50,14 @@ func main() {
 
     // Use any discovered model
     resp, err := client.Text().
-        UseProvider("openai").
-        UseModel("gpt-5"). // Discovered automatically
-        WithPrompt("Hello, world!").
-        Execute()
+        Using("openai").
+        Model("gpt-5"). // Discovered automatically
+        Prompt("Hello, world!").
+        Generate(ctx)
+    if err != nil {
+        panic(err)
+    }
+    fmt.Println(resp.Content())
 }
 ```
 
@@ -371,46 +379,45 @@ client := wormhole.New(
 ### Before (Hardcoded)
 
 ```go
-// ❌ Hardcoded model name - becomes obsolete
+// Hardcoded model name - can become obsolete
 resp, err := client.Text().
-    UseProvider("openai").
-    UseModel("gpt-4"). // Outdated!
-    WithPrompt("Hello").
-    Execute()
+    Using("openai").
+    Model("gpt-4").
+    Prompt("Hello").
+    Generate(ctx)
 ```
 
 ### After (Dynamic Discovery)
 
 ```go
-// ✅ Automatically discovers latest models
+// Discover available models before choosing one.
 models, _ := client.ListAvailableModels("openai")
 
 // Use the newest model
 resp, err := client.Text().
-    UseProvider("openai").
-    UseModel("gpt-5"). // Discovered automatically
-    WithPrompt("Hello").
-    Execute()
+    Using("openai").
+    Model(models[0].ID).
+    Prompt("Hello").
+    Generate(ctx)
 ```
 
 ### Gradual Migration
 
-Discovery is enabled by default and backward compatible:
+Discovery is enabled by default and does not require a model registry lookup before each request:
 
 ```go
-// Old code still works
 client := wormhole.New(
     wormhole.WithOpenAI("key"),
 )
 
-// Can use hardcoded model names
-resp, _ := client.Text().UseModel("gpt-5").Execute()
+// You can still pass a model name directly.
+resp, _ := client.Text().Model("gpt-5").Prompt("Hello").Generate(ctx)
 
 // OR dynamically discover models
 models, _ := client.ListAvailableModels("openai")
 ```
 
-**No breaking changes required.**
+Use discovery when you need current provider catalogs; use direct model names when your application pins a known model.
 
 ## Troubleshooting
 

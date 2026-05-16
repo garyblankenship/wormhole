@@ -40,7 +40,7 @@ func main() {
         panic(err)
     }
 
-    fmt.Println(response.Text)
+    fmt.Println(response.Content())
 }
 ```
 
@@ -101,7 +101,7 @@ for _, model := range models {
         continue
     }
 
-    fmt.Printf("%s: %s\n", model, response.Text)
+    fmt.Printf("%s: %s\n", model, response.Content())
 }
 ```
 
@@ -219,9 +219,7 @@ for _, model := range models {
     }
 
     for chunk := range chunks {
-        if chunk.Delta != nil {
-            fmt.Print(chunk.Delta.Content)
-        }
+        fmt.Print(chunk.Content())
     }
     fmt.Println("\n---")
 }
@@ -461,7 +459,7 @@ draft, _ := client.Text().
 // Refine with premium model
 final, _ := client.Text().
     Model("anthropic/claude-sonnet-4-5").
-    Prompt(fmt.Sprintf("Improve: %s", draft.Text)).
+    Prompt(fmt.Sprintf("Improve: %s", draft.Content())).
     Generate(ctx)
 ```
 

@@ -536,7 +536,7 @@ response, _ := client.Text().Model("gpt-5").Prompt("...").Generate(ctx)
 **Stream responses**:
 ```go
 chunks, _ := client.Text().Model("gpt-5").Stream(ctx)
-for chunk := range chunks { fmt.Print(chunk.Text) }
+for chunk := range chunks { fmt.Print(chunk.Content()) }
 ```
 
 **Generate embeddings**:
