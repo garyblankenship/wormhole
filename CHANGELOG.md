@@ -1,5 +1,10 @@
 # Changelog
 
+## v1.9.2 (2026-05-16)
+
+### Other
+- trim non-library files from generated source archives
+
 ## v1.9.1 (2026-05-16)
 
 ### Fixes
