@@ -19,6 +19,7 @@ coverage.html
 coverage/
 coverage.xml
 coverage.txt
+!docs/assets/wormhole-banner.webp
 
 # Generated code
 *.pb.go
