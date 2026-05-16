@@ -95,11 +95,18 @@ func (a *WormholeToOrchestrationAdapter) CreateCompletion(ctx context.Context, r
 		return nil, err
 	}
 
+	tokensUsed := 0
+	cost := a.EstimateCost(req)
+	if resp.Usage != nil {
+		tokensUsed = resp.Usage.TotalTokens
+		cost = a.estimateCostFromUsage(*resp.Usage)
+	}
+
 	// Convert response
 	return &OrchestrationCompletionResponse{
 		Content:    resp.Text,
-		TokensUsed: resp.Usage.TotalTokens,
-		Cost:       a.estimateCostFromUsage(*resp.Usage),
+		TokensUsed: tokensUsed,
+		Cost:       cost,
 		Provider:   a.name,
 		Model:      wormholeReq.Model,
 		Duration:   time.Since(start),
@@ -126,16 +133,11 @@ func (a *WormholeToOrchestrationAdapter) CreateStreamingCompletion(ctx context.C
 			return nil, chunk.Error
 		}
 
-		if chunk.Delta != nil {
-			fullContent += chunk.Delta.Content
-		}
+		content := chunk.Content()
+		fullContent += content
 		totalTokens++
 
 		// Call the callback
-		var content string
-		if chunk.Delta != nil {
-			content = chunk.Delta.Content
-		}
 		// Check if we're done (no more content and finish reason is set)
 		done := chunk.FinishReason != nil
 		if err := callback(content, done); err != nil {
