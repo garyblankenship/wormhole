@@ -1,5 +1,10 @@
 # Changelog
 
+## v1.9.1 (2026-05-16)
+
+### Fixes
+- remove local `.work` scratch files from the published module
+
 ## v1.9.0 (2026-05-16)
 
 ### Features

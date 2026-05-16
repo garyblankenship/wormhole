@@ -21,6 +21,9 @@ coverage.xml
 coverage.txt
 !docs/assets/wormhole-banner.webp
 
+# Local agent scratch space
+.work/
+
 # Generated code
 *.pb.go
 *.pb.gw.go
