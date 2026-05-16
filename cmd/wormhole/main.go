@@ -25,7 +25,7 @@ func main() {
 	case "serve":
 		runServe(os.Args[2:])
 	case "version":
-		fmt.Println("wormhole v0.1.0")
+		fmt.Println("wormhole v1.9.0")
 	case "help", "--help", "-h":
 		printUsage()
 	default:
