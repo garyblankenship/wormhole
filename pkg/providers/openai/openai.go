@@ -207,6 +207,11 @@ func (p *Provider) Images(ctx context.Context, request types.ImagesRequest) (*ty
 	return p.transformImageResponse(&response), nil
 }
 
+// GenerateImage generates images through the unified image-generation interface.
+func (p *Provider) GenerateImage(ctx context.Context, request types.ImageRequest) (*types.ImageResponse, error) {
+	return p.Images(ctx, request)
+}
+
 // Audio handles both speech-to-text and text-to-speech
 func (p *Provider) Audio(ctx context.Context, request types.AudioRequest) (*types.AudioResponse, error) {
 	if request.Type == types.AudioRequestTypeSTT {
