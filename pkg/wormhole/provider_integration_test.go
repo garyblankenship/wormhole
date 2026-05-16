@@ -18,6 +18,8 @@ import (
 )
 
 func TestIntegration_MultipleProviders(t *testing.T) {
+	skipIntegrationInShortMode(t)
+
 	// Register test models in the global model registry
 	testutil.SetupTestModels(t)
 
@@ -110,6 +112,8 @@ func TestIntegration_MultipleProviders(t *testing.T) {
 }
 
 func TestIntegration_Middleware(t *testing.T) {
+	skipIntegrationInShortMode(t)
+
 	// Register test models in the global model registry
 	testutil.SetupTestModels(t)
 
@@ -245,6 +249,8 @@ func TestIntegration_Middleware(t *testing.T) {
 }
 
 func TestIntegration_OpenRouter(t *testing.T) {
+	skipIntegrationInShortMode(t)
+
 	// Note: Don't call setupTestModels(t) here because OpenRouter tests depend on
 	// auto-registered OpenRouter models from New() which setupTestModels() would clear
 

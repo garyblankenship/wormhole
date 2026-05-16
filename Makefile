@@ -1,4 +1,4 @@
-.PHONY: all build test clean lint fmt help bench release prepare-release
+.PHONY: all build test test-short test-live clean lint fmt help bench release prepare-release
 
 # Default target: format, lint, test, build
 all: fmt lint test build
@@ -11,12 +11,22 @@ build:
 # Run tests
 test:
 	@echo "Running tests..."
-	@go test -v ./... -cover
+	@go test -v ./...
+
+# Run short deterministic tests
+test-short:
+	@echo "Running short tests..."
+	@go test -short ./...
+
+# Run live provider integration tests (requires provider API keys/services)
+test-live:
+	@echo "Running live integration tests..."
+	@WORMHOLE_LIVE_TESTS=1 go test -v ./...
 
 # Run tests with coverage report
 test-coverage:
 	@echo "Running tests with coverage..."
-	@go test -v ./... -coverprofile=coverage.out
+	@go test -v ./pkg/... ./internal/... -coverprofile=coverage.out
 	@go tool cover -html=coverage.out -o coverage.html
 	@echo "Coverage report generated: coverage.html"
 
@@ -139,6 +149,8 @@ help:
 	@echo "    make all           - Format, lint, test, and build"
 	@echo "    make build         - Build the project"
 	@echo "    make test          - Run tests"
+	@echo "    make test-short    - Run short deterministic tests"
+	@echo "    make test-live     - Run live integration tests"
 	@echo "    make test-coverage - Run tests with coverage report"
 	@echo "    make clean         - Clean build artifacts"
 	@echo ""

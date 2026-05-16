@@ -145,6 +145,58 @@ func TestUnmarshalAnthropicToolArgs_RealWorld(t *testing.T) {
 	}
 }
 
+func TestExtractJSONFromMarkdown(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name  string
+		input string
+		want  string
+	}{
+		{
+			name:  "plain JSON",
+			input: `{"ok":true}`,
+			want:  `{"ok":true}`,
+		},
+		{
+			name:  "json code block",
+			input: "before\n```json\n{\"ok\":true}\n```\nafter",
+			want:  `{"ok":true}`,
+		},
+		{
+			name:  "generic object code block",
+			input: "```\n{\"ok\":true}\n```",
+			want:  `{"ok":true}`,
+		},
+		{
+			name:  "generic array code block",
+			input: "```\n[1,2,3]\n```",
+			want:  `[1,2,3]`,
+		},
+		{
+			name:  "generic non JSON code block unchanged",
+			input: "```\nnot json\n```",
+			want:  "```\nnot json\n```",
+		},
+		{
+			name:  "unterminated code block unchanged",
+			input: "```json\n{\"ok\":true}",
+			want:  "```json\n{\"ok\":true}",
+		},
+	}
+
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			if got := ExtractJSONFromMarkdown(tt.input); got != tt.want {
+				t.Fatalf("ExtractJSONFromMarkdown() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
 // Benchmark to ensure our functions don't significantly impact performance
 func BenchmarkLenientUnmarshal(b *testing.B) {
 	var result map[string]any

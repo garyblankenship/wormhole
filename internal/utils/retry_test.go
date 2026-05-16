@@ -48,6 +48,14 @@ func TestRetryableError(t *testing.T) {
 
 		assert.Contains(t, retryErr.Error(), "should_retry: false")
 	})
+
+	t.Run("unwrap returns cause", func(t *testing.T) {
+		cause := errors.New("connection reset")
+		retryErr := &RetryableError{Err: cause}
+
+		assert.True(t, errors.Is(retryErr, cause))
+		assert.Equal(t, cause, retryErr.Unwrap())
+	})
 }
 
 func TestIsRetryableStatusCode(t *testing.T) {

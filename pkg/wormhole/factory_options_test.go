@@ -1,0 +1,228 @@
+package wormhole
+
+import (
+	"log/slog"
+	"testing"
+	"time"
+
+	"github.com/garyblankenship/wormhole/pkg/discovery"
+	"github.com/garyblankenship/wormhole/pkg/types"
+)
+
+func TestEmbeddingsBuilderConfigurationCloneAndValidate(t *testing.T) {
+	t.Parallel()
+
+	client := New(WithDefaultProvider("openai"), WithOpenAI("test-key"), WithModelValidation(false), WithDiscovery(false))
+	builder := client.Embeddings().
+		Using("openai").
+		BaseURL("https://example.test/v1").
+		Model("text-embedding-3-small").
+		Input("one").
+		AddInput("two").
+		Dimensions(256).
+		ProviderOptions(map[string]any{"trace": true})
+
+	if builder.getProvider() != "openai" || builder.getBaseURL() != "https://example.test/v1" {
+		t.Fatalf("embeddings routing = (%q, %q)", builder.getProvider(), builder.getBaseURL())
+	}
+	if builder.request.Model != "text-embedding-3-small" || len(builder.request.Input) != 2 {
+		t.Fatalf("embeddings request = %#v", builder.request)
+	}
+	if *builder.request.Dimensions != 256 || builder.request.ProviderOptions["trace"] != true {
+		t.Fatalf("embeddings options = %#v", builder.request)
+	}
+	if err := builder.Validate(); err != nil {
+		t.Fatalf("Validate returned error: %v", err)
+	}
+	if got := builder.MustValidate(); got != builder {
+		t.Fatal("MustValidate did not return receiver")
+	}
+
+	clone := builder.Clone()
+	clone.request.Input[0] = "changed"
+	clone.request.ProviderOptions["trace"] = false
+	if builder.request.Input[0] == "changed" {
+		t.Fatal("Clone input mutation changed original")
+	}
+	if builder.request.ProviderOptions["trace"] != true {
+		t.Fatal("Clone provider options mutation changed original")
+	}
+
+	invalid := client.Embeddings().Dimensions(0)
+	if err := invalid.Validate(); err == nil {
+		t.Fatal("invalid Validate returned nil")
+	}
+	assertPanics(t, func() { invalid.MustValidate() })
+}
+
+func TestFactoryProviderConstructors(t *testing.T) {
+	factory := NewSimpleFactory()
+
+	openai := factory.OpenAI("openai-key")
+	if openai.config.DefaultProvider != "openai" || openai.config.Providers["openai"].APIKey != "openai-key" {
+		t.Fatalf("OpenAI config = %#v", openai.config)
+	}
+	_ = openai.Close()
+
+	anthropic := factory.Anthropic("anthropic-key")
+	if anthropic.config.DefaultProvider != "anthropic" || anthropic.config.Providers["anthropic"].APIKey != "anthropic-key" {
+		t.Fatalf("Anthropic config = %#v", anthropic.config)
+	}
+	_ = anthropic.Close()
+
+	gemini := factory.Gemini("gemini-key")
+	if gemini.config.DefaultProvider != "gemini" || gemini.config.Providers["gemini"].APIKey != "gemini-key" {
+		t.Fatalf("Gemini config = %#v", gemini.config)
+	}
+	_ = gemini.Close()
+
+	groq := factory.Groq("groq-key")
+	if groq.config.DefaultProvider != "groq" || groq.config.Providers["groq"].BaseURL == "" {
+		t.Fatalf("Groq config = %#v", groq.config)
+	}
+	_ = groq.Close()
+
+	mistral := factory.Mistral("mistral-key")
+	if mistral.config.DefaultProvider != "mistral" || mistral.config.Providers["mistral"].APIKey != "mistral-key" {
+		t.Fatalf("Mistral config = %#v", mistral.config)
+	}
+	_ = mistral.Close()
+
+	ollama, err := factory.Ollama("http://localhost:11434")
+	if err != nil {
+		t.Fatalf("Ollama returned error: %v", err)
+	}
+	if ollama.config.DefaultProvider != "ollama" || !ollama.config.Providers["ollama"].DynamicModels {
+		t.Fatalf("Ollama config = %#v", ollama.config)
+	}
+	_ = ollama.Close()
+
+	lmstudio, err := factory.LMStudio("http://localhost:1234")
+	if err != nil {
+		t.Fatalf("LMStudio returned error: %v", err)
+	}
+	if lmstudio.config.DefaultProvider != "lmstudio" || !lmstudio.config.Providers["lmstudio"].DynamicModels {
+		t.Fatalf("LMStudio config = %#v", lmstudio.config)
+	}
+	_ = lmstudio.Close()
+
+	openrouter, err := factory.OpenRouter("router-key")
+	if err != nil {
+		t.Fatalf("OpenRouter returned error: %v", err)
+	}
+	if openrouter.config.DefaultProvider != "openrouter" || !openrouter.config.Providers["openrouter"].DynamicModels {
+		t.Fatalf("OpenRouter config = %#v", openrouter.config)
+	}
+	_ = openrouter.Close()
+}
+
+func TestFactoryEnvironmentAndMiddlewareOptions(t *testing.T) {
+	t.Setenv("OLLAMA_BASE_URL", "")
+	t.Setenv("LMSTUDIO_BASE_URL", "")
+	t.Setenv("OPENROUTER_API_KEY", "")
+	t.Setenv("OPENAI_API_KEY", "env-openai")
+
+	factory := NewSimpleFactory()
+	if got := factory.getAPIKey(nil, "OPENAI_API_KEY"); got != "env-openai" {
+		t.Fatalf("getAPIKey env = %q, want env-openai", got)
+	}
+	if got := factory.getAPIKey([]string{"direct"}, "OPENAI_API_KEY"); got != "direct" {
+		t.Fatalf("getAPIKey direct = %q, want direct", got)
+	}
+	if _, err := factory.Ollama(); err == nil {
+		t.Fatal("Ollama without base URL returned nil error")
+	}
+	if _, err := factory.LMStudio(); err == nil {
+		t.Fatal("LMStudio without base URL returned nil error")
+	}
+	if _, err := factory.OpenRouter(); err == nil {
+		t.Fatal("OpenRouter without API key returned nil error")
+	}
+
+	logger := slog.Default()
+	var cfg Config
+	options := []Option{
+		factory.WithRateLimit(10),
+		factory.WithCircuitBreaker(2, time.Second),
+		factory.WithCache(time.Minute),
+		factory.WithTimeout(time.Second),
+		factory.WithLogging(logger),
+		factory.WithDetailedLogging(logger),
+		factory.WithDebugLogging(logger),
+	}
+	metricsOpt, metrics := factory.WithMetrics()
+	options = append(options, metricsOpt)
+	for _, opt := range options {
+		opt(&cfg)
+	}
+	if metrics == nil {
+		t.Fatal("WithMetrics returned nil metrics")
+	}
+	if len(cfg.Middleware) != 5 {
+		t.Fatalf("legacy middleware count = %d, want 5", len(cfg.Middleware))
+	}
+	if len(cfg.ProviderMiddlewares) != 8 {
+		t.Fatalf("provider middleware count = %d, want 8", len(cfg.ProviderMiddlewares))
+	}
+}
+
+func TestOptionHelpersAndConfigWarnings(t *testing.T) {
+	t.Setenv("OPENAI_API_KEY", "openai-env")
+	t.Setenv("ANTHROPIC_API_KEY", "anthropic-env")
+	t.Setenv("GEMINI_API_KEY", "gemini-env")
+	t.Setenv("GROQ_API_KEY", "groq-env")
+	t.Setenv("MISTRAL_API_KEY", "mistral-env")
+	t.Setenv("OPENROUTER_API_KEY", "router-env")
+
+	logger := slog.Default()
+	var cfg Config
+	options := []Option{
+		WithDefaultProvider("missing"),
+		WithProviderMiddleware(nil),
+		WithDebugLogging(logger),
+		WithLogger(logger),
+		WithDiscoveryConfig(discovery.DiscoveryConfig{OfflineMode: true}),
+		WithOfflineMode(true),
+		WithOpenAICompatible("vllm", "http://localhost:8000/v1", types.ProviderConfig{}),
+		WithVLLM(types.ProviderConfig{BaseURL: "http://localhost:8000/v1"}),
+		WithOllamaOpenAI(types.ProviderConfig{BaseURL: "http://localhost:11434/v1"}),
+		WithProviderFromEnv("openai"),
+		WithProviderFromEnv("unknown"),
+		WithAllProvidersFromEnv(),
+	}
+	for _, opt := range options {
+		opt(&cfg)
+	}
+
+	if cfg.Logger != logger || !cfg.DebugLogging {
+		t.Fatal("logger/debug options not applied")
+	}
+	if !cfg.DiscoveryConfig.OfflineMode {
+		t.Fatal("offline mode not applied")
+	}
+	for _, provider := range []string{"openai", "anthropic", "gemini", "groq", "mistral", "openrouter", "vllm", "ollama-openai"} {
+		if _, ok := cfg.Providers[provider]; !ok {
+			t.Fatalf("provider %q not configured by options", provider)
+		}
+	}
+
+	warnings := validateConfig(&cfg)
+	if len(warnings) < 2 {
+		t.Fatalf("validateConfig warnings = %#v, want at least two", warnings)
+	}
+	if got := formatList([]string{"b", "a"}); got != "b, a" {
+		t.Fatalf("formatList = %q, want b, a", got)
+	}
+	if got := formatList([]string{"one"}); got != "one" {
+		t.Fatalf("formatList single = %q, want one", got)
+	}
+	if got := formatList(nil); got != "" {
+		t.Fatalf("formatList empty = %q, want empty", got)
+	}
+	if got := capitalize("openai"); got != "Openai" {
+		t.Fatalf("capitalize = %q, want Openai", got)
+	}
+	if got := capitalize(""); got != "" {
+		t.Fatalf("capitalize empty = %q, want empty", got)
+	}
+}

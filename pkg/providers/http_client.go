@@ -86,7 +86,7 @@ func returnResponseBuf(buf []byte) {
 }
 
 type HTTPClientWrapper struct {
-    providerName string
+	providerName string
 	Config       types.ProviderConfig
 	tlsConfig    *config.TLSConfig
 	httpClient   *http.Client
@@ -154,7 +154,6 @@ func (w *HTTPClientWrapper) GetHTTPClient() *http.Client {
 	}
 	return NewSecureHTTPClient(w.GetHTTPTimeout(), w.tlsConfig, nil, "")
 }
-
 
 func (w *HTTPClientWrapper) DoRequest(ctx context.Context, method, url string, body any, result any) error {
 	req, err := w.buildRequest(ctx, method, url, body)
@@ -226,7 +225,6 @@ func (w *HTTPClientWrapper) StreamRequest(ctx context.Context, method, url strin
 
 	return resp.Body, nil
 }
-
 
 func (w *HTTPClientWrapper) buildRequest(ctx context.Context, method, url string, body any) (*http.Request, error) {
 	payload, err := w.marshalRequestBody(body)
@@ -371,8 +369,6 @@ func (w *HTTPClientWrapper) mapHTTPStatusToErrorCode(statusCode int) types.Error
 		return types.ErrorCodeNetwork
 	}
 }
-
-
 
 func (w *HTTPClientWrapper) maskAPIKeyInURL(rawURL string) string {
 	parsed, err := url.Parse(rawURL)

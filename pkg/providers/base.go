@@ -20,7 +20,7 @@ type AuthStrategy interface {
 // and adds HTTP functionality for making requests
 type BaseProvider struct {
 	*types.BaseProvider
-	Config       types.ProviderConfig
+	Config types.ProviderConfig
 	*HTTPClientWrapper
 }
 
@@ -118,5 +118,5 @@ func (p *BaseProvider) WrapError(code types.ErrorCode, message string, cause err
 }
 
 func (p *BaseProvider) Close() error {
-    return p.HTTPClientWrapper.Close()
+	return p.HTTPClientWrapper.Close()
 }

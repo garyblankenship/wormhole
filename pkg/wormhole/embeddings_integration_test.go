@@ -11,10 +11,18 @@ import (
 	"time"
 
 	"github.com/garyblankenship/wormhole/pkg/middleware"
+	wmtest "github.com/garyblankenship/wormhole/pkg/testing"
 	"github.com/garyblankenship/wormhole/pkg/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+func skipUnlessLiveTestsEnabled(t *testing.T) {
+	t.Helper()
+	if os.Getenv("WORMHOLE_LIVE_TESTS") != "1" {
+		t.Skip("set WORMHOLE_LIVE_TESTS=1 to run live provider integration tests")
+	}
+}
 
 // verifyEmbeddingsResponse validates an embeddings response
 func verifyEmbeddingsResponse(t *testing.T, resp *types.EmbeddingsResponse, expectedCount int, checkDimensions bool, expectedDims int) {
@@ -72,6 +80,7 @@ func TestEmbeddingsIntegration(t *testing.T) {
 	if testing.Short() {
 		t.Skip("Skipping integration tests in short mode")
 	}
+	skipUnlessLiveTestsEnabled(t)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
@@ -360,6 +369,7 @@ func TestEmbeddingsEdgeCases(t *testing.T) {
 	if testing.Short() {
 		t.Skip("Skipping edge case tests in short mode")
 	}
+	skipUnlessLiveTestsEnabled(t)
 
 	if os.Getenv("OPENAI_API_KEY") == "" {
 		t.Skip("OPENAI_API_KEY not set")
@@ -544,10 +554,6 @@ func TestEmbeddingsBuilder(t *testing.T) {
 }
 
 func TestEmbeddingsMiddleware(t *testing.T) {
-	if os.Getenv("OPENAI_API_KEY") == "" {
-		t.Skip("OPENAI_API_KEY not set")
-	}
-
 	// Test with a simple logging middleware
 	var middlewareCalled bool
 	mw := func(next middleware.Handler) middleware.Handler {
@@ -557,18 +563,24 @@ func TestEmbeddingsMiddleware(t *testing.T) {
 		}
 	}
 
-	client := New(WithOpenAI("test-key"), WithMiddleware(mw))
+	mock := wmtest.NewMockProvider("mock")
+	client := New(
+		WithCustomProvider("mock", wmtest.MockProviderFactory(mock)),
+		WithProviderConfig("mock", types.ProviderConfig{}),
+		WithDefaultProvider("mock"),
+		WithMiddleware(mw),
+	)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	_, _ = client.Embeddings().
-		Using("openai").
+	_, err := client.Embeddings().
+		Using("mock").
 		Model("text-embedding-3-small").
 		Input("Middleware test").
 		Generate(ctx)
+	require.NoError(t, err)
 
-	// Error is acceptable (might not have API key), but middleware should be called
 	assert.True(t, middlewareCalled, "Middleware was not called")
 }
 

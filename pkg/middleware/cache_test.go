@@ -149,6 +149,29 @@ func TestLRUCache(t *testing.T) {
 	}
 }
 
+func TestCacheClose(t *testing.T) {
+	t.Run("memory cache", func(t *testing.T) {
+		cache := NewMemoryCache(1)
+		if err := cache.Close(); err != nil {
+			t.Fatalf("MemoryCache.Close() error = %v", err)
+		}
+	})
+
+	t.Run("ttl cache", func(t *testing.T) {
+		cache := NewTTLCache(1, time.Minute)
+		if err := cache.Close(); err != nil {
+			t.Fatalf("TTLCache.Close() error = %v", err)
+		}
+	})
+
+	t.Run("lru cache", func(t *testing.T) {
+		cache := NewLRUCache(1)
+		if err := cache.Close(); err != nil {
+			t.Fatalf("LRUCache.Close() error = %v", err)
+		}
+	})
+}
+
 func TestDefaultCacheKeyGenerator(t *testing.T) {
 	// Test with simple struct
 	type TestRequest struct {

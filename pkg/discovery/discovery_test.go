@@ -164,6 +164,44 @@ func TestDiscoveryService_RefreshModels(t *testing.T) {
 	}
 }
 
+func TestDiscoveryService_RegisterFetcherAndStop(t *testing.T) {
+	mockModels := []*types.ModelInfo{{
+		ID:       "registered-model",
+		Name:     "Registered Model",
+		Provider: "registered",
+	}}
+	mockFetcher := &MockFetcher{
+		name:   "registered",
+		models: mockModels,
+	}
+	config := DiscoveryConfig{
+		CacheTTL:        1 * time.Hour,
+		EnableFileCache: false,
+		OfflineMode:     false,
+	}
+	service := NewDiscoveryService(config)
+
+	service.RegisterFetcher(mockFetcher)
+
+	models, err := service.GetModels(context.Background(), "registered")
+	if err != nil {
+		t.Fatalf("Expected registered fetcher to return models, got %v", err)
+	}
+	if len(models) != 1 {
+		t.Fatalf("Expected 1 registered model, got %d", len(models))
+	}
+	if models[0].ID != "registered-model" {
+		t.Fatalf("Expected registered model ID, got %s", models[0].ID)
+	}
+
+	if err := service.Stop(); err != nil {
+		t.Fatalf("Expected stop to succeed, got %v", err)
+	}
+	if err := service.Stop(); err != nil {
+		t.Fatalf("Expected repeated stop to succeed, got %v", err)
+	}
+}
+
 func TestDiscoveryService_ClearCache(t *testing.T) {
 	mockModels := []*types.ModelInfo{
 		{

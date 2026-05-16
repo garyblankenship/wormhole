@@ -17,6 +17,8 @@ import (
 )
 
 func TestOpenAIIntegration_StreamingGeneration(t *testing.T) {
+	skipIntegrationInShortMode(t)
+
 	// Register test models in the global model registry
 	testutil.SetupTestModels(t)
 

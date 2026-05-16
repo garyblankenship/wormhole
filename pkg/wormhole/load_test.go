@@ -27,6 +27,13 @@ type LoadTestConfig struct {
 	ErrorRate        float64 // Percentage of requests that should error (0-100)
 }
 
+func skipLoadTestInShortMode(t *testing.T) {
+	t.Helper()
+	if testing.Short() {
+		t.Skip("Skipping load test in short mode")
+	}
+}
+
 // LoadTestMetrics holds collected metrics during load testing
 type LoadTestMetrics struct {
 	TotalRequests  int64
@@ -186,6 +193,7 @@ func calculatePercentiles(latencies []time.Duration) (p50, p90, p99, minLatency,
 
 // TestLoadConcurrentRequests tests sustained concurrent load
 func TestLoadConcurrentRequests(t *testing.T) {
+	skipLoadTestInShortMode(t)
 	config := LoadTestConfig{
 		Duration:         5 * time.Second, // Short for CI, can be longer for local
 		Concurrency:      100,
@@ -201,6 +209,7 @@ func TestLoadConcurrentRequests(t *testing.T) {
 
 // TestLoadHighConcurrency tests very high concurrency
 func TestLoadHighConcurrency(t *testing.T) {
+	skipLoadTestInShortMode(t)
 	config := LoadTestConfig{
 		Duration:         3 * time.Second,
 		Concurrency:      500,
@@ -216,6 +225,7 @@ func TestLoadHighConcurrency(t *testing.T) {
 
 // TestLoadWithRateLimit tests load with rate limiting
 func TestLoadWithRateLimit(t *testing.T) {
+	skipLoadTestInShortMode(t)
 	config := LoadTestConfig{
 		Duration:         3 * time.Second,
 		Concurrency:      50,
@@ -231,6 +241,7 @@ func TestLoadWithRateLimit(t *testing.T) {
 
 // TestLoadWithErrorInjection tests error handling under load
 func TestLoadWithErrorInjection(t *testing.T) {
+	skipLoadTestInShortMode(t)
 	// Create mock provider that errors 20% of the time
 	mockProvider := testing_pkg.NewMockProvider("mock")
 	mockProvider.WithTextResponse(types.TextResponse{
@@ -286,6 +297,7 @@ func (p *errorInjectingProvider) Text(ctx context.Context, request types.TextReq
 
 // TestLoadWithMiddleware tests load with middleware chain
 func TestLoadWithMiddleware(t *testing.T) {
+	skipLoadTestInShortMode(t)
 	// Create middleware stack
 	middlewares := []middleware.Middleware{
 		func(next middleware.Handler) middleware.Handler {
@@ -341,6 +353,7 @@ func TestLoadWithMiddleware(t *testing.T) {
 
 // TestProviderPoolStress tests provider pool exhaustion and recovery
 func TestProviderPoolStress(t *testing.T) {
+	skipLoadTestInShortMode(t)
 	// Create multiple mock providers to simulate provider pool
 	mockProvider1 := testing_pkg.NewMockProvider("mock1")
 	mockProvider1.WithTextResponse(types.TextResponse{
@@ -400,6 +413,7 @@ func TestProviderPoolStress(t *testing.T) {
 
 // TestMiddlewareChainDepth tests deep middleware chains under load
 func TestMiddlewareChainDepth(t *testing.T) {
+	skipLoadTestInShortMode(t)
 	// Create a deep middleware chain (10 layers)
 	var middlewares []middleware.Middleware
 	for i := 0; i < 10; i++ {
@@ -444,6 +458,7 @@ func TestMiddlewareChainDepth(t *testing.T) {
 
 // TestMemoryLeakDetection tests for memory leaks under sustained load
 func TestMemoryLeakDetection(t *testing.T) {
+	skipLoadTestInShortMode(t)
 	// This test runs multiple phases to detect memory leaks
 	mockProvider := testing_pkg.NewMockProvider("mock")
 	mockProvider.WithTextResponse(types.TextResponse{
@@ -519,6 +534,7 @@ func TestMemoryLeakDetection(t *testing.T) {
 
 // TestLoadWithMixedOperations tests mixed operations (text, embeddings, structured) under load
 func TestLoadWithMixedOperations(t *testing.T) {
+	skipLoadTestInShortMode(t)
 	// Create mock provider that supports all operations
 	mockProvider := testing_pkg.NewMockProvider("mock")
 	mockProvider.WithTextResponse(types.TextResponse{

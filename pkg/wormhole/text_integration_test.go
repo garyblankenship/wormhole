@@ -15,6 +15,8 @@ import (
 )
 
 func TestOpenAIIntegration_TextGeneration(t *testing.T) {
+	skipIntegrationInShortMode(t)
+
 	// Register test models in the global model registry
 	testutil.SetupTestModels(t)
 
@@ -245,6 +247,8 @@ func TestOpenAIIntegration_TextGeneration(t *testing.T) {
 }
 
 func TestOpenAIIntegration_FunctionCalling(t *testing.T) {
+	skipIntegrationInShortMode(t)
+
 	// Register test models in the global model registry
 	testutil.SetupTestModels(t)
 
