@@ -11,15 +11,16 @@ import (
 
 // DiscoveryService fetches and caches models from providers
 type DiscoveryService struct {
-	cache    *ModelCache
-	fetchers map[string]ModelFetcher
-	config   DiscoveryConfig
-	mu       sync.RWMutex
-	ctx      context.Context
-	cancel   context.CancelFunc
-	wg       sync.WaitGroup
-	stopOnce sync.Once
-	stopCh   chan struct{}
+	cache     *ModelCache
+	fetchers  map[string]ModelFetcher
+	config    DiscoveryConfig
+	mu        sync.RWMutex
+	ctx       context.Context
+	cancel    context.CancelFunc
+	wg        sync.WaitGroup
+	startOnce sync.Once
+	stopOnce  sync.Once
+	stopCh    chan struct{}
 }
 
 // NewDiscoveryService creates a new model discovery service
@@ -100,13 +101,13 @@ func (s *DiscoveryService) RefreshModels(ctx context.Context) error {
 	close(errCh)
 
 	// Collect errors (pre-allocate for expected capacity)
-	errors := make([]error, 0, len(providers))
+	errs := make([]error, 0, len(providers))
 	for err := range errCh {
-		errors = append(errors, err)
+		errs = append(errs, err)
 	}
 
-	if len(errors) > 0 {
-		return fmt.Errorf("failed to refresh some providers: %v", errors)
+	if len(errs) > 0 {
+		return fmt.Errorf("failed to refresh some providers: %v", errs)
 	}
 
 	return nil
@@ -118,25 +119,27 @@ func (s *DiscoveryService) StartBackgroundRefresh(ctx context.Context) {
 		return // Background refresh disabled
 	}
 
-	s.wg.Add(1)
-	ticker := time.NewTicker(s.config.RefreshInterval)
-	go func() {
-		defer s.wg.Done()
-		defer ticker.Stop()
-		for {
-			select {
-			case <-ticker.C:
-				// Refresh all providers (errors logged but not returned in background)
-				_ = s.RefreshModels(ctx)
-			case <-s.stopCh:
-				return
-			case <-ctx.Done():
-				return
-			case <-s.ctx.Done():
-				return
+	s.startOnce.Do(func() {
+		s.wg.Add(1)
+		ticker := time.NewTicker(s.config.RefreshInterval)
+		go func() {
+			defer s.wg.Done()
+			defer ticker.Stop()
+			for {
+				select {
+				case <-ticker.C:
+					// Refresh all providers (errors logged but not returned in background)
+					_ = s.RefreshModels(ctx)
+				case <-s.stopCh:
+					return
+				case <-ctx.Done():
+					return
+				case <-s.ctx.Done():
+					return
+				}
 			}
-		}
-	}()
+		}()
+	})
 }
 
 // Stop halts background refresh and cleans up resources

@@ -46,18 +46,28 @@ func (p *Wormhole) initializeDiscoveryService() {
 
 // ListAvailableModels returns all available models for a provider from the discovery cache.
 func (p *Wormhole) ListAvailableModels(provider string) ([]*types.ModelInfo, error) {
+	return p.ListAvailableModelsWithContext(context.Background(), provider)
+}
+
+// ListAvailableModelsWithContext returns all available models for a provider from the discovery cache.
+func (p *Wormhole) ListAvailableModelsWithContext(ctx context.Context, provider string) ([]*types.ModelInfo, error) {
 	if p.discoveryService == nil {
 		return nil, fmt.Errorf("model discovery is not enabled")
 	}
-	return p.discoveryService.GetModels(context.Background(), provider)
+	return p.discoveryService.GetModels(ctx, provider)
 }
 
 // RefreshModels manually triggers a refresh of all provider model catalogs.
 func (p *Wormhole) RefreshModels() error {
+	return p.RefreshModelsWithContext(context.Background())
+}
+
+// RefreshModelsWithContext manually triggers a refresh of all provider model catalogs.
+func (p *Wormhole) RefreshModelsWithContext(ctx context.Context) error {
 	if p.discoveryService == nil {
 		return fmt.Errorf("model discovery is not enabled")
 	}
-	return p.discoveryService.RefreshModels(context.Background())
+	return p.discoveryService.RefreshModels(ctx)
 }
 
 // ClearModelCache clears all cached model data.

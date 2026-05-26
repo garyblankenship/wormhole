@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -26,6 +27,21 @@ func (m *MockFetcher) FetchModels(ctx context.Context) ([]*types.ModelInfo, erro
 		return nil, ctx.Err()
 	}
 	return m.models, nil
+}
+
+type blockingFetcher struct {
+	name  string
+	count atomic.Int32
+}
+
+func (f *blockingFetcher) Name() string {
+	return f.name
+}
+
+func (f *blockingFetcher) FetchModels(ctx context.Context) ([]*types.ModelInfo, error) {
+	f.count.Add(1)
+	<-ctx.Done()
+	return nil, ctx.Err()
 }
 
 func TestDiscoveryService_GetModels(t *testing.T) {
@@ -199,6 +215,42 @@ func TestDiscoveryService_RegisterFetcherAndStop(t *testing.T) {
 	}
 	if err := service.Stop(); err != nil {
 		t.Fatalf("Expected repeated stop to succeed, got %v", err)
+	}
+}
+
+func TestDiscoveryService_StartBackgroundRefreshOnlyStartsOnce(t *testing.T) {
+	t.Parallel()
+
+	fetcher := &blockingFetcher{name: "test"}
+	service := NewDiscoveryService(DiscoveryConfig{
+		CacheTTL:        time.Hour,
+		EnableFileCache: false,
+		RefreshInterval: 5 * time.Millisecond,
+	}, fetcher)
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+	t.Cleanup(func() {
+		if err := service.Stop(); err != nil {
+			t.Fatalf("Stop returned error: %v", err)
+		}
+	})
+
+	service.StartBackgroundRefresh(ctx)
+	service.StartBackgroundRefresh(ctx)
+
+	deadline := time.After(100 * time.Millisecond)
+	for fetcher.count.Load() == 0 {
+		select {
+		case <-deadline:
+			t.Fatal("background refresh did not start")
+		default:
+			time.Sleep(time.Millisecond)
+		}
+	}
+
+	time.Sleep(15 * time.Millisecond)
+	if got := fetcher.count.Load(); got != 1 {
+		t.Fatalf("background refresh fetch count = %d, want 1", got)
 	}
 }
 
