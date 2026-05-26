@@ -2,9 +2,12 @@ package main
 
 import (
 	"context"
+	"errors"
 	"flag"
 	"fmt"
+	"io"
 	"log/slog"
+	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
@@ -16,27 +19,32 @@ import (
 )
 
 func main() {
-	if len(os.Args) < 2 {
-		printUsage()
-		os.Exit(0)
-	}
-
-	switch os.Args[1] {
-	case "serve":
-		runServe(os.Args[2:])
-	case "version":
-		fmt.Println("wormhole v1.9.0")
-	case "help", "--help", "-h":
-		printUsage()
-	default:
-		fmt.Fprintf(os.Stderr, "unknown command: %s\n", os.Args[1])
-		printUsage()
-		os.Exit(1)
-	}
+	os.Exit(run(os.Args[1:], os.Stdout, os.Stderr, os.Getenv))
 }
 
-func printUsage() {
-	fmt.Println(`wormhole - OpenAI-compatible LLM proxy
+func run(args []string, stdout, stderr io.Writer, getenv func(string) string) int {
+	if len(args) < 1 {
+		printUsage(stdout)
+		return 0
+	}
+
+	switch args[0] {
+	case "serve":
+		return runServe(args[1:], stdout, stderr, getenv)
+	case "version":
+		_, _ = fmt.Fprintln(stdout, "wormhole v1.9.0")
+	case "help", "--help", "-h":
+		printUsage(stdout)
+	default:
+		_, _ = fmt.Fprintf(stderr, "unknown command: %s\n", args[0])
+		printUsage(stderr)
+		return 1
+	}
+	return 0
+}
+
+func printUsage(w io.Writer) {
+	_, _ = fmt.Fprintln(w, `wormhole - OpenAI-compatible LLM proxy
 
 Commands:
   serve     Start the proxy server
@@ -46,15 +54,19 @@ Commands:
 Run "wormhole serve --help" for serve options.`)
 }
 
-func runServe(args []string) {
-	fs := flag.NewFlagSet("serve", flag.ExitOnError)
+func runServe(args []string, stdout, stderr io.Writer, getenv func(string) string) int {
+	fs := flag.NewFlagSet("serve", flag.ContinueOnError)
+	fs.SetOutput(stderr)
 	addr := fs.String("addr", ":8080", "Listen address")
 	defaultProvider := fs.String("default-provider", "", "Default provider when model has no prefix")
 	if err := fs.Parse(args); err != nil {
-		os.Exit(1)
+		if err == flag.ErrHelp {
+			return 0
+		}
+		return 1
 	}
 
-	logger := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
+	logger := slog.New(slog.NewJSONHandler(stdout, &slog.HandlerOptions{
 		Level: slog.LevelInfo,
 	}))
 
@@ -62,7 +74,7 @@ func runServe(args []string) {
 	opts = append(opts, wormhole.WithAllProvidersFromEnv())
 
 	// Ollama often has no API key, just a base URL
-	if ollamaURL := os.Getenv("OLLAMA_BASE_URL"); ollamaURL != "" {
+	if ollamaURL := getenv("OLLAMA_BASE_URL"); ollamaURL != "" {
 		opts = append(opts, wormhole.WithOllama(types.ProviderConfig{
 			BaseURL: ollamaURL,
 		}))
@@ -72,7 +84,7 @@ func runServe(args []string) {
 		Addr:            *addr,
 		DefaultProvider: *defaultProvider,
 		WormholeOpts:    opts,
-		ProxyAPIKey:     os.Getenv("WORMHOLE_API_KEY"),
+		ProxyAPIKey:     getenv("WORMHOLE_API_KEY"),
 		Logger:          logger,
 	}
 
@@ -91,8 +103,9 @@ func runServe(args []string) {
 		}
 	}()
 
-	if err := srv.Start(); err != nil && err.Error() != "http: Server closed" {
+	if err := srv.Start(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 		logger.Error("server error", "error", err)
-		os.Exit(1)
+		return 1
 	}
+	return 0
 }
