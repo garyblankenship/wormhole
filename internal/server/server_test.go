@@ -17,12 +17,13 @@ import (
 )
 
 func newTestProxy(mock *wmtest.MockProvider, opts ...wormhole.Option) *proxy {
-	baseOpts := []wormhole.Option{
+	baseOpts := make([]wormhole.Option, 0, 4+len(opts))
+	baseOpts = append(baseOpts,
 		wormhole.WithCustomProvider("openai", wmtest.MockProviderFactory(mock)),
 		wormhole.WithProviderConfig("openai", types.ProviderConfig{}),
 		wormhole.WithDefaultProvider("openai"),
 		wormhole.WithDiscovery(false),
-	}
+	)
 	baseOpts = append(baseOpts, opts...)
 
 	return New(Config{
@@ -54,7 +55,6 @@ func TestParseModelRoute(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			gotProvider, gotModel := parseModelRoute(tt.model)
@@ -133,7 +133,6 @@ func TestProxyChatValidationAndUpstreamErrors(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			rec := performRequest(p, http.MethodPost, "/v1/chat/completions", tt.body)
@@ -143,6 +142,22 @@ func TestProxyChatValidationAndUpstreamErrors(t *testing.T) {
 			assert.NotEmpty(t, out.Error.Message)
 		})
 	}
+}
+
+func TestProxyRejectsOversizedChatBody(t *testing.T) {
+	t.Parallel()
+
+	p := newTestProxy(wmtest.NewMockProvider("openai"))
+	body := `{"model":"gpt-test","messages":[{"role":"user","content":"` +
+		strings.Repeat("x", maxProxyRequestBodyBytes) + `"}]}`
+
+	rec := performRequest(p, http.MethodPost, "/v1/chat/completions", body)
+
+	require.Equal(t, http.StatusBadRequest, rec.Code)
+	var out ErrorResponse
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &out))
+	assert.Equal(t, "invalid_json", out.Error.Code)
+	assert.Contains(t, out.Error.Message, "request body too large")
 }
 
 func TestProxyChatStreaming(t *testing.T) {
@@ -166,6 +181,20 @@ func TestProxyChatStreaming(t *testing.T) {
 	assert.Contains(t, body, "data: [DONE]")
 }
 
+func TestProxyRejectsMultipleJSONValues(t *testing.T) {
+	t.Parallel()
+
+	p := newTestProxy(wmtest.NewMockProvider("openai"))
+	rec := performRequest(p, http.MethodPost, "/v1/chat/completions",
+		`{"model":"gpt-test","messages":[{"role":"user","content":"hello"}]} {}`)
+
+	require.Equal(t, http.StatusBadRequest, rec.Code)
+	var out ErrorResponse
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &out))
+	assert.Equal(t, "invalid_json", out.Error.Code)
+	assert.Contains(t, out.Error.Message, "single JSON value")
+}
+
 func TestProxyEmbeddings(t *testing.T) {
 	t.Parallel()
 
@@ -186,6 +215,26 @@ func TestProxyEmbeddings(t *testing.T) {
 	assert.Equal(t, "text-embedding-test", out.Model)
 	require.Len(t, out.Data, 2)
 	assert.Equal(t, []float64{0.1, 0.2}, out.Data[0].Embedding)
+}
+
+func TestProxyEmbeddingsAcceptsSingleStringInput(t *testing.T) {
+	t.Parallel()
+
+	mock := wmtest.NewMockProvider("openai").WithEmbeddings([]types.Embedding{
+		{Index: 0, Embedding: []float64{0.1, 0.2}},
+	})
+	p := newTestProxy(mock)
+
+	rec := performRequest(p, http.MethodPost, "/v1/embeddings", `{
+		"model":"openai/text-embedding-test",
+		"input":"one"
+	}`)
+
+	require.Equal(t, http.StatusOK, rec.Code)
+	var out EmbeddingResponse
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &out))
+	require.Len(t, out.Data, 1)
+	assert.Equal(t, "text-embedding-test", out.Model)
 }
 
 func TestProxyEmbeddingsValidationAndUpstreamErrors(t *testing.T) {

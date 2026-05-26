@@ -1,5 +1,10 @@
 package server
 
+import (
+	"encoding/json"
+	"fmt"
+)
+
 // ChatCompletionRequest is the OpenAI-compatible chat completion request.
 type ChatCompletionRequest struct {
 	Model       string        `json:"model"`
@@ -44,8 +49,27 @@ type ChatUsage struct {
 
 // EmbeddingRequest is the OpenAI-compatible embeddings request.
 type EmbeddingRequest struct {
-	Model string   `json:"model"`
-	Input []string `json:"input"`
+	Model string         `json:"model"`
+	Input EmbeddingInput `json:"input"`
+}
+
+// EmbeddingInput accepts the OpenAI-compatible string-or-array input shape.
+type EmbeddingInput []string
+
+func (i *EmbeddingInput) UnmarshalJSON(data []byte) error {
+	var single string
+	if err := json.Unmarshal(data, &single); err == nil {
+		*i = []string{single}
+		return nil
+	}
+
+	var many []string
+	if err := json.Unmarshal(data, &many); err == nil {
+		*i = many
+		return nil
+	}
+
+	return fmt.Errorf("input must be a string or array of strings")
 }
 
 // EmbeddingResponse is the OpenAI-compatible embeddings response.

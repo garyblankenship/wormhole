@@ -2,13 +2,17 @@ package server
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"time"
 
 	"github.com/garyblankenship/wormhole/pkg/types"
 	wormhole "github.com/garyblankenship/wormhole/pkg/wormhole"
 )
+
+const maxProxyRequestBodyBytes = 1 << 20
 
 func (p *proxy) handleHealth(w http.ResponseWriter, _ *http.Request) {
 	writeJSON(w, http.StatusOK, HealthResponse{
@@ -19,7 +23,7 @@ func (p *proxy) handleHealth(w http.ResponseWriter, _ *http.Request) {
 
 func (p *proxy) handleChatCompletions(w http.ResponseWriter, r *http.Request) {
 	var req ChatCompletionRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := decodeRequestBody(w, r, &req); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid_json",
 			"Failed to parse request body: "+err.Error(), "invalid_request_error")
 		return
@@ -164,17 +168,23 @@ func (p *proxy) streamChat(w http.ResponseWriter, r *http.Request, builder *worm
 			p.logger.Error("failed to marshal chunk", "error", marshalErr)
 			break
 		}
-		fmt.Fprintf(w, "data: %s\n\n", data)
+		if _, err := fmt.Fprintf(w, "data: %s\n\n", data); err != nil {
+			p.logger.Error("failed to write stream chunk", "error", err)
+			break
+		}
 		flusher.Flush()
 	}
 
-	fmt.Fprint(w, "data: [DONE]\n\n")
+	if _, err := fmt.Fprint(w, "data: [DONE]\n\n"); err != nil {
+		p.logger.Error("failed to write stream terminator", "error", err)
+		return
+	}
 	flusher.Flush()
 }
 
 func (p *proxy) handleEmbeddings(w http.ResponseWriter, r *http.Request) {
 	var req EmbeddingRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := decodeRequestBody(w, r, &req); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid_json",
 			"Failed to parse request body: "+err.Error(), "invalid_request_error")
 		return
@@ -193,7 +203,7 @@ func (p *proxy) handleEmbeddings(w http.ResponseWriter, r *http.Request) {
 
 	provider, model := parseModelRoute(req.Model)
 
-	builder := p.wh.Embeddings().Model(model).Input(req.Input...)
+	builder := p.wh.Embeddings().Model(model).Input([]string(req.Input)...)
 	if provider != "" {
 		builder = builder.Using(provider)
 	}
@@ -228,13 +238,13 @@ func (p *proxy) handleEmbeddings(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, out)
 }
 
-func (p *proxy) handleListModels(w http.ResponseWriter, _ *http.Request) {
+func (p *proxy) handleListModels(w http.ResponseWriter, r *http.Request) {
 	providers := []string{"openai", "anthropic", "gemini", "ollama", "openrouter"}
 	var entries []ModelEntry
 	ts := time.Now().Unix()
 
 	for _, prov := range providers {
-		models, err := p.wh.ListAvailableModels(prov)
+		models, err := p.wh.ListAvailableModelsWithContext(r.Context(), prov)
 		if err != nil {
 			continue
 		}
@@ -256,6 +266,18 @@ func (p *proxy) handleListModels(w http.ResponseWriter, _ *http.Request) {
 		Object: "list",
 		Data:   entries,
 	})
+}
+
+func decodeRequestBody(w http.ResponseWriter, r *http.Request, dst any) error {
+	r.Body = http.MaxBytesReader(w, r.Body, maxProxyRequestBodyBytes)
+	decoder := json.NewDecoder(r.Body)
+	if err := decoder.Decode(dst); err != nil {
+		return err
+	}
+	if decoder.Decode(&struct{}{}) != io.EOF {
+		return errors.New("request body must contain a single JSON value")
+	}
+	return nil
 }
 
 func writeJSON(w http.ResponseWriter, status int, v any) {
