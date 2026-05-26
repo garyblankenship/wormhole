@@ -7,7 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log"
+	"log/slog"
 	"net"
 	"net/http"
 	"net/url"
@@ -31,6 +31,22 @@ var responseBodyPool = sync.Pool{
 		buf := make([]byte, 0, 4096)
 		return &buf
 	},
+}
+
+const maxProviderResponseBodyBytes = 32 << 20
+
+func readResponseBodyLimited(r io.Reader) ([]byte, error) {
+	respBody, err := readAllPooled(io.LimitReader(r, maxProviderResponseBodyBytes+1))
+	if err != nil {
+		return nil, err
+	}
+	if len(respBody) > maxProviderResponseBodyBytes {
+		returnResponseBuf(respBody)
+		return nil, types.ErrRequestTooLarge.WithDetails(
+			fmt.Sprintf("provider response body exceeded %d bytes", maxProviderResponseBodyBytes),
+		)
+	}
+	return respBody, nil
 }
 
 // readAllPooled reads all data from r into a pooled byte slice.
@@ -167,11 +183,11 @@ func (w *HTTPClientWrapper) DoRequest(ctx context.Context, method, url string, b
 	}
 	defer func() {
 		if err := resp.Body.Close(); err != nil {
-			log.Printf("warning: failed to close response body: %v", err)
+			slog.Warn("failed to close response body", "error", err)
 		}
 	}()
 
-	respBody, err := readAllPooled(resp.Body)
+	respBody, err := readResponseBodyLimited(resp.Body)
 	if err != nil {
 		return types.Errorf("read response body", err)
 	}
@@ -218,7 +234,10 @@ func (w *HTTPClientWrapper) StreamRequest(ctx context.Context, method, url strin
 
 	if resp.StatusCode >= 400 {
 		defer func() { _ = resp.Body.Close() }()
-		respBody, _ := readAllPooled(resp.Body)
+		respBody, err := readResponseBodyLimited(resp.Body)
+		if err != nil {
+			return nil, types.Errorf("read response body", err)
+		}
 		defer returnResponseBuf(respBody)
 		return nil, w.buildErrorResponse(resp.StatusCode, resp.Status, url, respBody)
 	}

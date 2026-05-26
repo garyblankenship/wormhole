@@ -5,6 +5,8 @@ import (
 	"errors"
 	"net"
 	"net/http"
+	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -84,6 +86,44 @@ func TestHTTPClientWrapperBuildRequestAndParseResponse(t *testing.T) {
 	}
 	if err := wrapper.parseResponse([]byte(`{`), &decoded); err == nil {
 		t.Fatal("parseResponse with invalid JSON returned nil error")
+	}
+}
+
+func TestHTTPClientWrapperLimitsProviderResponseBodies(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(`{"data":"` + strings.Repeat("x", maxProviderResponseBodyBytes) + `"}`))
+	}))
+	t.Cleanup(server.Close)
+
+	wrapper := NewHTTPClientWrapper("test", types.ProviderConfig{}, nil, &NoAuthStrategy{}, server.Client())
+	var out map[string]any
+	err := wrapper.DoRequest(context.Background(), http.MethodGet, server.URL, nil, &out)
+	if err == nil {
+		t.Fatal("DoRequest returned nil error for oversized response body")
+	}
+	if !strings.Contains(err.Error(), "provider response body exceeded") {
+		t.Fatalf("DoRequest error = %v, want response body limit", err)
+	}
+}
+
+func TestHTTPClientWrapperLimitsStreamErrorBodies(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusBadRequest)
+		_, _ = w.Write([]byte(strings.Repeat("x", maxProviderResponseBodyBytes+1)))
+	}))
+	t.Cleanup(server.Close)
+
+	wrapper := NewHTTPClientWrapper("test", types.ProviderConfig{}, nil, &NoAuthStrategy{}, server.Client())
+	_, err := wrapper.StreamRequest(context.Background(), http.MethodGet, server.URL, nil)
+	if err == nil {
+		t.Fatal("StreamRequest returned nil error for oversized error body")
+	}
+	if !strings.Contains(err.Error(), "provider response body exceeded") {
+		t.Fatalf("StreamRequest error = %v, want response body limit", err)
 	}
 }
 

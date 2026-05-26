@@ -3,13 +3,25 @@ package openai
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"io"
 	"net/http"
+	"strings"
 	"testing"
 
 	"github.com/garyblankenship/wormhole/pkg/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+type zeroReader struct{}
+
+func (zeroReader) Read(p []byte) (int, error) {
+	for i := range p {
+		p[i] = 'x'
+	}
+	return len(p), nil
+}
 
 func TestProviderSupportedCapabilities(t *testing.T) {
 	t.Parallel()
@@ -182,4 +194,64 @@ func TestHandleSpeechToTextStatusError(t *testing.T) {
 	})
 	require.Error(t, err)
 	assert.True(t, types.IsRateLimitError(err))
+}
+
+func TestHandleSpeechToTextValidatesAudioInput(t *testing.T) {
+	t.Parallel()
+
+	provider := New(types.ProviderConfig{APIKey: "test-key"})
+	_, err := provider.handleSpeechToText(context.Background(), types.AudioRequest{
+		Type:  types.AudioRequestTypeSTT,
+		Model: "whisper-1",
+		Input: "not-bytes",
+	})
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "speech-to-text input must be non-empty []byte audio")
+}
+
+func TestHandleSpeechToTextLimitsResponseBody(t *testing.T) {
+	t.Parallel()
+
+	provider, _ := newOpenAITestProvider(t, func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = io.CopyN(w, zeroReader{}, maxSpeechToTextJSONBytes+1)
+	})
+
+	_, err := provider.handleSpeechToText(context.Background(), types.AudioRequest{
+		Type:  types.AudioRequestTypeSTT,
+		Model: "whisper-1",
+		Input: []byte("audio"),
+	})
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "response body exceeded")
+}
+
+func TestHandleTextToSpeechLimitsAudioBody(t *testing.T) {
+	t.Parallel()
+
+	provider, _ := newOpenAITestProvider(t, func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = io.CopyN(w, zeroReader{}, maxTextToSpeechAudioBytes+1)
+	})
+
+	_, err := provider.handleTextToSpeech(context.Background(), types.AudioRequest{
+		Type:  types.AudioRequestTypeTTS,
+		Model: "gpt-4o-mini-tts",
+		Input: "hello",
+	})
+
+	require.Error(t, err)
+	var whErr *types.WormholeError
+	require.True(t, errors.As(err, &whErr))
+	require.NotNil(t, whErr.Cause)
+	assert.Contains(t, whErr.Cause.Error(), "response body exceeded")
+}
+
+func TestReadLimitedAllowsExactLimit(t *testing.T) {
+	t.Parallel()
+
+	data, err := readLimited(strings.NewReader("1234"), 4)
+
+	require.NoError(t, err)
+	assert.Equal(t, []byte("1234"), data)
 }

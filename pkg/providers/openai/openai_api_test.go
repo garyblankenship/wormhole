@@ -259,15 +259,16 @@ func TestProviderEmbeddingsImagesAndAudio(t *testing.T) {
 	assert.Equal(t, "transcribed", stt.Text)
 }
 
-func TestProviderSpeechToTextInvalidInputPanics(t *testing.T) {
+func TestProviderSpeechToTextInvalidInputReturnsError(t *testing.T) {
 	provider := New(types.ProviderConfig{APIKey: "test-key", BaseURL: "http://127.0.0.1"})
-	assert.Panics(t, func() {
-		_, _ = provider.Audio(context.Background(), types.AudioRequest{
-			Type:  types.AudioRequestTypeSTT,
-			Model: "whisper-1",
-			Input: "not bytes",
-		})
+	_, err := provider.Audio(context.Background(), types.AudioRequest{
+		Type:  types.AudioRequestTypeSTT,
+		Model: "whisper-1",
+		Input: "not bytes",
 	})
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "speech-to-text input must be non-empty []byte audio")
 }
 
 func TestProviderStream(t *testing.T) {

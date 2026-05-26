@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"log"
+	"log/slog"
 	"net/http"
 
 	"github.com/garyblankenship/wormhole/internal/pool"
@@ -16,7 +16,9 @@ import (
 )
 
 const (
-	defaultBaseURL = "https://api.openai.com/v1"
+	defaultBaseURL            = "https://api.openai.com/v1"
+	maxTextToSpeechAudioBytes = 64 << 20
+	maxSpeechToTextJSONBytes  = 1 << 20
 )
 
 // Provider implements the OpenAI provider
@@ -249,7 +251,7 @@ func (p *Provider) handleTextToSpeech(ctx context.Context, request types.AudioRe
 		_ = body.Close()
 	}()
 
-	audio, err := io.ReadAll(body)
+	audio, err := readLimited(body, maxTextToSpeechAudioBytes)
 	if err != nil {
 		return nil, p.RequestError("failed to read audio data", err)
 	}
@@ -263,9 +265,14 @@ func (p *Provider) handleTextToSpeech(ctx context.Context, request types.AudioRe
 
 // handleSpeechToText handles speech-to-text requests
 func (p *Provider) handleSpeechToText(ctx context.Context, request types.AudioRequest) (*types.AudioResponse, error) {
+	audio, ok := request.Input.([]byte)
+	if !ok || len(audio) == 0 {
+		return nil, p.ValidationError("speech-to-text input must be non-empty []byte audio")
+	}
+
 	// Build multipart form data
 	formData := utils.AudioFormData{
-		Audio:       request.Input.([]byte),
+		Audio:       audio,
 		Filename:    "audio.wav",
 		Model:       request.Model,
 		Language:    request.Language,
@@ -296,12 +303,12 @@ func (p *Provider) handleSpeechToText(ctx context.Context, request types.AudioRe
 	}
 	defer func() {
 		if err := resp.Body.Close(); err != nil {
-			log.Printf("warning: failed to close response body: %v", err)
+			slog.Warn("failed to close response body", "error", err)
 		}
 	}()
 
 	// Parse response
-	body, err := io.ReadAll(resp.Body)
+	body, err := readLimited(resp.Body, maxSpeechToTextJSONBytes)
 	if err != nil {
 		return nil, types.Errorf("read response", err)
 	}
@@ -326,6 +333,17 @@ func (p *Provider) handleSpeechToText(ctx context.Context, request types.AudioRe
 		Text:   sttResponse.Text,
 		Format: "text",
 	}, nil
+}
+
+func readLimited(r io.Reader, limit int64) ([]byte, error) {
+	data, err := io.ReadAll(io.LimitReader(r, limit+1))
+	if err != nil {
+		return nil, err
+	}
+	if int64(len(data)) > limit {
+		return nil, fmt.Errorf("response body exceeded %d bytes", limit)
+	}
+	return data, nil
 }
 
 // Temporarily disabled until request types are defined
