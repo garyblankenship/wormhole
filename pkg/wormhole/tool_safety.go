@@ -198,10 +198,12 @@ func (r *RetryExecutor) ExecuteWithRetry(ctx context.Context, fn func(ctx contex
 				shift = 63
 			}
 			waitTime := time.Duration(100*(1<<uint(shift))) * time.Millisecond // #nosec G115 - shift bounded 0-63
+			timer := time.NewTimer(waitTime)
 			select {
-			case <-time.After(waitTime):
+			case <-timer.C:
 				continue
 			case <-ctx.Done():
+				timer.Stop()
 				return ctx.Err()
 			}
 		}

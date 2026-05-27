@@ -2,33 +2,15 @@ package middleware
 
 import (
 	"context"
-	crand "crypto/rand"
-	"encoding/binary"
 	"math"
 	"math/rand"
-	"sync"
 	"time"
 )
 
-var (
-	// seededRand is a properly seeded random generator for jitter calculations
-	seededRand *rand.Rand
-	randOnce   sync.Once
-)
-
-// getSeededRand returns a properly seeded random generator
-func getSeededRand() *rand.Rand {
-	randOnce.Do(func() {
-		var seed int64
-		if err := binary.Read(crand.Reader, binary.BigEndian, &seed); err != nil {
-			// Fallback to time-based seed if crypto/rand fails
-			seed = time.Now().UnixNano()
-		}
-		// Create seeded random source
-		src := rand.NewSource(seed)
-		seededRand = rand.New(src) // #nosec G404 - crypto/rand seeded source for non-cryptographic jitter
-	})
-	return seededRand
+// jitterRand returns a value in [0, 1) using math/rand's global locked source.
+// Go 1.20+ auto-seeds the global source; concurrent callers are safe.
+func jitterRand() float64 {
+	return rand.Float64() // #nosec G404 - non-cryptographic jitter
 }
 
 // RetryConfig holds configuration for retry middleware
@@ -79,11 +61,14 @@ func RetryMiddleware(config RetryConfig) Middleware {
 				// Calculate delay with exponential backoff
 				delay := calculateRetryDelay(config, attempt)
 
-				// Wait before retry, respecting context cancellation
+				// Wait before retry, respecting context cancellation.
+				// Use NewTimer + Stop() to avoid leaked timers on early cancel.
+				timer := time.NewTimer(delay)
 				select {
 				case <-ctx.Done():
+					timer.Stop()
 					return nil, wrapMiddlewareError("retry", "execute", ctx.Err())
-				case <-time.After(delay):
+				case <-timer.C:
 					// Continue to next attempt
 				}
 			}
@@ -101,7 +86,7 @@ func calculateRetryDelay(config RetryConfig, attempt int) time.Duration {
 	// Apply jitter to prevent thundering herd
 	if config.Jitter {
 		// Add ±25% jitter using properly seeded random generator
-		jitterFactor := 0.75 + getSeededRand().Float64()*0.5 // Random between 0.75 and 1.25 // #nosec G404 - non-cryptographic jitter
+		jitterFactor := 0.75 + jitterRand()*0.5 // Random between 0.75 and 1.25
 		delay *= jitterFactor
 	}
 
