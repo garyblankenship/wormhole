@@ -3,6 +3,7 @@ package discovery
 import (
 	"context"
 	"fmt"
+	"sort"
 	"sync"
 	"time"
 
@@ -25,10 +26,7 @@ type DiscoveryService struct {
 
 // NewDiscoveryService creates a new model discovery service
 func NewDiscoveryService(config DiscoveryConfig, fetchers ...ModelFetcher) *DiscoveryService {
-	// Use defaults if not set
-	if config.CacheTTL == 0 {
-		config = DefaultConfig()
-	}
+	config = NormalizeConfig(config)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	s := &DiscoveryService{
@@ -46,6 +44,77 @@ func NewDiscoveryService(config DiscoveryConfig, fetchers ...ModelFetcher) *Disc
 	}
 
 	return s
+}
+
+// NormalizeConfig applies discovery defaults while preserving explicit toggles.
+func NormalizeConfig(config DiscoveryConfig) DiscoveryConfig {
+	defaults := DefaultConfig()
+	if config == (DiscoveryConfig{}) {
+		return defaults
+	}
+	if config.CacheTTL == 0 {
+		config.CacheTTL = defaults.CacheTTL
+	}
+	if config.FileCachePath == "" {
+		config.FileCachePath = defaults.FileCachePath
+	}
+	if config.FileCacheTTL == 0 {
+		config.FileCacheTTL = defaults.FileCacheTTL
+	}
+	if config.RefreshInterval == 0 && !config.DisableBackgroundRefresh {
+		config.RefreshInterval = defaults.RefreshInterval
+	}
+	if config.DisableFileCache {
+		config.EnableFileCache = false
+	}
+	return config
+}
+
+// MergeConfig overlays a partial config on top of defaults.
+func MergeConfig(base, override DiscoveryConfig) DiscoveryConfig {
+	if base == (DiscoveryConfig{}) {
+		base = DefaultConfig()
+	}
+	if override.CacheTTL != 0 {
+		base.CacheTTL = override.CacheTTL
+	}
+	if override.FileCachePath != "" {
+		base.FileCachePath = override.FileCachePath
+	}
+	if override.FileCacheTTL != 0 {
+		base.FileCacheTTL = override.FileCacheTTL
+	}
+	if override.RefreshInterval != 0 {
+		base.RefreshInterval = override.RefreshInterval
+	}
+	if override.DisableBackgroundRefresh {
+		base.RefreshInterval = 0
+		base.DisableBackgroundRefresh = true
+	}
+	if override.EnableFileCache {
+		base.EnableFileCache = true
+	}
+	if override.DisableFileCache {
+		base.EnableFileCache = false
+		base.DisableFileCache = true
+	}
+	if override.OfflineMode {
+		base.OfflineMode = true
+	}
+	return base
+}
+
+// Providers returns the provider names with registered model fetchers.
+func (s *DiscoveryService) Providers() []string {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	providers := make([]string, 0, len(s.fetchers))
+	for provider := range s.fetchers {
+		providers = append(providers, provider)
+	}
+	sort.Strings(providers)
+	return providers
 }
 
 // RegisterFetcher adds a model fetcher for a provider

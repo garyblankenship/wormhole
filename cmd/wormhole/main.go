@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"runtime/debug"
 	"syscall"
 	"time"
 
@@ -17,6 +18,8 @@ import (
 	"github.com/garyblankenship/wormhole/pkg/types"
 	wormhole "github.com/garyblankenship/wormhole/pkg/wormhole"
 )
+
+var version = "dev"
 
 func main() {
 	os.Exit(run(os.Args[1:], os.Stdout, os.Stderr, os.Getenv))
@@ -32,7 +35,7 @@ func run(args []string, stdout, stderr io.Writer, getenv func(string) string) in
 	case "serve":
 		return runServe(args[1:], stdout, stderr, getenv)
 	case "version":
-		_, _ = fmt.Fprintln(stdout, "wormhole v1.9.0")
+		_, _ = fmt.Fprintf(stdout, "wormhole %s\n", resolvedVersion())
 	case "help", "--help", "-h":
 		printUsage(stdout)
 	default:
@@ -41,6 +44,16 @@ func run(args []string, stdout, stderr io.Writer, getenv func(string) string) in
 		return 1
 	}
 	return 0
+}
+
+func resolvedVersion() string {
+	if version != "" && version != "dev" {
+		return version
+	}
+	if info, ok := debug.ReadBuildInfo(); ok && info.Main.Version != "" && info.Main.Version != "(devel)" {
+		return info.Main.Version
+	}
+	return version
 }
 
 func printUsage(w io.Writer) {

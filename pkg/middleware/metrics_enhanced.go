@@ -329,19 +329,19 @@ func (b *enhancedMetricsBucket) prometheusFormat(labels string, buckets []float6
 	}
 
 	// Write metrics
-	builder.WriteString(fmt.Sprintf("wormhole_requests_total%s %d\n", labelStr, requests))
-	builder.WriteString(fmt.Sprintf("wormhole_errors_total%s %d\n", labelStr, errors))
-	builder.WriteString(fmt.Sprintf("wormhole_retries_total%s %d\n", labelStr, retries))
-	builder.WriteString(fmt.Sprintf("wormhole_duration_total_ns%s %d\n", labelStr, totalDuration))
-	builder.WriteString(fmt.Sprintf("wormhole_input_tokens_total%s %d\n", labelStr, inputTokens))
-	builder.WriteString(fmt.Sprintf("wormhole_output_tokens_total%s %d\n", labelStr, outputTokens))
+	fmt.Fprintf(&builder, "wormhole_requests_total%s %d\n", labelStr, requests)
+	fmt.Fprintf(&builder, "wormhole_errors_total%s %d\n", labelStr, errors)
+	fmt.Fprintf(&builder, "wormhole_retries_total%s %d\n", labelStr, retries)
+	fmt.Fprintf(&builder, "wormhole_duration_total_ns%s %d\n", labelStr, totalDuration)
+	fmt.Fprintf(&builder, "wormhole_input_tokens_total%s %d\n", labelStr, inputTokens)
+	fmt.Fprintf(&builder, "wormhole_output_tokens_total%s %d\n", labelStr, outputTokens)
 
 	// Write histogram (simplified)
 	for i, count := range b.histogramCounts {
 		if i < len(buckets) {
-			builder.WriteString(fmt.Sprintf("wormhole_duration_bucket{le=\"%f\"}%s %d\n", buckets[i], labelStr, count))
+			fmt.Fprintf(&builder, "wormhole_duration_bucket{le=\"%f\"}%s %d\n", buckets[i], labelStr, count)
 		} else {
-			builder.WriteString(fmt.Sprintf("wormhole_duration_bucket{le=\"+Inf\"}%s %d\n", labelStr, count))
+			fmt.Fprintf(&builder, "wormhole_duration_bucket{le=\"+Inf\"}%s %d\n", labelStr, count)
 		}
 	}
 

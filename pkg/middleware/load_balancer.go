@@ -57,6 +57,7 @@ type LoadBalancer struct {
 	healthCheckFunc func(Handler) error
 	healthInterval  time.Duration
 	stopHealthCheck chan struct{}
+	healthWG        sync.WaitGroup
 }
 
 // NewLoadBalancer creates a new load balancer
@@ -296,30 +297,41 @@ func (lb *LoadBalancer) updateProviderMetrics(provider *ProviderHandler, latency
 // StartHealthChecks starts background health checking
 func (lb *LoadBalancer) StartHealthChecks(checkFunc func(Handler) error) {
 	lb.mu.Lock()
+	if lb.stopHealthCheck != nil {
+		lb.healthCheckFunc = checkFunc
+		lb.mu.Unlock()
+		return
+	}
+	stopCh := make(chan struct{})
 	lb.healthCheckFunc = checkFunc
-	lb.stopHealthCheck = make(chan struct{})
+	lb.stopHealthCheck = stopCh
+	lb.healthWG.Add(1)
 	lb.mu.Unlock()
 
-	go lb.runHealthChecks()
+	go lb.runHealthChecks(stopCh)
 }
 
 // StopHealthChecks stops background health checking
 func (lb *LoadBalancer) StopHealthChecks() {
 	lb.mu.Lock()
-	if lb.stopHealthCheck != nil {
-		close(lb.stopHealthCheck)
-		lb.stopHealthCheck = nil
-	}
+	stopCh := lb.stopHealthCheck
+	lb.stopHealthCheck = nil
 	lb.mu.Unlock()
+
+	if stopCh != nil {
+		close(stopCh)
+		lb.healthWG.Wait()
+	}
 }
 
-func (lb *LoadBalancer) runHealthChecks() {
+func (lb *LoadBalancer) runHealthChecks(stopCh <-chan struct{}) {
+	defer lb.healthWG.Done()
 	ticker := time.NewTicker(lb.healthInterval)
 	defer ticker.Stop()
 
 	for {
 		select {
-		case <-lb.stopHealthCheck:
+		case <-stopCh:
 			return
 		case <-ticker.C:
 			lb.performHealthChecks()

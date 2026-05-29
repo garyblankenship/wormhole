@@ -200,6 +200,9 @@ func TestOptionHelpersAndConfigWarnings(t *testing.T) {
 	if !cfg.DiscoveryConfig.OfflineMode {
 		t.Fatal("offline mode not applied")
 	}
+	if cfg.DiscoveryConfig.CacheTTL == 0 || cfg.DiscoveryConfig.FileCachePath == "" || !cfg.DiscoveryConfig.EnableFileCache {
+		t.Fatalf("discovery defaults not preserved for partial config: %#v", cfg.DiscoveryConfig)
+	}
 	for _, provider := range []string{"openai", "anthropic", "gemini", "groq", "mistral", "openrouter", "vllm", "ollama-openai"} {
 		if _, ok := cfg.Providers[provider]; !ok {
 			t.Fatalf("provider %q not configured by options", provider)
@@ -224,5 +227,23 @@ func TestOptionHelpersAndConfigWarnings(t *testing.T) {
 	}
 	if got := capitalize(""); got != "" {
 		t.Fatalf("capitalize empty = %q, want empty", got)
+	}
+}
+
+func TestDiscoveryConfigExplicitDisableOptions(t *testing.T) {
+	var cfg Config
+	WithDiscoveryConfig(discovery.DiscoveryConfig{
+		DisableFileCache:         true,
+		DisableBackgroundRefresh: true,
+	})(&cfg)
+
+	if cfg.DiscoveryConfig.EnableFileCache {
+		t.Fatalf("EnableFileCache = true, want false")
+	}
+	if cfg.DiscoveryConfig.RefreshInterval != 0 {
+		t.Fatalf("RefreshInterval = %s, want disabled", cfg.DiscoveryConfig.RefreshInterval)
+	}
+	if cfg.DiscoveryConfig.CacheTTL == 0 || cfg.DiscoveryConfig.FileCachePath == "" {
+		t.Fatalf("discovery defaults not preserved: %#v", cfg.DiscoveryConfig)
 	}
 }

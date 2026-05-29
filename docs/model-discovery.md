@@ -466,7 +466,7 @@ client := wormhole.New(
 wormhole.WithDiscoveryConfig(discovery.DiscoveryConfig{
     RefreshInterval: 24 * time.Hour, // Less frequent
     // OR
-    RefreshInterval: 0,              // Disable background refresh
+    DisableBackgroundRefresh: true,  // Disable background refresh
 })
 ```
 

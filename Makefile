@@ -39,11 +39,8 @@ clean:
 # Run linter
 lint:
 	@echo "Running linter..."
-	@if command -v golangci-lint >/dev/null 2>&1; then \
-		golangci-lint run; \
-	else \
-		echo "golangci-lint not installed. Install with: go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest"; \
-	fi
+	@command -v golangci-lint >/dev/null 2>&1 || { echo "golangci-lint not installed. Install with: go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest"; exit 1; }
+	@golangci-lint run ./...
 
 # Format code
 fmt:
@@ -53,7 +50,7 @@ fmt:
 # Run examples
 example:
 	@echo "Running example..."
-	@go run cmd/example/main.go
+	@go run ./examples/basic
 
 # Install dependencies
 deps:
@@ -85,7 +82,11 @@ prepare-release:
 		echo "Usage: make prepare-release VERSION=v1.0.0"; \
 		exit 1; \
 	fi
-	@./scripts/prepare-release.sh $(VERSION)
+	@echo "Preparing release $(VERSION)..."
+	@go mod tidy
+	@go test ./...
+	@goreleaser check
+	@echo "Release $(VERSION) is ready to tag."
 
 # Create GitHub release using goreleaser
 release:

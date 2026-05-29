@@ -26,9 +26,11 @@ func (p *Provider) buildMessagePayload(request *types.TextRequest) map[string]an
 		"messages": p.transformMessages(request.Messages),
 	}
 
-	// Add system prompt if present
-	if request.SystemPrompt != "" {
-		payload["system"] = request.SystemPrompt
+	// Add system prompt if present. Anthropic requires system content in the
+	// top-level field, while OpenAI-compatible callers often send it as a
+	// normal system message.
+	if system := mergeSystemMessages(request.SystemPrompt, request.Messages); system != "" {
+		payload["system"] = system
 	}
 
 	// Handle max tokens - Anthropic requires this field

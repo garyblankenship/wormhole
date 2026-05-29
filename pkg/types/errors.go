@@ -475,7 +475,7 @@ func (ve *ValidationErrors) Error() error {
 	}
 	// Combine into summary using strings.Builder for efficiency
 	var builder strings.Builder
-	builder.WriteString(fmt.Sprintf("%d validation errors: ", len(ve.Errors)))
+	fmt.Fprintf(&builder, "%d validation errors: ", len(ve.Errors))
 	for i, e := range ve.Errors {
 		if i > 0 {
 			builder.WriteString("; ")

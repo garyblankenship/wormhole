@@ -54,7 +54,7 @@ func (f *OpenRouterFetcher) FetchModels(ctx context.Context) ([]*types.ModelInfo
 		} `json:"data"`
 	}
 
-	if err := fetchJSON(ctx, req, &response); err != nil {
+	if err := fetchJSON(req, &response); err != nil {
 		return nil, err
 	}
 

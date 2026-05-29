@@ -294,4 +294,3 @@ func (c HTTPTransportConfig) Validate() error {
 
 	return nil
 }
-

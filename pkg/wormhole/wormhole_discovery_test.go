@@ -26,9 +26,9 @@ func TestListAvailableModelsWithContextPropagatesCancellation(t *testing.T) {
 	t.Parallel()
 
 	client := New(WithDiscoveryConfig(discovery.DiscoveryConfig{
-		CacheTTL:        time.Hour,
-		EnableFileCache: false,
-		RefreshInterval: 0,
+		CacheTTL:                 time.Hour,
+		DisableFileCache:         true,
+		DisableBackgroundRefresh: true,
 	}))
 	require.NotNil(t, client.discoveryService)
 	client.discoveryService.RegisterFetcher(contextProbeFetcher{})
@@ -46,9 +46,9 @@ func TestRefreshModelsWithContextPropagatesCancellation(t *testing.T) {
 	t.Parallel()
 
 	client := New(WithDiscoveryConfig(discovery.DiscoveryConfig{
-		CacheTTL:        time.Hour,
-		EnableFileCache: false,
-		RefreshInterval: 0,
+		CacheTTL:                 time.Hour,
+		DisableFileCache:         true,
+		DisableBackgroundRefresh: true,
 	}))
 	require.NotNil(t, client.discoveryService)
 	client.discoveryService.RegisterFetcher(contextProbeFetcher{})

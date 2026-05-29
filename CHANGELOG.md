@@ -1,5 +1,24 @@
 # Changelog
 
+## v1.10.0 (2026-05-29)
+
+### Features
+- add context-aware model discovery methods and guard background refresh startup
+- harden proxy server request handling with capped bodies, context propagation, and flexible embedding input forms
+
+### Fixes
+- preserve Anthropic system messages sent through normal message lists
+- merge partial discovery config with defaults and add explicit discovery opt-outs
+- make proxy model listing use configured and discoverable providers
+- make load-balancer health-check shutdown and test mock providers race-safe
+- restore local lint, example, and release verification targets
+- update CLI version reporting to use build metadata
+
+### Other
+- refresh GoReleaser config for current syntax and release paths
+- tune lint policy and clean existing lint findings
+- format existing Go files touched by verification
+
 ## v1.9.2 (2026-05-16)
 
 ### Other

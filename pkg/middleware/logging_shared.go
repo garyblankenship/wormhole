@@ -12,7 +12,7 @@ import (
 // A nil pointer returns v as-is so downstream type switches fall through to default.
 func deref(v any) any {
 	rv := reflect.ValueOf(v)
-	if rv.Kind() == reflect.Ptr && !rv.IsNil() {
+	if rv.Kind() == reflect.Pointer && !rv.IsNil() {
 		return rv.Elem().Interface()
 	}
 	return v

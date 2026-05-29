@@ -125,4 +125,3 @@ type geminiEmbeddingsResponse struct {
 type embedding struct {
 	Values []float64 `json:"values"`
 }
-

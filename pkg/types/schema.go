@@ -44,7 +44,7 @@ func (s *ObjectSchema) Validate(data any) error {
 	}
 
 	value := reflect.ValueOf(data)
-	if value.Kind() == reflect.Ptr {
+	if value.Kind() == reflect.Pointer {
 		value = value.Elem()
 	}
 
@@ -132,7 +132,7 @@ func (s *ArraySchema) Validate(data any) error {
 	}
 
 	value := reflect.ValueOf(data)
-	if value.Kind() == reflect.Ptr {
+	if value.Kind() == reflect.Pointer {
 		value = value.Elem()
 	}
 

@@ -2,7 +2,9 @@ package testing
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"sync"
 	"time"
 
 	"github.com/garyblankenship/wormhole/pkg/types"
@@ -11,6 +13,7 @@ import (
 // MockProvider is a mock implementation of the Provider interface for testing
 type MockProvider struct {
 	*types.BaseProvider
+	mu             sync.Mutex
 	name           string
 	textResponses  []types.TextResponse
 	textIndex      int
@@ -31,30 +34,40 @@ func NewMockProvider(name string) *MockProvider {
 
 // WithTextResponse adds a text response to return
 func (m *MockProvider) WithTextResponse(response types.TextResponse) *MockProvider {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	m.textResponses = append(m.textResponses, response)
 	return m
 }
 
 // WithStreamChunks sets the stream chunks to return
 func (m *MockProvider) WithStreamChunks(chunks []types.TextChunk) *MockProvider {
-	m.streamChunks = chunks
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.streamChunks = append([]types.TextChunk(nil), chunks...)
 	return m
 }
 
 // WithStructuredData sets the structured data to return
 func (m *MockProvider) WithStructuredData(data any) *MockProvider {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	m.structuredData = data
 	return m
 }
 
 // WithEmbeddings sets the embeddings to return
 func (m *MockProvider) WithEmbeddings(embeddings []types.Embedding) *MockProvider {
-	m.embeddings = embeddings
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.embeddings = append([]types.Embedding(nil), embeddings...)
 	return m
 }
 
 // WithError makes the provider return an error
 func (m *MockProvider) WithError(message string) *MockProvider {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	m.shouldError = true
 	m.errorMessage = message
 	return m
@@ -80,8 +93,11 @@ func (m *MockProvider) SupportedCapabilities() []types.ModelCapability {
 
 // Text returns a mocked text response
 func (m *MockProvider) Text(ctx context.Context, request types.TextRequest) (*types.TextResponse, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
 	if m.shouldError {
-		return nil, fmt.Errorf(m.errorMessage)
+		return nil, errors.New(m.errorMessage)
 	}
 
 	if len(m.textResponses) == 0 {
@@ -101,16 +117,21 @@ func (m *MockProvider) Text(ctx context.Context, request types.TextRequest) (*ty
 
 // Stream returns a mocked streaming response
 func (m *MockProvider) Stream(ctx context.Context, request types.TextRequest) (<-chan types.TextChunk, error) {
+	m.mu.Lock()
 	if m.shouldError {
-		return nil, fmt.Errorf(m.errorMessage)
+		err := errors.New(m.errorMessage)
+		m.mu.Unlock()
+		return nil, err
 	}
+	streamChunks := append([]types.TextChunk(nil), m.streamChunks...)
+	m.mu.Unlock()
 
-	chunks := make(chan types.TextChunk, len(m.streamChunks))
+	chunks := make(chan types.TextChunk, len(streamChunks))
 
 	go func() {
 		defer close(chunks)
 
-		if len(m.streamChunks) == 0 {
+		if len(streamChunks) == 0 {
 			// Default stream chunks
 			chunks <- types.TextChunk{
 				ID:    "mock-stream",
@@ -128,7 +149,7 @@ func (m *MockProvider) Stream(ctx context.Context, request types.TextRequest) (<
 			return
 		}
 
-		for _, chunk := range m.streamChunks {
+		for _, chunk := range streamChunks {
 			select {
 			case <-ctx.Done():
 				return
@@ -142,11 +163,16 @@ func (m *MockProvider) Stream(ctx context.Context, request types.TextRequest) (<
 
 // Structured returns a mocked structured response
 func (m *MockProvider) Structured(ctx context.Context, request types.StructuredRequest) (*types.StructuredResponse, error) {
-	if m.shouldError {
-		return nil, fmt.Errorf(m.errorMessage)
+	m.mu.Lock()
+	shouldError := m.shouldError
+	errorMessage := m.errorMessage
+	data := m.structuredData
+	m.mu.Unlock()
+
+	if shouldError {
+		return nil, errors.New(errorMessage)
 	}
 
-	data := m.structuredData
 	if data == nil {
 		data = map[string]any{
 			"mock": "structured response",
@@ -163,11 +189,16 @@ func (m *MockProvider) Structured(ctx context.Context, request types.StructuredR
 
 // Embeddings returns mocked embeddings
 func (m *MockProvider) Embeddings(ctx context.Context, request types.EmbeddingsRequest) (*types.EmbeddingsResponse, error) {
-	if m.shouldError {
-		return nil, fmt.Errorf(m.errorMessage)
+	m.mu.Lock()
+	shouldError := m.shouldError
+	errorMessage := m.errorMessage
+	embeddings := append([]types.Embedding(nil), m.embeddings...)
+	m.mu.Unlock()
+
+	if shouldError {
+		return nil, errors.New(errorMessage)
 	}
 
-	embeddings := m.embeddings
 	if len(embeddings) == 0 {
 		// Create mock embeddings for each input
 		for i := range request.Input {
@@ -188,8 +219,13 @@ func (m *MockProvider) Embeddings(ctx context.Context, request types.EmbeddingsR
 
 // Audio returns a mocked audio response
 func (m *MockProvider) Audio(ctx context.Context, request types.AudioRequest) (*types.AudioResponse, error) {
-	if m.shouldError {
-		return nil, fmt.Errorf(m.errorMessage)
+	m.mu.Lock()
+	shouldError := m.shouldError
+	errorMessage := m.errorMessage
+	m.mu.Unlock()
+
+	if shouldError {
+		return nil, errors.New(errorMessage)
 	}
 
 	if request.Type == types.AudioRequestTypeTTS {
@@ -211,8 +247,13 @@ func (m *MockProvider) Audio(ctx context.Context, request types.AudioRequest) (*
 
 // Images returns a mocked images response
 func (m *MockProvider) Images(ctx context.Context, request types.ImagesRequest) (*types.ImagesResponse, error) {
-	if m.shouldError {
-		return nil, fmt.Errorf(m.errorMessage)
+	m.mu.Lock()
+	shouldError := m.shouldError
+	errorMessage := m.errorMessage
+	m.mu.Unlock()
+
+	if shouldError {
+		return nil, errors.New(errorMessage)
 	}
 
 	return &types.ImagesResponse{

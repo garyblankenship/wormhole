@@ -23,12 +23,14 @@ func getDefaultClient() *http.Client {
 	return defaultClient
 }
 
-func fetchJSON(ctx context.Context, req *http.Request, out any) error {
+func fetchJSON(req *http.Request, out any) error {
 	resp, err := getDefaultClient().Do(req)
 	if err != nil {
 		return fmt.Errorf("failed to fetch models: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		_ = resp.Body.Close()
+	}()
 	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("API returned status %d", resp.StatusCode)
 	}

@@ -149,4 +149,3 @@ func (p *Provider) Audio(ctx context.Context, request types.AudioRequest) (*type
 func (p *Provider) Images(ctx context.Context, request types.ImagesRequest) (*types.ImagesResponse, error) {
 	return nil, p.NotImplementedError("Images")
 }
-

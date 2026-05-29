@@ -254,7 +254,6 @@ func TestProxyEmbeddingsValidationAndUpstreamErrors(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			rec := performRequest(p, http.MethodPost, "/v1/embeddings", tt.body)
@@ -277,4 +276,15 @@ func TestProxyModelsEmptyWhenDiscoveryDisabled(t *testing.T) {
 	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &out))
 	assert.Equal(t, "list", out.Object)
 	assert.Empty(t, out.Data)
+}
+
+func TestMergeProviderNames(t *testing.T) {
+	t.Parallel()
+
+	got := mergeProviderNames(
+		[]string{"openai", "groq"},
+		[]string{"openai", "anthropic", "mistral"},
+	)
+
+	assert.Equal(t, []string{"openai", "groq", "anthropic", "mistral"}, got)
 }

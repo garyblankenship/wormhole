@@ -98,7 +98,7 @@ func RegisterTypedTool[Args any, Result any](
 //	schema := wormhole.SchemaFromStruct(SearchArgs{})
 func SchemaFromStruct(v any) (map[string]any, error) {
 	t := reflect.TypeOf(v)
-	if t.Kind() == reflect.Ptr {
+	if t.Kind() == reflect.Pointer {
 		t = t.Elem()
 	}
 

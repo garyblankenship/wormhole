@@ -381,12 +381,12 @@ func (t *StreamingTransformer) mapDefaultFinishReason(reason string) types.Finis
 // NewOpenAIStreamingTransformer creates a transformer configured for OpenAI
 func NewOpenAIStreamingTransformer() *StreamingTransformer {
 	return NewStreamingTransformer(StreamingConfig{
-		TextFieldPath:     "choices.0.delta.content",
-		ToolCallFieldPath: "choices.0.delta.tool_calls",
-		FinishReasonPath:  "choices.0.finish_reason",
-		UsagePath:         "usage",
-		IDPath:            "id",
-		ModelPath:         "model",
+		TextFieldPath:       "choices.0.delta.content",
+		ToolCallFieldPath:   "choices.0.delta.tool_calls",
+		FinishReasonPath:    "choices.0.finish_reason",
+		UsagePath:           "usage",
+		IDPath:              "id",
+		ModelPath:           "model",
 		FinishReasonAdapter: MapFinishReason,
 		ReturnsBatch:        false,
 		ChunkType:           "text_chunk",
@@ -398,9 +398,9 @@ func NewAnthropicStreamingTransformer() *StreamingTransformer {
 	return NewStreamingTransformer(StreamingConfig{
 		// Anthropic uses event-based streaming, so paths depend on event type
 		// This is a simplified configuration for basic text extraction
-		TextFieldPath:    "delta.text",
-		FinishReasonPath: "delta.stop_reason",
-		UsagePath:        "usage",
+		TextFieldPath:       "delta.text",
+		FinishReasonPath:    "delta.stop_reason",
+		UsagePath:           "usage",
 		FinishReasonAdapter: MapFinishReason,
 		ReturnsBatch:        false,
 		ChunkType:           "stream_chunk",

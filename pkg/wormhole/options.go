@@ -229,7 +229,7 @@ func WithModelValidation(enabled bool) Option {
 //	)
 func WithDiscoveryConfig(config discovery.DiscoveryConfig) Option {
 	return func(c *Config) {
-		c.DiscoveryConfig = config
+		c.DiscoveryConfig = discovery.MergeConfig(c.DiscoveryConfig, config)
 	}
 }
 

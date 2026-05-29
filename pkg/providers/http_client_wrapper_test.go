@@ -34,7 +34,6 @@ func TestHTTPClientWrapperTimeoutsAndClientFallback(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
@@ -145,7 +144,6 @@ func TestHTTPClientWrapperErrorHelpers(t *testing.T) {
 		{status: 418, want: types.ErrorCodeNetwork},
 	}
 	for _, tt := range statusTests {
-		tt := tt
 		t.Run(string(tt.want)+"_"+http.StatusText(tt.status), func(t *testing.T) {
 			t.Parallel()
 

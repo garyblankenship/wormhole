@@ -109,7 +109,6 @@ func TestAuthStrategiesApply(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
@@ -150,7 +149,6 @@ func TestAuthStrategyNames(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		tt := tt
 		t.Run(tt.want, func(t *testing.T) {
 			t.Parallel()
 
@@ -210,7 +208,6 @@ func TestAuthStrategyFactory(t *testing.T) {
 
 	factory := &AuthStrategyFactory{}
 	for _, tt := range tests {
-		tt := tt
 		t.Run(tt.providerName, func(t *testing.T) {
 			t.Parallel()
 

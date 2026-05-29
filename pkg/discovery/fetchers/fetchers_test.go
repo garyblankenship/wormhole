@@ -201,7 +201,7 @@ func TestFetchJSONReturnsStatusError(t *testing.T) {
 	require.NoError(t, err)
 
 	var out map[string]any
-	err = fetchJSON(context.Background(), req, &out)
+	err = fetchJSON(req, &out)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "status 418")
 }

@@ -239,7 +239,7 @@ func (p *proxy) handleEmbeddings(w http.ResponseWriter, r *http.Request) {
 }
 
 func (p *proxy) handleListModels(w http.ResponseWriter, r *http.Request) {
-	providers := []string{"openai", "anthropic", "gemini", "ollama", "openrouter"}
+	providers := mergeProviderNames(p.wh.ConfiguredProviders(), p.wh.ModelDiscoveryProviders())
 	var entries []ModelEntry
 	ts := time.Now().Unix()
 
@@ -266,6 +266,21 @@ func (p *proxy) handleListModels(w http.ResponseWriter, r *http.Request) {
 		Object: "list",
 		Data:   entries,
 	})
+}
+
+func mergeProviderNames(groups ...[]string) []string {
+	seen := make(map[string]bool)
+	var providers []string
+	for _, group := range groups {
+		for _, provider := range group {
+			if seen[provider] {
+				continue
+			}
+			seen[provider] = true
+			providers = append(providers, provider)
+		}
+	}
+	return providers
 }
 
 func decodeRequestBody(w http.ResponseWriter, r *http.Request, dst any) error {

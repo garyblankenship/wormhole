@@ -19,7 +19,7 @@ func TestRunTopLevelCommands(t *testing.T) {
 	}{
 		{name: "no args prints usage", wantCode: 0, wantStdout: "wormhole - OpenAI-compatible LLM proxy"},
 		{name: "help prints usage", args: []string{"help"}, wantCode: 0, wantStdout: "Commands:"},
-		{name: "version prints version", args: []string{"version"}, wantCode: 0, wantStdout: "wormhole v1.9.0"},
+		{name: "version prints version", args: []string{"version"}, wantCode: 0, wantStdout: "wormhole dev"},
 		{name: "unknown command errors", args: []string{"unknown"}, wantCode: 1, wantStderr: "unknown command: unknown"},
 	}
 

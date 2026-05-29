@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"sort"
 
 	"github.com/garyblankenship/wormhole/pkg/discovery"
 	"github.com/garyblankenship/wormhole/pkg/discovery/fetchers"
@@ -75,6 +76,24 @@ func (p *Wormhole) ClearModelCache() {
 	if p.discoveryService != nil {
 		p.discoveryService.ClearCache()
 	}
+}
+
+// ConfiguredProviders returns provider names configured on this client.
+func (p *Wormhole) ConfiguredProviders() []string {
+	providers := make([]string, 0, len(p.config.Providers))
+	for provider := range p.config.Providers {
+		providers = append(providers, provider)
+	}
+	sort.Strings(providers)
+	return providers
+}
+
+// ModelDiscoveryProviders returns provider names supported by model discovery.
+func (p *Wormhole) ModelDiscoveryProviders() []string {
+	if p.discoveryService == nil {
+		return nil
+	}
+	return p.discoveryService.Providers()
 }
 
 // StopModelDiscovery stops the background model refresh goroutine.

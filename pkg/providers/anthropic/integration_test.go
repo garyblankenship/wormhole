@@ -167,6 +167,53 @@ func TestAnthropicProvider_IntegrationTextGeneration(t *testing.T) {
 	}
 }
 
+func TestAnthropicProvider_SystemMessagesInMessageList(t *testing.T) {
+	t.Parallel()
+
+	var captured map[string]any
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		require.NoError(t, json.NewDecoder(r.Body).Decode(&captured))
+		response := map[string]any{
+			"id":          "msg_test123",
+			"type":        "message",
+			"role":        "assistant",
+			"model":       "claude-3-sonnet-20240229",
+			"stop_reason": "end_turn",
+			"content": []map[string]any{{
+				"type": "text",
+				"text": "ok",
+			}},
+			"usage": map[string]any{
+				"input_tokens":  1,
+				"output_tokens": 1,
+			},
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(response)
+	}))
+	defer server.Close()
+
+	provider := anthropic.New(types.ProviderConfig{
+		APIKey:  "test-api-key",
+		BaseURL: server.URL,
+	})
+
+	_, err := provider.Text(context.Background(), types.TextRequest{
+		BaseRequest:  types.BaseRequest{Model: "claude-3-sonnet-20240229"},
+		SystemPrompt: "base system",
+		Messages: []types.Message{
+			types.NewSystemMessage("message system"),
+			types.NewUserMessage("hello"),
+		},
+	})
+	require.NoError(t, err)
+
+	assert.Equal(t, "base system\n\nmessage system", captured["system"])
+	messages := captured["messages"].([]any)
+	require.Len(t, messages, 1)
+	assert.Equal(t, "user", messages[0].(map[string]any)["role"])
+}
+
 // TestAnthropicProvider_IntegrationStreaming tests streaming functionality
 func TestAnthropicProvider_IntegrationStreaming(t *testing.T) {
 	// Create a mock server that returns streaming responses

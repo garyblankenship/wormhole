@@ -24,7 +24,6 @@ linters:
     - unused
     - gosec
     - dupl
-    - goconst
     - gocyclo
     - misspell
     - unparam
@@ -51,9 +50,10 @@ linters:
         linters:
           - gosec
           - dupl
+          - unparam
+          - prealloc
       - path: examples/
         linters:
-          - goconst
           - gocyclo
       - linters:
           - staticcheck

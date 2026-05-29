@@ -49,7 +49,6 @@ func NotImplementedError(providerName, method string) error {
 	return ProviderErrorf(providerName, "%s provider does not support %s", providerName, method)
 }
 
-
 // NewProviderValidationError returns a WormholeError with ErrorCodeValidation
 func NewProviderValidationError(providerName, message string, details ...string) error {
 	err := NewWormholeError(ErrorCodeValidation, message, false)

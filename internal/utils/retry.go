@@ -56,12 +56,12 @@ func (e *RetryableError) Unwrap() error {
 // IsRetryableStatusCode determines if an HTTP status code should be retried
 func IsRetryableStatusCode(statusCode int) bool {
 	switch statusCode {
-	case http.StatusRequestTimeout,     // 408 - Request timeout
-		http.StatusTooManyRequests,      // 429 - Rate limited
-		http.StatusInternalServerError,  // 500 - Internal server error
-		http.StatusBadGateway,           // 502 - Bad gateway
-		http.StatusServiceUnavailable,   // 503 - Service unavailable
-		http.StatusGatewayTimeout:       // 504 - Gateway timeout
+	case http.StatusRequestTimeout, // 408 - Request timeout
+		http.StatusTooManyRequests,     // 429 - Rate limited
+		http.StatusInternalServerError, // 500 - Internal server error
+		http.StatusBadGateway,          // 502 - Bad gateway
+		http.StatusServiceUnavailable,  // 503 - Service unavailable
+		http.StatusGatewayTimeout:      // 504 - Gateway timeout
 		return true
 	default:
 		return false

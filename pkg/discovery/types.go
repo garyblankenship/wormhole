@@ -27,8 +27,16 @@ type DiscoveryConfig struct {
 	// EnableFileCache enables persistent file-based caching (default: true)
 	EnableFileCache bool
 
+	// DisableFileCache explicitly disables persistent file-based caching when
+	// applying partial configs through wormhole.WithDiscoveryConfig.
+	DisableFileCache bool
+
 	// RefreshInterval is how often to refresh models in background (default: 12h)
 	RefreshInterval time.Duration
+
+	// DisableBackgroundRefresh explicitly disables periodic model refresh when
+	// applying partial configs through wormhole.WithDiscoveryConfig.
+	DisableBackgroundRefresh bool
 
 	// OfflineMode disables all network fetching, uses cache/fallback only (default: false)
 	OfflineMode bool

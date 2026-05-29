@@ -11,12 +11,12 @@ builds:
   - skip: true  # This is a library, not a binary
 
 archives:
-  - format: tar.gz
+  - formats:
+      - tar.gz
     files:
       - README.md
-      - docs/CHANGELOG.md
+      - CHANGELOG.md
       - LICENSE
-      - docs/PERFORMANCE.md
       - docs/**/*
       - examples/**/*
     name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
@@ -25,7 +25,7 @@ checksum:
   name_template: 'checksums.txt'
 
 snapshot:
-  name_template: "{{ incpatch .Version }}-next"
+  version_template: "{{ incpatch .Version }}-next"
 
 changelog:
   sort: asc
@@ -79,9 +79,10 @@ release:
     
     ## 🚀 Quick Start
     ```go
-    client := wormhole.SimpleFactory().
-        WithOpenAI("your-api-key").
-        Build()
+    client := wormhole.New(
+        wormhole.WithOpenAI("your-api-key"),
+        wormhole.WithDefaultProvider("openai"),
+    )
     
     response, err := client.Text().
         Model("gpt-5").
@@ -91,9 +92,8 @@ release:
     
     ## 📚 Resources
     - [📖 **Documentation**](https://pkg.go.dev/github.com/garyblankenship/wormhole@{{ .Tag }})
-    - [⚡ **Performance Guide**](https://github.com/garyblankenship/wormhole/blob/{{ .Tag }}/docs/PERFORMANCE.md)
     - [🚀 **Examples**](https://github.com/garyblankenship/wormhole/tree/{{ .Tag }}/examples)
-    - [📋 **Changelog**](https://github.com/garyblankenship/wormhole/blob/{{ .Tag }}/docs/CHANGELOG.md)
+    - [📋 **Changelog**](https://github.com/garyblankenship/wormhole/blob/{{ .Tag }}/CHANGELOG.md)
     
     ## 🆚 Performance Comparison
     | SDK | Core Latency | Memory Usage | Providers |

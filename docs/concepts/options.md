@@ -317,8 +317,12 @@ client := wormhole.New(
         RefreshInterval: 6 * time.Hour,   // Refresh every 6 hours
         OfflineMode:     false,           // Allow network fetching
     }),
-)
+	)
 ```
+
+`WithDiscoveryConfig` merges partial values with the default discovery config.
+Use `DisableFileCache: true` or `DisableBackgroundRefresh: true` for explicit
+opt-outs.
 
 #### WithDiscovery
 
