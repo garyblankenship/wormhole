@@ -86,6 +86,8 @@ this one special client" taped to the side of your service.
 | Tool calling | `wormhole.RegisterTypedTool(client, name, desc, handler)` |
 | Agent loop | `client.Agent().Model("gpt-5.2").Run(ctx, "task")` |
 | Model fallback | `client.Text().Model("gpt-5.2").WithFallback("gpt-5-mini").Generate(ctx)` |
+| Model selection | `client.SelectModel(ctx, wormhole.ModelQuery{Capabilities: []types.ModelCapability{types.CapabilityText}})` |
+| Attempt tracing | `wormhole.WithAttemptTrace(func(ctx context.Context, e wormhole.AttemptEvent) { ... })` |
 | Batch execution | `client.Batch().Add(req1).Add(req2).Concurrency(5).Execute(ctx)` |
 | OpenAI-compatible endpoint | `client.Text().BaseURL("http://localhost:11434/v1").Generate(ctx)` |
 | Provider capabilities | `client.ProviderCapabilities("openai").SupportsToolCalling()` |
@@ -108,6 +110,11 @@ does not need a second garage.
 | LM Studio | `WithLMStudio(config)` | OpenAI-compatible local text and streaming |
 | vLLM | `WithVLLM(config)` | OpenAI-compatible local text and streaming |
 | Custom | `WithCustomProvider(name, factory)` | whatever your provider implements |
+
+Known providers are described by `provider_profiles.json` and exposed through
+`KnownProviderProfiles()` / `ProviderProfileByName()`. The profile data owns
+default OpenAI-compatible base URLs, environment variable names, local-provider
+flags, and discovery mode; Go code keeps the routing logic generic.
 
 OpenAI text generation uses Chat Completions by default. Opt into the Responses
 API when you want OpenAI's newer `/v1/responses` wire format:
@@ -257,6 +264,26 @@ Provider notes:
 | Gemini | Supports embedding task metadata through `ProviderOptions`. |
 | Ollama | Processes local embedding models through the native Ollama API. |
 | OpenAI-compatible | Works when the endpoint implements `/embeddings`. |
+
+## Model Selection
+
+Discovery returns provider model metadata; `SelectModels` filters and sorts that
+metadata for app-facing choices:
+
+```go
+model, err := client.SelectModel(ctx, wormhole.ModelQuery{
+	Capabilities: []types.ModelCapability{
+		types.CapabilityText,
+		types.CapabilityStream,
+	},
+	PreferProviders: []string{"anthropic", "openai"},
+	SortBy:          wormhole.ModelSortCost,
+})
+```
+
+This is intentionally a small selector, not a benchmark oracle. It filters by
+capability, provider, name, context length, token limit, cost, and deprecation
+state, then returns deterministic results.
 
 ## Images and Audio: The Portal Has Speakers Now
 
@@ -413,6 +440,18 @@ client := wormhole.New(
 )
 ```
 
+Attempt tracing is available when callers need to observe fallback behavior
+without storing a route ledger:
+
+```go
+client := wormhole.New(
+	wormhole.WithOpenAI(os.Getenv("OPENAI_API_KEY")),
+	wormhole.WithAttemptTrace(func(ctx context.Context, e wormhole.AttemptEvent) {
+		log.Printf("%s %s/%s attempt=%d phase=%s", e.Operation, e.Provider, e.Model, e.Attempt, e.Phase)
+	}),
+)
+```
+
 ## OpenAI-Compatible Proxy: One Door, Many Dimensions
 
 The `wormhole` binary can run a local OpenAI-compatible proxy. Point OpenAI-style
@@ -476,6 +515,17 @@ client := wormhole.New(
 	wormhole.WithProviderConfig("internal", types.ProviderConfig{}),
 	wormhole.WithDefaultProvider("internal"),
 )
+```
+
+Custom providers can use `pkg/testing` conformance checks to verify the public
+provider contract:
+
+```go
+func TestInternalProviderConformance(t *testing.T) {
+	wmtest.RunProviderConformance(t, wmtest.ProviderConformanceConfig{
+		Provider: NewInternalProviderForTest(),
+	})
+}
 ```
 
 ## Testing: Simulate The Universe First

@@ -12,7 +12,7 @@ Wormhole's dynamic model discovery system automatically fetches and caches avail
 - **Automatic Background Refresh**: Models update periodically without blocking requests
 - **Offline Support**: Falls back to cached/hardcoded models when network is unavailable
 - **Zero Configuration**: Works out of the box with sensible defaults
-- **Multi-Provider**: Supports OpenAI, Anthropic, OpenRouter, and Ollama
+- **Multi-Provider**: Supports OpenAI, Anthropic, Gemini, OpenRouter, Ollama, and profiled OpenAI-compatible providers
 
 ## Quick Start
 
@@ -118,7 +118,15 @@ func main() {
 #### Ollama
 - **Endpoint**: `GET http://localhost:11434/api/tags`
 - **Auth**: None (local service)
-- **Models**: User's locally installed models
+
+#### Gemini
+- **Endpoint**: `GET https://generativelanguage.googleapis.com/v1beta/models`
+- **Auth**: API key query parameter
+
+#### OpenAI-Compatible
+- **Endpoint**: `GET {base_url}/models`
+- **Auth**: Bearer token when the configured provider has an API key
+- **Models**: Whatever the compatible endpoint exposes
 
 ## Configuration
 
@@ -548,14 +556,15 @@ wormhole.WithDiscoveryConfig(discovery.DiscoveryConfig{
 
 ## Future Enhancements
 
-- **Model Filtering**: Filter by capabilities, cost, or context length
-- **Model Ranking**: Sort by popularity, cost, or performance
 - **Provider Health Checks**: Detect provider availability
 - **Model Deprecation Warnings**: Alert when models are EOL
 - **Smart Fallback**: Suggest alternative models when requested model unavailable
 
+Model filtering and deterministic cost/context sorting are available through
+`client.SelectModels(ctx, wormhole.ModelQuery{...})`.
+
 ---
 
-**Last Updated**: 2025-11-16
+**Last Updated**: 2026-05-31
 **Status**: Production Ready
 **Version**: 1.0.0

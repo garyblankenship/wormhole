@@ -53,6 +53,9 @@ github.com/garyblankenship/wormhole
 | `ProviderConfig` | Provider-specific configuration |
 | `Capabilities` | Provider capability flags (streaming, tools, etc.) |
 | `ModelInfo` | Discovered model information |
+| `ProviderProfile` | Built-in provider profile metadata |
+| `ModelQuery` | Discovery-backed model selection query |
+| `AttemptEvent` | Provider/model attempt trace event |
 
 ## Key Functions
 
@@ -100,6 +103,8 @@ github.com/garyblankenship/wormhole
 | Function | Description |
 |----------|-------------|
 | `client.ListAvailableModels(provider) ([]*ModelInfo, error)` | List provider's models |
+| `client.SelectModels(ctx, query) ([]*ModelInfo, error)` | Filter and sort discovered models |
+| `client.SelectModel(ctx, query) (*ModelInfo, error)` | Return the first discovered model matching a query |
 | `client.RefreshModels() error` | Refresh model cache |
 | `client.ClearModelCache()` | Clear cached models |
 
@@ -122,8 +127,28 @@ github.com/garyblankenship/wormhole
 | `WithDefaultProvider(name)` | Set default provider |
 | `WithMiddleware(...)` | Add HTTP middleware |
 | `WithProviderMiddleware(...)` | Add type-safe provider middleware |
+| `WithAttemptTrace(func(context.Context, AttemptEvent))` | Observe provider/model attempts and fallback |
 | `WithDebugLogging(logger)` | Enable debug logging |
 | `WithModelValidation(enabled)` | Enable model validation |
+
+### Provider Profiles
+
+Known OpenAI-compatible provider URLs, env var names, local-provider flags, and
+model discovery modes live in `pkg/wormhole/provider_profiles.json`.
+`KnownProviderProfiles()` returns all built-in profiles, and
+`ProviderProfileByName(name)` returns one profile.
+
+### Model Selection
+
+`ModelQuery` filters discovered models by provider, capability, name, context
+length, max output tokens, cost, and deprecated state. `PreferProviders` moves
+preferred providers to the front before the requested sort.
+
+### Testing Custom Providers
+
+`pkg/testing.RunProviderConformance` exercises the advertised provider
+capabilities against the shared `types.Provider` contract. Use it for custom
+providers before wiring them into an application.
 
 ### OpenAI Responses API
 
