@@ -28,6 +28,7 @@ type Usage struct {
 // TextResponse represents a text generation response
 type TextResponse struct {
 	ID           string         `json:"id"`
+	Provider     string         `json:"provider,omitempty"`
 	Model        string         `json:"model"`
 	Text         string         `json:"text"`
 	ToolCalls    []ToolCall     `json:"tool_calls,omitempty"`
@@ -107,6 +108,7 @@ type StreamChunk = TextChunk
 // TextChunk represents a streaming text response chunk
 type TextChunk struct {
 	ID           string        `json:"id,omitempty"`
+	Provider     string        `json:"provider,omitempty"`
 	Model        string        `json:"model,omitempty"`
 	Text         string        `json:"text,omitempty"`
 	Delta        *ChunkDelta   `json:"delta,omitempty"` // For OpenAI compatibility
@@ -153,6 +155,7 @@ type ChunkDelta struct {
 // EmbeddingsResponse represents an embeddings response
 type EmbeddingsResponse struct {
 	ID         string         `json:"id"`
+	Provider   string         `json:"provider,omitempty"`
 	Model      string         `json:"model"`
 	Embeddings []Embedding    `json:"embeddings"`
 	Usage      *Usage         `json:"usage,omitempty"`

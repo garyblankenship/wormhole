@@ -58,7 +58,7 @@ func (p *Provider) buildMessagePayload(request *types.TextRequest) map[string]an
 	}
 
 	// Provider options
-	for k, v := range request.ProviderOptions {
+	for k, v := range p.Config.MergedProviderOptions(request.Model, request.ProviderOptions) {
 		payload[k] = v
 	}
 

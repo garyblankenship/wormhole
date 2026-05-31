@@ -32,7 +32,7 @@ func (p *Provider) buildChatPayload(request *types.TextRequest) map[string]any {
 	}
 
 	// Merge provider-specific options (allows overriding any parameter)
-	for k, v := range request.ProviderOptions {
+	for k, v := range p.Config.MergedProviderOptions(request.Model, request.ProviderOptions) {
 		payload[k] = v
 	}
 

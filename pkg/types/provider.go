@@ -159,6 +159,27 @@ type ProviderConfig struct {
 	DynamicModels bool              `json:"dynamic_models,omitempty"` // Skip local registry validation for providers with dynamic model catalogs
 	Params        map[string]any    `json:"params,omitempty"`         // Provider-specific parameters for customization
 
+	DefaultProviderOptions map[string]any            `json:"default_provider_options,omitempty"`
+	ProviderOptionsByModel map[string]map[string]any `json:"provider_options_by_model,omitempty"`
+
+	// ChatPath overrides the chat-completions path appended to BaseURL.
+	// Empty means the provider's default ("/chat/completions" for OpenAI).
+	ChatPath string `json:"chat_path,omitempty"`
+
+	// UseResponsesAPI makes OpenAI text generation use /responses instead of
+	// /chat/completions. It is opt-in because many OpenAI-compatible providers
+	// only implement the chat-completions wire format.
+	UseResponsesAPI bool `json:"use_responses_api,omitempty"`
+
+	// ResponsesPath overrides the Responses API path appended to BaseURL.
+	// Empty means the provider's default ("/responses" for OpenAI).
+	ResponsesPath string `json:"responses_path,omitempty"`
+
+	// APIKeys, when it holds more than one entry, enables round-robin key
+	// rotation on HTTP 429 within the retry path. Requires MaxRetries > 0.
+	// A single key here (or only APIKey set) behaves identically to before.
+	APIKeys []string `json:"api_keys,omitempty"`
+
 	// NEW: Per-provider retry configuration (pointers allow differentiation between not set vs explicitly set to 0)
 	MaxRetries    *int           `json:"max_retries,omitempty"`
 	RetryDelay    *time.Duration `json:"retry_delay,omitempty"`
@@ -268,6 +289,72 @@ func (c ProviderConfig) WithParams(params map[string]any) ProviderConfig {
 		c.Params[k] = v
 	}
 	return c
+}
+
+// WithDefaultProviderOptions sets provider-specific body fields included on
+// every request for this provider unless overridden by model or request options.
+func (c ProviderConfig) WithDefaultProviderOptions(options map[string]any) ProviderConfig {
+	c.DefaultProviderOptions = cloneAnyMap(options)
+	return c
+}
+
+// WithProviderOptionsForModel sets provider-specific body fields included when
+// a request uses model. These override default provider options and are
+// overridden by request.ProviderOptions.
+func (c ProviderConfig) WithProviderOptionsForModel(model string, options map[string]any) ProviderConfig {
+	c.ProviderOptionsByModel = cloneProviderOptionsByModel(c.ProviderOptionsByModel)
+	if c.ProviderOptionsByModel == nil {
+		c.ProviderOptionsByModel = make(map[string]map[string]any)
+	}
+	c.ProviderOptionsByModel[model] = cloneAnyMap(options)
+	return c
+}
+
+// MergedProviderOptions returns provider body options with precedence:
+// defaults < per-model < per-request. The returned map is detached from config
+// and request maps so providers can safely copy it into payloads.
+func (c ProviderConfig) MergedProviderOptions(model string, requestOptions map[string]any) map[string]any {
+	total := len(c.DefaultProviderOptions) + len(requestOptions)
+	if perModel := c.ProviderOptionsByModel[model]; perModel != nil {
+		total += len(perModel)
+	}
+	if total == 0 {
+		return nil
+	}
+
+	merged := make(map[string]any, total)
+	copyAnyMap(merged, c.DefaultProviderOptions)
+	if perModel := c.ProviderOptionsByModel[model]; perModel != nil {
+		copyAnyMap(merged, perModel)
+	}
+	copyAnyMap(merged, requestOptions)
+	return merged
+}
+
+func cloneAnyMap(src map[string]any) map[string]any {
+	if len(src) == 0 {
+		return nil
+	}
+	dst := make(map[string]any, len(src))
+	copyAnyMap(dst, src)
+	return dst
+}
+
+func copyAnyMap(dst, src map[string]any) {
+	for k, v := range src {
+		dst[k] = v
+	}
+}
+
+func cloneProviderOptionsByModel(src map[string]map[string]any) map[string]map[string]any {
+	if len(src) == 0 {
+		return nil
+	}
+	dst := make(map[string]map[string]any, len(src))
+	for model, options := range src {
+		dst[model] = cloneAnyMap(options)
+	}
+	return dst
 }
 
 // ==================== TLS Configuration Support ====================

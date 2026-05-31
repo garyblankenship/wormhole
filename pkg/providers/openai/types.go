@@ -1,5 +1,7 @@
 package openai
 
+import "encoding/json"
+
 // OpenAI API response types
 
 type chatCompletionResponse struct {
@@ -34,6 +36,70 @@ type usage struct {
 	PromptTokens     int `json:"prompt_tokens"`
 	CompletionTokens int `json:"completion_tokens"`
 	TotalTokens      int `json:"total_tokens"`
+}
+
+type responsesResponse struct {
+	ID                string                `json:"id"`
+	Object            string                `json:"object"`
+	CreatedAt         int64                 `json:"created_at"`
+	Model             string                `json:"model"`
+	Status            string                `json:"status"`
+	Output            []responsesOutputItem `json:"output"`
+	OutputText        string                `json:"output_text,omitempty"`
+	IncompleteDetails *struct {
+		Reason string `json:"reason"`
+	} `json:"incomplete_details,omitempty"`
+	Usage responsesUsage `json:"usage"`
+	Error *struct {
+		Code    string `json:"code"`
+		Message string `json:"message"`
+	} `json:"error,omitempty"`
+}
+
+type responsesOutputItem struct {
+	ID        string                 `json:"id"`
+	Type      string                 `json:"type"`
+	Status    string                 `json:"status,omitempty"`
+	Role      string                 `json:"role,omitempty"`
+	Content   []responsesContentPart `json:"content,omitempty"`
+	CallID    string                 `json:"call_id,omitempty"`
+	Name      string                 `json:"name,omitempty"`
+	Arguments string                 `json:"arguments,omitempty"`
+	Raw       map[string]any         `json:"-"`
+}
+
+func (i *responsesOutputItem) UnmarshalJSON(data []byte) error {
+	type alias responsesOutputItem
+	var item alias
+	if err := json.Unmarshal(data, &item); err != nil {
+		return err
+	}
+	var raw map[string]any
+	if err := json.Unmarshal(data, &raw); err == nil {
+		item.Raw = raw
+	}
+	*i = responsesOutputItem(item)
+	return nil
+}
+
+type responsesContentPart struct {
+	Type    string `json:"type"`
+	Text    string `json:"text,omitempty"`
+	Refusal string `json:"refusal,omitempty"`
+}
+
+type responsesUsage struct {
+	InputTokens  int `json:"input_tokens"`
+	OutputTokens int `json:"output_tokens"`
+	TotalTokens  int `json:"total_tokens"`
+}
+
+type responsesStreamEvent struct {
+	Type     string               `json:"type"`
+	Response *responsesResponse   `json:"response,omitempty"`
+	Delta    string               `json:"delta,omitempty"`
+	ItemID   string               `json:"item_id,omitempty"`
+	Item     *responsesOutputItem `json:"item,omitempty"`
 }
 
 type streamChoice struct {

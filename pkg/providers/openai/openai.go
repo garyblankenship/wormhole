@@ -3,9 +3,6 @@ package openai
 import (
 	"context"
 	"encoding/json"
-	"fmt"
-	"io"
-	"log/slog"
 	"net/http"
 
 	"github.com/garyblankenship/wormhole/internal/pool"
@@ -16,9 +13,7 @@ import (
 )
 
 const (
-	defaultBaseURL            = "https://api.openai.com/v1"
-	maxTextToSpeechAudioBytes = 64 << 20
-	maxSpeechToTextJSONBytes  = 1 << 20
+	defaultBaseURL = "https://api.openai.com/v1"
 )
 
 // Provider implements the OpenAI provider
@@ -28,6 +23,8 @@ type Provider struct {
 	responseTransform    *transform.ResponseTransform
 	streamingTransformer *transform.StreamingTransformer
 }
+
+var _ types.Provider = (*Provider)(nil)
 
 // New creates a new OpenAI provider
 func New(config types.ProviderConfig) *Provider {
@@ -41,6 +38,26 @@ func New(config types.ProviderConfig) *Provider {
 		responseTransform:    transform.NewResponseTransform(),
 		streamingTransformer: transform.NewOpenAIStreamingTransformer(),
 	}
+}
+
+// chatCompletionsURL returns the chat-completions endpoint, honoring a
+// configured ChatPath override (empty = the OpenAI default).
+func (p *Provider) chatCompletionsURL() string {
+	path := p.Config.ChatPath
+	if path == "" {
+		path = "/chat/completions"
+	}
+	return p.GetBaseURL() + path
+}
+
+// responsesURL returns the Responses API endpoint, honoring a configured
+// ResponsesPath override (empty = the OpenAI default).
+func (p *Provider) responsesURL() string {
+	path := p.Config.ResponsesPath
+	if path == "" {
+		path = "/responses"
+	}
+	return p.GetBaseURL() + path
 }
 
 // SupportedCapabilities returns the capabilities supported by OpenAI provider
@@ -59,9 +76,13 @@ func (p *Provider) SupportedCapabilities() []types.ModelCapability {
 
 // Text generates a text response
 func (p *Provider) Text(ctx context.Context, request types.TextRequest) (*types.TextResponse, error) {
+	if p.Config.UseResponsesAPI {
+		return p.responsesText(ctx, request)
+	}
+
 	payload := p.buildChatPayload(&request)
 
-	url := p.GetBaseURL() + "/chat/completions"
+	url := p.chatCompletionsURL()
 
 	var response chatCompletionResponse
 	err := p.DoRequest(ctx, http.MethodPost, url, payload, &response)
@@ -70,6 +91,7 @@ func (p *Provider) Text(ctx context.Context, request types.TextRequest) (*types.
 	}
 
 	textResponse := p.transformTextResponse(&response)
+	textResponse.Provider = p.Name()
 
 	// Validate response has content to prevent silent failures
 	if textResponse.Text == "" && len(textResponse.ToolCalls) == 0 {
@@ -81,17 +103,37 @@ func (p *Provider) Text(ctx context.Context, request types.TextRequest) (*types.
 
 // Stream generates a streaming text response
 func (p *Provider) Stream(ctx context.Context, request types.TextRequest) (<-chan types.TextChunk, error) {
+	if p.Config.UseResponsesAPI {
+		return p.responsesStream(ctx, request)
+	}
+
 	payload := p.buildChatPayload(&request)
 	payload["stream"] = true
 
-	url := p.GetBaseURL() + "/chat/completions"
+	url := p.chatCompletionsURL()
 
 	body, err := p.StreamRequest(ctx, http.MethodPost, url, payload)
 	if err != nil {
 		return nil, err
 	}
 
-	return utils.ProcessStream(body, p.parseStreamChunk, 100), nil
+	return p.stampProvider(utils.ProcessStream(body, p.parseStreamChunk, 100)), nil
+}
+
+// stampProvider sets Provider on the terminal chunk. Sole closer of out;
+// exits when the upstream channel closes.
+func (p *Provider) stampProvider(in <-chan types.TextChunk) <-chan types.TextChunk {
+	out := make(chan types.TextChunk)
+	go func() {
+		defer close(out)
+		for chunk := range in {
+			if chunk.IsDone() {
+				chunk.Provider = p.Name()
+			}
+			out <- chunk
+		}
+	}()
+	return out
 }
 
 // Structured generates a structured response
@@ -172,7 +214,9 @@ func (p *Provider) Embeddings(ctx context.Context, request types.EmbeddingsReque
 		return nil, err
 	}
 
-	return p.transformEmbeddingsResponse(&response), nil
+	resp := p.transformEmbeddingsResponse(&response)
+	resp.Provider = p.Name()
+	return resp, nil
 }
 
 // Images generates images
@@ -212,138 +256,6 @@ func (p *Provider) Images(ctx context.Context, request types.ImagesRequest) (*ty
 // GenerateImage generates images through the unified image-generation interface.
 func (p *Provider) GenerateImage(ctx context.Context, request types.ImageRequest) (*types.ImageResponse, error) {
 	return p.Images(ctx, request)
-}
-
-// Audio handles both speech-to-text and text-to-speech
-func (p *Provider) Audio(ctx context.Context, request types.AudioRequest) (*types.AudioResponse, error) {
-	if request.Type == types.AudioRequestTypeSTT {
-		return p.handleSpeechToText(ctx, request)
-	}
-
-	// Handle TTS
-	return p.handleTextToSpeech(ctx, request)
-}
-
-// handleTextToSpeech handles text-to-speech requests
-func (p *Provider) handleTextToSpeech(ctx context.Context, request types.AudioRequest) (*types.AudioResponse, error) {
-	payload := map[string]any{
-		"model": request.Model,
-		"input": request.Input,
-	}
-
-	if request.Voice != "" {
-		payload["voice"] = request.Voice
-	}
-	if request.Speed > 0 {
-		payload["speed"] = request.Speed
-	}
-	if request.ResponseFormat != "" {
-		payload["response_format"] = request.ResponseFormat
-	}
-
-	url := p.GetBaseURL() + "/audio/speech"
-
-	body, err := p.StreamRequest(ctx, http.MethodPost, url, payload)
-	if err != nil {
-		return nil, err
-	}
-	defer func() {
-		_ = body.Close()
-	}()
-
-	audio, err := readLimited(body, maxTextToSpeechAudioBytes)
-	if err != nil {
-		return nil, p.RequestError("failed to read audio data", err)
-	}
-
-	return &types.AudioResponse{
-		Model:  request.Model,
-		Audio:  audio,
-		Format: request.ResponseFormat,
-	}, nil
-}
-
-// handleSpeechToText handles speech-to-text requests
-func (p *Provider) handleSpeechToText(ctx context.Context, request types.AudioRequest) (*types.AudioResponse, error) {
-	audio, ok := request.Input.([]byte)
-	if !ok || len(audio) == 0 {
-		return nil, p.ValidationError("speech-to-text input must be non-empty []byte audio")
-	}
-
-	// Build multipart form data
-	formData := utils.AudioFormData{
-		Audio:       audio,
-		Filename:    "audio.wav",
-		Model:       request.Model,
-		Language:    request.Language,
-		Prompt:      request.Prompt,
-		Temperature: request.Temperature,
-	}
-
-	reader, contentType, err := utils.BuildAudioForm(formData)
-	if err != nil {
-		return nil, p.RequestError("failed to build audio form", err)
-	}
-
-	// Make request to OpenAI Whisper API
-	url := fmt.Sprintf("%s/audio/transcriptions", p.Config.BaseURL)
-	req, err := http.NewRequestWithContext(ctx, "POST", url, reader)
-	if err != nil {
-		return nil, p.RequestError("failed to create request", err)
-	}
-
-	// Set headers
-	req.Header.Set(types.HeaderAuthorization, "Bearer "+p.Config.APIKey)
-	req.Header.Set(types.HeaderContentType, contentType)
-
-	// Execute request
-	resp, err := p.GetHTTPClient().Do(req)
-	if err != nil {
-		return nil, p.WrapError(types.ErrorCodeNetwork, "request failed", err)
-	}
-	defer func() {
-		if err := resp.Body.Close(); err != nil {
-			slog.Warn("failed to close response body", "error", err)
-		}
-	}()
-
-	// Parse response
-	body, err := readLimited(resp.Body, maxSpeechToTextJSONBytes)
-	if err != nil {
-		return nil, types.Errorf("read response", err)
-	}
-
-	if resp.StatusCode != http.StatusOK {
-		err := types.HTTPStatusToError(resp.StatusCode, string(body))
-		err.Provider = p.Name()
-		return nil, err
-	}
-
-	var sttResponse struct {
-		Text     string  `json:"text"`
-		Language string  `json:"language,omitempty"`
-		Duration float64 `json:"duration,omitempty"`
-	}
-
-	if err := json.Unmarshal(body, &sttResponse); err != nil {
-		return nil, types.Errorf("parse response", err)
-	}
-
-	return &types.AudioResponse{
-		Text:   sttResponse.Text,
-		Format: "text",
-	}, nil
-}
-
-func readLimited(r io.Reader, limit int64) ([]byte, error) {
-	data, err := io.ReadAll(io.LimitReader(r, limit+1))
-	if err != nil {
-		return nil, err
-	}
-	if int64(len(data)) > limit {
-		return nil, fmt.Errorf("response body exceeded %d bytes", limit)
-	}
-	return data, nil
 }
 
 // Temporarily disabled until request types are defined

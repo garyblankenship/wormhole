@@ -100,7 +100,7 @@ func (cb *CircuitBreaker) Execute(ctx context.Context, fn func() (any, error)) (
 }
 
 func (cb *CircuitBreaker) handleError(result any, err error) (any, error) {
-	cb.failures++
+	cb.failures += circuitFailureWeight(err, cb.failureThreshold)
 	cb.lastFailureTime = time.Now()
 
 	switch cb.state {

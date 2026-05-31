@@ -101,6 +101,122 @@ func returnResponseBuf(buf []byte) {
 	responseBodyPool.Put(&buf)
 }
 
+// keyPool provides thread-safe stateful selection over a set of API keys.
+type keyPool struct {
+	mu       sync.Mutex
+	keys     []string
+	current  int
+	limited  map[int]time.Time
+	cooldown time.Duration
+}
+
+func newKeyPool(keys []string, cooldown time.Duration) *keyPool {
+	if cooldown <= 0 {
+		cooldown = time.Second
+	}
+	return &keyPool{
+		keys:     append([]string(nil), keys...),
+		limited:  make(map[int]time.Time),
+		cooldown: cooldown,
+	}
+}
+
+func (kp *keyPool) currentKey(now time.Time) string {
+	kp.mu.Lock()
+	defer kp.mu.Unlock()
+	kp.expireLocked(now)
+	if !kp.isLimitedLocked(kp.current, now) {
+		return kp.keys[kp.current]
+	}
+	for offset := 1; offset < len(kp.keys); offset++ {
+		next := (kp.current + offset) % len(kp.keys)
+		if !kp.isLimitedLocked(next, now) {
+			kp.current = next
+			return kp.keys[kp.current]
+		}
+	}
+	return kp.keys[kp.current]
+}
+
+func (kp *keyPool) rotateAfterRateLimit(failedKey string, retryAfter time.Duration, now time.Time) string {
+	kp.mu.Lock()
+	defer kp.mu.Unlock()
+	kp.expireLocked(now)
+
+	failedIdx := kp.indexOfLocked(failedKey)
+	if failedIdx >= 0 {
+		cooldown := kp.cooldown
+		if retryAfter > 0 {
+			cooldown = retryAfter
+		}
+		kp.limited[failedIdx] = now.Add(cooldown)
+	}
+
+	// Avoid double-advancing: only move the cursor when the request that saw
+	// the 429 used the currently selected key.
+	if failedIdx == kp.current {
+		for offset := 1; offset < len(kp.keys); offset++ {
+			next := (kp.current + offset) % len(kp.keys)
+			if !kp.isLimitedLocked(next, now) {
+				kp.current = next
+				break
+			}
+		}
+	}
+
+	if kp.isLimitedLocked(kp.current, now) {
+		for idx := range kp.keys {
+			if !kp.isLimitedLocked(idx, now) {
+				kp.current = idx
+				break
+			}
+		}
+	}
+	return kp.keys[kp.current]
+}
+
+func (kp *keyPool) indexOfLocked(key string) int {
+	for idx, existing := range kp.keys {
+		if existing == key {
+			return idx
+		}
+	}
+	return -1
+}
+
+func (kp *keyPool) expireLocked(now time.Time) {
+	for idx, until := range kp.limited {
+		if !until.After(now) {
+			delete(kp.limited, idx)
+		}
+	}
+}
+
+func (kp *keyPool) isLimitedLocked(idx int, now time.Time) bool {
+	until, ok := kp.limited[idx]
+	return ok && until.After(now)
+}
+
+func (kp *keyPool) debugState() map[string]any {
+	kp.mu.Lock()
+	defer kp.mu.Unlock()
+	limited := make(map[string]time.Time, len(kp.limited))
+	for idx, until := range kp.limited {
+		limited[maskSecret(kp.keys[idx])] = until
+	}
+	return map[string]any{
+		"current":      maskSecret(kp.keys[kp.current]),
+		"rate_limited": limited,
+	}
+}
+
+func maskSecret(secret string) string {
+	if len(secret) <= 8 {
+		return "****"
+	}
+	return secret[:4] + "****" + secret[len(secret)-4:]
+}
+
 type HTTPClientWrapper struct {
 	providerName string
 	Config       types.ProviderConfig
@@ -108,12 +224,20 @@ type HTTPClientWrapper struct {
 	httpClient   *http.Client
 	retryClient  *utils.RetryableHTTPClient
 	authStrategy AuthStrategy
+	keyPool      *keyPool
 }
 
 // NewHTTPClientWrapper creates a new HTTPClientWrapper.
 // Pass a non-nil httpClient to inject a custom HTTP client (useful for testing).
 // Pass nil to use the default secure HTTP client.
 func NewHTTPClientWrapper(name string, providerConfig types.ProviderConfig, tlsConfig *config.TLSConfig, authStrategy AuthStrategy, httpClient HTTPClient) *HTTPClientWrapper {
+	// Seed the first-attempt key from APIKeys[0] when only APIKeys is set, so the
+	// first request's auth uses APIKeys[0] and the pool's next() returns APIKeys[1]
+	// on the first 429.
+	if providerConfig.APIKey == "" && len(providerConfig.APIKeys) > 0 {
+		providerConfig.APIKey = providerConfig.APIKeys[0]
+	}
+
 	w := &HTTPClientWrapper{
 		providerName: name,
 		Config:       providerConfig,
@@ -144,12 +268,32 @@ func NewHTTPClientWrapper(name string, providerConfig types.ProviderConfig, tlsC
 	if providerConfig.RetryMaxDelay != nil {
 		retryConfig.MaxDelay = *providerConfig.RetryMaxDelay
 	}
+	if len(providerConfig.APIKeys) > 1 {
+		w.keyPool = newKeyPool(providerConfig.APIKeys, retryConfig.InitialDelay)
+	}
 
 	// Use injected client for retry wrapper if provided, otherwise use the concrete httpClient
 	if httpClient != nil {
 		w.retryClient = utils.NewRetryableHTTPClient(httpClient, retryConfig)
 	} else {
 		w.retryClient = utils.NewRetryableHTTPClient(w.httpClient, retryConfig)
+	}
+
+	// Stateful key rotation: only rotate after a retryable rate-limit response.
+	if w.keyPool != nil {
+		pool := w.keyPool
+		auth := authStrategy
+		baseCfg := providerConfig
+		w.retryClient.OnRetry = func(reqClone *http.Request, _ int, retryErr *utils.RetryableError, previousRequest *http.Request) {
+			cfg := baseCfg
+			now := time.Now()
+			if retryErr != nil && retryErr.StatusCode == http.StatusTooManyRequests {
+				cfg.APIKey = pool.rotateAfterRateLimit(bearerToken(previousRequest), retryErr.RetryAfter, now)
+			} else {
+				cfg.APIKey = pool.currentKey(now)
+			}
+			_ = auth.Apply(reqClone, cfg)
+		}
 	}
 
 	return w
@@ -219,7 +363,7 @@ func (w *HTTPClientWrapper) StreamRequest(ctx context.Context, method, url strin
 	req.Header.Set(types.HeaderAccept, types.ContentTypeEventStream)
 	req.Header.Set(types.HeaderCacheControl, "no-cache")
 
-	if err := w.authStrategy.Apply(req, w.Config); err != nil {
+	if err := w.authStrategy.Apply(req, w.authConfig()); err != nil {
 		return nil, err
 	}
 
@@ -293,7 +437,7 @@ func (w *HTTPClientWrapper) marshalRequestBody(body any) ([]byte, error) {
 func (w *HTTPClientWrapper) setRequestHeaders(req *http.Request) error {
 	req.Header.Set(types.HeaderContentType, types.ContentTypeJSON)
 
-	if err := w.authStrategy.Apply(req, w.Config); err != nil {
+	if err := w.authStrategy.Apply(req, w.authConfig()); err != nil {
 		return err
 	}
 
@@ -304,9 +448,41 @@ func (w *HTTPClientWrapper) setRequestHeaders(req *http.Request) error {
 	return nil
 }
 
+func (w *HTTPClientWrapper) authConfig() types.ProviderConfig {
+	cfg := w.Config
+	if w.keyPool != nil {
+		cfg.APIKey = w.keyPool.currentKey(time.Now())
+	}
+	return cfg
+}
+
+func bearerToken(req *http.Request) string {
+	if req == nil {
+		return ""
+	}
+	value := req.Header.Get("Authorization")
+	token, ok := strings.CutPrefix(value, "Bearer ")
+	if !ok {
+		return ""
+	}
+	return token
+}
+
 func (w *HTTPClientWrapper) handleRequestError(ctx context.Context, err error) error {
 	if ctx.Err() != nil {
 		return ctx.Err()
+	}
+
+	var retryErr *utils.RetryableError
+	if errors.As(err, &retryErr) && retryErr.StatusCode > 0 {
+		wormholeErr := types.NewWormholeError(
+			w.mapHTTPStatusToErrorCode(retryErr.StatusCode),
+			fmt.Sprintf("HTTP %d after retries", retryErr.StatusCode),
+			retryErr.ShouldRetry,
+		).WithDetails(err.Error())
+		wormholeErr.StatusCode = retryErr.StatusCode
+		wormholeErr.Provider = w.providerName
+		return wormholeErr
 	}
 
 	if w.isTimeoutError(err) {

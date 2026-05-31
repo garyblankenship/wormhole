@@ -50,6 +50,19 @@ func WithOpenAI(apiKey string, config ...types.ProviderConfig) Option {
 	}
 }
 
+// WithOpenAIResponses configures the OpenAI provider to use the Responses API
+// for text generation instead of Chat Completions.
+func WithOpenAIResponses(apiKey string, config ...types.ProviderConfig) Option {
+	return func(c *Config) {
+		var cfg types.ProviderConfig
+		if len(config) > 0 {
+			cfg = config[0]
+		}
+		cfg.UseResponsesAPI = true
+		registerProvider(c, "openai", apiKey, cfg)
+	}
+}
+
 // WithAnthropic configures the Anthropic provider.
 func WithAnthropic(apiKey string, config ...types.ProviderConfig) Option {
 	return func(c *Config) {

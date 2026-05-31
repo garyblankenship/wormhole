@@ -34,10 +34,24 @@ func (p *Wormhole) initializeDiscoveryService() {
 				}
 			}
 			modelFetchers = append(modelFetchers, fetchers.NewOllamaFetcher(baseURL))
+		case providerOpenRouter:
+			modelFetchers = append(modelFetchers, fetchers.NewOpenRouterFetcher())
+		case providerGemini:
+			if providerConfig.APIKey != "" {
+				modelFetchers = append(modelFetchers, fetchers.NewGeminiFetcher(providerConfig.BaseURL, providerConfig.APIKey))
+			}
+		default:
+			if providerConfig.BaseURL != "" {
+				modelFetchers = append(modelFetchers, fetchers.NewOpenAICompatibleFetcher(
+					providerName,
+					providerConfig.BaseURL,
+					providerConfig.APIKey,
+					providerConfig.Headers,
+				))
+			}
 		}
 	}
 
-	modelFetchers = append(modelFetchers, fetchers.NewOpenRouterFetcher())
 	p.discoveryService = discovery.NewDiscoveryService(p.config.DiscoveryConfig, modelFetchers...)
 
 	if !p.config.DiscoveryConfig.OfflineMode && p.config.DiscoveryConfig.RefreshInterval > 0 {

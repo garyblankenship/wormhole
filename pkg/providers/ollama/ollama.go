@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"time"
 
 	"github.com/garyblankenship/wormhole/internal/utils"
 	"github.com/garyblankenship/wormhole/pkg/providers"
@@ -22,6 +21,8 @@ type Provider struct {
 	responseTransform    *transform.ResponseTransform
 	streamingTransformer *transform.StreamingTransformer
 }
+
+var _ types.Provider = (*Provider)(nil)
 
 // New creates a new Ollama provider
 func New(config types.ProviderConfig) (*Provider, error) {
@@ -63,7 +64,25 @@ func (p *Provider) Text(ctx context.Context, request types.TextRequest) (*types.
 		return nil, err
 	}
 
-	return p.transformTextResponse(&response), nil
+	resp := p.transformTextResponse(&response)
+	resp.Provider = p.Name()
+	return resp, nil
+}
+
+// stampProvider sets Provider on the terminal chunk. Sole closer of out;
+// exits when the upstream channel closes.
+func (p *Provider) stampProvider(in <-chan types.TextChunk) <-chan types.TextChunk {
+	out := make(chan types.TextChunk)
+	go func() {
+		defer close(out)
+		for chunk := range in {
+			if chunk.IsDone() {
+				chunk.Provider = p.Name()
+			}
+			out <- chunk
+		}
+	}()
+	return out
 }
 
 // Stream generates a streaming text response using Ollama's streaming chat API
@@ -78,7 +97,7 @@ func (p *Provider) Stream(ctx context.Context, request types.TextRequest) (<-cha
 		return nil, err
 	}
 
-	return utils.ProcessStream(body, p.parseStreamChunk, 100), nil
+	return p.stampProvider(utils.ProcessStream(body, p.parseStreamChunk, 100)), nil
 }
 
 // Structured generates a structured response using JSON mode
@@ -156,99 +175,6 @@ func (p *Provider) Embeddings(ctx context.Context, request types.EmbeddingsReque
 	return p.processEmbeddingsConcurrently(ctx, request)
 }
 
-// processEmbeddingsSequentially handles small batches sequentially
-func (p *Provider) processEmbeddingsSequentially(ctx context.Context, request types.EmbeddingsRequest) (*types.EmbeddingsResponse, error) {
-	embeddings := make([]types.Embedding, 0, len(request.Input))
-
-	for i, input := range request.Input {
-		payload := &embeddingsRequest{
-			Model:  request.Model,
-			Prompt: input,
-		}
-
-		url := p.GetBaseURL() + "/api/embeddings"
-
-		var response embeddingsResponse
-		err := p.DoRequest(ctx, http.MethodPost, url, payload, &response)
-		if err != nil {
-			return nil, p.WrapError(types.ErrorCodeProvider, fmt.Sprintf("failed to get embedding for input %d", i), err)
-		}
-
-		embeddings = append(embeddings, types.Embedding{
-			Index:     i,
-			Embedding: response.Embedding,
-		})
-	}
-
-	return &types.EmbeddingsResponse{
-		Model:      request.Model,
-		Embeddings: embeddings,
-		Usage:      nil, // Ollama doesn't provide usage info for embeddings
-		Created:    time.Now(),
-	}, nil
-}
-
-// processEmbeddingsConcurrently handles larger batches with controlled concurrency
-func (p *Provider) processEmbeddingsConcurrently(ctx context.Context, request types.EmbeddingsRequest) (*types.EmbeddingsResponse, error) {
-	type result struct {
-		index     int
-		embedding types.Embedding
-		err       error
-	}
-
-	// Limit concurrency to avoid overwhelming local Ollama instance
-	const maxConcurrency = 3
-	semaphore := make(chan struct{}, maxConcurrency)
-	results := make(chan result, len(request.Input))
-
-	// Start concurrent workers
-	for i, input := range request.Input {
-		go func(idx int, txt string) {
-			semaphore <- struct{}{}        // Acquire semaphore
-			defer func() { <-semaphore }() // Release semaphore
-
-			payload := &embeddingsRequest{
-				Model:  request.Model,
-				Prompt: txt,
-			}
-
-			url := p.GetBaseURL() + "/api/embeddings"
-
-			var response embeddingsResponse
-			err := p.DoRequest(ctx, http.MethodPost, url, payload, &response)
-
-			if err != nil {
-				results <- result{index: idx, err: p.WrapError(types.ErrorCodeProvider, fmt.Sprintf("failed to get embedding for input %d", idx), err)}
-			} else {
-				results <- result{
-					index: idx,
-					embedding: types.Embedding{
-						Index:     idx,
-						Embedding: response.Embedding,
-					},
-				}
-			}
-		}(i, input)
-	}
-
-	// Collect results
-	embeddings := make([]types.Embedding, len(request.Input))
-	for i := 0; i < len(request.Input); i++ {
-		res := <-results
-		if res.err != nil {
-			return nil, res.err
-		}
-		embeddings[res.index] = res.embedding
-	}
-
-	return &types.EmbeddingsResponse{
-		Model:      request.Model,
-		Embeddings: embeddings,
-		Usage:      nil, // Ollama doesn't provide usage info for embeddings
-		Created:    time.Now(),
-	}, nil
-}
-
 // Images generates images - Ollama doesn't support image generation natively
 func (p *Provider) Images(ctx context.Context, request types.ImagesRequest) (*types.ImagesResponse, error) {
 	return nil, p.NotImplementedError("Images - Ollama does not support image generation")
@@ -283,69 +209,4 @@ func (p *Provider) TextToSpeech(ctx context.Context, request types.TextToSpeechR
 // GenerateImage generates an image - not supported by Ollama
 func (p *Provider) GenerateImage(ctx context.Context, request types.ImageRequest) (*types.ImageResponse, error) {
 	return nil, p.NotImplementedError("GenerateImage - Ollama does not support image generation")
-}
-
-// ListModels lists available Ollama models
-func (p *Provider) ListModels(ctx context.Context) (*modelsResponse, error) {
-	url := p.GetBaseURL() + "/api/tags"
-
-	var response modelsResponse
-	err := p.DoRequest(ctx, http.MethodGet, url, nil, &response)
-	if err != nil {
-		return nil, err
-	}
-
-	return &response, nil
-}
-
-// PullModel pulls a model from Ollama registry
-func (p *Provider) PullModel(ctx context.Context, model string) error {
-	payload := map[string]any{
-		"name": model,
-	}
-
-	url := p.GetBaseURL() + "/api/pull"
-
-	// This is a streaming endpoint but we'll treat it as regular request for simplicity
-	var response map[string]any // Ollama returns various status messages
-	err := p.DoRequest(ctx, http.MethodPost, url, payload, &response)
-	if err != nil {
-		return p.WrapError(types.ErrorCodeProvider, fmt.Sprintf("failed to pull model %s", model), err)
-	}
-
-	return nil
-}
-
-// ShowModel shows information about a model
-func (p *Provider) ShowModel(ctx context.Context, model string) (map[string]any, error) {
-	payload := map[string]any{
-		"name": model,
-	}
-
-	url := p.GetBaseURL() + "/api/show"
-
-	var response map[string]any
-	err := p.DoRequest(ctx, http.MethodPost, url, payload, &response)
-	if err != nil {
-		return nil, p.WrapError(types.ErrorCodeProvider, fmt.Sprintf("failed to show model %s", model), err)
-	}
-
-	return response, nil
-}
-
-// DeleteModel deletes a model from Ollama
-func (p *Provider) DeleteModel(ctx context.Context, model string) error {
-	payload := map[string]any{
-		"name": model,
-	}
-
-	url := p.GetBaseURL() + "/api/delete"
-
-	var response map[string]any
-	err := p.DoRequest(ctx, http.MethodDelete, url, payload, &response)
-	if err != nil {
-		return p.WrapError(types.ErrorCodeProvider, fmt.Sprintf("failed to delete model %s", model), err)
-	}
-
-	return nil
 }

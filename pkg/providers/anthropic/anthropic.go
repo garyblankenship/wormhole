@@ -21,6 +21,8 @@ type Provider struct {
 	streamingTransformer *transform.StreamingTransformer
 }
 
+var _ types.Provider = (*Provider)(nil)
+
 // New creates a new Anthropic provider
 func New(config types.ProviderConfig) *Provider {
 	if config.BaseURL == "" {
@@ -61,7 +63,25 @@ func (p *Provider) Text(ctx context.Context, request types.TextRequest) (*types.
 		return nil, err
 	}
 
-	return p.transformTextResponse(&response), nil
+	resp := p.transformTextResponse(&response)
+	resp.Provider = p.Name()
+	return resp, nil
+}
+
+// stampProvider sets Provider on the terminal chunk. Sole closer of out;
+// exits when the upstream channel closes.
+func (p *Provider) stampProvider(in <-chan types.StreamChunk) <-chan types.StreamChunk {
+	out := make(chan types.StreamChunk)
+	go func() {
+		defer close(out)
+		for chunk := range in {
+			if chunk.IsDone() {
+				chunk.Provider = p.Name()
+			}
+			out <- chunk
+		}
+	}()
+	return out
 }
 
 // Stream generates a streaming text response
@@ -76,7 +96,7 @@ func (p *Provider) Stream(ctx context.Context, request types.TextRequest) (<-cha
 		return nil, err
 	}
 
-	return utils.ProcessStream(body, p.parseStreamChunk, 100), nil
+	return p.stampProvider(utils.ProcessStream(body, p.parseStreamChunk, 100)), nil
 }
 
 // Structured generates a structured response

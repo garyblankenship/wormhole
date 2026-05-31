@@ -23,6 +23,8 @@ type Gemini struct {
 	streamingTransformer *transform.StreamingTransformer
 }
 
+var _ types.Provider = (*Gemini)(nil)
+
 // New creates a new Gemini provider
 func New(apiKey string, config types.ProviderConfig) *Gemini {
 	if config.BaseURL == "" {
@@ -76,7 +78,28 @@ func (g *Gemini) Text(ctx context.Context, request types.TextRequest) (*types.Te
 		return nil, err
 	}
 
-	return g.transformTextResponse(&response)
+	resp, err := g.transformTextResponse(&response)
+	if err != nil {
+		return nil, err
+	}
+	resp.Provider = g.Name()
+	return resp, nil
+}
+
+// stampProvider sets Provider on the terminal chunk. Sole closer of out;
+// exits when the upstream channel closes.
+func (g *Gemini) stampProvider(in <-chan types.TextChunk) <-chan types.TextChunk {
+	out := make(chan types.TextChunk)
+	go func() {
+		defer close(out)
+		for chunk := range in {
+			if chunk.IsDone() {
+				chunk.Provider = g.Name()
+			}
+			out <- chunk
+		}
+	}()
+	return out
 }
 
 // Stream generates streaming text using Gemini models
@@ -98,7 +121,7 @@ func (g *Gemini) Stream(ctx context.Context, request types.TextRequest) (<-chan 
 		return nil, err
 	}
 
-	return g.handleStream(stream), nil
+	return g.stampProvider(g.handleStream(stream)), nil
 }
 
 // Structured generates structured output using Gemini models
@@ -121,37 +144,6 @@ func (g *Gemini) Structured(ctx context.Context, request types.StructuredRequest
 	}
 
 	return g.transformStructuredResponse(&response, request.Schema)
-}
-
-// Embeddings generates embeddings using Gemini models
-func (g *Gemini) Embeddings(ctx context.Context, request types.EmbeddingsRequest) (*types.EmbeddingsResponse, error) {
-	// More flexible model validation - check for known embedding models or "embedding" in name
-	isEmbeddingModel := strings.Contains(request.Model, "embedding") ||
-		request.Model == "models/gemini-embedding-001" ||
-		request.Model == "gemini-embedding-001" ||
-		request.Model == "models/embedding-001" ||
-		request.Model == "embedding-001" ||
-		strings.HasSuffix(request.Model, ":embedding")
-
-	if !isEmbeddingModel {
-		return nil, g.ModelErrorf("model '%s' does not appear to be an embedding model", request.Model)
-	}
-
-	payload := g.buildEmbeddingsPayload(request)
-	modelName := normalizeModelResource(request.Model)
-
-	endpoint := fmt.Sprintf("%s/models/%s:batchEmbedContents?key=%s",
-		g.GetBaseURL(),
-		modelName,
-		g.apiKey,
-	)
-
-	var response geminiEmbeddingsResponse
-	if err := g.DoRequest(ctx, "POST", endpoint, payload, &response); err != nil {
-		return nil, err
-	}
-
-	return g.transformEmbeddingsResponse(&response)
 }
 
 // Audio is not supported by Gemini
@@ -218,6 +210,10 @@ func (g *Gemini) buildTextPayload(request types.TextRequest) (map[string]any, er
 		}
 	}
 
+	for k, v := range g.Config.MergedProviderOptions(request.Model, request.ProviderOptions) {
+		payload[k] = v
+	}
+
 	return payload, nil
 }
 
@@ -247,37 +243,6 @@ func (g *Gemini) buildStructuredPayload(request types.StructuredRequest) (map[st
 	}
 
 	return payload, nil
-}
-
-// buildEmbeddingsPayload builds the request payload for embeddings
-func (g *Gemini) buildEmbeddingsPayload(request types.EmbeddingsRequest) map[string]any {
-	requests := make([]map[string]any, len(request.Input))
-	modelName := "models/" + normalizeModelResource(request.Model)
-
-	for i, input := range request.Input {
-		requests[i] = map[string]any{
-			"model": modelName,
-			"content": map[string]any{
-				"parts": []map[string]any{
-					{"text": input},
-				},
-			},
-		}
-
-		// Add task type if specified
-		if request.ProviderOptions != nil {
-			if taskType, ok := request.ProviderOptions["taskType"].(string); ok {
-				requests[i]["taskType"] = taskType
-			}
-			if title, ok := request.ProviderOptions["title"].(string); ok {
-				requests[i]["title"] = title
-			}
-		}
-	}
-
-	return map[string]any{
-		"requests": requests,
-	}
 }
 
 func normalizeModelResource(model string) string {

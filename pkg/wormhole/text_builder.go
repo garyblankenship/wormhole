@@ -347,15 +347,19 @@ func (b *TextRequestBuilder) shouldAutoExecuteTools(wormhole *Wormhole) bool {
 
 // Stream executes the request and returns a streaming response
 func (b *TextRequestBuilder) Stream(ctx context.Context) (<-chan types.StreamChunk, error) {
-	request := cloneTextRequest(b.request)
-	prepareTextExecutionRequest(request)
+	baseRequest := cloneTextRequest(b.request)
+	prepareTextExecutionRequest(baseRequest)
 
-	if len(request.Messages) == 0 {
+	if len(baseRequest.Messages) == 0 {
 		return nil, types.ErrInvalidRequest.WithDetails("no messages provided")
 	}
-	if request.Model == "" {
+	if baseRequest.Model == "" {
 		return nil, types.ErrInvalidRequest.WithDetails("no model specified")
 	}
+
+	modelsToTry := make([]string, 0, 1+len(b.fallbackModels))
+	modelsToTry = append(modelsToTry, baseRequest.Model)
+	modelsToTry = append(modelsToTry, b.fallbackModels...)
 
 	if !b.getWormhole().trackRequest() {
 		return nil, fmt.Errorf("client is shutting down")
@@ -368,29 +372,112 @@ func (b *TextRequestBuilder) Stream(ctx context.Context) (<-chan types.StreamChu
 	}
 
 	// Let the provider handle model validation at request time
-
 	// Provider handles all model validation and constraints
+	stream := make(chan types.StreamChunk)
+	go b.streamWithFallback(ctx, provider, release, baseRequest, modelsToTry, stream)
+	return stream, nil
+}
 
-	// Apply type-safe middleware chain if configured
+func (b *TextRequestBuilder) streamWithFallback(ctx context.Context, provider types.Provider, release func(), baseRequest *types.TextRequest, modelsToTry []string, out chan<- types.StreamChunk) {
+	defer close(out)
+	defer b.getWormhole().untrackRequest()
+	defer release()
+
+	var failures []string
+	for _, model := range modelsToTry {
+		request := cloneTextRequest(baseRequest)
+		request.Model = model
+
+		attemptCtx, cancelAttempt := context.WithCancel(ctx)
+		stream, err := b.openStream(attemptCtx, provider, request)
+		if err != nil {
+			cancelAttempt()
+			failures = append(failures, fmt.Sprintf("%s: %v", model, err))
+			if ctx.Err() != nil {
+				return
+			}
+			continue
+		}
+
+		emitted, retry, err := forwardStreamWithFirstChunkSafety(ctx, cancelAttempt, out, stream)
+		cancelAttempt()
+		if err != nil {
+			failures = append(failures, fmt.Sprintf("%s: %v", model, err))
+		}
+		if emitted || !retry {
+			return
+		}
+		if ctx.Err() != nil {
+			return
+		}
+	}
+
+	if ctx.Err() != nil {
+		return
+	}
+	sendStreamChunk(ctx, out, types.StreamChunk{
+		Error: fmt.Errorf("all stream attempts failed before emitting a chunk: %s", strings.Join(failures, "; ")),
+	})
+}
+
+func (b *TextRequestBuilder) openStream(ctx context.Context, provider types.Provider, request *types.TextRequest) (<-chan types.StreamChunk, error) {
 	if b.getWormhole().providerMiddleware != nil {
 		handler := b.getWormhole().providerMiddleware.ApplyStream(provider.Stream)
-		stream, err := handler(ctx, *request)
-		if err != nil {
-			release()
-			b.getWormhole().untrackRequest()
-			return nil, err
-		}
-		return wrapTrackedStream(ctx, b.getWormhole(), release, stream), nil
+		return handler(ctx, *request)
 	}
 
 	// No middleware configured, use provider directly
-	stream, err := provider.Stream(ctx, *request)
-	if err != nil {
-		release()
-		b.getWormhole().untrackRequest()
-		return nil, err
+	return provider.Stream(ctx, *request)
+}
+
+func forwardStreamWithFirstChunkSafety(ctx context.Context, cancelAttempt context.CancelFunc, out chan<- types.StreamChunk, stream <-chan types.StreamChunk) (emitted bool, retry bool, err error) {
+	for {
+		select {
+		case <-ctx.Done():
+			return false, false, ctx.Err()
+		case chunk, ok := <-stream:
+			if !ok {
+				if !emitted {
+					return false, true, fmt.Errorf("stream closed before first chunk")
+				}
+				return true, false, nil
+			}
+			if !emitted && chunk.HasError() {
+				cancelAttempt()
+				go drainStream(ctx, stream)
+				return false, true, chunk.Error
+			}
+			emitted = true
+			if !sendStreamChunk(ctx, out, chunk) {
+				return true, false, ctx.Err()
+			}
+			if chunk.HasError() {
+				return true, false, chunk.Error
+			}
+		}
 	}
-	return wrapTrackedStream(ctx, b.getWormhole(), release, stream), nil
+}
+
+func sendStreamChunk(ctx context.Context, out chan<- types.StreamChunk, chunk types.StreamChunk) bool {
+	select {
+	case out <- chunk:
+		return true
+	case <-ctx.Done():
+		return false
+	}
+}
+
+func drainStream(ctx context.Context, stream <-chan types.StreamChunk) {
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case _, ok := <-stream:
+			if !ok {
+				return
+			}
+		}
+	}
 }
 
 func cloneTextRequest(src *types.TextRequest) *types.TextRequest {
