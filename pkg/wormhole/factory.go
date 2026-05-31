@@ -20,7 +20,7 @@ func NewSimpleFactory() *SimpleFactory {
 
 // OpenAI creates a Wormhole client configured for OpenAI
 func (f *SimpleFactory) OpenAI(apiKey ...string) *Wormhole {
-	key := f.getAPIKey(apiKey, "OPENAI_API_KEY")
+	key := f.getProfileAPIKey(apiKey, providerOpenAI)
 
 	return New(
 		WithDefaultProvider("openai"),
@@ -30,7 +30,7 @@ func (f *SimpleFactory) OpenAI(apiKey ...string) *Wormhole {
 
 // Anthropic creates a Wormhole client configured for Anthropic
 func (f *SimpleFactory) Anthropic(apiKey ...string) *Wormhole {
-	key := f.getAPIKey(apiKey, "ANTHROPIC_API_KEY")
+	key := f.getProfileAPIKey(apiKey, providerAnthropic)
 
 	return New(
 		WithDefaultProvider("anthropic"),
@@ -40,7 +40,7 @@ func (f *SimpleFactory) Anthropic(apiKey ...string) *Wormhole {
 
 // Gemini creates a Wormhole client configured for Google Gemini
 func (f *SimpleFactory) Gemini(apiKey ...string) *Wormhole {
-	key := f.getAPIKey(apiKey, "GEMINI_API_KEY", "GOOGLE_API_KEY")
+	key := f.getProfileAPIKey(apiKey, providerGemini)
 
 	return New(
 		WithDefaultProvider("gemini"),
@@ -50,13 +50,9 @@ func (f *SimpleFactory) Gemini(apiKey ...string) *Wormhole {
 
 // Ollama creates a Wormhole client configured for Ollama
 func (f *SimpleFactory) Ollama(baseURL ...string) (*Wormhole, error) {
-	var url string
-	if len(baseURL) > 0 && baseURL[0] != "" {
-		url = baseURL[0]
-	} else if envURL := os.Getenv("OLLAMA_BASE_URL"); envURL != "" {
-		url = envURL
-	} else {
-		return nil, fmt.Errorf("Ollama base URL is required: provide via parameter or OLLAMA_BASE_URL environment variable")
+	url, ok := f.getRequiredProfileBaseURL(baseURL, providerOllama)
+	if !ok {
+		return nil, fmt.Errorf("Ollama base URL is required: provide via parameter or %s environment variable", primaryBaseURLEnv(providerOllama))
 	}
 
 	return New(
@@ -70,7 +66,7 @@ func (f *SimpleFactory) Ollama(baseURL ...string) (*Wormhole, error) {
 
 // Groq creates a Wormhole client configured for Groq
 func (f *SimpleFactory) Groq(apiKey ...string) *Wormhole {
-	key := f.getAPIKey(apiKey, "GROQ_API_KEY")
+	key := f.getProfileAPIKey(apiKey, "groq")
 
 	return New(
 		WithDefaultProvider("groq"),
@@ -80,7 +76,7 @@ func (f *SimpleFactory) Groq(apiKey ...string) *Wormhole {
 
 // Mistral creates a Wormhole client configured for Mistral
 func (f *SimpleFactory) Mistral(apiKey ...string) *Wormhole {
-	key := f.getAPIKey(apiKey, "MISTRAL_API_KEY")
+	key := f.getProfileAPIKey(apiKey, "mistral")
 
 	return New(
 		WithDefaultProvider("mistral"),
@@ -90,13 +86,9 @@ func (f *SimpleFactory) Mistral(apiKey ...string) *Wormhole {
 
 // LMStudio creates a Wormhole client configured for LMStudio
 func (f *SimpleFactory) LMStudio(baseURL ...string) (*Wormhole, error) {
-	var url string
-	if len(baseURL) > 0 && baseURL[0] != "" {
-		url = baseURL[0]
-	} else if envURL := os.Getenv("LMSTUDIO_BASE_URL"); envURL != "" {
-		url = envURL
-	} else {
-		return nil, fmt.Errorf("LMStudio base URL is required: provide via parameter or LMSTUDIO_BASE_URL environment variable")
+	url, ok := f.getRequiredProfileBaseURL(baseURL, "lmstudio")
+	if !ok {
+		return nil, fmt.Errorf("LMStudio base URL is required: provide via parameter or %s environment variable", primaryBaseURLEnv("lmstudio"))
 	}
 
 	return New(
@@ -110,14 +102,14 @@ func (f *SimpleFactory) LMStudio(baseURL ...string) (*Wormhole, error) {
 
 // OpenRouter creates a Wormhole client configured for OpenRouter (multi-provider gateway)
 func (f *SimpleFactory) OpenRouter(apiKey ...string) (*Wormhole, error) {
-	key := f.getAPIKey(apiKey, "OPENROUTER_API_KEY")
+	key := f.getProfileAPIKey(apiKey, providerOpenRouter)
 	if key == "" {
-		return nil, fmt.Errorf("OpenRouter API key is required: provide via parameter or OPENROUTER_API_KEY environment variable")
+		return nil, fmt.Errorf("OpenRouter API key is required: provide via parameter or %s environment variable", primaryAPIKeyEnv(providerOpenRouter))
 	}
 
 	return New(
 		WithDefaultProvider("openrouter"),
-		WithOpenAICompatible("openrouter", "https://openrouter.ai/api/v1", types.ProviderConfig{
+		WithProfiledOpenAICompatible("openrouter", types.ProviderConfig{
 			APIKey:        key,
 			DynamicModels: true, // Enable all 200+ OpenRouter models without registry validation
 		}),
@@ -186,6 +178,49 @@ func (f *SimpleFactory) getAPIKey(provided []string, envVars ...string) string {
 	}
 
 	return ""
+}
+
+func (f *SimpleFactory) getProfileAPIKey(provided []string, provider string) string {
+	if len(provided) > 0 && provided[0] != "" {
+		return provided[0]
+	}
+	profile, ok := providerProfile(provider)
+	if !ok {
+		return ""
+	}
+	return configuredAPIKey(profile)
+}
+
+func (f *SimpleFactory) getRequiredProfileBaseURL(provided []string, provider string) (string, bool) {
+	if len(provided) > 0 && provided[0] != "" {
+		return provided[0], true
+	}
+	profile, ok := providerProfile(provider)
+	if !ok {
+		return "", false
+	}
+	if profile.BaseURLEnv != "" {
+		if value := os.Getenv(profile.BaseURLEnv); value != "" {
+			return value, true
+		}
+	}
+	return "", false
+}
+
+func primaryAPIKeyEnv(provider string) string {
+	profile, ok := providerProfile(provider)
+	if !ok || len(profile.APIKeyEnv) == 0 {
+		return provider + "_API_KEY"
+	}
+	return profile.APIKeyEnv[0]
+}
+
+func primaryBaseURLEnv(provider string) string {
+	profile, ok := providerProfile(provider)
+	if !ok || profile.BaseURLEnv == "" {
+		return provider + "_BASE_URL"
+	}
+	return profile.BaseURLEnv
 }
 
 // Quick provides quick access to factory methods

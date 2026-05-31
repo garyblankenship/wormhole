@@ -3,7 +3,6 @@ package wormhole
 import (
 	"context"
 	"fmt"
-	"os"
 	"sort"
 
 	"github.com/garyblankenship/wormhole/pkg/discovery"
@@ -15,32 +14,34 @@ func (p *Wormhole) initializeDiscoveryService() {
 	var modelFetchers []discovery.ModelFetcher
 
 	for providerName, providerConfig := range p.config.Providers {
-		switch providerName {
-		case providerOpenAI:
+		profile, known := providerProfile(providerName)
+		discoveryKind := discoveryOpenAICompatible
+		if known {
+			discoveryKind = profile.Discovery
+		}
+
+		switch discoveryKind {
+		case discoveryOpenAI:
 			if providerConfig.APIKey != "" {
 				modelFetchers = append(modelFetchers, fetchers.NewOpenAIFetcher(providerConfig.APIKey))
 			}
-		case providerAnthropic:
+		case discoveryAnthropic:
 			if providerConfig.APIKey != "" {
 				modelFetchers = append(modelFetchers, fetchers.NewAnthropicFetcher(providerConfig.APIKey))
 			}
-		case providerOllama:
+		case discoveryOllama:
 			baseURL := providerConfig.BaseURL
-			if baseURL == "" {
-				if envURL := os.Getenv("OLLAMA_BASE_URL"); envURL != "" {
-					baseURL = envURL
-				} else {
-					baseURL = "http://localhost:11434"
-				}
+			if baseURL == "" && known {
+				baseURL = configuredBaseURL(profile)
 			}
 			modelFetchers = append(modelFetchers, fetchers.NewOllamaFetcher(baseURL))
-		case providerOpenRouter:
+		case discoveryOpenRouter:
 			modelFetchers = append(modelFetchers, fetchers.NewOpenRouterFetcher())
-		case providerGemini:
+		case discoveryGemini:
 			if providerConfig.APIKey != "" {
 				modelFetchers = append(modelFetchers, fetchers.NewGeminiFetcher(providerConfig.BaseURL, providerConfig.APIKey))
 			}
-		default:
+		case discoveryOpenAICompatible:
 			if providerConfig.BaseURL != "" {
 				modelFetchers = append(modelFetchers, fetchers.NewOpenAICompatibleFetcher(
 					providerName,

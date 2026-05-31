@@ -3,7 +3,6 @@ package wormhole
 import (
 	"fmt"
 	"maps"
-	"os"
 	"sort"
 	"strings"
 	"sync/atomic"
@@ -67,8 +66,8 @@ func geminiFactory() types.ProviderFactory {
 func ollamaFactory() types.ProviderFactory {
 	return func(c types.ProviderConfig) (types.Provider, error) {
 		if c.BaseURL == "" {
-			if envURL := os.Getenv("OLLAMA_BASE_URL"); envURL != "" {
-				c.BaseURL = envURL
+			if profile, ok := providerProfile(providerOllama); ok {
+				c.BaseURL = configuredBaseURL(profile)
 			}
 		}
 		return ollama.New(c)
@@ -359,9 +358,9 @@ func validateConfig(c *Config) []string {
 		}
 	}
 
-	localProviders := map[string]bool{"ollama": true, "lmstudio": true, "vllm": true}
 	for name, cfg := range c.Providers {
-		if !localProviders[name] && cfg.APIKey == "" {
+		profile, knownProfile := providerProfile(name)
+		if (!knownProfile || !profile.Local) && cfg.APIKey == "" {
 			warnings = append(warnings, fmt.Sprintf(
 				"Provider '%s' is configured but has no API key. Requests will likely fail.",
 				name,

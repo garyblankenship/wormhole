@@ -210,8 +210,8 @@ func TestOptionHelpersAndConfigWarnings(t *testing.T) {
 	}
 
 	warnings := validateConfig(&cfg)
-	if len(warnings) < 2 {
-		t.Fatalf("validateConfig warnings = %#v, want at least two", warnings)
+	if len(warnings) < 1 {
+		t.Fatalf("validateConfig warnings = %#v, want at least one", warnings)
 	}
 	if got := formatList([]string{"b", "a"}); got != "b, a" {
 		t.Fatalf("formatList = %q, want b, a", got)

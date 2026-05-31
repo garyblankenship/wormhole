@@ -1,8 +1,6 @@
 package wormhole
 
 import (
-	"os"
-	"strings"
 	"time"
 
 	"github.com/garyblankenship/wormhole/pkg/discovery"
@@ -85,14 +83,12 @@ func WithGroq(apiKey string, config ...types.ProviderConfig) Option {
 	}
 	cfg.APIKey = apiKey
 
-	// Use the generic OpenAI-compatible provider factory
-	return WithOpenAICompatible("groq", "https://api.groq.com/openai/v1", cfg)
+	return WithProfiledOpenAICompatible("groq", cfg)
 }
 
 // WithMistral configures the Mistral provider as an OpenAI-compatible endpoint.
 func WithMistral(config types.ProviderConfig) Option {
-	// Use the generic OpenAI-compatible provider factory
-	return WithOpenAICompatible("mistral", "https://api.mistral.ai/v1", config)
+	return WithProfiledOpenAICompatible("mistral", config)
 }
 
 // WithOllama configures the Ollama provider.
@@ -107,29 +103,34 @@ func WithOllama(config types.ProviderConfig) Option {
 
 // WithLMStudio configures the LMStudio provider.
 func WithLMStudio(config types.ProviderConfig) Option {
-	return func(c *Config) {
-		registerOpenAICompatible(c, "lmstudio", config)
-	}
+	return WithProfiledOpenAICompatible("lmstudio", config)
 }
 
 // WithVLLM configures the vLLM provider.
 func WithVLLM(config types.ProviderConfig) Option {
-	return func(c *Config) {
-		registerOpenAICompatible(c, "vllm", config)
-	}
+	return WithProfiledOpenAICompatible("vllm", config)
 }
 
 // WithOllamaOpenAI configures the Ollama OpenAI-compatible provider.
 func WithOllamaOpenAI(config types.ProviderConfig) Option {
-	return func(c *Config) {
-		registerOpenAICompatible(c, "ollama-openai", config)
-	}
+	return WithProfiledOpenAICompatible("ollama-openai", config)
 }
 
 // WithOpenAICompatible configures a generic OpenAI-compatible provider.
 func WithOpenAICompatible(name, baseURL string, config types.ProviderConfig) Option {
 	return func(c *Config) {
 		config.BaseURL = baseURL
+		registerOpenAICompatible(c, name, config)
+	}
+}
+
+// WithProfiledOpenAICompatible configures a known OpenAI-compatible provider
+// using the provider profile's default or environment-provided base URL.
+func WithProfiledOpenAICompatible(name string, config types.ProviderConfig) Option {
+	return func(c *Config) {
+		if profile, ok := providerProfile(name); ok && config.BaseURL == "" {
+			config.BaseURL = configuredBaseURL(profile)
+		}
 		registerOpenAICompatible(c, name, config)
 	}
 }
@@ -220,6 +221,13 @@ func WithLogger(logger types.Logger) Option {
 	}
 }
 
+// WithAttemptTrace configures a callback for provider/model attempts.
+func WithAttemptTrace(trace AttemptTraceFunc) Option {
+	return func(c *Config) {
+		c.AttemptTrace = trace
+	}
+}
+
 // WithModelValidation enables or disables model validation against the registry.
 func WithModelValidation(enabled bool) Option {
 	return func(c *Config) {
@@ -276,8 +284,8 @@ func WithDiscovery(enabled bool) Option {
 	}
 }
 
-// WithProviderFromEnv configures a provider using environment variables.
-// It automatically looks for <PROVIDER>_API_KEY and optionally <PROVIDER>_BASE_URL.
+// WithProviderFromEnv configures a provider using environment variables from
+// the built-in provider profile registry.
 //
 // Supported provider names:
 //   - "openai" -> OPENAI_API_KEY, OPENAI_BASE_URL
@@ -302,23 +310,22 @@ func WithDiscovery(enabled bool) Option {
 // This allows safe composition without runtime errors for unconfigured providers.
 func WithProviderFromEnv(provider string) Option {
 	return func(c *Config) {
-		envPrefix := strings.ToUpper(provider)
-		apiKey := os.Getenv(envPrefix + "_API_KEY")
-
-		// Skip if no API key found (silent skip for flexibility)
-		if apiKey == "" {
+		profile, known := providerProfile(provider)
+		if !known {
 			return
 		}
 
-		baseURL := os.Getenv(envPrefix + "_BASE_URL")
+		apiKey := configuredAPIKey(profile)
+		if apiKey == "" && !profile.Local {
+			return
+		}
 
 		cfg := types.ProviderConfig{
 			APIKey:  apiKey,
-			BaseURL: baseURL,
+			BaseURL: configuredBaseURL(profile),
 		}
 
-		// Route to appropriate provider configuration
-		switch strings.ToLower(provider) {
+		switch provider {
 		case "openai":
 			WithOpenAI(apiKey, cfg)(c)
 		case "anthropic":
@@ -332,12 +339,10 @@ func WithProviderFromEnv(provider string) Option {
 		case "ollama":
 			WithOllama(cfg)(c)
 		case "openrouter":
-			cfg.BaseURL = "https://openrouter.ai/api/v1"
 			WithOpenAICompatible("openrouter", cfg.BaseURL, cfg)(c)
 		default:
-			// For unknown providers, assume OpenAI-compatible if base URL is provided
-			if baseURL != "" {
-				WithOpenAICompatible(provider, baseURL, cfg)(c)
+			if profile.Kind == providerKindOpenAICompatible && cfg.BaseURL != "" {
+				WithOpenAICompatible(provider, cfg.BaseURL, cfg)(c)
 			}
 		}
 	}
@@ -356,9 +361,8 @@ func WithProviderFromEnv(provider string) Option {
 //	)
 func WithAllProvidersFromEnv() Option {
 	return func(c *Config) {
-		providers := []string{"openai", "anthropic", "gemini", "groq", "mistral", "openrouter"}
-		for _, p := range providers {
-			WithProviderFromEnv(p)(c)
+		for _, profile := range envProviderProfiles() {
+			WithProviderFromEnv(profile.Name)(c)
 		}
 	}
 }

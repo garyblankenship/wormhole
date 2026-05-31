@@ -86,11 +86,12 @@ func runServe(args []string, stdout, stderr io.Writer, getenv func(string) strin
 	var opts []wormhole.Option
 	opts = append(opts, wormhole.WithAllProvidersFromEnv())
 
-	// Ollama often has no API key, just a base URL
-	if ollamaURL := getenv("OLLAMA_BASE_URL"); ollamaURL != "" {
-		opts = append(opts, wormhole.WithOllama(types.ProviderConfig{
-			BaseURL: ollamaURL,
-		}))
+	if profile, ok := wormhole.ProviderProfileByName("ollama"); ok && profile.BaseURLEnv != "" {
+		if ollamaURL := getenv(profile.BaseURLEnv); ollamaURL != "" {
+			opts = append(opts, wormhole.WithOllama(types.ProviderConfig{
+				BaseURL: ollamaURL,
+			}))
+		}
 	}
 
 	cfg := server.Config{

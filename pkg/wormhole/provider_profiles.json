@@ -1,0 +1,95 @@
+[
+  {
+    "name": "openai",
+    "display_name": "OpenAI",
+    "kind": "native",
+    "api_key_env": ["OPENAI_API_KEY"],
+    "base_url_env": "OPENAI_BASE_URL",
+    "discovery": "openai",
+    "auto_env": true
+  },
+  {
+    "name": "anthropic",
+    "display_name": "Anthropic",
+    "kind": "native",
+    "api_key_env": ["ANTHROPIC_API_KEY"],
+    "base_url_env": "ANTHROPIC_BASE_URL",
+    "discovery": "anthropic",
+    "auto_env": true
+  },
+  {
+    "name": "gemini",
+    "display_name": "Google Gemini",
+    "kind": "native",
+    "api_key_env": ["GEMINI_API_KEY", "GOOGLE_API_KEY"],
+    "base_url_env": "GEMINI_BASE_URL",
+    "discovery": "gemini",
+    "auto_env": true
+  },
+  {
+    "name": "openrouter",
+    "display_name": "OpenRouter",
+    "kind": "openai-compatible",
+    "default_base_url": "https://openrouter.ai/api/v1",
+    "api_key_env": ["OPENROUTER_API_KEY"],
+    "base_url_env": "OPENROUTER_BASE_URL",
+    "discovery": "openrouter",
+    "auto_env": true
+  },
+  {
+    "name": "groq",
+    "display_name": "Groq",
+    "kind": "openai-compatible",
+    "default_base_url": "https://api.groq.com/openai/v1",
+    "api_key_env": ["GROQ_API_KEY"],
+    "base_url_env": "GROQ_BASE_URL",
+    "discovery": "openai-compatible",
+    "auto_env": true
+  },
+  {
+    "name": "mistral",
+    "display_name": "Mistral",
+    "kind": "openai-compatible",
+    "default_base_url": "https://api.mistral.ai/v1",
+    "api_key_env": ["MISTRAL_API_KEY"],
+    "base_url_env": "MISTRAL_BASE_URL",
+    "discovery": "openai-compatible",
+    "auto_env": true
+  },
+  {
+    "name": "ollama",
+    "display_name": "Ollama",
+    "kind": "native",
+    "default_base_url": "http://localhost:11434",
+    "base_url_env": "OLLAMA_BASE_URL",
+    "discovery": "ollama",
+    "local": true
+  },
+  {
+    "name": "lmstudio",
+    "display_name": "LM Studio",
+    "kind": "openai-compatible",
+    "default_base_url": "http://localhost:1234/v1",
+    "base_url_env": "LMSTUDIO_BASE_URL",
+    "discovery": "openai-compatible",
+    "local": true
+  },
+  {
+    "name": "vllm",
+    "display_name": "vLLM",
+    "kind": "openai-compatible",
+    "default_base_url": "http://localhost:8000/v1",
+    "base_url_env": "VLLM_BASE_URL",
+    "discovery": "openai-compatible",
+    "local": true
+  },
+  {
+    "name": "ollama-openai",
+    "display_name": "Ollama OpenAI-Compatible",
+    "kind": "openai-compatible",
+    "default_base_url": "http://localhost:11434/v1",
+    "base_url_env": "OLLAMA_OPENAI_BASE_URL",
+    "discovery": "openai-compatible",
+    "local": true
+  }
+]

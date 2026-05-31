@@ -281,14 +281,40 @@ func (b *TextRequestBuilder) Generate(ctx context.Context) (*types.TextResponse,
 		defer release()
 
 		var lastErr error
-		for _, model := range modelsToTry {
+		wormhole := b.getWormhole()
+		for attempt, model := range modelsToTry {
 			request := cloneTextRequest(baseRequest)
 			request.Model = model
+			wormhole.emitAttempt(ctx, AttemptEvent{
+				Operation: "text.generate",
+				Phase:     AttemptStarted,
+				Provider:  provider.Name(),
+				Model:     model,
+				Attempt:   attempt + 1,
+				Fallback:  attempt > 0,
+			})
 
 			resp, err := b.executeGenerate(ctx, provider, request)
 			if err == nil {
+				wormhole.emitAttempt(ctx, AttemptEvent{
+					Operation: "text.generate",
+					Phase:     AttemptSuccess,
+					Provider:  provider.Name(),
+					Model:     model,
+					Attempt:   attempt + 1,
+					Fallback:  attempt > 0,
+				})
 				return resp, nil
 			}
+			wormhole.emitAttempt(ctx, AttemptEvent{
+				Operation: "text.generate",
+				Phase:     AttemptError,
+				Provider:  provider.Name(),
+				Model:     model,
+				Attempt:   attempt + 1,
+				Fallback:  attempt > 0,
+				Error:     err,
+			})
 			lastErr = err
 		}
 
@@ -384,15 +410,35 @@ func (b *TextRequestBuilder) streamWithFallback(ctx context.Context, provider ty
 	defer release()
 
 	var failures []string
-	for _, model := range modelsToTry {
+	wormhole := b.getWormhole()
+	for attempt, model := range modelsToTry {
 		request := cloneTextRequest(baseRequest)
 		request.Model = model
+		wormhole.emitAttempt(ctx, AttemptEvent{
+			Operation: "text.stream",
+			Phase:     AttemptStarted,
+			Provider:  provider.Name(),
+			Model:     model,
+			Attempt:   attempt + 1,
+			Fallback:  attempt > 0,
+			Stream:    true,
+		})
 
 		attemptCtx, cancelAttempt := context.WithCancel(ctx)
 		stream, err := b.openStream(attemptCtx, provider, request)
 		if err != nil {
 			cancelAttempt()
 			failures = append(failures, fmt.Sprintf("%s: %v", model, err))
+			wormhole.emitAttempt(ctx, AttemptEvent{
+				Operation: "text.stream",
+				Phase:     AttemptError,
+				Provider:  provider.Name(),
+				Model:     model,
+				Attempt:   attempt + 1,
+				Fallback:  attempt > 0,
+				Stream:    true,
+				Error:     err,
+			})
 			if ctx.Err() != nil {
 				return
 			}
@@ -403,6 +449,27 @@ func (b *TextRequestBuilder) streamWithFallback(ctx context.Context, provider ty
 		cancelAttempt()
 		if err != nil {
 			failures = append(failures, fmt.Sprintf("%s: %v", model, err))
+			wormhole.emitAttempt(ctx, AttemptEvent{
+				Operation: "text.stream",
+				Phase:     AttemptError,
+				Provider:  provider.Name(),
+				Model:     model,
+				Attempt:   attempt + 1,
+				Fallback:  attempt > 0,
+				Stream:    true,
+				Error:     err,
+			})
+		}
+		if emitted {
+			wormhole.emitAttempt(ctx, AttemptEvent{
+				Operation: "text.stream",
+				Phase:     AttemptSuccess,
+				Provider:  provider.Name(),
+				Model:     model,
+				Attempt:   attempt + 1,
+				Fallback:  attempt > 0,
+				Stream:    true,
+			})
 		}
 		if emitted || !retry {
 			return

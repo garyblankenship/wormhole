@@ -63,6 +63,7 @@ type Config struct {
 	DiscoveryConfig     discovery.DiscoveryConfig // Dynamic model discovery configuration
 	EnableDiscovery     bool                      // Whether to enable dynamic model discovery (default: true)
 	Idempotency         *IdempotencyConfig        // Idempotency configuration for duplicate prevention
+	AttemptTrace        AttemptTraceFunc          // Optional per-attempt tracing callback
 }
 
 // New creates a new Wormhole instance using functional options
