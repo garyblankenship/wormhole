@@ -116,6 +116,7 @@ github.com/garyblankenship/wormhole
 | Option | Description |
 |--------|-------------|
 | `WithOpenAI(apiKey)` | Configure OpenAI provider |
+| `WithOpenAIResponses(apiKey)` | Configure OpenAI provider to use `/responses` for text and streaming |
 | `WithAnthropic(apiKey)` | Configure Anthropic provider |
 | `WithGemini(apiKey)` | Configure Gemini provider |
 | `WithDefaultProvider(name)` | Set default provider |
@@ -123,6 +124,28 @@ github.com/garyblankenship/wormhole
 | `WithProviderMiddleware(...)` | Add type-safe provider middleware |
 | `WithDebugLogging(logger)` | Enable debug logging |
 | `WithModelValidation(enabled)` | Enable model validation |
+
+### OpenAI Responses API
+
+`WithOpenAIResponses(apiKey)` is a convenience option for:
+
+```go
+wormhole.WithOpenAI(apiKey, types.ProviderConfig{
+    UseResponsesAPI: true,
+})
+```
+
+When enabled, OpenAI `Text()` and `Stream()` use `/responses`. Other OpenAI
+resources such as embeddings, images, and audio keep their existing endpoint
+paths.
+
+Responses configuration fields:
+
+| Field | Type | Default | Source |
+|-------|------|---------|--------|
+| `UseResponsesAPI` | `bool` | `false` | `pkg/types/provider.go` |
+| `ResponsesPath` | `string` | `/responses` | `pkg/providers/openai/openai.go` |
+| `ChatPath` | `string` | `/chat/completions` | `pkg/providers/openai/openai.go` |
 
 ## Builder Methods
 

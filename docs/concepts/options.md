@@ -79,6 +79,42 @@ client := wormhole.New(
 )
 ```
 
+#### WithOpenAIResponses
+
+Configure the OpenAI provider to use the Responses API for text generation:
+
+```go
+client := wormhole.New(
+    wormhole.WithDefaultProvider("openai"),
+    wormhole.WithOpenAIResponses("sk-..."),
+)
+```
+
+`WithOpenAIResponses` sets `types.ProviderConfig.UseResponsesAPI` to `true`.
+The default remains Chat Completions when you use `WithOpenAI`.
+
+Responses-specific provider options:
+
+| Option | Type | Default | Source | Effect |
+|--------|------|---------|--------|--------|
+| `UseResponsesAPI` | `bool` | `false` | `pkg/types/provider.go` | Route OpenAI `Text()` and `Stream()` through `/responses` |
+| `ResponsesPath` | `string` | `/responses` | `pkg/providers/openai/openai.go` | Override the path appended to `BaseURL` |
+| `ChatPath` | `string` | `/chat/completions` | `pkg/providers/openai/openai.go` | Override the Chat Completions path when Responses mode is off |
+
+Use `ProviderOptions()` on a text request for advanced Responses fields that do
+not have first-class builder methods:
+
+```go
+resp, err := client.Text().
+    Model("gpt-5").
+    Prompt("Summarize this").
+    ProviderOptions(map[string]any{
+        "store": false,
+        "reasoning": map[string]any{"effort": "low"},
+    }).
+    Generate(ctx)
+```
+
 #### WithAnthropic
 
 Configure the Anthropic provider:

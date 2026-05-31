@@ -39,6 +39,7 @@ Wormhole is a production-ready Go SDK providing a unified interface to multiple 
 
 **OpenAI Full Support:**
 - Complete feature set: text, streaming, structured, embeddings, images, audio
+- Chat Completions by default, with opt-in Responses API support through `WithOpenAIResponses`
 - GPT-5 model constraints handled automatically (temperature=1.0)
 - Robust error handling and validation
 

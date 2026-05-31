@@ -98,7 +98,7 @@ does not need a second garage.
 
 | Provider | Configuration | Supported core resources |
 | --- | --- | --- |
-| OpenAI | `WithOpenAI(key)` | text, streaming, structured output, embeddings, images, audio, tools |
+| OpenAI | `WithOpenAI(key)` or `WithOpenAIResponses(key)` | text, streaming, structured output, embeddings, images, audio, tools |
 | Anthropic | `WithAnthropic(key)` | text, streaming, structured output, tools, vision input |
 | Gemini | `WithGemini(key)` | text, streaming, structured output, embeddings, tools, vision input |
 | Ollama | `WithOllama(config)` | text, streaming, structured output, embeddings, local model helpers |
@@ -109,14 +109,24 @@ does not need a second garage.
 | vLLM | `WithVLLM(config)` | OpenAI-compatible local text and streaming |
 | Custom | `WithCustomProvider(name, factory)` | whatever your provider implements |
 
+OpenAI text generation uses Chat Completions by default. Opt into the Responses
+API when you want OpenAI's newer `/v1/responses` wire format:
+
+```go
+client := wormhole.New(
+	wormhole.WithDefaultProvider("openai"),
+	wormhole.WithOpenAIResponses(os.Getenv("OPENAI_API_KEY")),
+)
+```
+
 ### What The Portal Does Not Do
 
 Use Wormhole when you want a common application API across providers. Use the
 official provider SDKs or direct REST calls when you need provider-admin or
 platform-specific resources:
 
-- OpenAI Responses, Assistants, Threads, Runs, Files, Vector Stores, Batches,
-  Fine-tuning, Moderation, Realtime, image edits, or audio translation.
+- OpenAI Assistants, Threads, Runs, Files, Vector Stores, Batches, Fine-tuning,
+  Moderation, Realtime, image edits, or audio translation.
 - Anthropic Files API, Message Batches, provider beta resources, Bedrock,
   Vertex, or AWS platform adapters.
 - Gemini Enterprise or Vertex-specific resources, files/caches beyond the core

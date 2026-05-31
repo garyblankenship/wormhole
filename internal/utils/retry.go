@@ -72,6 +72,10 @@ func IsRetryableStatusCode(statusCode int) bool {
 type RetryableHTTPClient struct {
 	Client HTTPClient
 	Config RetryConfig
+	// OnRetry, if non-nil, is invoked on the cloned request before a retry
+	// attempt (attempt >= 1). retryErr describes the previous failed attempt
+	// and previousRequest is the exact request that produced it.
+	OnRetry func(reqClone *http.Request, attempt int, retryErr *RetryableError, previousRequest *http.Request)
 }
 
 // NewRetryableHTTPClient creates a new retryable HTTP client
@@ -90,6 +94,8 @@ func NewRetryableHTTPClient(client HTTPClient, config RetryConfig) *RetryableHTT
 // Do executes an HTTP request with retry logic
 func (r *RetryableHTTPClient) Do(req *http.Request) (*http.Response, error) {
 	var lastErr error
+	var lastRetryErr *RetryableError
+	var previousRequest *http.Request
 
 	for attempt := 0; attempt <= r.Config.MaxRetries; attempt++ {
 		// Clone request for retry attempts
@@ -106,8 +112,14 @@ func (r *RetryableHTTPClient) Do(req *http.Request) (*http.Response, error) {
 			}
 		}
 
+		// Rotate credentials on retries (e.g. next API key after a 429).
+		if attempt > 0 && r.OnRetry != nil {
+			r.OnRetry(reqClone, attempt, lastRetryErr, previousRequest)
+		}
+
 		// Execute request
 		resp, err := r.Client.Do(reqClone)
+		previousRequest = reqClone
 
 		// If no error and successful status, return immediately
 		if err == nil && !IsRetryableStatusCode(resp.StatusCode) {
@@ -122,14 +134,14 @@ func (r *RetryableHTTPClient) Do(req *http.Request) (*http.Response, error) {
 
 		// Handle different error scenarios
 		if err != nil {
-			lastErr = &RetryableError{
+			lastRetryErr = &RetryableError{
 				Err:         err,
 				ShouldRetry: true, // Network errors are generally retryable
 			}
 		} else {
 			// HTTP error response
 			retryAfter := parseRetryAfter(resp.Header.Get("Retry-After"))
-			lastErr = &RetryableError{
+			lastRetryErr = &RetryableError{
 				Err:         fmt.Errorf("HTTP %d", resp.StatusCode),
 				StatusCode:  resp.StatusCode,
 				ShouldRetry: IsRetryableStatusCode(resp.StatusCode),
@@ -139,9 +151,10 @@ func (r *RetryableHTTPClient) Do(req *http.Request) (*http.Response, error) {
 				log.Printf("warning: failed to close response body: %v", err)
 			}
 		}
+		lastErr = lastRetryErr
 
 		// Don't retry if this is not a retryable error
-		if retryErr, ok := lastErr.(*RetryableError); ok && !retryErr.ShouldRetry {
+		if lastRetryErr != nil && !lastRetryErr.ShouldRetry {
 			return nil, lastErr
 		}
 
@@ -151,7 +164,7 @@ func (r *RetryableHTTPClient) Do(req *http.Request) (*http.Response, error) {
 		}
 
 		// Calculate delay for next attempt
-		delay := r.calculateDelay(attempt, lastErr.(*RetryableError).RetryAfter)
+		delay := r.calculateDelay(attempt, lastRetryErr.RetryAfter)
 
 		// Wait before retry, respecting context cancellation
 		select {

@@ -439,6 +439,8 @@ err := pool.Unmarshal(jsonBytes, &target)
 
 5. Provider Request Transform
    SDK TextRequest → OpenAI chat/completions payload
+   or, when UseResponsesAPI is true:
+   SDK TextRequest → OpenAI responses payload
 
 6. HTTP Execution
    BaseProvider.DoRequest()
@@ -464,6 +466,7 @@ err := pool.Unmarshal(jsonBytes, &target)
 
 2. Provider Streaming Request
    POST /chat/completions with stream=true
+   or POST /responses with stream=true when UseResponsesAPI is true
 
 3. SSE Parsing (goroutine)
    HTTP body → SSEParser → transformToTextChunk(event) → channel

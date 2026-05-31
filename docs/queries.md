@@ -137,6 +137,12 @@ client := wormhole.New(
     wormhole.WithDefaultProvider("openai"),
 )
 
+// OpenAI Responses API
+client := wormhole.New(
+    wormhole.WithOpenAIResponses(apiKey),
+    wormhole.WithDefaultProvider("openai"),
+)
+
 // OpenAI-compatible endpoints (e.g., local models)
 resp, err := client.Text().
     Model("local-model").

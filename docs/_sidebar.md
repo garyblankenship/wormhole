@@ -2,6 +2,7 @@
 
 ## Providers
 
+- [OpenAI](providers/openai.md)
 - [Anthropic](providers/anthropic.md)
 - [Google Gemini](providers/gemini.md)
 - [OpenRouter](providers/openrouter.md)
