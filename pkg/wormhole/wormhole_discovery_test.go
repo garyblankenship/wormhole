@@ -62,3 +62,25 @@ func TestRefreshModelsWithContextPropagatesCancellation(t *testing.T) {
 	require.Contains(t, err.Error(), "ctxprobe")
 	require.Contains(t, err.Error(), context.Canceled.Error())
 }
+
+func TestInitializeDiscoveryServiceRegistersConfiguredProviderFetchers(t *testing.T) {
+	t.Parallel()
+
+	client := New(
+		WithDiscoveryConfig(discovery.DiscoveryConfig{
+			DisableFileCache:         true,
+			DisableBackgroundRefresh: true,
+		}),
+		WithOpenAI("openai-key"),
+		WithGemini("gemini-key"),
+		WithOpenAICompatible("custom", "https://custom.example.test/v1", types.ProviderConfig{
+			APIKey:  "custom-key",
+			Headers: map[string]string{"X-Custom": "yes"},
+		}),
+	)
+
+	providers := client.ModelDiscoveryProviders()
+	require.Contains(t, providers, "openai")
+	require.Contains(t, providers, "gemini")
+	require.Contains(t, providers, "custom")
+}

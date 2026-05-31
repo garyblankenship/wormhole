@@ -190,6 +190,128 @@ func TestOllamaFetcher(t *testing.T) {
 	assert.True(t, hasCapability(models[1], types.CapabilityEmbeddings))
 }
 
+func TestGeminiFetcher(t *testing.T) {
+	var sawKey bool
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		assert.Equal(t, "/models", r.URL.Path)
+		sawKey = r.URL.Query().Get("key") == "gemini-key"
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"models": []map[string]any{
+				{
+					"name":                       "models/gemini-2.5-flash",
+					"displayName":                "Gemini 2.5 Flash",
+					"inputTokenLimit":            1000000,
+					"supportedGenerationMethods": []string{"generateContent"},
+				},
+				{
+					"name":                       "models/text-embedding-004",
+					"supportedGenerationMethods": []string{"embedContent"},
+				},
+			},
+		})
+	}))
+	defer server.Close()
+	useTestHTTPClient(t, server.Client())
+
+	models, err := NewGeminiFetcher(server.URL, "gemini-key").FetchModels(context.Background())
+	require.NoError(t, err)
+	require.Len(t, models, 2)
+	assert.True(t, sawKey)
+	assert.Equal(t, "gemini-2.5-flash", models[0].ID)
+	assert.Equal(t, "gemini", models[0].Provider)
+	assert.True(t, hasCapability(models[0], types.CapabilityStream))
+	assert.True(t, hasCapability(models[1], types.CapabilityEmbeddings))
+}
+
+func TestGeminiFetcherRequiresAPIKey(t *testing.T) {
+	_, err := NewGeminiFetcher("", "").FetchModels(context.Background())
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "API key")
+}
+
+func TestGeminiFetcherMalformedJSONAndStatusErrors(t *testing.T) {
+	tests := []struct {
+		name    string
+		handler http.HandlerFunc
+		want    string
+	}{
+		{
+			name: "malformed JSON",
+			handler: func(w http.ResponseWriter, r *http.Request) {
+				_, _ = w.Write([]byte(`{`))
+			},
+			want: "unexpected EOF",
+		},
+		{
+			name: "non-2xx",
+			handler: func(w http.ResponseWriter, r *http.Request) {
+				w.WriteHeader(http.StatusInternalServerError)
+			},
+			want: "status 500",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			server := httptest.NewServer(tt.handler)
+			defer server.Close()
+			useTestHTTPClient(t, server.Client())
+
+			_, err := NewGeminiFetcher(server.URL, "key").FetchModels(context.Background())
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), tt.want)
+		})
+	}
+}
+
+func TestGeminiFetcherContextCancellation(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	_, err := NewGeminiFetcher("https://example.test", "key").FetchModels(ctx)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, context.Canceled)
+}
+
+func TestOpenAICompatibleFetcher(t *testing.T) {
+	var sawHeaders bool
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		assert.Equal(t, "/models", r.URL.Path)
+		sawHeaders = r.Header.Get("Authorization") == "Bearer compatible-key" &&
+			r.Header.Get("X-Provider") == "custom"
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"data": []map[string]any{
+				{"id": "gpt-compatible"},
+			},
+		})
+	}))
+	defer server.Close()
+	useTestHTTPClient(t, server.Client())
+
+	fetcher := NewOpenAICompatibleFetcher("compatible", server.URL, "compatible-key", map[string]string{"X-Provider": "custom"})
+	models, err := fetcher.FetchModels(context.Background())
+	require.NoError(t, err)
+	require.Len(t, models, 1)
+	assert.True(t, sawHeaders)
+	assert.Equal(t, "compatible", fetcher.Name())
+	assert.Equal(t, "compatible", models[0].Provider)
+	assert.True(t, hasCapability(models[0], types.CapabilityText))
+}
+
+func TestOpenAICompatibleFetcherStatusError(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusBadGateway)
+	}))
+	defer server.Close()
+	useTestHTTPClient(t, server.Client())
+
+	_, err := NewOpenAICompatibleFetcher("compatible", server.URL, "", nil).FetchModels(context.Background())
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "status 502")
+}
+
 func TestFetchJSONReturnsStatusError(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "nope", http.StatusTeapot)
