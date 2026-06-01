@@ -8,6 +8,7 @@ import (
 	"io"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/garyblankenship/wormhole/pkg/types"
 )
@@ -276,6 +277,72 @@ func ProcessStream(
 		processor.Process(chunks)
 	}()
 	return chunks
+}
+
+// StreamIdleTimeoutError is returned when a stream stalls for longer than the
+// configured idle timeout.
+type StreamIdleTimeoutError struct {
+	Timeout time.Duration
+}
+
+func (e *StreamIdleTimeoutError) Error() string {
+	return fmt.Sprintf("stream idle timeout: no chunk received within %s", e.Timeout)
+}
+
+// ProcessStreamWithIdleTimeout wraps ProcessStream with a per-chunk idle timeout.
+// If timeout is zero or negative, it falls through to ProcessStream (no watchdog).
+// When the watchdog fires, a single timeout error chunk is emitted and the source
+// channel is drained to ensure the body-closing goroutine can exit.
+func ProcessStreamWithIdleTimeout(
+	body io.ReadCloser,
+	transformer func([]byte) (*types.TextChunk, error),
+	bufferSize int,
+	timeout time.Duration,
+) <-chan types.TextChunk {
+	if timeout <= 0 {
+		return ProcessStream(body, transformer, bufferSize)
+	}
+
+	src := ProcessStream(body, transformer, bufferSize)
+	out := make(chan types.TextChunk, bufferSize)
+
+	go func() {
+		defer close(out)
+		timer := time.NewTimer(timeout)
+		defer timer.Stop()
+
+		for {
+			select {
+			case chunk, ok := <-src:
+				if !ok {
+					return
+				}
+				if !timer.Stop() {
+					<-timer.C
+				}
+				timer.Reset(timeout)
+				out <- chunk
+				if chunk.Error != nil {
+					return
+				}
+			case <-timer.C:
+				out <- types.TextChunk{
+					Error: &StreamIdleTimeoutError{Timeout: timeout},
+				}
+				// Drain source so the body-closing goroutine can exit.
+				go drainChannel(src)
+				return
+			}
+		}
+	}()
+
+	return out
+}
+
+// drainChannel discards remaining items from a channel until it closes.
+func drainChannel(ch <-chan types.TextChunk) {
+	for range ch {
+	}
 }
 
 // MergeTextChunks merges text chunks into a complete response

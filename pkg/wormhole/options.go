@@ -228,6 +228,15 @@ func WithAttemptTrace(trace AttemptTraceFunc) Option {
 	}
 }
 
+// WithStreamIdleTimeout configures a per-chunk idle timeout for streaming responses.
+// A stream that stops emitting chunks for longer than this duration fails with
+// a typed timeout error. Zero or negative disables the watchdog (default).
+func WithStreamIdleTimeout(d time.Duration) Option {
+	return func(c *Config) {
+		c.StreamIdleTimeout = d
+	}
+}
+
 // WithModelValidation enables or disables model validation against the registry.
 func WithModelValidation(enabled bool) Option {
 	return func(c *Config) {

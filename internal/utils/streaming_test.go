@@ -708,3 +708,100 @@ data: [DONE]
 		assert.Len(t, received, 3) // Should not include [DONE]
 	})
 }
+
+func TestProcessStreamWithIdleTimeout_Disabled(t *testing.T) {
+	t.Parallel()
+
+	// Zero timeout should fall through to plain ProcessStream
+	body := io.NopCloser(strings.NewReader("data: \"hello\"\n\n"))
+	transformer := func(data []byte) (*types.TextChunk, error) {
+		return &types.TextChunk{Text: string(data)}, nil
+	}
+
+	ch := ProcessStreamWithIdleTimeout(body, transformer, 10, 0)
+	var chunks []types.TextChunk
+	for c := range ch {
+		chunks = append(chunks, c)
+	}
+	assert.Len(t, chunks, 1)
+	assert.Equal(t, "\"hello\"", chunks[0].Text)
+}
+
+func TestProcessStreamWithIdleTimeout_NormalCompletion(t *testing.T) {
+	t.Parallel()
+
+	// Stream that emits quickly \u2014 should complete before timeout
+	body := io.NopCloser(strings.NewReader("data: \"fast\"\n\ndata: [DONE]\n\n"))
+	transformer := func(data []byte) (*types.TextChunk, error) {
+		if string(data) == "[DONE]" {
+			return nil, nil
+		}
+		return &types.TextChunk{Text: string(data)}, nil
+	}
+
+	ch := ProcessStreamWithIdleTimeout(body, transformer, 10, 5*time.Second)
+	var chunks []types.TextChunk
+	for c := range ch {
+		chunks = append(chunks, c)
+	}
+	require.Len(t, chunks, 1)
+	assert.Equal(t, "\"fast\"", chunks[0].Text)
+	assert.NoError(t, chunks[0].Error)
+}
+
+func TestProcessStreamWithIdleTimeout_StallDetected(t *testing.T) {
+	t.Parallel()
+
+	// Create a reader that sends one chunk then blocks forever.
+	reader, writer := io.Pipe()
+	body := io.NopCloser(reader)
+
+	transformer := func(data []byte) (*types.TextChunk, error) {
+		return &types.TextChunk{Text: string(data)}, nil
+	}
+
+	ch := ProcessStreamWithIdleTimeout(body, transformer, 10, 50*time.Millisecond)
+
+	// Send one chunk, then stall
+	go func() {
+		writer.Write([]byte("data: first\n\n"))
+		// Block \u2014 never close writer
+	}()
+
+	var chunks []types.TextChunk
+	for c := range ch {
+		chunks = append(chunks, c)
+	}
+
+	// Should get: first chunk + timeout error
+	require.Len(t, chunks, 2)
+	assert.Equal(t, "first", chunks[0].Text)
+	assert.Error(t, chunks[1].Error)
+	assert.Contains(t, chunks[1].Error.Error(), "stream idle timeout")
+
+	// Clean up so the blocked writer goroutine doesn't leak
+	writer.Close()
+}
+
+func TestProcessStreamWithIdleTimeout_NoFirstChunk(t *testing.T) {
+	t.Parallel()
+
+	// Reader that never sends anything
+	reader, _ := io.Pipe()
+	body := io.NopCloser(reader)
+
+	transformer := func(data []byte) (*types.TextChunk, error) {
+		return &types.TextChunk{Text: string(data)}, nil
+	}
+
+	ch := ProcessStreamWithIdleTimeout(body, transformer, 10, 50*time.Millisecond)
+
+	var chunks []types.TextChunk
+	for c := range ch {
+		chunks = append(chunks, c)
+	}
+
+	require.Len(t, chunks, 1)
+	assert.Error(t, chunks[0].Error)
+	assert.Contains(t, chunks[0].Error.Error(), "stream idle timeout")
+}

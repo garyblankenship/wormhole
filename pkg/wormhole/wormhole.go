@@ -64,6 +64,7 @@ type Config struct {
 	EnableDiscovery     bool                      // Whether to enable dynamic model discovery (default: true)
 	Idempotency         *IdempotencyConfig        // Idempotency configuration for duplicate prevention
 	AttemptTrace        AttemptTraceFunc          // Optional per-attempt tracing callback
+	StreamIdleTimeout  time.Duration             // Per-chunk idle timeout for streaming (0 = disabled)
 }
 
 // New creates a new Wormhole instance using functional options

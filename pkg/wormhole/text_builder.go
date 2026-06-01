@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/garyblankenship/wormhole/pkg/types"
 )
@@ -488,13 +489,24 @@ func (b *TextRequestBuilder) streamWithFallback(ctx context.Context, provider ty
 }
 
 func (b *TextRequestBuilder) openStream(ctx context.Context, provider types.Provider, request *types.TextRequest) (<-chan types.StreamChunk, error) {
+	var stream <-chan types.StreamChunk
+	var err error
+
 	if b.getWormhole().providerMiddleware != nil {
 		handler := b.getWormhole().providerMiddleware.ApplyStream(provider.Stream)
-		return handler(ctx, *request)
+		stream, err = handler(ctx, *request)
+	} else {
+		stream, err = provider.Stream(ctx, *request)
+	}
+	if err != nil {
+		return nil, err
 	}
 
-	// No middleware configured, use provider directly
-	return provider.Stream(ctx, *request)
+	// Apply per-chunk idle timeout if configured.
+	if timeout := b.getWormhole().config.StreamIdleTimeout; timeout > 0 {
+		stream = applyStreamIdleTimeout(stream, timeout)
+	}
+	return stream, nil
 }
 
 func forwardStreamWithFirstChunkSafety(ctx context.Context, cancelAttempt context.CancelFunc, out chan<- types.StreamChunk, stream <-chan types.StreamChunk) (emitted bool, retry bool, err error) {
@@ -705,4 +717,43 @@ func (b *TextRequestBuilder) StreamAndAccumulate(ctx context.Context) (<-chan ty
 	}()
 
 	return accumulated, func() string { return builder.String() }, nil
+}
+
+// applyStreamIdleTimeout wraps a provider stream with a per-chunk idle watchdog.
+// If no chunk arrives within timeout, a typed timeout error is emitted and the
+// source channel is drained so the provider goroutine can exit.
+func applyStreamIdleTimeout(src <-chan types.StreamChunk, timeout time.Duration) <-chan types.StreamChunk {
+	out := make(chan types.StreamChunk, cap(src))
+	go func() {
+		defer close(out)
+		timer := time.NewTimer(timeout)
+		defer timer.Stop()
+
+		for {
+			select {
+			case chunk, ok := <-src:
+				if !ok {
+					return
+				}
+				if !timer.Stop() {
+					<-timer.C
+				}
+				timer.Reset(timeout)
+				out <- chunk
+				if chunk.Error != nil {
+					return
+				}
+			case <-timer.C:
+				out <- types.StreamChunk{
+					Error: fmt.Errorf("stream idle timeout: no chunk received within %s", timeout),
+				}
+				go func() {
+					for range src {
+					}
+				}()
+				return
+			}
+		}
+	}()
+	return out
 }
