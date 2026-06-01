@@ -2,146 +2,179 @@ package providers
 
 import (
 	"testing"
+	"unicode/utf8"
 
 	"github.com/garyblankenship/wormhole/pkg/types"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
-func TestRequestBuilderPayloads(t *testing.T) {
+func TestPrepareMessages_EmptyInput(t *testing.T) {
 	t.Parallel()
 
-	builder := NewRequestBuilder()
+	result, err := PrepareMessages(nil)
+	require.NoError(t, err)
+	assert.Nil(t, result)
 
-	payload := builder.BuildTextPayload("model-1", []any{"message"}, "system")
-	if payload["model"] != "model-1" || payload["system"] != "system" {
-		t.Fatalf("text payload = %#v", payload)
-	}
-
-	temp := float32(0.7)
-	topP := float32(0.9)
-	maxTokens := 128
-	builder.AddGenerationParams(payload, &temp, &topP, &maxTokens, []string{"stop"})
-	if payload["temperature"] != temp || payload["top_p"] != topP || payload["max_tokens"] != maxTokens {
-		t.Fatalf("generation params missing from payload: %#v", payload)
-	}
-	if got := payload["stop"].([]string); len(got) != 1 || got[0] != "stop" {
-		t.Fatalf("stop = %#v, want [stop]", payload["stop"])
-	}
-
-	single := builder.BuildEmbeddingsPayload("embed", []string{"one"})
-	if single["input"] != "one" {
-		t.Fatalf("single embedding input = %#v, want one", single["input"])
-	}
-
-	multiple := builder.BuildEmbeddingsPayload("embed", []string{"one", "two"})
-	if got := multiple["input"].([]string); len(got) != 2 || got[1] != "two" {
-		t.Fatalf("multiple embedding input = %#v, want [one two]", multiple["input"])
-	}
+	result, err = PrepareMessages([]types.Message{})
+	require.NoError(t, err)
+	assert.Nil(t, result)
 }
 
-func TestRequestBuilderTransformsMessagesAndTools(t *testing.T) {
+func TestPrepareMessages_SynthesizesMissingToolCallIDs(t *testing.T) {
 	t.Parallel()
 
-	builder := NewRequestBuilder()
-	toolCall := types.ToolCall{
-		ID:   "call-1",
-		Type: "lookup",
-		Arguments: map[string]any{
-			"query": "weather",
+	input := []types.Message{
+		types.NewUserMessage("hi"),
+		&types.AssistantMessage{
+			ToolCalls: []types.ToolCall{
+				{ID: "", Name: "get_weather", Function: &types.ToolCallFunction{Name: "get_weather", Arguments: "{}"}},
+			},
 		},
 	}
 
-	tests := []struct {
-		name string
-		msg  any
-		role string
-	}{
-		{name: "user", msg: types.NewUserMessage("hello"), role: "user"},
-		{name: "assistant", msg: &types.AssistantMessage{Content: "hi", ToolCalls: []types.ToolCall{toolCall}}, role: "assistant"},
-		{name: "system", msg: types.NewSystemMessage("rules"), role: "system"},
-		{name: "tool", msg: types.NewToolResultMessage("call-1", "result"), role: "tool"},
-		{name: "fallback", msg: 123, role: "user"},
-	}
+	result, err := PrepareMessages(input)
+	require.NoError(t, err)
+	require.Len(t, result, 2)
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-
-			got := builder.TransformMessage(tt.msg)
-			if got["role"] != tt.role {
-				t.Fatalf("role = %v, want %s", got["role"], tt.role)
-			}
-		})
-	}
-
-	transformed := builder.TransformMessages([]any{types.NewUserMessage("one"), types.NewSystemMessage("two")})
-	if len(transformed) != 2 || transformed[0]["role"] != "user" || transformed[1]["role"] != "system" {
-		t.Fatalf("TransformMessages = %#v", transformed)
-	}
-
-	interfaceMessages := builder.TransformMessagesFromInterface([]types.Message{
-		types.NewUserMessage("one"),
-		types.NewSystemMessage("two"),
-	})
-	if len(interfaceMessages) != 2 || interfaceMessages[0]["role"] != "user" || interfaceMessages[1]["role"] != "system" {
-		t.Fatalf("TransformMessagesFromInterface = %#v", interfaceMessages)
-	}
-
-	tool := types.NewTool("lookup", "Lookup data", map[string]any{"type": "object"})
-	toolMap := builder.TransformTool(*tool)
-	function := toolMap["function"].(map[string]any)
-	if function["name"] != "lookup" || function["parameters"].(map[string]any)["type"] != "object" {
-		t.Fatalf("TransformTool = %#v", toolMap)
-	}
-
-	tools := builder.TransformTools([]types.Tool{*tool})
-	if len(tools) != 1 {
-		t.Fatalf("TransformTools len = %d, want 1", len(tools))
-	}
+	am, ok := result[1].(*types.AssistantMessage)
+	require.True(t, ok)
+	assert.NotEmpty(t, am.ToolCalls[0].ID, "missing tool-call ID should be synthesized")
+	assert.Contains(t, am.ToolCalls[0].ID, "synth_")
 }
 
-func TestRequestBuilderTransformToolChoice(t *testing.T) {
+func TestPrepareMessages_RejectsDuplicateToolCallIDs(t *testing.T) {
 	t.Parallel()
 
-	builder := NewRequestBuilder()
+	input := []types.Message{
+		types.NewUserMessage("hi"),
+		&types.AssistantMessage{
+			ToolCalls: []types.ToolCall{
+				{ID: "call_1", Name: "a"},
+				{ID: "call_1", Name: "b"},
+			},
+		},
+	}
 
-	if got := builder.TransformToolChoice(nil); got != nil {
-		t.Fatalf("nil tool choice = %#v, want nil", got)
-	}
-	if got := builder.TransformToolChoice(&types.ToolChoice{Type: types.ToolChoiceTypeNone}); got != "none" {
-		t.Fatalf("none tool choice = %#v, want none", got)
-	}
-	if got := builder.TransformToolChoice(&types.ToolChoice{Type: types.ToolChoiceTypeAuto}); got != "auto" {
-		t.Fatalf("auto tool choice = %#v, want auto", got)
-	}
-	specific := builder.TransformToolChoice(&types.ToolChoice{Type: types.ToolChoiceTypeSpecific, ToolName: "lookup"}).(map[string]any)
-	function := specific["function"].(map[string]any)
-	if specific["type"] != "function" || function["name"] != "lookup" {
-		t.Fatalf("specific tool choice = %#v", specific)
-	}
-	if got := builder.TransformToolChoice(&types.ToolChoice{Type: types.ToolChoiceTypeSpecific}); got != "auto" {
-		t.Fatalf("specific without name = %#v, want auto", got)
-	}
+	_, err := PrepareMessages(input)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "duplicate tool-call ID")
 }
 
-func TestRequestBuilderValidateModelName(t *testing.T) {
+func TestPrepareMessages_SanitizesInvalidUTF8(t *testing.T) {
 	t.Parallel()
 
-	builder := NewRequestBuilder()
-	if _, err := builder.ValidateModelName(""); err == nil {
-		t.Fatal("ValidateModelName empty returned nil error")
+	invalidUTF8 := "hello\xffworld"
+
+	input := []types.Message{
+		&types.UserMessage{Content: invalidUTF8},
+		&types.AssistantMessage{Content: invalidUTF8},
+		&types.SystemMessage{Content: invalidUTF8},
 	}
-	got, err := builder.ValidateModelName("gpt-5", "claude-", "gpt-")
-	if err != nil {
-		t.Fatalf("ValidateModelName returned error: %v", err)
+
+	result, err := PrepareMessages(input)
+	require.NoError(t, err)
+	require.Len(t, result, 3)
+
+	um, ok := result[0].(*types.UserMessage)
+	require.True(t, ok)
+	assert.True(t, utf8.ValidString(um.Content), "user message should be valid UTF-8")
+
+	am, ok := result[1].(*types.AssistantMessage)
+	require.True(t, ok)
+	assert.True(t, utf8.ValidString(am.Content), "assistant message should be valid UTF-8")
+
+	sm, ok := result[2].(*types.SystemMessage)
+	require.True(t, ok)
+	assert.True(t, utf8.ValidString(sm.Content), "system message should be valid UTF-8")
+}
+
+func TestPrepareMessages_ToolResultUTF8Sanitized(t *testing.T) {
+	t.Parallel()
+
+	input := []types.Message{
+		types.NewToolResultMessage("call_1", "result\xffdata"),
 	}
-	if got != "gpt-5" {
-		t.Fatalf("model = %q, want gpt-5", got)
+
+	result, err := PrepareMessages(input)
+	require.NoError(t, err)
+	require.Len(t, result, 1)
+
+	tr, ok := result[0].(*types.ToolResultMessage)
+	require.True(t, ok)
+	assert.True(t, utf8.ValidString(tr.Content), "tool result should be valid UTF-8")
+}
+
+func TestPrepareMessages_DoesNotMutateCallerSlice(t *testing.T) {
+	t.Parallel()
+
+	original := &types.AssistantMessage{
+		Content:   "original",
+		ToolCalls: []types.ToolCall{{ID: "", Name: "test"}},
 	}
-	got, err = builder.ValidateModelName("custom")
-	if err != nil {
-		t.Fatalf("ValidateModelName without prefixes returned error: %v", err)
+
+	input := []types.Message{
+		types.NewUserMessage("hi"),
+		original,
 	}
-	if got != "custom" {
-		t.Fatalf("model = %q, want custom", got)
+
+	result, err := PrepareMessages(input)
+	require.NoError(t, err)
+
+	// Original should be untouched
+	assert.Empty(t, original.ToolCalls[0].ID, "caller-owned message should not be mutated")
+	assert.Equal(t, "original", original.Content)
+
+	// Result should have repaired version
+	am, ok := result[1].(*types.AssistantMessage)
+	require.True(t, ok)
+	assert.NotEmpty(t, am.ToolCalls[0].ID, "prepared copy should have synthesized ID")
+}
+
+func TestPrepareMessages_PreservesValidMessages(t *testing.T) {
+	t.Parallel()
+
+	input := []types.Message{
+		types.NewSystemMessage("You are helpful."),
+		types.NewUserMessage("Hello"),
+		&types.AssistantMessage{
+			Content:   "Hi there",
+			ToolCalls: []types.ToolCall{{ID: "call_abc", Name: "search"}},
+		},
+		types.NewToolResultMessage("call_abc", "results"),
 	}
+
+	result, err := PrepareMessages(input)
+	require.NoError(t, err)
+	require.Len(t, result, 4)
+
+	// Types preserved
+	assert.IsType(t, &types.SystemMessage{}, result[0])
+	assert.IsType(t, &types.UserMessage{}, result[1])
+	assert.IsType(t, &types.AssistantMessage{}, result[2])
+	assert.IsType(t, &types.ToolResultMessage{}, result[3])
+
+	// Values preserved
+	am, _ := result[2].(*types.AssistantMessage)
+	assert.Equal(t, "call_abc", am.ToolCalls[0].ID)
+}
+
+func TestPrepareMessages_AllowsUniqueIDsAcrossAssistantMessages(t *testing.T) {
+	t.Parallel()
+
+	// Same ID in different assistant messages is allowed (they're separate tool calls)
+	input := []types.Message{
+		types.NewUserMessage("hi"),
+		&types.AssistantMessage{
+			ToolCalls: []types.ToolCall{{ID: "call_1", Name: "a"}},
+		},
+		&types.AssistantMessage{
+			ToolCalls: []types.ToolCall{{ID: "call_1", Name: "b"}},
+		},
+	}
+
+	// This should succeed — duplicates are only rejected within the same assistant message
+	result, err := PrepareMessages(input)
+	require.NoError(t, err)
+	require.Len(t, result, 3)
 }

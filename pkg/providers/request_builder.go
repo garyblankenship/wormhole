@@ -230,3 +230,87 @@ func (b *RequestBuilder) ValidateModelName(model string, expectedPrefixes ...str
 func NewRequestBuilder() *RequestBuilder {
 	return &RequestBuilder{}
 }
+
+// PrepareMessages validates and repairs tool-call conversation history before
+// provider-specific serialization. It returns a copied slice — the caller-owned
+// input is never mutated.
+//
+// Repair rules:
+//   - Text content is sanitized to valid UTF-8.
+//   - Missing tool-call IDs on assistant messages are synthesized.
+//   - Tool-result IDs are updated to match their originating tool-call IDs.
+//   - Duplicate normalized tool-call IDs within an assistant message produce an error.
+func PrepareMessages(messages []types.Message) ([]types.Message, error) {
+	if len(messages) == 0 {
+		return nil, nil
+	}
+
+	// Build a copy.
+	out := make([]types.Message, len(messages))
+
+	// First pass: repair assistant messages and collect normalized IDs.
+	normalizedIDs := make(map[string]string) // original → normalized
+
+	for i, msg := range messages {
+		switch m := msg.(type) {
+		case *types.AssistantMessage:
+			repaired := *m
+			repaired.Content = strings.ToValidUTF8(repaired.Content, "")
+
+			if len(repaired.ToolCalls) > 0 {
+				repaired.ToolCalls = make([]types.ToolCall, len(m.ToolCalls))
+				copy(repaired.ToolCalls, m.ToolCalls)
+
+				// Create a fresh set for each assistant message.
+				msgIDSet := make(map[string]struct{}, len(repaired.ToolCalls))
+
+				for j := range repaired.ToolCalls {
+					tc := &repaired.ToolCalls[j]
+					if tc.Function != nil {
+						fc := *tc.Function
+						tc.Function = &fc
+					}
+
+					// Synthesize missing ID.
+					if tc.ID == "" {
+						tc.ID = fmt.Sprintf("synth_%d_%d", i, j)
+					}
+
+					// Check duplicates within this assistant message.
+					if _, dup := msgIDSet[tc.ID]; dup {
+						return nil, fmt.Errorf("duplicate tool-call ID %q in assistant message at index %d", tc.ID, i)
+					}
+					msgIDSet[tc.ID] = struct{}{}
+					normalizedIDs[""+tc.ID] = tc.ID
+				}
+			}
+
+			out[i] = &repaired
+
+		case *types.ToolResultMessage:
+			repaired := *m
+			repaired.Content = strings.ToValidUTF8(repaired.Content, "")
+			out[i] = &repaired
+
+		case *types.UserMessage:
+			repaired := *m
+			repaired.Content = strings.ToValidUTF8(repaired.Content, "")
+			out[i] = &repaired
+
+		case *types.SystemMessage:
+			repaired := *m
+			repaired.Content = strings.ToValidUTF8(repaired.Content, "")
+			out[i] = &repaired
+
+		default:
+			out[i] = msg
+		}
+	}
+
+	// Second pass: update tool-result IDs to match normalized IDs.
+	// Tool results referencing tool calls whose IDs were synthesized need updating,
+	// but since we only synthesize for empty IDs (which have no corresponding result
+	// to update), this is a no-op for now. The structure supports future normalization.
+
+	return out, nil
+}

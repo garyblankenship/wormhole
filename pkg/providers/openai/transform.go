@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/garyblankenship/wormhole/internal/utils"
+	"github.com/garyblankenship/wormhole/pkg/providers"
 	providerTransform "github.com/garyblankenship/wormhole/pkg/providers/transform"
 	"github.com/garyblankenship/wormhole/pkg/types"
 )
@@ -15,9 +16,13 @@ const toolChoiceAuto = "auto"
 
 // buildChatPayload builds the OpenAI chat completion payload
 func (p *Provider) buildChatPayload(request *types.TextRequest) map[string]any {
+	prepared, err := providers.PrepareMessages(request.Messages)
+	if err != nil {
+		prepared = request.Messages // fall through; provider will surface the issue
+	}
 	payload := map[string]any{
 		"model":    request.Model,
-		"messages": p.transformMessages(request.Messages),
+		"messages": p.transformMessages(prepared),
 	}
 
 	// Add generation parameters

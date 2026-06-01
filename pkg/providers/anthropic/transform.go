@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/garyblankenship/wormhole/internal/utils"
+	"github.com/garyblankenship/wormhole/pkg/providers"
 	providerTransform "github.com/garyblankenship/wormhole/pkg/providers/transform"
 	"github.com/garyblankenship/wormhole/pkg/types"
 )
@@ -21,9 +22,13 @@ const roleUser = "user"
 
 // buildMessagePayload builds the Anthropic messages API payload
 func (p *Provider) buildMessagePayload(request *types.TextRequest) map[string]any {
+	prepared, err := providers.PrepareMessages(request.Messages)
+	if err != nil {
+		prepared = request.Messages
+	}
 	payload := map[string]any{
 		"model":    request.Model,
-		"messages": p.transformMessages(request.Messages),
+		"messages": p.transformMessages(prepared),
 	}
 
 	// Add system prompt if present. Anthropic requires system content in the

@@ -158,7 +158,11 @@ func (g *Gemini) Images(ctx context.Context, request types.ImagesRequest) (*type
 
 // buildTextPayload builds the request payload for text generation
 func (g *Gemini) buildTextPayload(request types.TextRequest) (map[string]any, error) {
-	contents, err := g.transformMessages(request.Messages)
+	prepared, prepareErr := providers.PrepareMessages(request.Messages)
+	if prepareErr != nil {
+		prepared = request.Messages
+	}
+	contents, err := g.transformMessages(prepared)
 	if err != nil {
 		return nil, err
 	}
