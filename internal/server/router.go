@@ -1,19 +1,22 @@
 package server
 
-import "strings"
+import (
+	"strings"
 
-// knownProviders lists provider names recognized for prefix routing.
-var knownProviders = map[string]bool{
-	"openai":     true,
-	"anthropic":  true,
-	"gemini":     true,
-	"ollama":     true,
-	"openrouter": true,
-	"groq":       true,
-	"mistral":    true,
-	"lmstudio":   true,
-	"vllm":       true,
-}
+	"github.com/garyblankenship/wormhole/pkg/wormhole"
+)
+
+// knownProviderSet is initialized once from embedded provider profiles.
+// Adding a provider to provider_profiles.json makes it available as a
+// proxy route prefix without editing this file.
+var knownProviderSet = func() map[string]bool {
+	names := wormhole.KnownProviderNames()
+	m := make(map[string]bool, len(names))
+	for _, n := range names {
+		m[n] = true
+	}
+	return m
+}()
 
 // parseModelRoute splits a model string like "anthropic/claude-sonnet-4-5"
 // into (provider, model). If no known provider prefix, returns ("", fullModel).
@@ -23,7 +26,7 @@ func parseModelRoute(model string) (provider, resolved string) {
 		return "", model
 	}
 	prefix := model[:idx]
-	if knownProviders[prefix] {
+	if knownProviderSet[prefix] {
 		return prefix, model[idx+1:]
 	}
 	return "", model

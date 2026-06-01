@@ -52,6 +52,9 @@ func TestParseModelRoute(t *testing.T) {
 		{name: "no prefix", model: "gpt-5.2", wantModel: "gpt-5.2"},
 		{name: "known provider prefix", model: "anthropic/claude-sonnet-4-5", wantProvider: "anthropic", wantModel: "claude-sonnet-4-5"},
 		{name: "unknown slash prefix remains model", model: "custom/model", wantModel: "custom/model"},
+		{name: "ollama-openai profile prefix routes", model: "ollama-openai/llama3", wantProvider: "ollama-openai", wantModel: "llama3"},
+		{name: "groq profile prefix routes", model: "groq/llama3", wantProvider: "groq", wantModel: "llama3"},
+		{name: "openrouter profile prefix routes", model: "openrouter/anthropic/claude-sonnet-4-5", wantProvider: "openrouter", wantModel: "anthropic/claude-sonnet-4-5"},
 	}
 
 	for _, tt := range tests {
@@ -62,6 +65,25 @@ func TestParseModelRoute(t *testing.T) {
 			assert.Equal(t, tt.wantModel, gotModel)
 		})
 	}
+}
+
+// TestKnownProviderSetMatchesProfiles verifies that the router's known provider
+// set is derived from provider_profiles.json, not a hardcoded map.
+func TestKnownProviderSetMatchesProfiles(t *testing.T) {
+	names := wormhole.KnownProviderNames()
+	require.NotEmpty(t, names, "expected provider profiles")
+
+	// Every profile name must be routable
+	for _, name := range names {
+		provider, model := parseModelRoute(name + "/test-model")
+		assert.Equal(t, name, provider, "profile %q should be a routable prefix", name)
+		assert.Equal(t, "test-model", model, "model should be %q for prefix %q", "test-model", name)
+	}
+
+	// Unknown prefixes must not route
+	provider, model := parseModelRoute("notaprovider/foo")
+	assert.Empty(t, provider, "unknown prefix should not route")
+	assert.Equal(t, "notaprovider/foo", model, "unknown prefix should passthrough as full model")
 }
 
 func TestProxyHealthAndAuth(t *testing.T) {

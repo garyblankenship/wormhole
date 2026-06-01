@@ -43,6 +43,17 @@ var providerProfiles struct {
 	err  error
 }
 
+// KnownProviderNames returns the names of all built-in provider profiles, sorted alphabetically.
+// This is the authoritative list of provider names for prefix routing and validation.
+func KnownProviderNames() []string {
+	profiles, _ := loadProviderProfiles()
+	names := make([]string, len(profiles))
+	for i, p := range profiles {
+		names[i] = p.Name
+	}
+	return names
+}
+
 // KnownProviderProfiles returns all built-in provider profiles sorted by name.
 func KnownProviderProfiles() []ProviderProfile {
 	profiles, _ := loadProviderProfiles()
