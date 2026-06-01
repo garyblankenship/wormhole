@@ -440,11 +440,25 @@ func (b *TextRequestBuilder) streamWithFallback(ctx context.Context, provider ty
 				Stream:    true,
 				Error:     err,
 			})
+			wormhole.emitStreamEvent(ctx, StreamEvent{
+				Type:     StreamError,
+				Provider: provider.Name(),
+				Model:    model,
+				Attempt:  attempt + 1,
+				Error:    err,
+			})
 			if ctx.Err() != nil {
 				return
 			}
 			continue
 		}
+
+		wormhole.emitStreamEvent(ctx, StreamEvent{
+			Type:     StreamStarted,
+			Provider: provider.Name(),
+			Model:    model,
+			Attempt:  attempt + 1,
+		})
 
 		emitted, retry, err := forwardStreamWithFirstChunkSafety(ctx, cancelAttempt, out, stream)
 		cancelAttempt()
@@ -460,8 +474,14 @@ func (b *TextRequestBuilder) streamWithFallback(ctx context.Context, provider ty
 				Stream:    true,
 				Error:     err,
 			})
-		}
-		if emitted {
+			wormhole.emitStreamEvent(ctx, StreamEvent{
+				Type:     StreamError,
+				Provider: provider.Name(),
+				Model:    model,
+				Attempt:  attempt + 1,
+				Error:    err,
+			})
+		} else if emitted {
 			wormhole.emitAttempt(ctx, AttemptEvent{
 				Operation: "text.stream",
 				Phase:     AttemptSuccess,
@@ -470,6 +490,12 @@ func (b *TextRequestBuilder) streamWithFallback(ctx context.Context, provider ty
 				Attempt:   attempt + 1,
 				Fallback:  attempt > 0,
 				Stream:    true,
+			})
+			wormhole.emitStreamEvent(ctx, StreamEvent{
+				Type:     StreamEnded,
+				Provider: provider.Name(),
+				Model:    model,
+				Attempt:  attempt + 1,
 			})
 		}
 		if emitted || !retry {
@@ -485,6 +511,10 @@ func (b *TextRequestBuilder) streamWithFallback(ctx context.Context, provider ty
 	}
 	sendStreamChunk(ctx, out, types.StreamChunk{
 		Error: fmt.Errorf("all stream attempts failed before emitting a chunk: %s", strings.Join(failures, "; ")),
+	})
+	wormhole.emitStreamEvent(ctx, StreamEvent{
+		Type:  StreamError,
+		Error: fmt.Errorf("all stream attempts failed: %s", strings.Join(failures, "; ")),
 	})
 }
 

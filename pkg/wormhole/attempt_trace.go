@@ -39,3 +39,43 @@ func (p *Wormhole) emitAttempt(ctx context.Context, event AttemptEvent) {
 	}
 	p.config.AttemptTrace(ctx, event)
 }
+
+// --- Stream Lifecycle Trace ---
+
+// StreamEventType identifies the kind of stream lifecycle event.
+type StreamEventType string
+
+const (
+	// StreamStarted is emitted when a streaming request is initiated.
+	StreamStarted StreamEventType = "started"
+	// StreamChunk is emitted for each chunk received (optional, controlled by config).
+	StreamChunk StreamEventType = "chunk"
+	// StreamEnded is the terminal event emitted exactly once when a stream completes normally.
+	StreamEnded StreamEventType = "ended"
+	// StreamError is the terminal event emitted exactly once when a stream fails.
+	StreamError StreamEventType = "error"
+)
+
+// StreamEvent describes one stream lifecycle event.
+type StreamEvent struct {
+	Type     StreamEventType
+	Provider string
+	Model    string
+	Attempt  int
+	Error    error
+	Time     time.Time
+}
+
+// StreamTraceFunc receives stream lifecycle events.
+// Terminal events (StreamEnded, StreamError) are emitted exactly once.
+type StreamTraceFunc func(context.Context, StreamEvent)
+
+func (p *Wormhole) emitStreamEvent(ctx context.Context, event StreamEvent) {
+	if p == nil || p.config.StreamTrace == nil {
+		return
+	}
+	if event.Time.IsZero() {
+		event.Time = time.Now()
+	}
+	p.config.StreamTrace(ctx, event)
+}

@@ -3,6 +3,7 @@ package wormhole
 import (
 	"context"
 	"errors"
+	"sync"
 	"testing"
 
 	whtest "github.com/garyblankenship/wormhole/pkg/testing"
@@ -71,5 +72,174 @@ func TestAttemptTraceRecordsStreamSuccess(t *testing.T) {
 	}
 	if len(events) != 2 || !events[0].Stream || events[1].Phase != AttemptSuccess {
 		t.Fatalf("events = %#v", events)
+	}
+}
+
+func TestStreamTraceSuccessPath(t *testing.T) {
+	t.Parallel()
+
+	var events []StreamEvent
+	mock := whtest.NewMockProvider("mock").WithStreamChunks(whtest.StreamChunksFrom("hello"))
+	client := New(
+		WithDefaultProvider("mock"),
+		WithCustomProvider("mock", whtest.MockProviderFactory(mock)),
+		WithProviderConfig("mock", types.ProviderConfig{}),
+		WithStreamTrace(func(_ context.Context, event StreamEvent) {
+			events = append(events, event)
+		}),
+		WithDiscovery(false),
+	)
+
+	stream, err := client.Text().Model("test-model").Prompt("hi").Stream(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := whtest.CollectStreamText(context.Background(), stream); err != nil {
+		t.Fatal(err)
+	}
+
+	// Expect: started + ended
+	if len(events) != 2 {
+		t.Fatalf("expected 2 events, got %d: %#v", len(events), events)
+	}
+	if events[0].Type != StreamStarted {
+		t.Fatalf("first event = %q, want started", events[0].Type)
+	}
+	if events[1].Type != StreamEnded {
+		t.Fatalf("last event = %q, want ended", events[1].Type)
+	}
+	if events[0].Provider != "mock" || events[0].Model != "test-model" {
+		t.Fatalf("started event = %#v", events[0])
+	}
+}
+
+func TestStreamTraceErrorPath(t *testing.T) {
+	t.Parallel()
+
+	var events []StreamEvent
+	mock := whtest.NewMockProvider("mock").WithStreamChunks([]types.TextChunk{
+		{Text: "partial"},
+		{Error: errors.New("stream broke")},
+	})
+	client := New(
+		WithDefaultProvider("mock"),
+		WithCustomProvider("mock", whtest.MockProviderFactory(mock)),
+		WithProviderConfig("mock", types.ProviderConfig{}),
+		WithStreamTrace(func(_ context.Context, event StreamEvent) {
+			events = append(events, event)
+		}),
+		WithDiscovery(false),
+	)
+
+	stream, err := client.Text().Model("test-model").Prompt("hi").Stream(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Drain stream to trigger error
+	for range stream {
+	}
+
+	// Expect: started + error (terminal from chunk error)
+	if len(events) != 2 {
+		t.Fatalf("expected 2 events, got %d: %#v", len(events), events)
+	}
+	if events[0].Type != StreamStarted {
+		t.Fatalf("first event = %q, want started", events[0].Type)
+	}
+	if events[1].Type != StreamError {
+		t.Fatalf("last event = %q, want error", events[1].Type)
+	}
+	if events[1].Error == nil {
+		t.Fatal("expected error in StreamError event")
+	}
+}
+
+func TestStreamTraceContextCancellation(t *testing.T) {
+	parallel := true
+	_ = parallel
+	t.Parallel()
+
+	var mu sync.Mutex
+	var events []StreamEvent
+	recordEvent := func(_ context.Context, event StreamEvent) {
+		mu.Lock()
+		events = append(events, event)
+		mu.Unlock()
+	}
+
+	// Stream that blocks forever — we'll cancel the context
+	mock := whtest.NewMockProvider("mock").WithStreamChunks([]types.TextChunk{
+		{Text: "first"},
+	})
+	client := New(
+		WithDefaultProvider("mock"),
+		WithCustomProvider("mock", whtest.MockProviderFactory(mock)),
+		WithProviderConfig("mock", types.ProviderConfig{}),
+		WithStreamTrace(recordEvent),
+		WithDiscovery(false),
+	)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	stream, err := client.Text().Model("test").Prompt("hi").Stream(ctx)
+	if err != nil {
+		cancel()
+		t.Fatal(err)
+	}
+	// Read one chunk then cancel
+	for range stream {
+		cancel()
+		break
+	}
+
+	mu.Lock()
+	defer mu.Unlock()
+	// At least StreamStarted should have fired
+	if len(events) == 0 {
+		t.Fatal("expected at least StreamStarted event")
+	}
+	if events[0].Type != StreamStarted {
+		t.Fatalf("first event = %q, want started", events[0].Type)
+	}
+}
+
+func TestStreamTraceNoDuplicateTerminal(t *testing.T) {
+	t.Parallel()
+
+	var mu sync.Mutex
+	var events []StreamEvent
+	recordEvent := func(_ context.Context, event StreamEvent) {
+		mu.Lock()
+		events = append(events, event)
+		mu.Unlock()
+	}
+
+	mock := whtest.NewMockProvider("mock").WithStreamChunks(whtest.StreamChunksFrom("hello"))
+	client := New(
+		WithDefaultProvider("mock"),
+		WithCustomProvider("mock", whtest.MockProviderFactory(mock)),
+		WithProviderConfig("mock", types.ProviderConfig{}),
+		WithStreamTrace(recordEvent),
+		WithDiscovery(false),
+	)
+
+	stream, err := client.Text().Model("test").Prompt("hi").Stream(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Drain fully
+	for range stream {
+	}
+
+	mu.Lock()
+	defer mu.Unlock()
+	// Count terminal events
+	var terminal int
+	for _, e := range events {
+		if e.Type == StreamEnded || e.Type == StreamError {
+			terminal++
+		}
+	}
+	if terminal != 1 {
+		t.Fatalf("expected exactly 1 terminal event, got %d: %#v", terminal, events)
 	}
 }

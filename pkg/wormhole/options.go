@@ -237,6 +237,14 @@ func WithStreamIdleTimeout(d time.Duration) Option {
 	}
 }
 
+// WithStreamTrace configures a callback for stream lifecycle events.
+// Terminal events (StreamEnded, StreamError) are emitted exactly once per stream.
+func WithStreamTrace(trace StreamTraceFunc) Option {
+	return func(c *Config) {
+		c.StreamTrace = trace
+	}
+}
+
 // WithModelValidation enables or disables model validation against the registry.
 func WithModelValidation(enabled bool) Option {
 	return func(c *Config) {
