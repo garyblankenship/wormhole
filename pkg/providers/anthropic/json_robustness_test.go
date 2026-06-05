@@ -9,6 +9,7 @@ import (
 // TestJSONRobustness tests that the Anthropic provider can handle
 // tool call arguments that contain regex patterns and escaped strings
 func TestJSONRobustness(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name          string
 		toolArguments string
@@ -67,6 +68,7 @@ func TestJSONRobustness(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			var data map[string]any
 			err := utils.UnmarshalAnthropicToolArgs(tt.toolArguments, &data)
 
@@ -94,6 +96,7 @@ func TestJSONRobustness(t *testing.T) {
 
 // TestJSONRobustness_Benchmarks ensures our JSON parsing doesn't have performance issues
 func TestJSONRobustness_Benchmarks(t *testing.T) {
+	t.Parallel()
 	// Test with a complex real-world example
 	complexArgs := `{
 		"enhanced_prompt": "You are a template generation system. Execute these steps sequentially:\\n\\n1. WORD COUNT: Tokenize user input on whitespace (regex: \\\\s+). Count non-empty tokens. Store as integer N.\\n\\n2. CLASSIFICATION: Assign tier based on N:\\n   - SIMPLE: N ∈ [0,10]\\n   - MEDIUM: N ∈ [11,30]\\n   - COMPLEX: N ≥ 31\\nOverride to COMPLEX if: code blocks > 50 chars OR technical specs detected (regex: \\\\b(API|SQL|JSON|XML)\\\\b)\\n\\n3. SPECIAL CASES:\\n   - Empty input → Return \\\"Please provide input text\\\" + set tier=SIMPLE\\n   - Match \\\"tell me a joke\\\" (case-insensitive) → Return exactly: \\\"Role: Stand-up comedian\\\\nObjective: Deliver humor\\\\nFormat: [Setup] ... [Punchline]\\\"",

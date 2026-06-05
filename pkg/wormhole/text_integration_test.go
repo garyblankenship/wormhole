@@ -21,6 +21,7 @@ func TestOpenAIIntegration_TextGeneration(t *testing.T) {
 	testutil.SetupTestModels(t)
 
 	t.Run("successful text generation", func(t *testing.T) {
+		t.Parallel()
 		server := testutil.MockOpenAIServer(t, func(w http.ResponseWriter, r *http.Request) {
 			// Verify request method and path
 			assert.Equal(t, "POST", r.Method)
@@ -107,6 +108,7 @@ func TestOpenAIIntegration_TextGeneration(t *testing.T) {
 	})
 
 	t.Run("with system message", func(t *testing.T) {
+		t.Parallel()
 		server := testutil.MockOpenAIServer(t, func(w http.ResponseWriter, r *http.Request) {
 			body, err := io.ReadAll(r.Body)
 			require.NoError(t, err)
@@ -173,6 +175,7 @@ func TestOpenAIIntegration_TextGeneration(t *testing.T) {
 	})
 
 	t.Run("with multiple messages", func(t *testing.T) {
+		t.Parallel()
 		server := testutil.MockOpenAIServer(t, func(w http.ResponseWriter, r *http.Request) {
 			body, err := io.ReadAll(r.Body)
 			require.NoError(t, err)
@@ -253,6 +256,7 @@ func TestOpenAIIntegration_FunctionCalling(t *testing.T) {
 	testutil.SetupTestModels(t)
 
 	t.Run("function call request and response", func(t *testing.T) {
+		t.Parallel()
 		server := testutil.MockOpenAIServer(t, func(w http.ResponseWriter, r *http.Request) {
 			body, err := io.ReadAll(r.Body)
 			require.NoError(t, err)

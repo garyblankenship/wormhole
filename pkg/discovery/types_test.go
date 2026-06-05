@@ -8,6 +8,7 @@ import (
 )
 
 func TestDefaultConfig(t *testing.T) {
+	t.Parallel()
 	cfg := DefaultConfig()
 
 	assert.Equal(t, 24*time.Hour, cfg.CacheTTL)

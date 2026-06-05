@@ -35,6 +35,7 @@ func markerMiddleware(t *testing.T, wantModel string) Middleware {
 }
 
 func TestLegacyAdapterApplyMethods(t *testing.T) {
+	t.Parallel()
 	adapter := NewLegacyAdapter(markerMiddleware(t, "test-model"))
 	ctx := context.Background()
 
@@ -80,6 +81,7 @@ func TestLegacyAdapterApplyMethods(t *testing.T) {
 }
 
 func TestLegacyAdapterReturnsMiddlewareError(t *testing.T) {
+	t.Parallel()
 	wantErr := errors.New("middleware failed")
 	adapter := NewLegacyAdapter(func(next Handler) Handler {
 		return func(ctx context.Context, req any) (any, error) {
@@ -97,6 +99,7 @@ func TestLegacyAdapterReturnsMiddlewareError(t *testing.T) {
 }
 
 func TestCircuitBreaker(t *testing.T) {
+	t.Parallel()
 	cb := NewCircuitBreaker(2, time.Millisecond)
 	require.Equal(t, StateClosed, cb.GetState())
 
@@ -130,6 +133,7 @@ func TestCircuitBreaker(t *testing.T) {
 }
 
 func TestCircuitBreakerMiddleware(t *testing.T) {
+	t.Parallel()
 	mw := CircuitBreakerMiddleware(1, time.Hour)
 	handler := mw(func(ctx context.Context, req any) (any, error) {
 		return nil, errors.New("failed")

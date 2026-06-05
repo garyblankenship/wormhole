@@ -11,6 +11,7 @@ import (
 )
 
 func TestHealthCheckerStatusAndProviders(t *testing.T) {
+	t.Parallel()
 	checker := NewHealthChecker(time.Hour)
 	checker.SetCheckFunction(func(ctx context.Context, provider string) error {
 		if provider == "bad" {
@@ -43,6 +44,7 @@ func TestHealthCheckerStatusAndProviders(t *testing.T) {
 }
 
 func TestHealthCheckMiddleware(t *testing.T) {
+	t.Parallel()
 	checker := NewHealthChecker(time.Hour)
 	provider := "openai"
 

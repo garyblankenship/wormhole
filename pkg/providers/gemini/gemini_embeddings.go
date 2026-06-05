@@ -36,10 +36,7 @@ func (g *Gemini) Embeddings(ctx context.Context, request types.EmbeddingsRequest
 		return nil, err
 	}
 
-	resp, err := g.transformEmbeddingsResponse(&response)
-	if err != nil {
-		return nil, err
-	}
+	resp := g.transformEmbeddingsResponse(&response)
 	resp.Provider = g.Name()
 	return resp, nil
 }

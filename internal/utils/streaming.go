@@ -3,6 +3,7 @@ package utils
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -182,33 +183,15 @@ func (p *SSEParser) hasEventData(event *SSEEvent) bool {
 	return event.Data != "" || event.Event != ""
 }
 
-// parseField parses a field line and updates the event
+// parseField parses a field line and updates the event via the shared
+// parseSSEField helper (single source of truth for SSE field semantics).
 func (p *SSEParser) parseField(line []byte, event *SSEEvent) error {
-	parts := bytes.SplitN(line, []byte(":"), 2)
-	if len(parts) < 2 {
+	if !bytes.Contains(line, []byte(":")) {
 		return fmt.Errorf("invalid field format")
 	}
 
-	field := strings.TrimSpace(string(parts[0]))
-	value := strings.TrimSpace(string(parts[1]))
-
-	p.applyField(field, value, event)
+	parseSSEField(string(line), event)
 	return nil
-}
-
-// applyField applies a parsed field to the event
-func (p *SSEParser) applyField(field, value string, event *SSEEvent) {
-	switch field {
-	case "event":
-		event.Event = value
-	case "data":
-		if event.Data != "" {
-			event.Data += "\n"
-		}
-		event.Data += value
-	case "id":
-		event.ID = value
-	}
 }
 
 // StreamProcessor processes streaming responses from providers
@@ -225,15 +208,21 @@ func NewStreamProcessor(r io.Reader, transformer func([]byte) (*types.TextChunk,
 	}
 }
 
-// Process processes the stream and sends chunks to the channel
-func (p *StreamProcessor) Process(chunks chan<- types.TextChunk) {
+// Process processes the stream and sends chunks to the channel.
+// Every send is guarded by ctx.Done() so the goroutine exits if the
+// consumer stops reading (otherwise the send blocks forever, holding
+// the upstream body open).
+func (p *StreamProcessor) Process(ctx context.Context, chunks chan<- types.TextChunk) {
 	defer close(chunks)
 
 	for {
 		event, err := p.parser.Parse()
 		if err != nil {
 			if err != io.EOF {
-				chunks <- types.TextChunk{Error: err}
+				select {
+				case chunks <- types.TextChunk{Error: err}:
+				case <-ctx.Done():
+				}
 			}
 			return
 		}
@@ -251,19 +240,28 @@ func (p *StreamProcessor) Process(chunks chan<- types.TextChunk) {
 		// Transform the data
 		chunk, err := p.transformer([]byte(event.Data))
 		if err != nil {
-			chunks <- types.TextChunk{Error: fmt.Errorf("failed to parse chunk: %w", err)}
+			select {
+			case chunks <- types.TextChunk{Error: fmt.Errorf("failed to parse chunk: %w", err)}:
+			case <-ctx.Done():
+			}
 			return
 		}
 
 		if chunk != nil {
-			chunks <- *chunk
+			select {
+			case chunks <- *chunk:
+			case <-ctx.Done():
+				return
+			}
 		}
 	}
 }
 
 // ProcessStream creates and processes a stream in a goroutine, returning the channel
-// This is a convenience function that combines channel creation, goroutine launch, and processing
+// This is a convenience function that combines channel creation, goroutine launch, and processing.
+// ctx cancellation unblocks the producer goroutine's sends and lets the body close.
 func ProcessStream(
+	ctx context.Context,
 	body io.ReadCloser,
 	transformer func([]byte) (*types.TextChunk, error),
 	bufferSize int,
@@ -274,7 +272,7 @@ func ProcessStream(
 			_ = body.Close()
 		}()
 		processor := NewStreamProcessor(body, transformer)
-		processor.Process(chunks)
+		processor.Process(ctx, chunks)
 	}()
 	return chunks
 }
@@ -294,16 +292,17 @@ func (e *StreamIdleTimeoutError) Error() string {
 // When the watchdog fires, a single timeout error chunk is emitted and the source
 // channel is drained to ensure the body-closing goroutine can exit.
 func ProcessStreamWithIdleTimeout(
+	ctx context.Context,
 	body io.ReadCloser,
 	transformer func([]byte) (*types.TextChunk, error),
 	bufferSize int,
 	timeout time.Duration,
 ) <-chan types.TextChunk {
 	if timeout <= 0 {
-		return ProcessStream(body, transformer, bufferSize)
+		return ProcessStream(ctx, body, transformer, bufferSize)
 	}
 
-	src := ProcessStream(body, transformer, bufferSize)
+	src := ProcessStream(ctx, body, transformer, bufferSize)
 	out := make(chan types.TextChunk, bufferSize)
 
 	go func() {

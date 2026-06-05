@@ -10,7 +10,9 @@ import (
 )
 
 func TestGeminiProvider_MessageTransformations(t *testing.T) {
+	t.Parallel()
 	t.Run("UserMessage with text", func(t *testing.T) {
+		t.Parallel()
 		msg := types.NewUserMessage("Hello, world!")
 
 		// We test this indirectly by checking the request structure
@@ -20,6 +22,7 @@ func TestGeminiProvider_MessageTransformations(t *testing.T) {
 	})
 
 	t.Run("UserMessage with media", func(t *testing.T) {
+		t.Parallel()
 		imageData := []byte("fake image data")
 		media := &types.ImageMedia{
 			MimeType: "image/jpeg",
@@ -38,6 +41,7 @@ func TestGeminiProvider_MessageTransformations(t *testing.T) {
 	})
 
 	t.Run("AssistantMessage with tool calls", func(t *testing.T) {
+		t.Parallel()
 		msg := &types.AssistantMessage{
 			Content: "I'll help you with that.",
 			ToolCalls: []types.ToolCall{
@@ -59,6 +63,7 @@ func TestGeminiProvider_MessageTransformations(t *testing.T) {
 	})
 
 	t.Run("ToolResultMessage", func(t *testing.T) {
+		t.Parallel()
 		msg := &types.ToolResultMessage{
 			ToolCallID: "call_123",
 			Content:    "Weather: 22°C, sunny",
@@ -71,7 +76,9 @@ func TestGeminiProvider_MessageTransformations(t *testing.T) {
 }
 
 func TestGeminiProvider_MediaTransformation(t *testing.T) {
+	t.Parallel()
 	t.Run("ImageMedia with base64 data", func(t *testing.T) {
+		t.Parallel()
 		imageData := []byte("fake image data")
 		media := &types.ImageMedia{
 			MimeType: "image/jpeg",
@@ -88,6 +95,7 @@ func TestGeminiProvider_MediaTransformation(t *testing.T) {
 	})
 
 	t.Run("ImageMedia with URL should be rejected", func(t *testing.T) {
+		t.Parallel()
 		media := &types.ImageMedia{
 			MimeType: "image/jpeg",
 			URL:      "https://example.com/image.jpg",
@@ -99,6 +107,7 @@ func TestGeminiProvider_MediaTransformation(t *testing.T) {
 	})
 
 	t.Run("DocumentMedia", func(t *testing.T) {
+		t.Parallel()
 		docData := []byte("fake document content")
 		media := &types.DocumentMedia{
 			MimeType: "application/pdf",
@@ -114,7 +123,9 @@ func TestGeminiProvider_MediaTransformation(t *testing.T) {
 }
 
 func TestGeminiProvider_ToolTransformation(t *testing.T) {
+	t.Parallel()
 	t.Run("Basic tool", func(t *testing.T) {
+		t.Parallel()
 		tool := types.NewTool(
 			"get_weather",
 			"Get current weather information",
@@ -150,6 +161,7 @@ func TestGeminiProvider_ToolTransformation(t *testing.T) {
 	})
 
 	t.Run("Tool with complex schema", func(t *testing.T) {
+		t.Parallel()
 		tool := types.NewTool(
 			"analyze_data",
 			"Analyze complex data structures",
@@ -203,6 +215,7 @@ func TestGeminiProvider_ToolTransformation(t *testing.T) {
 }
 
 func TestGeminiProvider_ToolChoiceTransformation(t *testing.T) {
+	t.Parallel()
 	testCases := []struct {
 		name     string
 		choice   *types.ToolChoice
@@ -263,6 +276,7 @@ func TestGeminiProvider_ToolChoiceTransformation(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			// We test this behavior indirectly through the request structure
 			// in the main integration tests. Here we verify the structure
 			// of the choice objects themselves.
@@ -278,7 +292,9 @@ func TestGeminiProvider_ToolChoiceTransformation(t *testing.T) {
 }
 
 func TestGeminiProvider_SchemaTransformation(t *testing.T) {
+	t.Parallel()
 	t.Run("Simple object schema", func(t *testing.T) {
+		t.Parallel()
 		schema := map[string]any{
 			"type": "object",
 			"properties": map[string]any{
@@ -318,6 +334,7 @@ func TestGeminiProvider_SchemaTransformation(t *testing.T) {
 	})
 
 	t.Run("Array schema", func(t *testing.T) {
+		t.Parallel()
 		schema := map[string]any{
 			"type": "array",
 			"items": map[string]any{
@@ -342,6 +359,7 @@ func TestGeminiProvider_SchemaTransformation(t *testing.T) {
 	})
 
 	t.Run("Enum schema", func(t *testing.T) {
+		t.Parallel()
 		schema := map[string]any{
 			"type":        "string",
 			"enum":        []any{"red", "green", "blue"},
@@ -359,6 +377,7 @@ func TestGeminiProvider_SchemaTransformation(t *testing.T) {
 	})
 
 	t.Run("String schema with constraints", func(t *testing.T) {
+		t.Parallel()
 		schema := map[string]any{
 			"type":      "string",
 			"minLength": 1,
@@ -373,6 +392,7 @@ func TestGeminiProvider_SchemaTransformation(t *testing.T) {
 	})
 
 	t.Run("Number schema with constraints", func(t *testing.T) {
+		t.Parallel()
 		schema := map[string]any{
 			"type":    "number",
 			"minimum": -100.5,
@@ -386,7 +406,9 @@ func TestGeminiProvider_SchemaTransformation(t *testing.T) {
 }
 
 func TestGeminiProvider_ResponseTransformation(t *testing.T) {
+	t.Parallel()
 	t.Run("Text response with usage", func(t *testing.T) {
+		t.Parallel()
 		// This is tested in the main gemini_test.go file
 		// Here we verify the expected structure of responses
 
@@ -411,6 +433,7 @@ func TestGeminiProvider_ResponseTransformation(t *testing.T) {
 	})
 
 	t.Run("Text response with tool calls", func(t *testing.T) {
+		t.Parallel()
 		response := &types.TextResponse{
 			Text: "",
 			ToolCalls: []types.ToolCall{
@@ -438,6 +461,7 @@ func TestGeminiProvider_ResponseTransformation(t *testing.T) {
 	})
 
 	t.Run("Structured response", func(t *testing.T) {
+		t.Parallel()
 		data := map[string]any{
 			"name":    "John Doe",
 			"age":     30,
@@ -460,6 +484,7 @@ func TestGeminiProvider_ResponseTransformation(t *testing.T) {
 	})
 
 	t.Run("Embeddings response", func(t *testing.T) {
+		t.Parallel()
 		embeddings := []types.Embedding{
 			{
 				Index:     0,
@@ -487,6 +512,7 @@ func TestGeminiProvider_ResponseTransformation(t *testing.T) {
 }
 
 func TestGeminiProvider_RoleMapping(t *testing.T) {
+	t.Parallel()
 	testCases := []struct {
 		inputRole    types.Role
 		expectedRole string
@@ -499,6 +525,7 @@ func TestGeminiProvider_RoleMapping(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(string(tc.inputRole), func(t *testing.T) {
+			t.Parallel()
 			// We test role mapping indirectly through message processing
 			// in the main test file. Here we verify the expected mappings.
 
@@ -523,18 +550,22 @@ func TestGeminiProvider_RoleMapping(t *testing.T) {
 }
 
 func TestGeminiProvider_EdgeCases(t *testing.T) {
+	t.Parallel()
 	t.Run("Empty message content", func(t *testing.T) {
+		t.Parallel()
 		msg := types.NewUserMessage("")
 		assert.Empty(t, msg.GetContent())
 		assert.Equal(t, types.RoleUser, msg.GetRole())
 	})
 
 	t.Run("Message with only whitespace", func(t *testing.T) {
+		t.Parallel()
 		msg := types.NewUserMessage("   \n\t  ")
 		assert.Equal(t, "   \n\t  ", msg.GetContent())
 	})
 
 	t.Run("Very long message content", func(t *testing.T) {
+		t.Parallel()
 		longContent := strings.Repeat("a", 10000)
 
 		msg := types.NewUserMessage(longContent)
@@ -543,6 +574,7 @@ func TestGeminiProvider_EdgeCases(t *testing.T) {
 	})
 
 	t.Run("Tool call with empty arguments", func(t *testing.T) {
+		t.Parallel()
 		msg := &types.AssistantMessage{
 			Content: "I'll help you",
 			ToolCalls: []types.ToolCall{
@@ -559,6 +591,7 @@ func TestGeminiProvider_EdgeCases(t *testing.T) {
 	})
 
 	t.Run("Tool call with nil arguments", func(t *testing.T) {
+		t.Parallel()
 		msg := &types.AssistantMessage{
 			Content: "I'll help you",
 			ToolCalls: []types.ToolCall{

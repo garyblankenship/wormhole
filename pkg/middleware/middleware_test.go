@@ -11,7 +11,9 @@ import (
 )
 
 func TestChain(t *testing.T) {
+	t.Parallel()
 	t.Run("applies middleware in correct order", func(t *testing.T) {
+		t.Parallel()
 		var order []string
 
 		mw1 := func(next Handler) Handler {
@@ -53,6 +55,7 @@ func TestChain(t *testing.T) {
 	})
 
 	t.Run("passes errors through chain", func(t *testing.T) {
+		t.Parallel()
 		expectedErr := errors.New("test error")
 
 		mw := func(next Handler) Handler {
@@ -75,7 +78,9 @@ func TestChain(t *testing.T) {
 }
 
 func TestMetricsMiddleware(t *testing.T) {
+	t.Parallel()
 	t.Run("records successful requests", func(t *testing.T) {
+		t.Parallel()
 		metrics := NewMetrics()
 		mw := MetricsMiddleware(metrics)
 
@@ -97,6 +102,7 @@ func TestMetricsMiddleware(t *testing.T) {
 	})
 
 	t.Run("records failed requests", func(t *testing.T) {
+		t.Parallel()
 		metrics := NewMetrics()
 		mw := MetricsMiddleware(metrics)
 
@@ -116,7 +122,9 @@ func TestMetricsMiddleware(t *testing.T) {
 }
 
 func TestTimeoutMiddleware(t *testing.T) {
+	t.Parallel()
 	t.Run("allows fast requests", func(t *testing.T) {
+		t.Parallel()
 		mw := TimeoutMiddleware(100 * time.Millisecond)
 
 		handler := func(ctx context.Context, req any) (any, error) {
@@ -131,6 +139,7 @@ func TestTimeoutMiddleware(t *testing.T) {
 	})
 
 	t.Run("times out slow requests", func(t *testing.T) {
+		t.Parallel()
 		mw := TimeoutMiddleware(10 * time.Millisecond)
 
 		handler := func(ctx context.Context, req any) (any, error) {

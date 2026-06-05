@@ -10,6 +10,7 @@ import (
 )
 
 func TestCapabilitiesFromConfiguredProvider(t *testing.T) {
+	t.Parallel()
 	mock := wmtest.NewMockProvider("mock")
 	client := New(
 		WithCustomProvider("mock", wmtest.MockProviderFactory(mock)),
@@ -30,6 +31,7 @@ func TestCapabilitiesFromConfiguredProvider(t *testing.T) {
 }
 
 func TestConservativeProviderCapabilities(t *testing.T) {
+	t.Parallel()
 	client := New(WithDiscovery(false))
 
 	openaiCaps := client.ProviderCapabilities("openai")
@@ -42,6 +44,7 @@ func TestConservativeProviderCapabilities(t *testing.T) {
 }
 
 func TestModelCapabilitiesValidationAndFallback(t *testing.T) {
+	t.Parallel()
 	client := New(WithDiscovery(false))
 
 	_, err := client.ModelCapabilities("", "model")
@@ -56,6 +59,7 @@ func TestModelCapabilitiesValidationAndFallback(t *testing.T) {
 }
 
 func TestCapabilitiesNilReceiver(t *testing.T) {
+	t.Parallel()
 	var caps *Capabilities
 	assert.False(t, caps.Has(CapabilityText))
 	assert.Nil(t, caps.All())

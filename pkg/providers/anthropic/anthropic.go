@@ -96,7 +96,7 @@ func (p *Provider) Stream(ctx context.Context, request types.TextRequest) (<-cha
 		return nil, err
 	}
 
-	return p.stampProvider(utils.ProcessStream(body, p.parseStreamChunk, 100)), nil
+	return p.stampProvider(utils.ProcessStream(ctx, body, p.parseStreamChunk, 100)), nil
 }
 
 // Structured generates a structured response

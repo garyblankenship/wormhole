@@ -534,7 +534,7 @@ func (b *TextRequestBuilder) openStream(ctx context.Context, provider types.Prov
 
 	// Apply per-chunk idle timeout if configured.
 	if timeout := b.getWormhole().config.StreamIdleTimeout; timeout > 0 {
-		stream = applyStreamIdleTimeout(stream, timeout)
+		stream = applyStreamIdleTimeout(ctx, stream, timeout)
 	}
 	return stream, nil
 }
@@ -752,7 +752,7 @@ func (b *TextRequestBuilder) StreamAndAccumulate(ctx context.Context) (<-chan ty
 // applyStreamIdleTimeout wraps a provider stream with a per-chunk idle watchdog.
 // If no chunk arrives within timeout, a typed timeout error is emitted and the
 // source channel is drained so the provider goroutine can exit.
-func applyStreamIdleTimeout(src <-chan types.StreamChunk, timeout time.Duration) <-chan types.StreamChunk {
+func applyStreamIdleTimeout(ctx context.Context, src <-chan types.StreamChunk, timeout time.Duration) <-chan types.StreamChunk {
 	out := make(chan types.StreamChunk, cap(src))
 	go func() {
 		defer close(out)
@@ -769,13 +769,21 @@ func applyStreamIdleTimeout(src <-chan types.StreamChunk, timeout time.Duration)
 					<-timer.C
 				}
 				timer.Reset(timeout)
-				out <- chunk
+				select {
+				case out <- chunk:
+				case <-ctx.Done():
+					return
+				}
 				if chunk.Error != nil {
 					return
 				}
 			case <-timer.C:
-				out <- types.StreamChunk{
+				select {
+				case out <- types.StreamChunk{
 					Error: fmt.Errorf("stream idle timeout: no chunk received within %s", timeout),
+				}:
+				case <-ctx.Done():
+					return
 				}
 				go func() {
 					for range src {

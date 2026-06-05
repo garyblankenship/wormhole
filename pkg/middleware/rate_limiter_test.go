@@ -11,7 +11,9 @@ import (
 )
 
 func TestRateLimitMiddleware(t *testing.T) {
+	t.Parallel()
 	t.Run("allows requests within rate limit", func(t *testing.T) {
+		t.Parallel()
 		mw := RateLimitMiddleware(10) // 10 requests per second
 
 		handler := func(ctx context.Context, req any) (any, error) {
@@ -53,6 +55,40 @@ func TestRateLimitMiddleware(t *testing.T) {
 	// })
 }
 
+func TestRateLimitCloseRace(t *testing.T) {
+	t.Parallel()
+
+	rl := NewRateLimiter(5)
+
+	var wg sync.WaitGroup
+	// Concurrent Waiters racing against Close — must not panic on a
+	// write-to-closed channel.
+	for i := 0; i < 50; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+			defer cancel()
+			_ = rl.Wait(ctx)
+		}()
+	}
+
+	// Close concurrently from multiple goroutines to prove idempotency too.
+	for i := 0; i < 5; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			require.NoError(t, rl.Close())
+		}()
+	}
+
+	wg.Wait()
+
+	// Wait after Close returns the rate-limit error, never panics.
+	err := rl.Wait(context.Background())
+	require.ErrorIs(t, err, ErrRateLimitExceeded)
+}
+
 // TokenBucketRateLimiter test disabled - function not implemented yet
 // func TestTokenBucketRateLimiter(t *testing.T) {
 // 	t.Run("token bucket allows burst", func(t *testing.T) {
@@ -72,7 +108,9 @@ func TestRateLimitMiddleware(t *testing.T) {
 // }
 
 func TestAdaptiveRateLimitMiddleware(t *testing.T) {
+	t.Parallel()
 	t.Run("adjusts rate based on latency", func(t *testing.T) {
+		t.Parallel()
 		mw := AdaptiveRateLimitMiddleware(5, 2, 10, 50*time.Millisecond)
 
 		var handlerLatency time.Duration
@@ -98,7 +136,9 @@ func TestAdaptiveRateLimitMiddleware(t *testing.T) {
 }
 
 func TestConcurrentRateLimiting(t *testing.T) {
+	t.Parallel()
 	t.Run("handles concurrent requests correctly", func(t *testing.T) {
+		t.Parallel()
 		mw := RateLimitMiddleware(10) // 10 requests per second
 
 		var count int
@@ -218,7 +258,9 @@ func (m *mockProviderAwareLimiter) RecordLatencyWithProvider(latency time.Durati
 }
 
 func TestProviderAwareConcurrencyLimitMiddleware(t *testing.T) {
+	t.Parallel()
 	t.Run("uses provider-aware limiting when provider in context", func(t *testing.T) {
+		t.Parallel()
 		mockLimiter := &mockProviderAwareLimiter{
 			acquireReturnValue:             true,
 			acquireWithProviderReturnValue: true,
@@ -279,6 +321,7 @@ func TestProviderAwareConcurrencyLimitMiddleware(t *testing.T) {
 	})
 
 	t.Run("handles acquire failure (context cancellation)", func(t *testing.T) {
+		t.Parallel()
 		mockLimiter := &mockProviderAwareLimiter{
 			acquireWithProviderReturnValue: false, // Simulate context cancellation
 		}
@@ -308,6 +351,7 @@ func TestProviderAwareConcurrencyLimitMiddleware(t *testing.T) {
 	})
 
 	t.Run("respects EnableProviderAware config when disabled", func(t *testing.T) {
+		t.Parallel()
 		mockLimiter := &mockProviderAwareLimiter{
 			acquireReturnValue:             true,
 			acquireWithProviderReturnValue: true,

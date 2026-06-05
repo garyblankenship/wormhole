@@ -7,6 +7,7 @@ import (
 )
 
 func TestModelInfo_Structure(t *testing.T) {
+	t.Parallel()
 	cost := &ModelCost{
 		InputTokens:  0.001,
 		OutputTokens: 0.002,
@@ -49,6 +50,7 @@ func TestModelInfo_Structure(t *testing.T) {
 }
 
 func TestModelCost_Structure(t *testing.T) {
+	t.Parallel()
 	cost := &ModelCost{
 		InputTokens:  0.0015,
 		OutputTokens: 0.006,
@@ -61,6 +63,7 @@ func TestModelCost_Structure(t *testing.T) {
 }
 
 func TestModelCapability_Constants(t *testing.T) {
+	t.Parallel()
 	capabilities := []ModelCapability{
 		CapabilityText,
 		CapabilityChat,
@@ -91,6 +94,7 @@ func TestModelCapability_Constants(t *testing.T) {
 }
 
 func TestModelRegistry_Creation(t *testing.T) {
+	t.Parallel()
 	registry := NewModelRegistry()
 
 	assert.NotNil(t, registry)
@@ -100,6 +104,7 @@ func TestModelRegistry_Creation(t *testing.T) {
 }
 
 func TestModelRegistry_Register(t *testing.T) {
+	t.Parallel()
 	registry := NewModelRegistry()
 
 	model1 := &ModelInfo{
@@ -130,6 +135,7 @@ func TestModelRegistry_Register(t *testing.T) {
 }
 
 func TestModelRegistry_Get(t *testing.T) {
+	t.Parallel()
 	registry := NewModelRegistry()
 
 	model := &ModelInfo{
@@ -140,12 +146,14 @@ func TestModelRegistry_Get(t *testing.T) {
 	registry.Register(model)
 
 	t.Run("existing model", func(t *testing.T) {
+		t.Parallel()
 		retrieved, exists := registry.Get("test-model")
 		assert.True(t, exists)
 		assert.Equal(t, model, retrieved)
 	})
 
 	t.Run("non-existing model", func(t *testing.T) {
+		t.Parallel()
 		retrieved, exists := registry.Get("non-existent")
 		assert.False(t, exists)
 		assert.Nil(t, retrieved)
@@ -153,6 +161,7 @@ func TestModelRegistry_Get(t *testing.T) {
 }
 
 func TestModelRegistry_GetByProvider(t *testing.T) {
+	t.Parallel()
 	registry := NewModelRegistry()
 
 	openaiModel1 := &ModelInfo{ID: "gpt-5", Provider: "openai"}
@@ -164,6 +173,7 @@ func TestModelRegistry_GetByProvider(t *testing.T) {
 	registry.Register(anthropicModel)
 
 	t.Run("provider with models", func(t *testing.T) {
+		t.Parallel()
 		openaiModels := registry.GetByProvider("openai")
 		assert.Len(t, openaiModels, 2)
 		assert.Contains(t, openaiModels, openaiModel1)
@@ -171,18 +181,21 @@ func TestModelRegistry_GetByProvider(t *testing.T) {
 	})
 
 	t.Run("provider with one model", func(t *testing.T) {
+		t.Parallel()
 		anthropicModels := registry.GetByProvider("anthropic")
 		assert.Len(t, anthropicModels, 1)
 		assert.Contains(t, anthropicModels, anthropicModel)
 	})
 
 	t.Run("provider with no models", func(t *testing.T) {
+		t.Parallel()
 		groqModels := registry.GetByProvider("groq")
 		assert.Len(t, groqModels, 0)
 	})
 }
 
 func TestModelRegistry_GetByCapability(t *testing.T) {
+	t.Parallel()
 	registry := NewModelRegistry()
 
 	textModel := &ModelInfo{
@@ -205,6 +218,7 @@ func TestModelRegistry_GetByCapability(t *testing.T) {
 	registry.Register(visionModel)
 
 	t.Run("common capability", func(t *testing.T) {
+		t.Parallel()
 		textModels := registry.GetByCapability(CapabilityText)
 		assert.Len(t, textModels, 3)
 		assert.Contains(t, textModels, textModel)
@@ -213,18 +227,21 @@ func TestModelRegistry_GetByCapability(t *testing.T) {
 	})
 
 	t.Run("specific capability", func(t *testing.T) {
+		t.Parallel()
 		visionModels := registry.GetByCapability(CapabilityVision)
 		assert.Len(t, visionModels, 1)
 		assert.Contains(t, visionModels, visionModel)
 	})
 
 	t.Run("no models with capability", func(t *testing.T) {
+		t.Parallel()
 		audioModels := registry.GetByCapability(CapabilityAudio)
 		assert.Len(t, audioModels, 0)
 	})
 }
 
 func TestModelRegistry_List(t *testing.T) {
+	t.Parallel()
 	registry := NewModelRegistry()
 
 	model1 := &ModelInfo{ID: "model1"}
@@ -243,6 +260,7 @@ func TestModelRegistry_List(t *testing.T) {
 }
 
 func TestModelRegistry_Search(t *testing.T) {
+	t.Parallel()
 	registry := NewModelRegistry()
 
 	models := []*ModelInfo{
@@ -258,6 +276,7 @@ func TestModelRegistry_Search(t *testing.T) {
 	}
 
 	t.Run("search by ID", func(t *testing.T) {
+		t.Parallel()
 		results := registry.Search("gpt")
 		assert.Len(t, results, 2)
 		assert.Contains(t, results, models[0])
@@ -265,6 +284,7 @@ func TestModelRegistry_Search(t *testing.T) {
 	})
 
 	t.Run("search by name", func(t *testing.T) {
+		t.Parallel()
 		results := registry.Search("claude")
 		assert.Len(t, results, 2)
 		assert.Contains(t, results, models[2])
@@ -272,29 +292,34 @@ func TestModelRegistry_Search(t *testing.T) {
 	})
 
 	t.Run("search by description", func(t *testing.T) {
+		t.Parallel()
 		results := registry.Search("multimodal")
 		assert.Len(t, results, 1)
 		assert.Contains(t, results, models[1])
 	})
 
 	t.Run("case insensitive search", func(t *testing.T) {
+		t.Parallel()
 		results := registry.Search("OPUS")
 		assert.Len(t, results, 1)
 		assert.Contains(t, results, models[2])
 	})
 
 	t.Run("no matches", func(t *testing.T) {
+		t.Parallel()
 		results := registry.Search("nonexistent")
 		assert.Len(t, results, 0)
 	})
 
 	t.Run("partial match", func(t *testing.T) {
+		t.Parallel()
 		results := registry.Search("3")
 		assert.Len(t, results, 3) // claude-3-opus, claude-3-haiku, llama-3
 	})
 }
 
 func TestModelRegistry_ValidateModel(t *testing.T) {
+	t.Parallel()
 	registry := NewModelRegistry()
 
 	validModel := &ModelInfo{
@@ -313,21 +338,25 @@ func TestModelRegistry_ValidateModel(t *testing.T) {
 	registry.Register(deprecatedModel)
 
 	t.Run("valid model with supported capabilities", func(t *testing.T) {
+		t.Parallel()
 		err := registry.ValidateModel("valid-model", []ModelCapability{CapabilityText, CapabilityChat})
 		assert.NoError(t, err)
 	})
 
 	t.Run("valid model with single capability", func(t *testing.T) {
+		t.Parallel()
 		err := registry.ValidateModel("valid-model", []ModelCapability{CapabilityFunctions})
 		assert.NoError(t, err)
 	})
 
 	t.Run("valid model with no required capabilities", func(t *testing.T) {
+		t.Parallel()
 		err := registry.ValidateModel("valid-model", []ModelCapability{})
 		assert.NoError(t, err)
 	})
 
 	t.Run("model not found", func(t *testing.T) {
+		t.Parallel()
 		err := registry.ValidateModel("non-existent", []ModelCapability{CapabilityText})
 		assert.Error(t, err)
 
@@ -338,6 +367,7 @@ func TestModelRegistry_ValidateModel(t *testing.T) {
 	})
 
 	t.Run("deprecated model", func(t *testing.T) {
+		t.Parallel()
 		err := registry.ValidateModel("deprecated-model", []ModelCapability{CapabilityText})
 		assert.Error(t, err)
 
@@ -349,6 +379,7 @@ func TestModelRegistry_ValidateModel(t *testing.T) {
 	})
 
 	t.Run("unsupported capability", func(t *testing.T) {
+		t.Parallel()
 		err := registry.ValidateModel("valid-model", []ModelCapability{CapabilityImages})
 		assert.Error(t, err)
 
@@ -360,6 +391,7 @@ func TestModelRegistry_ValidateModel(t *testing.T) {
 	})
 
 	t.Run("multiple unsupported capabilities", func(t *testing.T) {
+		t.Parallel()
 		err := registry.ValidateModel("valid-model", []ModelCapability{CapabilityImages, CapabilityAudio})
 		assert.Error(t, err)
 
@@ -371,6 +403,7 @@ func TestModelRegistry_ValidateModel(t *testing.T) {
 }
 
 func TestModelRegistry_EstimateCost(t *testing.T) {
+	t.Parallel()
 	registry := NewModelRegistry()
 
 	costModel := &ModelInfo{
@@ -391,6 +424,7 @@ func TestModelRegistry_EstimateCost(t *testing.T) {
 	registry.Register(noCostModel)
 
 	t.Run("model with cost information", func(t *testing.T) {
+		t.Parallel()
 		// 1000 input tokens = $0.001, 500 output tokens = $0.001
 		cost, err := registry.EstimateCost("cost-model", 1000, 500)
 		assert.NoError(t, err)
@@ -398,6 +432,7 @@ func TestModelRegistry_EstimateCost(t *testing.T) {
 	})
 
 	t.Run("different token counts", func(t *testing.T) {
+		t.Parallel()
 		// 2000 input tokens = $0.002, 1000 output tokens = $0.002
 		cost, err := registry.EstimateCost("cost-model", 2000, 1000)
 		assert.NoError(t, err)
@@ -405,30 +440,35 @@ func TestModelRegistry_EstimateCost(t *testing.T) {
 	})
 
 	t.Run("zero tokens", func(t *testing.T) {
+		t.Parallel()
 		cost, err := registry.EstimateCost("cost-model", 0, 0)
 		assert.NoError(t, err)
 		assert.Equal(t, 0.0, cost)
 	})
 
 	t.Run("input tokens only", func(t *testing.T) {
+		t.Parallel()
 		cost, err := registry.EstimateCost("cost-model", 1000, 0)
 		assert.NoError(t, err)
 		assert.Equal(t, 0.001, cost)
 	})
 
 	t.Run("output tokens only", func(t *testing.T) {
+		t.Parallel()
 		cost, err := registry.EstimateCost("cost-model", 0, 1000)
 		assert.NoError(t, err)
 		assert.Equal(t, 0.002, cost)
 	})
 
 	t.Run("model without cost information", func(t *testing.T) {
+		t.Parallel()
 		cost, err := registry.EstimateCost("no-cost-model", 1000, 500)
 		assert.NoError(t, err)
 		assert.Equal(t, 0.0, cost) // Should return 0 when no cost info
 	})
 
 	t.Run("model not found", func(t *testing.T) {
+		t.Parallel()
 		cost, err := registry.EstimateCost("non-existent", 1000, 500)
 		assert.Error(t, err)
 		assert.Equal(t, 0.0, cost)
@@ -440,6 +480,7 @@ func TestModelRegistry_EstimateCost(t *testing.T) {
 	})
 
 	t.Run("fractional token calculations", func(t *testing.T) {
+		t.Parallel()
 		// 500 input tokens = $0.0005, 250 output tokens = $0.0005
 		cost, err := registry.EstimateCost("cost-model", 500, 250)
 		assert.NoError(t, err)
@@ -448,6 +489,7 @@ func TestModelRegistry_EstimateCost(t *testing.T) {
 }
 
 func TestModelRegistry_GetConstraints(t *testing.T) {
+	t.Parallel()
 	registry := NewModelRegistry()
 
 	constraints := map[string]any{
@@ -470,18 +512,21 @@ func TestModelRegistry_GetConstraints(t *testing.T) {
 	registry.Register(unconstrainedModel)
 
 	t.Run("model with constraints", func(t *testing.T) {
+		t.Parallel()
 		result, err := registry.GetConstraints("constrained-model")
 		assert.NoError(t, err)
 		assert.Equal(t, constraints, result)
 	})
 
 	t.Run("model without constraints", func(t *testing.T) {
+		t.Parallel()
 		result, err := registry.GetConstraints("unconstrained-model")
 		assert.NoError(t, err)
 		assert.Nil(t, result)
 	})
 
 	t.Run("model not found", func(t *testing.T) {
+		t.Parallel()
 		result, err := registry.GetConstraints("non-existent")
 		assert.Error(t, err)
 		assert.Nil(t, result)
@@ -494,6 +539,7 @@ func TestModelRegistry_GetConstraints(t *testing.T) {
 }
 
 func TestModelRegistry_LoadModelsFromConfig(t *testing.T) {
+	t.Parallel()
 	registry := NewModelRegistry()
 
 	models := []*ModelInfo{
@@ -523,6 +569,7 @@ func TestModelRegistry_LoadModelsFromConfig(t *testing.T) {
 }
 
 func TestGlobalHelperFunctions(t *testing.T) {
+	t.Parallel()
 	// Note: These test the global functions that use DefaultModelRegistry
 	// We need to be careful not to interfere with other tests
 
@@ -595,6 +642,7 @@ func TestGlobalHelperFunctions(t *testing.T) {
 }
 
 func TestModelRegistry_ConcurrentAccess(t *testing.T) {
+	t.Parallel()
 	// Test basic thread safety - the current implementation is not thread-safe
 	// but this test documents the expected behavior
 	registry := NewModelRegistry()
@@ -608,6 +656,7 @@ func TestModelRegistry_ConcurrentAccess(t *testing.T) {
 
 	// Multiple concurrent reads should work
 	t.Run("concurrent reads", func(t *testing.T) {
+		t.Parallel()
 		done := make(chan bool, 10)
 
 		for i := 0; i < 10; i++ {

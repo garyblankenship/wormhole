@@ -23,6 +23,14 @@ type Usage struct {
 	PromptTokens     int `json:"prompt_tokens"`
 	CompletionTokens int `json:"completion_tokens"`
 	TotalTokens      int `json:"total_tokens"`
+	// CacheReadTokens is the number of prompt tokens served from a provider cache
+	// (OpenAI cached_tokens, Anthropic cache_read_input_tokens). Cache reads
+	// typically bill at a fraction of normal prompt-token cost.
+	CacheReadTokens int `json:"cache_read_tokens,omitempty"`
+	// CacheWriteTokens is the number of prompt tokens written into a provider
+	// cache (Anthropic cache_creation_input_tokens). Zero for providers that do
+	// not report cache writes.
+	CacheWriteTokens int `json:"cache_write_tokens,omitempty"`
 }
 
 // TextResponse represents a text generation response

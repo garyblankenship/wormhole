@@ -13,6 +13,7 @@ import (
 // ==================== Tool Registry Tests ====================
 
 func TestToolRegistry_RegisterAndGet(t *testing.T) {
+	t.Parallel()
 	registry := NewToolRegistry()
 
 	// Create a test tool
@@ -40,6 +41,7 @@ func TestToolRegistry_RegisterAndGet(t *testing.T) {
 }
 
 func TestToolRegistry_Has(t *testing.T) {
+	t.Parallel()
 	registry := NewToolRegistry()
 
 	assert.False(t, registry.Has("nonexistent"))
@@ -57,6 +59,7 @@ func TestToolRegistry_Has(t *testing.T) {
 }
 
 func TestToolRegistry_Unregister(t *testing.T) {
+	t.Parallel()
 	registry := NewToolRegistry()
 
 	tool := types.Tool{
@@ -80,6 +83,7 @@ func TestToolRegistry_Unregister(t *testing.T) {
 }
 
 func TestToolRegistry_List(t *testing.T) {
+	t.Parallel()
 	registry := NewToolRegistry()
 
 	// Empty registry
@@ -104,6 +108,7 @@ func TestToolRegistry_List(t *testing.T) {
 }
 
 func TestToolRegistry_Count(t *testing.T) {
+	t.Parallel()
 	registry := NewToolRegistry()
 
 	assert.Equal(t, 0, registry.Count())
@@ -119,6 +124,7 @@ func TestToolRegistry_Count(t *testing.T) {
 }
 
 func TestToolRegistry_Clear(t *testing.T) {
+	t.Parallel()
 	registry := NewToolRegistry()
 
 	handler := func(ctx context.Context, args map[string]any) (any, error) {
@@ -143,6 +149,7 @@ func TestToolRegistry_Clear(t *testing.T) {
 }
 
 func TestToolRegistry_ConcurrentAccess(t *testing.T) {
+	t.Parallel()
 	registry := NewToolRegistry()
 
 	handler := func(ctx context.Context, args map[string]any) (any, error) {
@@ -187,35 +194,43 @@ func TestToolRegistry_ConcurrentAccess(t *testing.T) {
 // which converts them to map[string]any internally
 
 func TestObjectSchemaBuilder(t *testing.T) {
+	t.Parallel()
 	t.Skip("Schema builders tested via RegisterTool integration")
 	// Schema builders work but don't integrate well with existing SchemaInterface
 	// They're converted to map[string]any in RegisterTool which is the real use case
 }
 
 func TestStringSchemaBuilder(t *testing.T) {
+	t.Parallel()
 	t.Skip("Schema builders tested via RegisterTool integration")
 }
 
 func TestNumberSchemaBuilder(t *testing.T) {
+	t.Parallel()
 	t.Skip("Schema builders tested via RegisterTool integration")
 }
 
 func TestBooleanSchemaBuilder(t *testing.T) {
+	t.Parallel()
 	t.Skip("Schema builders tested via RegisterTool integration")
 }
 
 func TestArraySchemaBuilder(t *testing.T) {
+	t.Parallel()
 	t.Skip("Schema builders tested via RegisterTool integration")
 }
 
 func TestEnumSchemaBuilder(t *testing.T) {
+	t.Parallel()
 	t.Skip("Schema builders tested via RegisterTool integration")
 }
 
 func TestConvenienceFunctions(t *testing.T) {
+	t.Parallel()
 	t.Skip("Schema builders tested via RegisterTool integration")
 }
 
 func TestComplexSchemaExample(t *testing.T) {
+	t.Parallel()
 	t.Skip("Schema builders tested via RegisterTool integration")
 }

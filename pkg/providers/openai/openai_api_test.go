@@ -21,7 +21,9 @@ func newOpenAITestProvider(t *testing.T, handler http.HandlerFunc) (*Provider, *
 }
 
 func TestProviderTextAndEmptyResponse(t *testing.T) {
+	t.Parallel()
 	t.Run("success", func(t *testing.T) {
+		t.Parallel()
 		provider, _ := newOpenAITestProvider(t, func(w http.ResponseWriter, r *http.Request) {
 			assert.Equal(t, http.MethodPost, r.Method)
 			assert.Equal(t, "/chat/completions", r.URL.Path)
@@ -58,6 +60,7 @@ func TestProviderTextAndEmptyResponse(t *testing.T) {
 	})
 
 	t.Run("empty response errors", func(t *testing.T) {
+		t.Parallel()
 		provider, _ := newOpenAITestProvider(t, func(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("Content-Type", "application/json")
 			require.NoError(t, json.NewEncoder(w).Encode(chatCompletionResponse{
@@ -82,7 +85,9 @@ func TestProviderTextAndEmptyResponse(t *testing.T) {
 }
 
 func TestProviderStructuredJSONAndTools(t *testing.T) {
+	t.Parallel()
 	t.Run("json mode", func(t *testing.T) {
+		t.Parallel()
 		provider, _ := newOpenAITestProvider(t, func(w http.ResponseWriter, r *http.Request) {
 			var req map[string]any
 			require.NoError(t, json.NewDecoder(r.Body).Decode(&req))
@@ -111,6 +116,7 @@ func TestProviderStructuredJSONAndTools(t *testing.T) {
 	})
 
 	t.Run("tool mode", func(t *testing.T) {
+		t.Parallel()
 		provider, _ := newOpenAITestProvider(t, func(w http.ResponseWriter, r *http.Request) {
 			var req map[string]any
 			require.NoError(t, json.NewDecoder(r.Body).Decode(&req))
@@ -151,6 +157,7 @@ func TestProviderStructuredJSONAndTools(t *testing.T) {
 }
 
 func TestProviderEmbeddingsImagesAndAudio(t *testing.T) {
+	t.Parallel()
 	provider, _ := newOpenAITestProvider(t, func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		switch r.URL.Path {
@@ -260,6 +267,7 @@ func TestProviderEmbeddingsImagesAndAudio(t *testing.T) {
 }
 
 func TestProviderSpeechToTextInvalidInputReturnsError(t *testing.T) {
+	t.Parallel()
 	provider := New(types.ProviderConfig{APIKey: "test-key", BaseURL: "http://127.0.0.1"})
 	_, err := provider.Audio(context.Background(), types.AudioRequest{
 		Type:  types.AudioRequestTypeSTT,
@@ -272,6 +280,7 @@ func TestProviderSpeechToTextInvalidInputReturnsError(t *testing.T) {
 }
 
 func TestProviderStream(t *testing.T) {
+	t.Parallel()
 	provider, _ := newOpenAITestProvider(t, func(w http.ResponseWriter, r *http.Request) {
 		var req map[string]any
 		require.NoError(t, json.NewDecoder(r.Body).Decode(&req))

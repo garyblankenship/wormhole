@@ -14,6 +14,7 @@ import (
 )
 
 func TestProviderResponsesAPIText(t *testing.T) {
+	t.Parallel()
 	provider, _ := newOpenAITestProvider(t, func(w http.ResponseWriter, r *http.Request) {
 		assert.Equal(t, http.MethodPost, r.Method)
 		assert.Equal(t, "/responses", r.URL.Path)
@@ -72,6 +73,7 @@ func TestProviderResponsesAPIText(t *testing.T) {
 }
 
 func TestProviderResponsesAPIToolCalling(t *testing.T) {
+	t.Parallel()
 	provider, _ := newOpenAITestProvider(t, func(w http.ResponseWriter, r *http.Request) {
 		var req map[string]any
 		require.NoError(t, json.NewDecoder(r.Body).Decode(&req))
@@ -122,6 +124,7 @@ func TestProviderResponsesAPIToolCalling(t *testing.T) {
 }
 
 func TestProviderResponsesAPIStream(t *testing.T) {
+	t.Parallel()
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		assert.Equal(t, "/responses", r.URL.Path)
 		var req map[string]any
@@ -129,13 +132,13 @@ func TestProviderResponsesAPIStream(t *testing.T) {
 		assert.Equal(t, true, req["stream"])
 
 		w.Header().Set("Content-Type", "text/event-stream")
-		fmt.Fprint(w, "event: response.output_text.delta\n")
-		fmt.Fprint(w, `data: {"type":"response.output_text.delta","delta":"hel"}`+"\n\n")
-		fmt.Fprint(w, "event: response.output_text.delta\n")
-		fmt.Fprint(w, `data: {"type":"response.output_text.delta","delta":"lo"}`+"\n\n")
-		fmt.Fprint(w, "event: response.completed\n")
-		fmt.Fprint(w, `data: {"type":"response.completed","response":{"id":"resp-stream","created_at":100,"model":"gpt-5","status":"completed","usage":{"input_tokens":1,"output_tokens":2,"total_tokens":3}}}`+"\n\n")
-		fmt.Fprint(w, "data: [DONE]\n\n")
+		_, _ = fmt.Fprint(w, "event: response.output_text.delta\n")
+		_, _ = fmt.Fprint(w, `data: {"type":"response.output_text.delta","delta":"hel"}`+"\n\n")
+		_, _ = fmt.Fprint(w, "event: response.output_text.delta\n")
+		_, _ = fmt.Fprint(w, `data: {"type":"response.output_text.delta","delta":"lo"}`+"\n\n")
+		_, _ = fmt.Fprint(w, "event: response.completed\n")
+		_, _ = fmt.Fprint(w, `data: {"type":"response.completed","response":{"id":"resp-stream","created_at":100,"model":"gpt-5","status":"completed","usage":{"input_tokens":1,"output_tokens":2,"total_tokens":3}}}`+"\n\n")
+		_, _ = fmt.Fprint(w, "data: [DONE]\n\n")
 	}))
 	t.Cleanup(server.Close)
 

@@ -11,6 +11,7 @@ import (
 )
 
 func TestNewSecureHTTPClient(t *testing.T) {
+	t.Parallel()
 	// Test 1: Default secure client
 	client := NewSecureHTTPClient(30*time.Second, nil, nil, "")
 	if client == nil {
@@ -41,6 +42,7 @@ func TestNewSecureHTTPClient(t *testing.T) {
 }
 
 func TestHTTPTransportConfig(t *testing.T) {
+	t.Parallel()
 	config := DefaultHTTPTransportConfig()
 
 	// Validate default values
@@ -70,6 +72,7 @@ func TestHTTPTransportConfig(t *testing.T) {
 }
 
 func TestExtractTLSConfigFromProviderConfig(t *testing.T) {
+	t.Parallel()
 	// Test 1: ProviderConfig without TLS config
 	config1 := types.NewProviderConfig("test-key")
 	tlsConfig1 := ExtractTLSConfigFromProviderConfig(config1)
@@ -113,6 +116,7 @@ func TestExtractTLSConfigFromProviderConfig(t *testing.T) {
 }
 
 func TestBaseProviderTLSIntegration(t *testing.T) {
+	t.Parallel()
 	// Test 1: Default BaseProvider (should use secure TLS)
 	providerConfig := types.NewProviderConfig("test-key")
 	bp := NewBaseProvider("test-provider", providerConfig)
@@ -148,6 +152,7 @@ func TestBaseProviderTLSIntegration(t *testing.T) {
 }
 
 func TestProviderConfigTLSBuilderMethods(t *testing.T) {
+	t.Parallel()
 	// Test WithTLSConfigParam
 	config := types.NewProviderConfig("test-key").
 		WithTLSConfigParam("min_version", uint16(tls.VersionTLS12)).
@@ -177,6 +182,7 @@ func TestProviderConfigTLSBuilderMethods(t *testing.T) {
 }
 
 func TestTLSConfigSecurity(t *testing.T) {
+	t.Parallel()
 	// Test default config is secure
 	defaultTLS := config.DefaultTLSConfig()
 	if !defaultTLS.IsSecure() {
@@ -213,6 +219,7 @@ func TestTLSConfigSecurity(t *testing.T) {
 }
 
 func TestHTTPClientCreationWithTransportConfig(t *testing.T) {
+	t.Parallel()
 	// Test with custom transport config
 	transportConfig := DefaultHTTPTransportConfig().
 		WithConnectionPooling(50, 5, 20, 60*time.Second).
@@ -247,104 +254,111 @@ func TestHTTPClientCreationWithTransportConfig(t *testing.T) {
 }
 
 func TestTransportCacheMetrics(t *testing.T) {
-	// Get initial metrics
-	initial := GetTransportCacheMetrics()
+	t.Parallel()
+	tc := NewTransportCache()
 
-	// Create a unique transport config that likely hasn't been cached before
+	// Create a unique transport config
 	configA := DefaultHTTPTransportConfig()
 	configA.MaxIdleConns = 9999
 	configA.MaxIdleConnsPerHost = 1111
 
-	// Create first client with configA - likely a miss (new transport)
-	client1 := NewSecureHTTPClient(30*time.Second, nil, &configA, "")
+	// First call with configA — miss (fresh cache)
+	client1 := tc.newSecureHTTPClient(30*time.Second, nil, &configA, "")
 	if client1 == nil {
-		t.Fatal("NewSecureHTTPClient returned nil")
+		t.Fatal("newSecureHTTPClient returned nil")
 	}
 
-	metrics1 := GetTransportCacheMetrics()
-	// We can't guarantee miss increase if configA was already cached from previous tests
-	// But we can verify that hits increased if it was a hit, or misses increased if it was a miss
-	// Just record the delta
-	missDelta := metrics1.Misses - initial.Misses
-	hitDelta := metrics1.Hits - initial.Hits
+	metrics1 := tc.Metrics()
+	if metrics1.Misses != 1 {
+		t.Errorf("Expected 1 miss after first call, got %d", metrics1.Misses)
+	}
+	if metrics1.Hits != 0 {
+		t.Errorf("Expected 0 hits after first call, got %d", metrics1.Hits)
+	}
 
-	// Create second client with same configA - should be a hit (cached transport)
-	client2 := NewSecureHTTPClient(30*time.Second, nil, &configA, "")
+	// Second call with same configA — hit
+	client2 := tc.newSecureHTTPClient(30*time.Second, nil, &configA, "")
 	if client2 == nil {
-		t.Fatal("NewSecureHTTPClient returned nil")
+		t.Fatal("newSecureHTTPClient returned nil")
 	}
 
-	metrics2 := GetTransportCacheMetrics()
-	if metrics2.Hits <= metrics1.Hits {
-		t.Errorf("Expected hit count to increase for same config, got %d (previous %d)", metrics2.Hits, metrics1.Hits)
+	metrics2 := tc.Metrics()
+	if metrics2.Hits != 1 {
+		t.Errorf("Expected 1 hit after second call with same config, got %d", metrics2.Hits)
 	}
 
-	// Create a different transport config - should be a miss (different fingerprint)
+	// Third call with different config — miss
 	configB := DefaultHTTPTransportConfig()
 	configB.MaxIdleConns = 8888
 	configB.MaxIdleConnsPerHost = 2222
-	client3 := NewSecureHTTPClient(30*time.Second, nil, &configB, "")
+	client3 := tc.newSecureHTTPClient(30*time.Second, nil, &configB, "")
 	if client3 == nil {
-		t.Fatal("NewSecureHTTPClient returned nil")
+		t.Fatal("newSecureHTTPClient returned nil")
 	}
 
-	metrics3 := GetTransportCacheMetrics()
-	if metrics3.Misses <= metrics2.Misses {
-		t.Errorf("Expected miss count to increase with different config, got %d (previous %d)", metrics3.Misses, metrics2.Misses)
+	metrics3 := tc.Metrics()
+	if metrics3.Misses != 2 {
+		t.Errorf("Expected 2 misses after different config, got %d", metrics3.Misses)
 	}
-
-	// Size should increase with new transports (unless configB was already cached)
-	sizeIncreased := metrics3.Size > metrics2.Size
-	if !sizeIncreased && metrics3.Misses > metrics2.Misses {
-		t.Errorf("Miss count increased but cache size didn't: size %d (previous %d)", metrics3.Size, metrics2.Size)
-	}
-
-	// Verify that at least one hit occurred (second client)
-	if metrics2.Hits == initial.Hits && missDelta == 0 && hitDelta == 0 {
-		t.Log("Note: All transports were already cached from previous tests")
+	if metrics3.Size < 2 {
+		t.Errorf("Expected cache size >= 2 with two distinct configs, got %d", metrics3.Size)
 	}
 }
 
 func TestTransportCacheEvictionBounded(t *testing.T) {
-	transportCache.Lock()
-	oldTransports := transports
-	oldHits := transportCacheHits.Load()
-	oldMisses := transportCacheMisses.Load()
-	transports = make(map[string]*cachedTransport)
-	transportCacheHits.Store(0)
-	transportCacheMisses.Store(0)
-	transportCache.Unlock()
-
-	defer func() {
-		transportCache.Lock()
-		transports = oldTransports
-		transportCacheHits.Store(oldHits)
-		transportCacheMisses.Store(oldMisses)
-		transportCache.Unlock()
-	}()
+	t.Parallel()
+	tc := NewTransportCache()
 
 	firstConfig := DefaultHTTPTransportConfig()
 	firstConfig.MaxIdleConns = 1000
 	firstKey := firstConfig.CacheKey("https://host-0.example")
+	// Seed the first (oldest) entry explicitly so we can assert it gets evicted.
+	tc.newSecureHTTPClient(30*time.Second, nil, &firstConfig, "https://host-0.example")
 
 	for i := 0; i < maxCachedTransports+8; i++ {
 		cfg := DefaultHTTPTransportConfig()
 		cfg.MaxIdleConns = 1000 + i
-		client := NewSecureHTTPClient(30*time.Second, nil, &cfg, "https://host-"+string(rune('a'+(i%26)))+".example/"+time.Duration(i).String())
+		client := tc.newSecureHTTPClient(30*time.Second, nil, &cfg, "https://host-"+string(rune('a'+(i%26)))+".example/"+time.Duration(i).String())
 		if client == nil {
-			t.Fatal("NewSecureHTTPClient returned nil")
+			t.Fatal("newSecureHTTPClient returned nil")
 		}
 	}
 
-	metrics := GetTransportCacheMetrics()
+	metrics := tc.Metrics()
 	if metrics.Size != maxCachedTransports {
 		t.Fatalf("expected cache size %d, got %d", maxCachedTransports, metrics.Size)
 	}
 
-	transportCache.RLock()
-	_, exists := transports[firstKey]
-	transportCache.RUnlock()
+	tc.mu.RLock()
+	_, exists := tc.transports[firstKey]
+	tc.mu.RUnlock()
 	if exists {
 		t.Fatalf("expected oldest transport %q to be evicted", firstKey)
+	}
+}
+
+func TestTransportCacheInstancesAreIsolated(t *testing.T) {
+	t.Parallel()
+	cfg := DefaultHTTPTransportConfig()
+	cfg.MaxIdleConns = 4242
+
+	tcA := NewTransportCache()
+	tcB := NewTransportCache()
+
+	// Populate cache A only.
+	tcA.newSecureHTTPClient(30*time.Second, nil, &cfg, "https://isolated.example")
+	tcA.newSecureHTTPClient(30*time.Second, nil, &cfg, "https://isolated.example") // hit
+
+	mA := tcA.Metrics()
+	if mA.Size == 0 {
+		t.Fatalf("cache A expected to hold at least one transport, got size 0")
+	}
+	if mA.Hits == 0 {
+		t.Fatalf("cache A expected at least one hit on repeated identical config")
+	}
+
+	mB := tcB.Metrics()
+	if mB.Size != 0 || mB.Hits != 0 || mB.Misses != 0 {
+		t.Fatalf("cache B must be untouched by activity on cache A: %+v", mB)
 	}
 }

@@ -25,6 +25,7 @@ func newOllamaTestProvider(t *testing.T, handler http.HandlerFunc) (*Provider, *
 }
 
 func TestProviderText(t *testing.T) {
+	t.Parallel()
 	provider, _ := newOllamaTestProvider(t, func(w http.ResponseWriter, r *http.Request) {
 		assert.Equal(t, http.MethodPost, r.Method)
 		assert.Equal(t, "/api/chat", r.URL.Path)
@@ -59,6 +60,7 @@ func TestProviderText(t *testing.T) {
 }
 
 func TestProviderStructured(t *testing.T) {
+	t.Parallel()
 	provider, _ := newOllamaTestProvider(t, func(w http.ResponseWriter, r *http.Request) {
 		var req chatRequest
 		require.NoError(t, json.NewDecoder(r.Body).Decode(&req))
@@ -84,6 +86,7 @@ func TestProviderStructured(t *testing.T) {
 }
 
 func TestProviderStructuredInvalidJSON(t *testing.T) {
+	t.Parallel()
 	provider, _ := newOllamaTestProvider(t, func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		require.NoError(t, json.NewEncoder(w).Encode(chatResponse{
@@ -103,6 +106,7 @@ func TestProviderStructuredInvalidJSON(t *testing.T) {
 }
 
 func TestProviderEmbeddingsSequentialAndConcurrent(t *testing.T) {
+	t.Parallel()
 	var requests atomic.Int32
 	provider, _ := newOllamaTestProvider(t, func(w http.ResponseWriter, r *http.Request) {
 		assert.Equal(t, "/api/embeddings", r.URL.Path)
@@ -139,6 +143,7 @@ func TestProviderEmbeddingsSequentialAndConcurrent(t *testing.T) {
 }
 
 func TestProviderEmbeddingsValidationAndErrors(t *testing.T) {
+	t.Parallel()
 	provider, _ := newOllamaTestProvider(t, func(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "failed", http.StatusInternalServerError)
 	})
@@ -156,6 +161,7 @@ func TestProviderEmbeddingsValidationAndErrors(t *testing.T) {
 }
 
 func TestProviderModelManagement(t *testing.T) {
+	t.Parallel()
 	provider, _ := newOllamaTestProvider(t, func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		switch r.URL.Path {
@@ -190,6 +196,7 @@ func TestProviderModelManagement(t *testing.T) {
 }
 
 func TestProviderUnsupportedOperations(t *testing.T) {
+	t.Parallel()
 	provider, err := New(types.ProviderConfig{BaseURL: "http://localhost:11434"})
 	require.NoError(t, err)
 
@@ -213,6 +220,7 @@ func TestProviderUnsupportedOperations(t *testing.T) {
 }
 
 func TestTransformHelpers(t *testing.T) {
+	t.Parallel()
 	provider, err := New(types.ProviderConfig{BaseURL: "http://localhost:11434"})
 	require.NoError(t, err)
 

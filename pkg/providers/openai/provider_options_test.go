@@ -7,6 +7,7 @@ import (
 )
 
 func TestProviderOptionsMergedIntoChatPayload(t *testing.T) {
+	t.Parallel()
 	provider := New(types.NewProviderConfig("key").
 		WithDefaultProviderOptions(map[string]any{"service_tier": "default", "store": false}).
 		WithProviderOptionsForModel("gpt-test", map[string]any{"service_tier": "model"}))
@@ -28,6 +29,7 @@ func TestProviderOptionsMergedIntoChatPayload(t *testing.T) {
 }
 
 func TestProviderOptionsMergedIntoResponsesPayload(t *testing.T) {
+	t.Parallel()
 	provider := New(types.NewProviderConfig("key").
 		WithDefaultProviderOptions(map[string]any{"parallel_tool_calls": false}).
 		WithProviderOptionsForModel("gpt-test", map[string]any{"reasoning": map[string]any{"effort": "low"}}))

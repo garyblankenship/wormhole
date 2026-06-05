@@ -17,6 +17,7 @@ import (
 )
 
 func TestGeminiProvider_Stream(t *testing.T) {
+	t.Parallel()
 	testCases := []struct {
 		name           string
 		request        types.TextRequest
@@ -183,6 +184,7 @@ data: [DONE]
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			var capturedURL string
 
 			// Create mock streaming server
@@ -295,7 +297,9 @@ data: [DONE]
 }
 
 func TestGeminiProvider_StreamContext(t *testing.T) {
+	t.Parallel()
 	t.Run("Stream with context cancellation", func(t *testing.T) {
+		t.Parallel()
 		// Create mock server that streams slowly
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("Content-Type", "text/event-stream")
@@ -345,6 +349,7 @@ func TestGeminiProvider_StreamContext(t *testing.T) {
 	})
 
 	t.Run("Stream with immediate context cancellation", func(t *testing.T) {
+		t.Parallel()
 		// Create mock server
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("Content-Type", "text/event-stream")
@@ -385,7 +390,9 @@ func TestGeminiProvider_StreamContext(t *testing.T) {
 }
 
 func TestGeminiProvider_StreamRequestFormat(t *testing.T) {
+	t.Parallel()
 	t.Run("Stream request with all parameters", func(t *testing.T) {
+		t.Parallel()
 		var capturedRequest map[string]any
 
 		// Create mock server that captures request
@@ -487,7 +494,9 @@ func TestGeminiProvider_StreamRequestFormat(t *testing.T) {
 }
 
 func TestGeminiProvider_StreamErrorScenarios(t *testing.T) {
+	t.Parallel()
 	t.Run("Server returns HTTP error", func(t *testing.T) {
+		t.Parallel()
 		// Create server that returns error
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(http.StatusInternalServerError)
@@ -513,6 +522,7 @@ func TestGeminiProvider_StreamErrorScenarios(t *testing.T) {
 	})
 
 	t.Run("Server closes connection unexpectedly", func(t *testing.T) {
+		t.Parallel()
 		// Create server that closes connection
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("Content-Type", "text/event-stream")
@@ -565,6 +575,7 @@ func TestGeminiProvider_StreamErrorScenarios(t *testing.T) {
 	})
 
 	t.Run("Empty stream response", func(t *testing.T) {
+		t.Parallel()
 		// Create server that returns empty stream
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("Content-Type", "text/event-stream")

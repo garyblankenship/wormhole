@@ -24,6 +24,7 @@ func TestIntegration_MultipleProviders(t *testing.T) {
 	testutil.SetupTestModels(t)
 
 	t.Run("switching between providers", func(t *testing.T) {
+		t.Parallel()
 		// OpenAI server
 		openaiServer := testutil.MockOpenAIServer(t, func(w http.ResponseWriter, r *http.Request) {
 			response := map[string]any{
@@ -118,6 +119,7 @@ func TestIntegration_Middleware(t *testing.T) {
 	testutil.SetupTestModels(t)
 
 	t.Run("metrics middleware", func(t *testing.T) {
+		t.Parallel()
 		server := testutil.MockOpenAIServer(t, func(w http.ResponseWriter, r *http.Request) {
 			response := map[string]any{
 				"id":      "chatcmpl-middleware123",
@@ -175,6 +177,7 @@ func TestIntegration_Middleware(t *testing.T) {
 	})
 
 	t.Run("custom capture middleware", func(t *testing.T) {
+		t.Parallel()
 		var capturedRequest any
 		var capturedResponse any
 
@@ -255,6 +258,7 @@ func TestIntegration_OpenRouter(t *testing.T) {
 	// auto-registered OpenRouter models from New() which setupTestModels() would clear
 
 	t.Run("openrouter with gpt-5-mini", func(t *testing.T) {
+		t.Parallel()
 		// Mock OpenRouter server (uses OpenAI-compatible format)
 		server := testutil.MockOpenAIServer(t, func(w http.ResponseWriter, r *http.Request) {
 			// Verify request headers
@@ -340,6 +344,7 @@ func TestIntegration_OpenRouter(t *testing.T) {
 	})
 
 	t.Run("openrouter provider handles any model", func(t *testing.T) {
+		t.Parallel()
 		// Create client with OpenRouter
 		client := wormhole.New(
 			wormhole.WithOpenAICompatible("openrouter", "https://openrouter.ai/api/v1", types.ProviderConfig{
@@ -370,6 +375,7 @@ func TestIntegration_OpenRouter(t *testing.T) {
 	})
 
 	t.Run("openrouter timeout handling", func(t *testing.T) {
+		t.Parallel()
 		// Mock slow OpenRouter server
 		server := testutil.MockOpenAIServer(t, func(w http.ResponseWriter, r *http.Request) {
 			// Simulate slow response (200ms delay)
@@ -397,6 +403,7 @@ func TestIntegration_OpenRouter(t *testing.T) {
 		})
 
 		t.Run("with explicit timeout should succeed", func(t *testing.T) {
+			t.Parallel()
 			// User should configure appropriate timeout for their use case
 			client := wormhole.New(
 				wormhole.WithDefaultProvider("openrouter"),
@@ -416,6 +423,7 @@ func TestIntegration_OpenRouter(t *testing.T) {
 		})
 
 		t.Run("with short timeout should fail gracefully", func(t *testing.T) {
+			t.Parallel()
 			client := wormhole.New(
 				wormhole.WithDefaultProvider("openrouter"),
 				wormhole.WithOpenAICompatible("openrouter", server.URL, types.ProviderConfig{

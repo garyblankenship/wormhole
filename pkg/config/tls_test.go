@@ -11,7 +11,9 @@ import (
 )
 
 func TestTLSConfigConstructors(t *testing.T) {
+	t.Parallel()
 	t.Run("default is secure", func(t *testing.T) {
+		t.Parallel()
 		cfg := DefaultTLSConfig()
 		assert.Equal(t, uint16(tls.VersionTLS13), cfg.MinVersion)
 		assert.False(t, cfg.InsecureSkipVerify)
@@ -21,6 +23,7 @@ func TestTLSConfigConstructors(t *testing.T) {
 	})
 
 	t.Run("strict uses only TLS 1.3 ciphers", func(t *testing.T) {
+		t.Parallel()
 		cfg := StrictTLSConfig()
 		assert.Equal(t, uint16(tls.VersionTLS13), cfg.MinVersion)
 		assert.Equal(t, TLS13CipherSuites(), cfg.CipherSuites)
@@ -28,6 +31,7 @@ func TestTLSConfigConstructors(t *testing.T) {
 	})
 
 	t.Run("insecure allows TLS 1.0 but still verifies by default", func(t *testing.T) {
+		t.Parallel()
 		cfg := InsecureTLSConfig()
 		assert.Equal(t, uint16(tls.VersionTLS10), cfg.MinVersion)
 		assert.False(t, cfg.InsecureSkipVerify)
@@ -37,6 +41,7 @@ func TestTLSConfigConstructors(t *testing.T) {
 }
 
 func TestTLSConfigIsSecure(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name string
 		cfg  TLSConfig
@@ -77,12 +82,14 @@ func TestTLSConfigIsSecure(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			assert.Equal(t, tt.want, tt.cfg.IsSecure())
 		})
 	}
 }
 
 func TestTLSConfigApplyAndWithers(t *testing.T) {
+	t.Parallel()
 	rootCAs := x509.NewCertPool()
 	cfg := DefaultTLSConfig().
 		WithMinVersion(tls.VersionTLS12).
@@ -110,12 +117,14 @@ func TestTLSConfigApplyAndWithers(t *testing.T) {
 }
 
 func TestTLSConfigApplyToNilBase(t *testing.T) {
+	t.Parallel()
 	applied := TLSConfig{}.ApplyToTLSConfig(nil)
 	require.NotNil(t, applied)
 	assert.Equal(t, uint16(tls.VersionTLS13), applied.MinVersion)
 }
 
 func TestTLSConfigFingerprint(t *testing.T) {
+	t.Parallel()
 	base := DefaultTLSConfig().
 		WithMinVersion(tls.VersionTLS12).
 		WithServerName("api.example.test")

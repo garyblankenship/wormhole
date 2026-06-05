@@ -22,6 +22,7 @@ func TestIntegration_ErrorHandling(t *testing.T) {
 	testutil.SetupTestModels(t)
 
 	t.Run("HTTP 401 unauthorized", func(t *testing.T) {
+		t.Parallel()
 		server := testutil.MockOpenAIServer(t, func(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(http.StatusUnauthorized)
 			w.Header().Set("Content-Type", "application/json")
@@ -58,6 +59,7 @@ func TestIntegration_ErrorHandling(t *testing.T) {
 	})
 
 	t.Run("HTTP 429 rate limit", func(t *testing.T) {
+		t.Parallel()
 		server := testutil.MockOpenAIServer(t, func(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(http.StatusTooManyRequests)
 			w.Header().Set("Content-Type", "application/json")
@@ -94,6 +96,7 @@ func TestIntegration_ErrorHandling(t *testing.T) {
 	})
 
 	t.Run("HTTP 500 server error", func(t *testing.T) {
+		t.Parallel()
 		server := testutil.MockOpenAIServer(t, func(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(http.StatusInternalServerError)
 			w.Header().Set("Content-Type", "application/json")
@@ -132,6 +135,7 @@ func TestIntegration_ErrorHandling(t *testing.T) {
 	})
 
 	t.Run("network timeout", func(t *testing.T) {
+		t.Parallel()
 		server := testutil.MockOpenAIServer(t, func(w http.ResponseWriter, r *http.Request) {
 			// Simulate slow response that will trigger timeout
 			time.Sleep(2 * time.Second)
@@ -189,6 +193,7 @@ func TestIntegration_ErrorHandling(t *testing.T) {
 	})
 
 	t.Run("context cancellation", func(t *testing.T) {
+		t.Parallel()
 		server := testutil.MockOpenAIServer(t, func(w http.ResponseWriter, r *http.Request) {
 			// Simulate long response
 			time.Sleep(200 * time.Millisecond)

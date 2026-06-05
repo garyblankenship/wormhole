@@ -8,6 +8,7 @@ import (
 )
 
 func TestNew_RequiresBaseURL(t *testing.T) {
+	t.Parallel()
 	config := types.ProviderConfig{}
 
 	_, err := New(config)
@@ -20,6 +21,7 @@ func TestNew_RequiresBaseURL(t *testing.T) {
 }
 
 func TestNew_CustomConfig(t *testing.T) {
+	t.Parallel()
 	customURL := "http://custom.ollama.host:11434"
 	config := types.ProviderConfig{
 		BaseURL: customURL,
@@ -39,6 +41,7 @@ func TestNew_CustomConfig(t *testing.T) {
 }
 
 func TestBuildChatPayload(t *testing.T) {
+	t.Parallel()
 	provider, err := New(types.ProviderConfig{
 		BaseURL: "http://localhost:11434",
 	})

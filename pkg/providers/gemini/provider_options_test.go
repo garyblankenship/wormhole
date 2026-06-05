@@ -7,6 +7,7 @@ import (
 )
 
 func TestProviderOptionsMergedIntoTextPayload(t *testing.T) {
+	t.Parallel()
 	provider := New("key", types.NewProviderConfig("key").
 		WithDefaultProviderOptions(map[string]any{"safetySettings": []any{"default"}, "cachedContent": "default"}).
 		WithProviderOptionsForModel("gemini-test", map[string]any{"cachedContent": "model"}))

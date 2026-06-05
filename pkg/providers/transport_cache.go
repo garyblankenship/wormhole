@@ -10,46 +10,60 @@ import (
 
 const maxCachedTransports = 64
 
-var (
-	transportCache sync.RWMutex
-	transports     = make(map[string]*cachedTransport)
-
-	// Transport cache metrics
-	transportCacheHits   atomic.Int64
-	transportCacheMisses atomic.Int64
-)
-
 type cachedTransport struct {
 	transport    *http.Transport
 	lastUsedNano atomic.Int64
 }
 
-func getCachedTransport(key string) (*http.Transport, bool) {
-	transportCache.RLock()
-	defer transportCache.RUnlock()
-	entry, ok := transports[key]
+// TransportCache is an instance-scoped, bounded LRU cache of *http.Transport
+// keyed by transport-config fingerprint. Each HTTPClientWrapper owns one, so
+// transports are NOT shared across wrapper instances or differing TLS configs.
+type TransportCache struct {
+	mu         sync.RWMutex
+	transports map[string]*cachedTransport
+	hits       atomic.Int64
+	misses     atomic.Int64
+}
+
+// NewTransportCache returns an empty, ready-to-use TransportCache.
+func NewTransportCache() *TransportCache {
+	return &TransportCache{
+		transports: make(map[string]*cachedTransport),
+	}
+}
+
+func (tc *TransportCache) get(key string) (*http.Transport, bool) {
+	tc.mu.RLock()
+	defer tc.mu.RUnlock()
+	entry, ok := tc.transports[key]
 	if ok {
 		entry.lastUsedNano.Store(time.Now().UnixNano())
-		transportCacheHits.Add(1)
+		tc.hits.Add(1)
 		return entry.transport, true
 	}
 	return nil, false
 }
 
-func setCachedTransport(key string, transport *http.Transport) {
-	transportCache.Lock()
-	defer transportCache.Unlock()
-	if existing, ok := transports[key]; ok && existing.transport != nil {
+func (tc *TransportCache) set(key string, transport *http.Transport) {
+	tc.mu.Lock()
+	defer tc.mu.Unlock()
+	if existing, ok := tc.transports[key]; ok && existing.transport != nil {
 		existing.transport.CloseIdleConnections()
 	}
 	entry := &cachedTransport{transport: transport}
 	entry.lastUsedNano.Store(time.Now().UnixNano())
-	transports[key] = entry
-	evictOldestTransportsLocked()
+	tc.transports[key] = entry
+	tc.evictOldestLocked()
 }
 
-func evictOldestTransportsLocked() {
-	if len(transports) <= maxCachedTransports {
+// recordMiss increments the cache-miss counter. Call when get() returns false.
+func (tc *TransportCache) recordMiss() {
+	tc.misses.Add(1)
+}
+
+// evictOldestLocked must be called with tc.mu held.
+func (tc *TransportCache) evictOldestLocked() {
+	if len(tc.transports) <= maxCachedTransports {
 		return
 	}
 
@@ -58,8 +72,8 @@ func evictOldestTransportsLocked() {
 		lastUsedNano int64
 	}
 
-	entries := make([]transportInfo, 0, len(transports))
-	for key, entry := range transports {
+	entries := make([]transportInfo, 0, len(tc.transports))
+	for key, entry := range tc.transports {
 		entries = append(entries, transportInfo{key: key, lastUsedNano: entry.lastUsedNano.Load()})
 	}
 
@@ -67,14 +81,14 @@ func evictOldestTransportsLocked() {
 		return entries[i].lastUsedNano < entries[j].lastUsedNano
 	})
 
-	for len(transports) > maxCachedTransports && len(entries) > 0 {
+	for len(tc.transports) > maxCachedTransports && len(entries) > 0 {
 		victim := entries[0]
 		entries = entries[1:]
-		if entry, ok := transports[victim.key]; ok {
+		if entry, ok := tc.transports[victim.key]; ok {
 			if entry.transport != nil {
 				entry.transport.CloseIdleConnections()
 			}
-			delete(transports, victim.key)
+			delete(tc.transports, victim.key)
 		}
 	}
 }
@@ -86,14 +100,14 @@ type TransportCacheMetrics struct {
 	Size   int
 }
 
-// GetTransportCacheMetrics returns current transport cache performance statistics
-func GetTransportCacheMetrics() TransportCacheMetrics {
-	transportCache.RLock()
-	defer transportCache.RUnlock()
+// Metrics returns current cache performance statistics for this instance.
+func (tc *TransportCache) Metrics() TransportCacheMetrics {
+	tc.mu.RLock()
+	defer tc.mu.RUnlock()
 
 	return TransportCacheMetrics{
-		Hits:   transportCacheHits.Load(),
-		Misses: transportCacheMisses.Load(),
-		Size:   len(transports),
+		Hits:   tc.hits.Load(),
+		Misses: tc.misses.Load(),
+		Size:   len(tc.transports),
 	}
 }

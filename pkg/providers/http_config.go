@@ -102,20 +102,22 @@ func extractHostFromBaseURL(baseURL string) string {
 }
 
 // NewSecureHTTPClient creates a new HTTP client with secure TLS configuration
-// and optimized transport settings.
-//
-// Parameters:
-//   - timeout: Overall request timeout (0 for no timeout)
-//   - tlsConfig: TLS configuration (nil for default secure configuration)
-//   - transportConfig: HTTP transport configuration (nil for default)
-//   - baseURL: Base URL for connection pooling grouping (empty for no grouping)
-//
-// The client uses:
-//   - Secure TLS 1.2+ by default
-//   - Modern cipher suites only
-//   - Connection pooling for performance
-//   - Proper timeout handling
+// and optimized transport settings. This standalone form does NOT share a
+// transport cache; each call builds a fresh transport. For cache-backed reuse,
+// HTTPClientWrapper routes through its instance-scoped *TransportCache.
 func NewSecureHTTPClient(timeout time.Duration, tlsConfig *config.TLSConfig, transportConfig *HTTPTransportConfig, baseURL string) *http.Client {
+	return buildSecureHTTPClient(timeout, tlsConfig, transportConfig, baseURL, nil)
+}
+
+// newSecureHTTPClient builds a client whose transport is cached in tc, keyed by
+// transport-config fingerprint + base URL. Reuses an existing transport on hit.
+func (tc *TransportCache) newSecureHTTPClient(timeout time.Duration, tlsConfig *config.TLSConfig, transportConfig *HTTPTransportConfig, baseURL string) *http.Client {
+	return buildSecureHTTPClient(timeout, tlsConfig, transportConfig, baseURL, tc)
+}
+
+// buildSecureHTTPClient is the shared construction path. When tc is nil the
+// transport is built fresh and uncached; otherwise it is looked up / stored in tc.
+func buildSecureHTTPClient(timeout time.Duration, tlsConfig *config.TLSConfig, transportConfig *HTTPTransportConfig, baseURL string, tc *TransportCache) *http.Client {
 	// Use default TLS config if not provided
 	if tlsConfig == nil {
 		defaultTLS := config.DefaultTLSConfig()
@@ -134,38 +136,39 @@ func NewSecureHTTPClient(timeout time.Duration, tlsConfig *config.TLSConfig, tra
 		tlsClientConfig = tlsConfig.ApplyToTLSConfig(nil)
 	}
 
-	// Compute cache key based on transport configuration and base URL
-	key := transportConfig.CacheKey(baseURL)
-
-	// Try to get cached transport
-	transport, ok := getCachedTransport(key)
-	if !ok {
-		// Increment miss count
-		transportCacheMisses.Add(1)
-
-		// Create new transport with TLS config
-		transport = &http.Transport{
-			Proxy: transportConfig.Proxy,
-			DialContext: (&net.Dialer{
-				Timeout:   transportConfig.DialTimeout,
-				KeepAlive: transportConfig.DialKeepAlive,
-			}).DialContext,
-			TLSHandshakeTimeout:   transportConfig.TLSHandshakeTimeout,
-			ExpectContinueTimeout: transportConfig.ExpectContinueTimeout,
-			ResponseHeaderTimeout: transportConfig.ResponseHeaderTimeout,
-			MaxIdleConns:          transportConfig.MaxIdleConns,
-			MaxIdleConnsPerHost:   transportConfig.MaxIdleConnsPerHost,
-			MaxConnsPerHost:       transportConfig.MaxConnsPerHost,
-			IdleConnTimeout:       transportConfig.IdleConnTimeout,
-			TLSClientConfig:       tlsClientConfig,
-			ForceAttemptHTTP2:     true, // Enable HTTP/2
+	if tc != nil {
+		// Compute cache key based on transport configuration and base URL
+		key := transportConfig.CacheKey(baseURL)
+		if transport, ok := tc.get(key); ok {
+			return &http.Client{Transport: transport, Timeout: timeout}
 		}
-		setCachedTransport(key, transport)
+		tc.recordMiss()
+		transport := newTransportFromConfig(transportConfig, tlsClientConfig)
+		tc.set(key, transport)
+		return &http.Client{Transport: transport, Timeout: timeout}
 	}
 
-	return &http.Client{
-		Transport: transport,
-		Timeout:   timeout,
+	transport := newTransportFromConfig(transportConfig, tlsClientConfig)
+	return &http.Client{Transport: transport, Timeout: timeout}
+}
+
+// newTransportFromConfig constructs an *http.Transport from the given config.
+func newTransportFromConfig(transportConfig *HTTPTransportConfig, tlsClientConfig *tls.Config) *http.Transport {
+	return &http.Transport{
+		Proxy: transportConfig.Proxy,
+		DialContext: (&net.Dialer{
+			Timeout:   transportConfig.DialTimeout,
+			KeepAlive: transportConfig.DialKeepAlive,
+		}).DialContext,
+		TLSHandshakeTimeout:   transportConfig.TLSHandshakeTimeout,
+		ExpectContinueTimeout: transportConfig.ExpectContinueTimeout,
+		ResponseHeaderTimeout: transportConfig.ResponseHeaderTimeout,
+		MaxIdleConns:          transportConfig.MaxIdleConns,
+		MaxIdleConnsPerHost:   transportConfig.MaxIdleConnsPerHost,
+		MaxConnsPerHost:       transportConfig.MaxConnsPerHost,
+		IdleConnTimeout:       transportConfig.IdleConnTimeout,
+		TLSClientConfig:       tlsClientConfig,
+		ForceAttemptHTTP2:     true, // Enable HTTP/2
 	}
 }
 

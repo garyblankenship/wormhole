@@ -13,6 +13,7 @@ import (
 const gpt5Prefix = "gpt-5"
 
 func TestOpenAIProvider(t *testing.T) {
+	t.Parallel()
 	config := types.ProviderConfig{
 		APIKey:  "test-key",
 		BaseURL: "https://api.openai.com/v1",
@@ -24,10 +25,12 @@ func TestOpenAIProvider(t *testing.T) {
 }
 
 func TestBuildChatPayload(t *testing.T) {
+	t.Parallel()
 	// This tests the internal payload building
 	// In a real test, we'd test against actual API or use mocks
 
 	t.Run("basic payload", func(t *testing.T) {
+		t.Parallel()
 		// Test that provider can be created
 		provider := openai.New(types.ProviderConfig{
 			APIKey: "test",
@@ -36,6 +39,7 @@ func TestBuildChatPayload(t *testing.T) {
 	})
 
 	t.Run("with tools", func(t *testing.T) {
+		t.Parallel()
 		tool := types.NewTool(
 			"test_tool",
 			"Test tool",
@@ -51,7 +55,9 @@ func TestBuildChatPayload(t *testing.T) {
 }
 
 func TestTransformResponses(t *testing.T) {
+	t.Parallel()
 	t.Run("finish reason mapping", func(t *testing.T) {
+		t.Parallel()
 		testCases := []struct {
 			input    string
 			expected types.FinishReason
@@ -70,6 +76,7 @@ func TestTransformResponses(t *testing.T) {
 	})
 
 	t.Run("usage conversion", func(t *testing.T) {
+		t.Parallel()
 		usage := &types.Usage{
 			PromptTokens:     100,
 			CompletionTokens: 50,
@@ -80,6 +87,7 @@ func TestTransformResponses(t *testing.T) {
 }
 
 func TestStreamChunkParsing(t *testing.T) {
+	t.Parallel()
 	chunk := types.StreamChunk{
 		ID:    "test",
 		Model: "gpt-5",
@@ -93,6 +101,7 @@ func TestStreamChunkParsing(t *testing.T) {
 }
 
 func TestMultimodalMessages(t *testing.T) {
+	t.Parallel()
 	parts := []types.MessagePart{
 		types.TextPart("Look at this:"),
 		types.ImagePart(map[string]any{
@@ -113,6 +122,7 @@ func TestMultimodalMessages(t *testing.T) {
 }
 
 func TestIsGPT5Model(t *testing.T) {
+	t.Parallel()
 	testCases := []struct {
 		model    string
 		expected bool
@@ -135,6 +145,7 @@ func TestIsGPT5Model(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.model, func(t *testing.T) {
+			t.Parallel()
 			// Test the detection logic directly
 			actual := len(tc.model) >= 5 && tc.model[:5] == gpt5Prefix
 			if !actual && len(tc.model) >= 5 {
@@ -147,6 +158,7 @@ func TestIsGPT5Model(t *testing.T) {
 }
 
 func TestGPT5MaxTokensParameter(t *testing.T) {
+	t.Parallel()
 	testCases := []struct {
 		name                 string
 		model                string
@@ -193,6 +205,7 @@ func TestGPT5MaxTokensParameter(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			provider := openai.New(types.ProviderConfig{
 				APIKey: "test-key",
 			})

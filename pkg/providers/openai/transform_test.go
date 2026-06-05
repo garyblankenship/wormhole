@@ -8,6 +8,7 @@ import (
 )
 
 func TestCleanJSONResponse(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name     string
 		input    string
@@ -52,6 +53,7 @@ func TestCleanJSONResponse(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			result := cleanJSONResponse(tt.input)
 			assert.Equal(t, tt.expected, result)
 		})
@@ -59,6 +61,7 @@ func TestCleanJSONResponse(t *testing.T) {
 }
 
 func TestTransformTextResponseWithJSONCleaning(t *testing.T) {
+	t.Parallel()
 	provider := &Provider{}
 
 	// Test with Anthropic model that returns JSON in code blocks
@@ -88,10 +91,12 @@ func TestTransformTextResponseWithJSONCleaning(t *testing.T) {
 	assert.Equal(t, "claude-opus-4.1", result.Model)
 }
 
-func TestTransformTextResponseWithoutCleaning(t *testing.T) {
+func TestTransformTextResponseModelAgnosticCleaning(t *testing.T) {
+	t.Parallel()
 	provider := &Provider{}
 
-	// Test with non-Anthropic model - should not clean
+	// Non-Anthropic model with JSON wrapped in markdown: stripping is now
+	// applied unconditionally (no model-name sniff), so it must be cleaned.
 	response := &chatCompletionResponse{
 		ID:      "test-id",
 		Model:   "gpt-4",
@@ -112,7 +117,67 @@ func TestTransformTextResponseWithoutCleaning(t *testing.T) {
 
 	result := provider.transformTextResponse(response)
 
-	// Should NOT have cleaned the JSON for non-Anthropic models
-	expected := "```json\n{\"key\": \"value\"}\n```"
+	// Cleaning is model-agnostic now: the gpt-4 response is stripped too.
+	expected := `{"key": "value"}`
+	assert.Equal(t, expected, result.Text)
+}
+
+func TestConvertUsageCacheTokenMapping(t *testing.T) {
+	t.Parallel()
+	p := &Provider{}
+
+	t.Run("cache token mapping", func(t *testing.T) {
+		t.Parallel()
+		u := usage{
+			PromptTokens:        100,
+			CompletionTokens:    50,
+			TotalTokens:         150,
+			PromptTokensDetails: &promptTokensDetail{CachedTokens: 40},
+		}
+		result := p.convertUsage(u)
+		assert.Equal(t, 40, result.CacheReadTokens)
+		assert.Equal(t, 0, result.CacheWriteTokens)
+	})
+
+	t.Run("nil details yields zero cache read", func(t *testing.T) {
+		t.Parallel()
+		u := usage{
+			PromptTokens:        100,
+			CompletionTokens:    50,
+			TotalTokens:         150,
+			PromptTokensDetails: nil,
+		}
+		result := p.convertUsage(u)
+		assert.Equal(t, 0, result.CacheReadTokens)
+		assert.Equal(t, 0, result.CacheWriteTokens)
+	})
+}
+
+func TestTransformTextResponsePlainTextUnchanged(t *testing.T) {
+	t.Parallel()
+	provider := &Provider{}
+
+	// No code fences: cleanJSONResponse is a no-op, content passes through.
+	response := &chatCompletionResponse{
+		ID:      "test-id",
+		Model:   "gpt-4",
+		Created: time.Now().Unix(),
+		Choices: []struct {
+			Index        int     `json:"index"`
+			Message      message `json:"message"`
+			FinishReason string  `json:"finish_reason"`
+		}{
+			{
+				Message: message{
+					Content: "Just plain text, no JSON here.",
+				},
+				FinishReason: "stop",
+			},
+		},
+	}
+
+	result := provider.transformTextResponse(response)
+
+	expected := "Just plain text, no JSON here."
 	assert.Equal(t, expected, result.Text)
 }

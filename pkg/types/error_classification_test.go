@@ -7,6 +7,7 @@ import (
 )
 
 func TestClassifyErrorUsesTypedErrors(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		err  error
 		want ErrorClass
@@ -26,6 +27,7 @@ func TestClassifyErrorUsesTypedErrors(t *testing.T) {
 }
 
 func TestClassifyErrorUsesStatusAndTextFallbacks(t *testing.T) {
+	t.Parallel()
 	err := NewWormholeError(ErrorCodeProvider, "provider failed", true).WithStatusCode(http.StatusTooManyRequests)
 	if got := ClassifyError(err); got != ErrorClassRateLimit {
 		t.Fatalf("status classification = %s", got)

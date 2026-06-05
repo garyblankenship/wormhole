@@ -45,6 +45,7 @@ func (f *blockingFetcher) FetchModels(ctx context.Context) ([]*types.ModelInfo, 
 }
 
 func TestDiscoveryService_GetModels(t *testing.T) {
+	t.Parallel()
 	mockModels := []*types.ModelInfo{
 		{
 			ID:       "test-model-1",
@@ -108,6 +109,7 @@ func TestDiscoveryService_GetModels(t *testing.T) {
 }
 
 func TestDiscoveryService_OfflineMode(t *testing.T) {
+	t.Parallel()
 	config := DiscoveryConfig{
 		CacheTTL:        1 * time.Hour,
 		EnableFileCache: false,
@@ -136,6 +138,7 @@ func TestDiscoveryService_OfflineMode(t *testing.T) {
 }
 
 func TestDiscoveryService_RefreshModels(t *testing.T) {
+	t.Parallel()
 	mockModels := []*types.ModelInfo{
 		{
 			ID:       "test-model",
@@ -181,6 +184,7 @@ func TestDiscoveryService_RefreshModels(t *testing.T) {
 }
 
 func TestDiscoveryService_RegisterFetcherAndStop(t *testing.T) {
+	t.Parallel()
 	mockModels := []*types.ModelInfo{{
 		ID:       "registered-model",
 		Name:     "Registered Model",
@@ -228,12 +232,14 @@ func TestDiscoveryService_StartBackgroundRefreshOnlyStartsOnce(t *testing.T) {
 		RefreshInterval: 5 * time.Millisecond,
 	}, fetcher)
 	ctx, cancel := context.WithCancel(context.Background())
-	t.Cleanup(cancel)
+	// Stop must be registered first (LIFO cleanup order) so cancel runs before
+	// Stop's wg.Wait — blockingFetcher.FetchModels blocks on ctx.Done().
 	t.Cleanup(func() {
 		if err := service.Stop(); err != nil {
 			t.Fatalf("Stop returned error: %v", err)
 		}
 	})
+	t.Cleanup(cancel)
 
 	service.StartBackgroundRefresh(ctx)
 	service.StartBackgroundRefresh(ctx)
@@ -255,6 +261,7 @@ func TestDiscoveryService_StartBackgroundRefreshOnlyStartsOnce(t *testing.T) {
 }
 
 func TestDiscoveryService_ClearCache(t *testing.T) {
+	t.Parallel()
 	mockModels := []*types.ModelInfo{
 		{
 			ID:       "test-model",
@@ -299,6 +306,7 @@ func TestDiscoveryService_ClearCache(t *testing.T) {
 }
 
 func TestDiscoveryService_UnknownProvider(t *testing.T) {
+	t.Parallel()
 	config := DiscoveryConfig{
 		CacheTTL:        1 * time.Hour,
 		EnableFileCache: false,
@@ -317,6 +325,7 @@ func TestDiscoveryService_UnknownProvider(t *testing.T) {
 }
 
 func TestModelCache_TTL(t *testing.T) {
+	t.Parallel()
 	config := DiscoveryConfig{
 		CacheTTL:        100 * time.Millisecond, // Short TTL for testing
 		EnableFileCache: false,

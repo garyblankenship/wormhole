@@ -12,6 +12,7 @@ import (
 
 // TestGracefulShutdownBasic tests basic graceful shutdown functionality
 func TestGracefulShutdownBasic(t *testing.T) {
+	t.Parallel()
 	client := wormhole.New(wormhole.WithDefaultProvider("openai"))
 
 	// Shutdown should complete with no active requests
@@ -28,6 +29,7 @@ func TestGracefulShutdownBasic(t *testing.T) {
 
 // TestIdempotencyKeyBasic tests basic idempotency key functionality
 func TestIdempotencyKeyBasic(t *testing.T) {
+	t.Parallel()
 	// Create client with idempotency key
 	client := wormhole.New(
 		wormhole.WithDefaultProvider("openai"),
@@ -52,6 +54,7 @@ func TestErrorHandlingBasic(t *testing.T) {
 
 // TestToolSafetyConfig tests tool safety config structure
 func TestToolSafetyConfig(t *testing.T) {
+	t.Parallel()
 	config := wormhole.DefaultToolSafetyConfig()
 
 	// Verify default values for new security fields

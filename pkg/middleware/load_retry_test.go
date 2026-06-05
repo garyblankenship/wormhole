@@ -12,6 +12,7 @@ import (
 )
 
 func TestLoadBalancerStrategiesAndMetrics(t *testing.T) {
+	t.Parallel()
 	handler := func(name string) Handler {
 		return func(ctx context.Context, req any) (any, error) {
 			return name, nil
@@ -20,6 +21,7 @@ func TestLoadBalancerStrategiesAndMetrics(t *testing.T) {
 
 	for _, strategy := range []LoadBalanceStrategy{RoundRobin, Random, LeastConnections, WeightedRoundRobin, ResponseTime, Adaptive, LoadBalanceStrategy(999)} {
 		t.Run(strategyName(strategy), func(t *testing.T) {
+			t.Parallel()
 			lb := NewLoadBalancer(strategy)
 			lb.AddProvider("a", handler("a"), 2)
 			lb.AddProvider("b", handler("b"), 1)
@@ -65,29 +67,45 @@ func strategyName(strategy LoadBalanceStrategy) string {
 }
 
 func TestLoadBalancerNoHealthyProvidersAndHealthChecks(t *testing.T) {
+	t.Parallel()
 	lb := NewLoadBalancer(RoundRobin)
 	lb.AddProvider("bad", func(ctx context.Context, req any) (any, error) {
 		return nil, errors.New("bad")
 	}, 1)
-	lb.providers[0].Healthy = false
+	p := lb.providers[0]
+
+	p.mu.Lock()
+	p.Healthy = false
+	p.mu.Unlock()
 
 	_, err := lb.SelectProvider(context.Background())
 	require.Error(t, err)
 	assert.True(t, IsMiddlewareError(err))
 
-	lb.providers[0].Healthy = true
+	p.mu.Lock()
+	p.Healthy = true
+	p.mu.Unlock()
 	lb.performHealthChecks()
-	assert.True(t, lb.providers[0].Healthy)
+	p.mu.RLock()
+	healthyAfterFirst := p.Healthy
+	p.mu.RUnlock()
+	assert.True(t, healthyAfterFirst)
 
 	lb.StartHealthChecks(func(Handler) error { return errors.New("unhealthy") })
 	time.Sleep(2 * time.Millisecond)
 	lb.performHealthChecks()
 	lb.StopHealthChecks()
-	assert.False(t, lb.providers[0].Healthy)
-	assert.False(t, lb.providers[0].LastHealthCheck.IsZero())
+
+	p.mu.RLock()
+	healthyAfterStop := p.Healthy
+	lastCheck := p.LastHealthCheck
+	p.mu.RUnlock()
+	assert.False(t, healthyAfterStop)
+	assert.False(t, lastCheck.IsZero())
 }
 
 func TestLoadBalancerMiddleware(t *testing.T) {
+	t.Parallel()
 	mw := LoadBalancerMiddleware(RoundRobin, map[string]Handler{
 		"a": func(ctx context.Context, req any) (any, error) { return "a", nil },
 	})
@@ -102,7 +120,9 @@ func TestLoadBalancerMiddleware(t *testing.T) {
 }
 
 func TestRetryMiddleware(t *testing.T) {
+	t.Parallel()
 	t.Run("retries until success", func(t *testing.T) {
+		t.Parallel()
 		attempts := 0
 		handler := RetryMiddleware(RetryConfig{
 			MaxRetries:      2,
@@ -125,6 +145,7 @@ func TestRetryMiddleware(t *testing.T) {
 	})
 
 	t.Run("non retryable", func(t *testing.T) {
+		t.Parallel()
 		attempts := 0
 		handler := RetryMiddleware(RetryConfig{
 			MaxRetries:      3,
@@ -143,6 +164,7 @@ func TestRetryMiddleware(t *testing.T) {
 	})
 
 	t.Run("context cancellation", func(t *testing.T) {
+		t.Parallel()
 		ctx, cancel := context.WithCancel(context.Background())
 		cancel()
 		handler := RetryMiddleware(RetryConfig{
@@ -161,6 +183,7 @@ func TestRetryMiddleware(t *testing.T) {
 }
 
 func TestMiddlewareCoreHelpers(t *testing.T) {
+	t.Parallel()
 	chain := NewChain()
 	chain.Add(func(next Handler) Handler {
 		return func(ctx context.Context, req any) (any, error) {

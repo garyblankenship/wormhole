@@ -1,13 +1,11 @@
 package anthropic
 
 import (
-	"encoding/json"
 	"fmt"
-	"time"
 
 	"github.com/garyblankenship/wormhole/internal/utils"
+	"github.com/garyblankenship/wormhole/pkg/config"
 	"github.com/garyblankenship/wormhole/pkg/providers"
-	providerTransform "github.com/garyblankenship/wormhole/pkg/providers/transform"
 	"github.com/garyblankenship/wormhole/pkg/types"
 )
 
@@ -42,7 +40,7 @@ func (p *Provider) buildMessagePayload(request *types.TextRequest) map[string]an
 	if request.MaxTokens != nil && *request.MaxTokens > 0 {
 		payload["max_tokens"] = *request.MaxTokens
 	} else {
-		payload["max_tokens"] = 4096 // Default
+		payload["max_tokens"] = config.GetDefaultAnthropicMaxTokens()
 	}
 
 	// Optional parameters - use shared utility
@@ -166,140 +164,4 @@ func (p *Provider) mapRole(role types.Role) string {
 	default:
 		return string(role)
 	}
-}
-
-// transformTools converts internal tools to Anthropic format
-func (p *Provider) transformTools(tools []types.Tool) []map[string]any {
-	result := make([]map[string]any, len(tools))
-
-	for i, tool := range tools {
-		parameters, _ := json.Marshal(tool.Function.Parameters)
-		result[i] = map[string]any{
-			"name":         tool.Function.Name,
-			"description":  tool.Function.Description,
-			"input_schema": json.RawMessage(parameters),
-		}
-	}
-
-	return result
-}
-
-// transformTextResponse converts Anthropic response to internal format
-func (p *Provider) transformTextResponse(response *messageResponse) *types.TextResponse {
-	text := ""
-	var toolCalls []types.ToolCall
-
-	// Extract content from response
-	for _, content := range response.Content {
-		switch content.Type {
-		case contentTypeText:
-			text += content.Text
-		case contentTypeToolUse:
-			args, _ := json.Marshal(content.Input)
-			toolCalls = append(toolCalls, types.ToolCall{
-				ID:   content.ID,
-				Type: "function",
-				Function: &types.ToolCallFunction{
-					Name:      content.Name,
-					Arguments: string(args),
-				},
-			})
-		}
-	}
-
-	return &types.TextResponse{
-		ID:           response.ID,
-		Model:        response.Model,
-		Text:         text,
-		ToolCalls:    toolCalls,
-		FinishReason: p.mapStopReason(response.StopReason),
-		Usage:        p.convertUsage(response.Usage),
-		Created:      time.Now(),
-	}
-}
-
-// parseStreamChunk parses a streaming chunk
-func (p *Provider) parseStreamChunk(data []byte) (*types.StreamChunk, error) {
-	// First, determine the event type
-	var baseEvent streamEvent
-	if err := json.Unmarshal(data, &baseEvent); err != nil {
-		return nil, err
-	}
-
-	chunk := &types.StreamChunk{}
-
-	switch baseEvent.Type {
-	case "message_start":
-		var event messageStartEvent
-		if err := json.Unmarshal(data, &event); err != nil {
-			return nil, err
-		}
-		chunk.ID = event.Message.ID
-		chunk.Model = event.Message.Model
-
-	case "content_block_delta":
-		var event contentBlockDeltaEvent
-		if err := json.Unmarshal(data, &event); err != nil {
-			return nil, err
-		}
-		if event.Delta.Type == "text_delta" {
-			chunk.Delta = &types.ChunkDelta{
-				Content: event.Delta.Text,
-			}
-		}
-
-	case "message_delta":
-		var event messageDeltaEvent
-		if err := json.Unmarshal(data, &event); err != nil {
-			return nil, err
-		}
-		if event.Delta.StopReason != "" {
-			reason := p.mapStopReason(event.Delta.StopReason)
-			chunk.FinishReason = &reason
-		}
-		if event.Delta.Usage.InputTokens > 0 || event.Delta.Usage.OutputTokens > 0 {
-			chunk.Usage = p.convertUsage(event.Delta.Usage)
-		}
-
-	case "message_stop":
-		// End of stream
-		return nil, nil
-	}
-
-	return chunk, nil
-}
-
-// Helper functions
-
-func (p *Provider) convertUsage(u messageUsage) *types.Usage {
-	return &types.Usage{
-		PromptTokens:     u.InputTokens,
-		CompletionTokens: u.OutputTokens,
-		TotalTokens:      u.InputTokens + u.OutputTokens,
-	}
-}
-
-func (p *Provider) mapStopReason(reason string) types.FinishReason {
-	return providerTransform.MapFinishReason(reason)
-}
-
-func (p *Provider) schemaToTool(schema json.RawMessage, name string) (*types.Tool, error) {
-	if name == "" {
-		name = "structured_output"
-	}
-
-	// Convert json.RawMessage to map[string]any
-	var params map[string]any
-	if err := json.Unmarshal(schema, &params); err != nil {
-		return nil, err
-	}
-
-	return &types.Tool{
-		Type: "function",
-		Function: &types.ToolFunction{
-			Name:        name,
-			Description: "Extract structured data",
-			Parameters:  params,
-		},
-	}, nil
 }

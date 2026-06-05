@@ -13,6 +13,7 @@ import (
 )
 
 func TestTextGeneration(t *testing.T) {
+	t.Parallel()
 	// Create a mock provider with test response
 	mockProvider := mocktesting.NewMockProvider("mock").
 		WithTextResponse(types.TextResponse{
@@ -32,6 +33,7 @@ func TestTextGeneration(t *testing.T) {
 	ctx := context.Background()
 
 	t.Run("simple prompt with mock provider", func(t *testing.T) {
+		t.Parallel()
 		req := p.Text().
 			Model("gpt-5").
 			Prompt("Hello world").
@@ -53,6 +55,7 @@ func TestTextGeneration(t *testing.T) {
 	})
 
 	t.Run("with system prompt", func(t *testing.T) {
+		t.Parallel()
 		req := p.Text().
 			Model("gpt-5").
 			SystemPrompt("You are helpful").
@@ -64,6 +67,7 @@ func TestTextGeneration(t *testing.T) {
 	})
 
 	t.Run("with messages", func(t *testing.T) {
+		t.Parallel()
 		messages := []types.Message{
 			types.NewSystemMessage("You are helpful"),
 			types.NewUserMessage("Hello"),
@@ -83,6 +87,7 @@ func TestTextGeneration(t *testing.T) {
 	})
 
 	t.Run("with tools", func(t *testing.T) {
+		t.Parallel()
 		tool := types.NewTool(
 			"get_weather",
 			"Get weather for a location",
@@ -110,6 +115,7 @@ func TestTextGeneration(t *testing.T) {
 }
 
 func TestStructuredGeneration(t *testing.T) {
+	t.Parallel()
 	p := wormhole.New(
 		wormhole.WithDefaultProvider("mock"),
 	)
@@ -134,6 +140,7 @@ func TestStructuredGeneration(t *testing.T) {
 }
 
 func TestEmbeddings(t *testing.T) {
+	t.Parallel()
 	p := wormhole.New(
 		wormhole.WithDefaultProvider("mock"),
 	)
@@ -148,25 +155,30 @@ func TestEmbeddings(t *testing.T) {
 }
 
 func TestMessageTypes(t *testing.T) {
+	t.Parallel()
 	t.Run("system message", func(t *testing.T) {
+		t.Parallel()
 		msg := types.NewSystemMessage("You are helpful")
 		assert.Equal(t, types.RoleSystem, msg.GetRole())
 		assert.Equal(t, "You are helpful", msg.GetContent())
 	})
 
 	t.Run("user message", func(t *testing.T) {
+		t.Parallel()
 		msg := types.NewUserMessage("Hello")
 		assert.Equal(t, types.RoleUser, msg.GetRole())
 		assert.Equal(t, "Hello", msg.GetContent())
 	})
 
 	t.Run("assistant message", func(t *testing.T) {
+		t.Parallel()
 		msg := types.NewAssistantMessage("Hi there")
 		assert.Equal(t, types.RoleAssistant, msg.GetRole())
 		assert.Equal(t, "Hi there", msg.GetContent())
 	})
 
 	t.Run("tool message", func(t *testing.T) {
+		t.Parallel()
 		msg := types.NewToolResultMessage("call-123", "Result data")
 		assert.Equal(t, types.RoleTool, msg.GetRole())
 		assert.Equal(t, "Result data", msg.GetContent())
@@ -174,6 +186,7 @@ func TestMessageTypes(t *testing.T) {
 	})
 
 	t.Run("multimodal message", func(t *testing.T) {
+		t.Parallel()
 		parts := []types.MessagePart{
 			types.TextPart("Look at this image:"),
 			types.ImagePart(map[string]string{"url": "https://example.com/image.jpg"}),
@@ -191,6 +204,7 @@ func TestMessageTypes(t *testing.T) {
 }
 
 func TestProviderCacheEviction(t *testing.T) {
+	t.Parallel()
 	p := wormhole.New(wormhole.WithOpenAI("test-key"))
 	// No providers cached yet, should not panic
 	p.CleanupStaleProviders(time.Minute, 10)

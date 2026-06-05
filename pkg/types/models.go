@@ -177,7 +177,10 @@ func (r *ModelRegistry) LoadModelsFromConfig(models []*ModelInfo) {
 	}
 }
 
-// Global model registry instance - Use LoadModelsFromConfig() to populate
+// DefaultModelRegistry is the global model registry instance. It starts EMPTY
+// (opt-in): populate it with LoadModelsFromConfig, or pass models via
+// wormhole.WithModels(...) to wormhole.New. Until populated, model-validation
+// helpers have no models to validate against.
 var DefaultModelRegistry = NewModelRegistry()
 
 // Helper functions for model operations

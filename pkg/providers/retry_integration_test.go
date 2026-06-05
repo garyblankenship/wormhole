@@ -14,9 +14,11 @@ import (
 )
 
 func TestBaseProvider_PerProviderRetryConfiguration(t *testing.T) {
+	t.Parallel()
 	t.Skip("Skipping timing-sensitive retry tests - jitter can cause unpredictable delays")
 
 	t.Run("uses per-provider max retries", func(t *testing.T) {
+		t.Parallel()
 		var callCount int64
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			atomic.AddInt64(&callCount, 1)
@@ -49,6 +51,7 @@ func TestBaseProvider_PerProviderRetryConfiguration(t *testing.T) {
 	})
 
 	t.Run("uses per-provider retry delay", func(t *testing.T) {
+		t.Parallel()
 		var callCount int64
 		var firstCallTime, secondCallTime time.Time
 
@@ -98,6 +101,7 @@ func TestBaseProvider_PerProviderRetryConfiguration(t *testing.T) {
 	})
 
 	t.Run("zero retries disables retry", func(t *testing.T) {
+		t.Parallel()
 		var callCount int64
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			atomic.AddInt64(&callCount, 1)
@@ -124,6 +128,7 @@ func TestBaseProvider_PerProviderRetryConfiguration(t *testing.T) {
 	})
 
 	t.Run("nil retry settings use defaults", func(t *testing.T) {
+		t.Parallel()
 		var callCount int64
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			atomic.AddInt64(&callCount, 1)
@@ -149,6 +154,7 @@ func TestBaseProvider_PerProviderRetryConfiguration(t *testing.T) {
 	})
 
 	t.Run("max retry delay is respected", func(t *testing.T) {
+		t.Parallel()
 		var callCount int64
 		var callTimes []time.Time
 
@@ -189,6 +195,7 @@ func TestBaseProvider_PerProviderRetryConfiguration(t *testing.T) {
 }
 
 func TestBaseProvider_RetryBehaviorWithDifferentStatusCodes(t *testing.T) {
+	t.Parallel()
 	testCases := []struct {
 		name          string
 		statusCode    int
@@ -207,6 +214,7 @@ func TestBaseProvider_RetryBehaviorWithDifferentStatusCodes(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			var callCount int64
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				atomic.AddInt64(&callCount, 1)
@@ -233,6 +241,7 @@ func TestBaseProvider_RetryBehaviorWithDifferentStatusCodes(t *testing.T) {
 }
 
 func TestBaseProvider_RetryWithContextCancellation(t *testing.T) {
+	t.Parallel()
 	var callCount int64
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		atomic.AddInt64(&callCount, 1)
@@ -267,6 +276,7 @@ func TestBaseProvider_RetryWithContextCancellation(t *testing.T) {
 }
 
 func TestBaseProvider_SuccessfulRetry(t *testing.T) {
+	t.Parallel()
 	var callCount int64
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		count := atomic.AddInt64(&callCount, 1)

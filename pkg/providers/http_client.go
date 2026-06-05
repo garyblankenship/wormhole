@@ -197,34 +197,15 @@ func (kp *keyPool) isLimitedLocked(idx int, now time.Time) bool {
 	return ok && until.After(now)
 }
 
-func (kp *keyPool) debugState() map[string]any {
-	kp.mu.Lock()
-	defer kp.mu.Unlock()
-	limited := make(map[string]time.Time, len(kp.limited))
-	for idx, until := range kp.limited {
-		limited[maskSecret(kp.keys[idx])] = until
-	}
-	return map[string]any{
-		"current":      maskSecret(kp.keys[kp.current]),
-		"rate_limited": limited,
-	}
-}
-
-func maskSecret(secret string) string {
-	if len(secret) <= 8 {
-		return "****"
-	}
-	return secret[:4] + "****" + secret[len(secret)-4:]
-}
-
 type HTTPClientWrapper struct {
-	providerName string
-	Config       types.ProviderConfig
-	tlsConfig    *config.TLSConfig
-	httpClient   *http.Client
-	retryClient  *utils.RetryableHTTPClient
-	authStrategy AuthStrategy
-	keyPool      *keyPool
+	providerName   string
+	Config         types.ProviderConfig
+	tlsConfig      *config.TLSConfig
+	httpClient     *http.Client
+	retryClient    *utils.RetryableHTTPClient
+	authStrategy   AuthStrategy
+	keyPool        *keyPool
+	transportCache *TransportCache
 }
 
 // NewHTTPClientWrapper creates a new HTTPClientWrapper.
@@ -239,10 +220,11 @@ func NewHTTPClientWrapper(name string, providerConfig types.ProviderConfig, tlsC
 	}
 
 	w := &HTTPClientWrapper{
-		providerName: name,
-		Config:       providerConfig,
-		tlsConfig:    tlsConfig,
-		authStrategy: authStrategy,
+		providerName:   name,
+		Config:         providerConfig,
+		tlsConfig:      tlsConfig,
+		authStrategy:   authStrategy,
+		transportCache: NewTransportCache(),
 	}
 
 	// Use injected client if provided, otherwise create default
@@ -252,10 +234,10 @@ func NewHTTPClientWrapper(name string, providerConfig types.ProviderConfig, tlsC
 			w.httpClient = hc
 		} else {
 			// For non-standard HTTPClient implementations, create a concrete client for GetHTTPClient()
-			w.httpClient = NewSecureHTTPClient(w.GetHTTPTimeout(), tlsConfig, nil, providerConfig.BaseURL)
+			w.httpClient = w.transportCache.newSecureHTTPClient(w.GetHTTPTimeout(), tlsConfig, nil, providerConfig.BaseURL)
 		}
 	} else {
-		w.httpClient = NewSecureHTTPClient(w.GetHTTPTimeout(), tlsConfig, nil, providerConfig.BaseURL)
+		w.httpClient = w.transportCache.newSecureHTTPClient(w.GetHTTPTimeout(), tlsConfig, nil, providerConfig.BaseURL)
 	}
 
 	retryConfig := utils.DefaultRetryConfig()
@@ -312,7 +294,7 @@ func (w *HTTPClientWrapper) GetHTTPClient() *http.Client {
 	if w.httpClient != nil {
 		return w.httpClient
 	}
-	return NewSecureHTTPClient(w.GetHTTPTimeout(), w.tlsConfig, nil, "")
+	return w.transportCache.newSecureHTTPClient(w.GetHTTPTimeout(), w.tlsConfig, nil, "")
 }
 
 func (w *HTTPClientWrapper) DoRequest(ctx context.Context, method, url string, body any, result any) error {

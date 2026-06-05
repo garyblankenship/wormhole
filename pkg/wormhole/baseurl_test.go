@@ -85,6 +85,7 @@ func newBaseURLTestServer(t *testing.T) *baseURLTestServer {
 }
 
 func TestBaseURLFunctionality(t *testing.T) {
+	t.Parallel()
 	defaultServer := newBaseURLTestServer(t)
 	overrideServer := newBaseURLTestServer(t)
 	client := New(
@@ -177,6 +178,7 @@ func TestBaseURLFunctionality(t *testing.T) {
 }
 
 func TestBaseURLValidation(t *testing.T) {
+	t.Parallel()
 	defaultServer := newBaseURLTestServer(t)
 	client := New(
 		WithDefaultProvider("openai"),
@@ -187,6 +189,7 @@ func TestBaseURLValidation(t *testing.T) {
 	ctx := context.Background()
 
 	t.Run("Empty BaseURL uses default", func(t *testing.T) {
+		t.Parallel()
 		defaultHits := defaultServer.hits.Load()
 		resp, err := client.Text().
 			BaseURL("").
@@ -201,6 +204,7 @@ func TestBaseURLValidation(t *testing.T) {
 	})
 
 	t.Run("Invalid BaseURL fails appropriately", func(t *testing.T) {
+		t.Parallel()
 		_, err := client.Text().
 			BaseURL("://invalid").
 			Model("test-model").

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/garyblankenship/wormhole/pkg/types"
 )
@@ -60,6 +61,7 @@ func newStreamingFallbackClient(provider *fallbackStreamProvider) *Wormhole {
 }
 
 func TestTextRequestBuilderStreamFallsBackOnOpenError(t *testing.T) {
+	t.Parallel()
 	provider := newFallbackStreamProvider(map[string]func() (<-chan types.TextChunk, error){
 		"primary": func() (<-chan types.TextChunk, error) {
 			return nil, errors.New("open failed")
@@ -79,6 +81,7 @@ func TestTextRequestBuilderStreamFallsBackOnOpenError(t *testing.T) {
 }
 
 func TestTextRequestBuilderStreamFallsBackOnFirstErrorChunk(t *testing.T) {
+	t.Parallel()
 	provider := newFallbackStreamProvider(map[string]func() (<-chan types.TextChunk, error){
 		"primary":  streamChunks(types.TextChunk{Error: errors.New("rate limited")}),
 		"fallback": streamChunks(types.TextChunk{Text: "fallback"}),
@@ -96,6 +99,7 @@ func TestTextRequestBuilderStreamFallsBackOnFirstErrorChunk(t *testing.T) {
 }
 
 func TestTextRequestBuilderStreamDoesNotFallBackAfterEmission(t *testing.T) {
+	t.Parallel()
 	provider := newFallbackStreamProvider(map[string]func() (<-chan types.TextChunk, error){
 		"primary": streamChunks(
 			types.TextChunk{Text: "primary"},
@@ -116,6 +120,7 @@ func TestTextRequestBuilderStreamDoesNotFallBackAfterEmission(t *testing.T) {
 }
 
 func TestTextRequestBuilderStreamAllAttemptsFailBeforeEmission(t *testing.T) {
+	t.Parallel()
 	provider := newFallbackStreamProvider(map[string]func() (<-chan types.TextChunk, error){
 		"primary": func() (<-chan types.TextChunk, error) {
 			return nil, errors.New("open failed")
@@ -135,6 +140,7 @@ func TestTextRequestBuilderStreamAllAttemptsFailBeforeEmission(t *testing.T) {
 }
 
 func TestTextRequestBuilderStreamContextCancellationClosesStream(t *testing.T) {
+	t.Parallel()
 	blocked := make(chan types.TextChunk)
 	provider := newFallbackStreamProvider(map[string]func() (<-chan types.TextChunk, error){
 		"primary": func() (<-chan types.TextChunk, error) {
@@ -151,5 +157,36 @@ func TestTextRequestBuilderStreamContextCancellationClosesStream(t *testing.T) {
 	cancel()
 	for range stream {
 		t.Fatal("expected stream to close without chunks after cancellation")
+	}
+}
+
+func TestApplyStreamIdleTimeoutCancellationClosesWhileBlockedOnSend(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	src := make(chan types.StreamChunk)
+	out := applyStreamIdleTimeout(ctx, src, time.Hour)
+	sent := make(chan struct{})
+
+	go func() {
+		src <- types.StreamChunk{Text: "blocked"}
+		close(sent)
+	}()
+
+	select {
+	case <-sent:
+	case <-time.After(time.Second):
+		t.Fatal("source send did not reach idle-timeout wrapper")
+	}
+
+	cancel()
+
+	select {
+	case chunk, ok := <-out:
+		if ok {
+			t.Fatalf("expected wrapper to close without forwarding after cancellation, got %#v", chunk)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("idle-timeout wrapper did not close after context cancellation")
 	}
 }

@@ -121,7 +121,7 @@ func (g *Gemini) Stream(ctx context.Context, request types.TextRequest) (<-chan 
 		return nil, err
 	}
 
-	return g.stampProvider(g.handleStream(stream)), nil
+	return g.stampProvider(g.handleStream(ctx, stream)), nil
 }
 
 // Structured generates structured output using Gemini models
@@ -171,10 +171,10 @@ func (g *Gemini) buildTextPayload(request types.TextRequest) (map[string]any, er
 		"contents": contents,
 	}
 
-	if request.SystemPrompt != "" {
+	if systemText := mergeSystemInstruction(request.SystemPrompt, request.Messages); systemText != "" {
 		payload["systemInstruction"] = map[string]any{
 			"parts": []map[string]any{
-				{"text": request.SystemPrompt},
+				{"text": systemText},
 			},
 		}
 	}

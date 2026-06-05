@@ -95,6 +95,7 @@ func (p *captureConfigProvider) Text(ctx context.Context, request types.TextRequ
 }
 
 func TestShutdownWaitsForInflightRequest(t *testing.T) {
+	t.Parallel()
 	provider := newBlockingTextProvider("blocking")
 	client := wormhole.New(
 		wormhole.WithDefaultProvider("blocking"),
@@ -139,6 +140,7 @@ func TestShutdownWaitsForInflightRequest(t *testing.T) {
 }
 
 func TestIdempotencyDeduplicatesRepeatedRequests(t *testing.T) {
+	t.Parallel()
 	provider := newCountingTextProvider("counting")
 	client := wormhole.New(
 		wormhole.WithDefaultProvider("counting"),
@@ -172,6 +174,7 @@ func TestIdempotencyDeduplicatesRepeatedRequests(t *testing.T) {
 }
 
 func TestBaseURLOverridePreservesProviderConfigAndFactory(t *testing.T) {
+	t.Parallel()
 	var (
 		mu          sync.Mutex
 		capturedCfg types.ProviderConfig

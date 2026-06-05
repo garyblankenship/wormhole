@@ -81,6 +81,7 @@ func (m *mockToolProvider) Close() error {
 // ==================== Tool Executor Tests ====================
 
 func TestToolExecutor_ExecuteSingleTool(t *testing.T) {
+	t.Parallel()
 	registry := NewToolRegistry()
 
 	// Register a simple tool with map[string]any schema
@@ -132,6 +133,7 @@ func TestToolExecutor_ExecuteSingleTool(t *testing.T) {
 }
 
 func TestToolExecutor_ExecuteToolNotFound(t *testing.T) {
+	t.Parallel()
 	registry := NewToolRegistry()
 	executor := NewToolExecutor(registry)
 
@@ -147,6 +149,7 @@ func TestToolExecutor_ExecuteToolNotFound(t *testing.T) {
 }
 
 func TestToolExecutor_ExecuteToolWithError(t *testing.T) {
+	t.Parallel()
 	registry := NewToolRegistry()
 
 	tool := types.Tool{
@@ -176,6 +179,7 @@ func TestToolExecutor_ExecuteToolWithError(t *testing.T) {
 }
 
 func TestToolExecutor_ExecuteAll(t *testing.T) {
+	t.Parallel()
 	registry := NewToolRegistry()
 
 	// Register multiple tools
@@ -219,6 +223,7 @@ func TestToolExecutor_ExecuteAll(t *testing.T) {
 }
 
 func TestToolExecutor_BuildToolResultMessage(t *testing.T) {
+	t.Parallel()
 	executor := NewToolExecutor(NewToolRegistry())
 
 	results := []types.ToolResult{
@@ -242,6 +247,7 @@ func TestToolExecutor_BuildToolResultMessage(t *testing.T) {
 }
 
 func TestToolExecutor_ExecuteWithTools_SingleRound(t *testing.T) {
+	t.Parallel()
 	registry := NewToolRegistry()
 
 	// Register a weather tool
@@ -308,6 +314,7 @@ func TestToolExecutor_ExecuteWithTools_SingleRound(t *testing.T) {
 }
 
 func TestToolExecutor_ExecuteWithTools_MaxIterations(t *testing.T) {
+	t.Parallel()
 	registry := NewToolRegistry()
 
 	// Register a tool
@@ -376,6 +383,7 @@ func TestToolExecutor_ExecuteWithTools_MaxIterations(t *testing.T) {
 }
 
 func TestToolExecutor_ExecuteWithTools_NoTools(t *testing.T) {
+	t.Parallel()
 	registry := NewToolRegistry()
 	executor := NewToolExecutor(registry)
 
@@ -408,6 +416,7 @@ func TestToolExecutor_ExecuteWithTools_NoTools(t *testing.T) {
 // ==================== Integration Tests ====================
 
 func TestWormhole_RegisterAndListTools(t *testing.T) {
+	t.Parallel()
 	client := New()
 
 	// Initially empty
@@ -442,6 +451,7 @@ func TestWormhole_RegisterAndListTools(t *testing.T) {
 }
 
 func TestWormhole_UnregisterAndClearTools(t *testing.T) {
+	t.Parallel()
 	client := New()
 
 	// Register tools
@@ -472,6 +482,7 @@ func TestWormhole_UnregisterAndClearTools(t *testing.T) {
 // ==================== Tool Safety Tests ====================
 
 func TestToolExecutor_WithSafetyConfig(t *testing.T) {
+	t.Parallel()
 	registry := NewToolRegistry()
 
 	// Register a tool
@@ -515,6 +526,7 @@ func TestToolExecutor_WithSafetyConfig(t *testing.T) {
 }
 
 func TestToolExecutor_CircuitBreaker(t *testing.T) {
+	t.Parallel()
 	registry := NewToolRegistry()
 
 	// Register a failing tool
@@ -576,6 +588,7 @@ func TestToolExecutor_CircuitBreaker(t *testing.T) {
 }
 
 func TestToolExecutor_CircuitBreakerHalfOpenRecovery(t *testing.T) {
+	t.Parallel()
 	registry := NewToolRegistry()
 
 	// Register a tool that fails first, then succeeds
@@ -649,6 +662,7 @@ func TestToolExecutor_CircuitBreakerHalfOpenRecovery(t *testing.T) {
 }
 
 func TestToolExecutor_CircuitBreakerHalfOpenFailure(t *testing.T) {
+	t.Parallel()
 	registry := NewToolRegistry()
 
 	// Register a tool that always fails

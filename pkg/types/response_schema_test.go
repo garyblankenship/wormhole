@@ -12,6 +12,7 @@ import (
 )
 
 func TestResponseHelpers(t *testing.T) {
+	t.Parallel()
 	stop := FinishReasonStop
 	length := FinishReasonLength
 	text := &TextResponse{Text: "hello", FinishReason: stop}
@@ -55,6 +56,7 @@ func TestResponseHelpers(t *testing.T) {
 }
 
 func TestSchemaValidation(t *testing.T) {
+	t.Parallel()
 	name := &StringSchema{
 		BaseSchema: BaseSchema{Type: "string", Description: "name"},
 		MinLength:  ptr(2),
@@ -117,6 +119,7 @@ func ptr(v int) *int { return &v }
 func ptrFloat(v float64) *float64 { return &v }
 
 func TestMessagesConversationAndToolChoice(t *testing.T) {
+	t.Parallel()
 	messages := []Message{
 		NewSystemMessage("system"),
 		NewUserMessage("user"),
@@ -254,6 +257,7 @@ func (m *countingMiddleware) ApplyImage(next ImageHandler) ImageHandler {
 }
 
 func TestProviderConfigBaseProviderAndWrapper(t *testing.T) {
+	t.Parallel()
 	cfg := NewProviderConfig("key").
 		WithBaseURL("https://example.test").
 		WithHeader("A", "B").

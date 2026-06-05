@@ -23,6 +23,7 @@ func TestOpenAIIntegration_StreamingGeneration(t *testing.T) {
 	testutil.SetupTestModels(t)
 
 	t.Run("streaming text generation", func(t *testing.T) {
+		t.Parallel()
 		server := testutil.MockOpenAIServer(t, func(w http.ResponseWriter, r *http.Request) {
 			// Verify streaming request
 			body, err := io.ReadAll(r.Body)

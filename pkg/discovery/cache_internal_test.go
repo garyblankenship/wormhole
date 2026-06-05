@@ -34,6 +34,7 @@ func newFileBackedCache(t *testing.T) *ModelCache {
 }
 
 func TestModelCacheFileBackedSetGetClear(t *testing.T) {
+	t.Parallel()
 	cache := newFileBackedCache(t)
 	models := testModels("test")
 
@@ -60,6 +61,7 @@ func TestModelCacheFileBackedSetGetClear(t *testing.T) {
 }
 
 func TestModelCacheLoadFromMonolithicFileMigrates(t *testing.T) {
+	t.Parallel()
 	cache := newFileBackedCache(t)
 	entry := &CacheEntry{
 		Models:    testModels("legacy"),
@@ -86,6 +88,7 @@ func TestModelCacheLoadFromMonolithicFileMigrates(t *testing.T) {
 }
 
 func TestModelCacheExpiredInvalidAndFallbackPaths(t *testing.T) {
+	t.Parallel()
 	cache := newFileBackedCache(t)
 	expired := CacheEntry{
 		Models:    testModels("expired"),
@@ -115,6 +118,7 @@ func TestModelCacheExpiredInvalidAndFallbackPaths(t *testing.T) {
 }
 
 func TestModelCacheProviderPathsJournalAndCleanup(t *testing.T) {
+	t.Parallel()
 	cache := newFileBackedCache(t)
 	assert.Contains(t, cache.getProviderFilePath("openrouter/../model"), "openrouter___model")
 	assert.Same(t, cache.getProviderLock("openai"), cache.getProviderLock("openai"))
@@ -134,6 +138,7 @@ func TestModelCacheProviderPathsJournalAndCleanup(t *testing.T) {
 }
 
 func TestModelCacheStartCleanupCloseAndExpandPath(t *testing.T) {
+	t.Parallel()
 	cache := NewModelCache(DiscoveryConfig{
 		CacheTTL:        time.Nanosecond,
 		FileCacheTTL:    time.Hour,

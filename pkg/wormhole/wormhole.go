@@ -63,12 +63,27 @@ type Config struct {
 	DiscoveryConfig     discovery.DiscoveryConfig // Dynamic model discovery configuration
 	EnableDiscovery     bool                      // Whether to enable dynamic model discovery (default: true)
 	Idempotency         *IdempotencyConfig        // Idempotency configuration for duplicate prevention
+	Models              []*types.ModelInfo        // Models to load into the registry (opt-in; see WithModels)
 	AttemptTrace        AttemptTraceFunc          // Optional per-attempt tracing callback
-	StreamIdleTimeout  time.Duration             // Per-chunk idle timeout for streaming (0 = disabled)
-	StreamTrace        StreamTraceFunc            // Optional stream lifecycle tracing callback
+	StreamIdleTimeout   time.Duration             // Per-chunk idle timeout for streaming (0 = disabled)
+	StreamTrace         StreamTraceFunc           // Optional stream lifecycle tracing callback
 }
 
-// New creates a new Wormhole instance using functional options
+// New creates a new Wormhole instance using functional options.
+//
+// Model registry is opt-in: the global types.DefaultModelRegistry starts empty.
+// Callers who enable model validation (the default) must populate the registry,
+// either by passing WithModels(...) here or by calling
+// types.DefaultModelRegistry.LoadModelsFromConfig(models) before issuing requests.
+// Without a populated registry, model-validation helpers have nothing to validate
+// against. To skip validation entirely, use WithModelValidation(false).
+//
+// Example:
+//
+//	client := wormhole.New(
+//	    wormhole.WithOpenAI(apiKey),
+//	    wormhole.WithModels(myModels), // populate the opt-in registry
+//	)
 func New(opts ...Option) *Wormhole {
 	// CRITICAL: Register built-in models FIRST before any model validation
 	// No model pre-registration - providers handle model validation at request time
@@ -85,6 +100,11 @@ func New(opts ...Option) *Wormhole {
 	// Apply all provided options
 	for _, opt := range opts {
 		opt(&config)
+	}
+
+	// Populate the opt-in model registry with any caller-supplied models.
+	if len(config.Models) > 0 {
+		types.DefaultModelRegistry.LoadModelsFromConfig(config.Models)
 	}
 
 	// Create client with final, immutable config

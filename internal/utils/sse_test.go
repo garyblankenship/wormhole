@@ -169,18 +169,15 @@ id : 123
 	})
 
 	t.Run("fields with extra spaces in values", func(t *testing.T) {
-		input := `event:   message   
-data:   Hello World   
-id:   123   
-
-`
+		// SSE spec: strip exactly ONE leading space; trailing preserved.
+		input := "event:   message   \ndata:   Hello World   \nid:   123   \n\n"
 		scanner := NewSSEScanner(strings.NewReader(input))
 
 		assert.True(t, scanner.Scan())
 		event := scanner.Event()
-		assert.Equal(t, "message", event.Event)
-		assert.Equal(t, "Hello World", event.Data)
-		assert.Equal(t, "123", event.ID)
+		assert.Equal(t, "  message   ", event.Event)
+		assert.Equal(t, "  Hello World   ", event.Data)
+		assert.Equal(t, "  123   ", event.ID)
 	})
 
 	t.Run("fields with multiple colons in value", func(t *testing.T) {
@@ -405,29 +402,41 @@ id: retry-1
 }
 
 func TestSSEScanner_Whitespace(t *testing.T) {
-	t.Run("whitespace trimming", func(t *testing.T) {
-		input := `  event:  message  
-  data:  Hello World  
-  id:  123  
-
-`
+	// SSE spec: exactly one leading space stripped from the value; trailing
+	// whitespace preserved. Field names are leniently trimmed of spaces/tabs.
+	t.Run("strip exactly one leading space, preserve trailing", func(t *testing.T) {
+		input := "  event:  message  \n  data:  Hello World  \n  id:  123  \n\n"
 		scanner := NewSSEScanner(strings.NewReader(input))
 
 		assert.True(t, scanner.Scan())
 		event := scanner.Event()
-		assert.Equal(t, "message", event.Event)
-		assert.Equal(t, "Hello World", event.Data)
-		assert.Equal(t, "123", event.ID)
+		// "  message  " -> one leading space stripped -> " message  "
+		assert.Equal(t, " message  ", event.Event)
+		assert.Equal(t, " Hello World  ", event.Data)
+		assert.Equal(t, " 123  ", event.ID)
 	})
 
-	t.Run("tabs and mixed whitespace", func(t *testing.T) {
+	t.Run("leading-two-spaces data preserves second space", func(t *testing.T) {
+		// Regression: `data:  leading-two-spaces` must strip exactly ONE
+		// leading space, leaving one space in front of the value.
+		input := "data:  leading-two-spaces\n\n"
+		scanner := NewSSEScanner(strings.NewReader(input))
+
+		assert.True(t, scanner.Scan())
+		event := scanner.Event()
+		assert.Equal(t, " leading-two-spaces", event.Data)
+	})
+
+	t.Run("tabs preserved (only space is stripped)", func(t *testing.T) {
+		// A tab after the colon is NOT a space, so nothing is stripped from
+		// the value; internal and surrounding tabs are preserved verbatim.
 		input := "\tevent:\tmessage\t\n\tdata:\tHello\tWorld\t\n\n"
 		scanner := NewSSEScanner(strings.NewReader(input))
 
 		assert.True(t, scanner.Scan())
 		event := scanner.Event()
-		assert.Equal(t, "message", event.Event)
-		assert.Equal(t, "Hello\tWorld", event.Data) // Internal tabs preserved
+		assert.Equal(t, "\tmessage\t", event.Event)
+		assert.Equal(t, "\tHello\tWorld\t", event.Data)
 	})
 }
 
@@ -449,18 +458,13 @@ id: json-test
 	})
 
 	t.Run("multiline JSON data", func(t *testing.T) {
-		input := `data: {
-data:   "text": "Hello",
-data:   "id": 123
-data: }
-
-`
+		// SSE spec: strip exactly ONE leading space per line; trailing preserved.
+		input := "data: {\ndata:   \"text\": \"Hello\",\ndata:   \"id\": 123\ndata: }\n\n"
 		scanner := NewSSEScanner(strings.NewReader(input))
 
 		assert.True(t, scanner.Scan())
 		event := scanner.Event()
-		// After trimming spaces, this is the correct result
-		expected := "{\n\"text\": \"Hello\",\n\"id\": 123\n}"
+		expected := "{\n  \"text\": \"Hello\",\n  \"id\": 123\n}"
 		assert.Equal(t, expected, event.Data)
 	})
 }

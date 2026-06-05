@@ -32,7 +32,9 @@ type NumericArgs struct {
 }
 
 func TestSchemaFromStruct(t *testing.T) {
+	t.Parallel()
 	t.Run("basic struct with json tags", func(t *testing.T) {
+		t.Parallel()
 		type BasicArgs struct {
 			Name  string `json:"name"`
 			Count int    `json:"count"`
@@ -50,6 +52,7 @@ func TestSchemaFromStruct(t *testing.T) {
 	})
 
 	t.Run("required fields", func(t *testing.T) {
+		t.Parallel()
 		schema, err := SchemaFromStruct(WeatherArgs{})
 		require.NoError(t, err)
 
@@ -59,6 +62,7 @@ func TestSchemaFromStruct(t *testing.T) {
 	})
 
 	t.Run("enum constraint", func(t *testing.T) {
+		t.Parallel()
 		schema, err := SchemaFromStruct(WeatherArgs{})
 		require.NoError(t, err)
 
@@ -71,6 +75,7 @@ func TestSchemaFromStruct(t *testing.T) {
 	})
 
 	t.Run("descriptions", func(t *testing.T) {
+		t.Parallel()
 		schema, err := SchemaFromStruct(WeatherArgs{})
 		require.NoError(t, err)
 
@@ -80,6 +85,7 @@ func TestSchemaFromStruct(t *testing.T) {
 	})
 
 	t.Run("numeric constraints", func(t *testing.T) {
+		t.Parallel()
 		schema, err := SchemaFromStruct(NumericArgs{})
 		require.NoError(t, err)
 
@@ -94,6 +100,7 @@ func TestSchemaFromStruct(t *testing.T) {
 	})
 
 	t.Run("array types", func(t *testing.T) {
+		t.Parallel()
 		schema, err := SchemaFromStruct(SearchArgs{})
 		require.NoError(t, err)
 
@@ -104,6 +111,7 @@ func TestSchemaFromStruct(t *testing.T) {
 	})
 
 	t.Run("all Go types", func(t *testing.T) {
+		t.Parallel()
 		type AllTypes struct {
 			String  string   `json:"string"`
 			Int     int      `json:"int"`
@@ -126,12 +134,14 @@ func TestSchemaFromStruct(t *testing.T) {
 	})
 
 	t.Run("non-struct returns error", func(t *testing.T) {
+		t.Parallel()
 		_, err := SchemaFromStruct("not a struct")
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "expected struct")
 	})
 
 	t.Run("pointer to struct works", func(t *testing.T) {
+		t.Parallel()
 		schema, err := SchemaFromStruct(&WeatherArgs{})
 		require.NoError(t, err)
 		assert.Equal(t, "object", schema["type"])
@@ -139,7 +149,9 @@ func TestSchemaFromStruct(t *testing.T) {
 }
 
 func TestMustSchemaFromStruct(t *testing.T) {
+	t.Parallel()
 	t.Run("valid struct doesn't panic", func(t *testing.T) {
+		t.Parallel()
 		assert.NotPanics(t, func() {
 			schema := MustSchemaFromStruct(WeatherArgs{})
 			assert.NotNil(t, schema)
@@ -147,6 +159,7 @@ func TestMustSchemaFromStruct(t *testing.T) {
 	})
 
 	t.Run("invalid type panics", func(t *testing.T) {
+		t.Parallel()
 		assert.Panics(t, func() {
 			MustSchemaFromStruct("not a struct")
 		})
@@ -154,7 +167,9 @@ func TestMustSchemaFromStruct(t *testing.T) {
 }
 
 func TestRegisterTypedTool(t *testing.T) {
+	t.Parallel()
 	t.Run("registers tool with generated schema", func(t *testing.T) {
+		t.Parallel()
 		client := New()
 
 		err := RegisterTypedTool(client, "get_weather", "Get current weather",
@@ -187,6 +202,7 @@ func TestRegisterTypedTool(t *testing.T) {
 	})
 
 	t.Run("handler receives typed arguments", func(t *testing.T) {
+		t.Parallel()
 		client := New()
 
 		var receivedArgs WeatherArgs
@@ -213,6 +229,7 @@ func TestRegisterTypedTool(t *testing.T) {
 	})
 
 	t.Run("handler receives array arguments", func(t *testing.T) {
+		t.Parallel()
 		client := New()
 
 		var receivedArgs SearchArgs
@@ -238,6 +255,7 @@ func TestRegisterTypedTool(t *testing.T) {
 	})
 
 	t.Run("handler error is propagated", func(t *testing.T) {
+		t.Parallel()
 		client := New()
 
 		expectedErr := assert.AnError
@@ -258,7 +276,9 @@ func TestRegisterTypedTool(t *testing.T) {
 }
 
 func TestToolTagParsing(t *testing.T) {
+	t.Parallel()
 	t.Run("multiple constraints", func(t *testing.T) {
+		t.Parallel()
 		type MultiConstraint struct {
 			Value int `json:"value" tool:"required,min=0,max=100" desc:"A constrained value"`
 		}
@@ -279,6 +299,7 @@ func TestToolTagParsing(t *testing.T) {
 	})
 
 	t.Run("enum with pipe separator", func(t *testing.T) {
+		t.Parallel()
 		type EnumTest struct {
 			Status string `json:"status" tool:"enum=active|inactive|pending"`
 		}
@@ -293,6 +314,7 @@ func TestToolTagParsing(t *testing.T) {
 	})
 
 	t.Run("string constraints", func(t *testing.T) {
+		t.Parallel()
 		type StringConstraints struct {
 			Code    string `json:"code" tool:"minLength=3,maxLength=10"`
 			Pattern string `json:"pattern" tool:"pattern=^[A-Z]+$"`

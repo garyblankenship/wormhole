@@ -3,6 +3,7 @@ package types
 import "testing"
 
 func TestProviderConfigMergedProviderOptionsPrecedenceAndIsolation(t *testing.T) {
+	t.Parallel()
 	defaults := map[string]any{"effort": "low", "trace": false}
 	modelOptions := map[string]any{"effort": "medium", "service_tier": "batch"}
 	requestOptions := map[string]any{"effort": "high"}

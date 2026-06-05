@@ -11,6 +11,7 @@ import (
 // TestConcurrentProviderAccess tests that multiple goroutines can safely
 // access the Provider method simultaneously without causing data races
 func TestConcurrentProviderAccess(t *testing.T) {
+	t.Parallel()
 	// Create wormhole with OpenAI provider configured
 	w := New(
 		WithDefaultProvider("openai"),
@@ -57,6 +58,7 @@ func TestConcurrentProviderAccess(t *testing.T) {
 // TestConcurrentProviderBuilders tests that multiple goroutines can safely
 // use builder methods simultaneously without causing data races
 func TestConcurrentProviderBuilders(t *testing.T) {
+	t.Parallel()
 	// Create wormhole with multiple providers
 	w := New(
 		WithDefaultProvider("openai"),
@@ -111,6 +113,7 @@ func TestConcurrentProviderBuilders(t *testing.T) {
 // TestConcurrentOptionCreation tests that multiple clients can be created concurrently
 // using functional options pattern (testing that our new immutable design is thread-safe)
 func TestConcurrentOptionCreation(t *testing.T) {
+	t.Parallel()
 	const numGoroutines = 50
 	var wg sync.WaitGroup
 	errChan := make(chan error, numGoroutines)
@@ -161,6 +164,7 @@ func TestConcurrentOptionCreation(t *testing.T) {
 // TestRaceConditionScenario simulates the exact scenario from the bug report:
 // Multiple goroutines making concurrent requests to the same provider
 func TestRaceConditionScenario(t *testing.T) {
+	t.Parallel()
 	w := New(
 		WithDefaultProvider("openai"),
 		WithOpenAI("test-key"),
@@ -211,6 +215,7 @@ func TestRaceConditionScenario(t *testing.T) {
 // TestHighContentionProviderAccess creates maximum contention by having
 // all goroutines access the same provider at exactly the same time
 func TestHighContentionProviderAccess(t *testing.T) {
+	t.Parallel()
 	w := New(
 		WithDefaultProvider("openai"),
 		WithOpenAI("test-key"),
@@ -262,6 +267,7 @@ func TestHighContentionProviderAccess(t *testing.T) {
 
 // TestConcurrentProviderInitialization tests the double-checked locking pattern
 func TestConcurrentProviderInitialization(t *testing.T) {
+	t.Parallel()
 	const numTests = 10
 
 	// Run the test multiple times to increase chance of catching race conditions

@@ -10,13 +10,16 @@ import (
 )
 
 func TestBatchBuilder(t *testing.T) {
+	t.Parallel()
 	t.Run("empty batch returns nil", func(t *testing.T) {
+		t.Parallel()
 		client := New()
 		results := client.Batch().Execute(context.Background())
 		assert.Nil(t, results)
 	})
 
 	t.Run("Add and Count", func(t *testing.T) {
+		t.Parallel()
 		client := New()
 		batch := client.Batch().
 			Add(client.Text().Model("gpt-5").Prompt("Q1")).
@@ -27,6 +30,7 @@ func TestBatchBuilder(t *testing.T) {
 	})
 
 	t.Run("AddAll", func(t *testing.T) {
+		t.Parallel()
 		client := New()
 		requests := []*TextRequestBuilder{
 			client.Text().Model("gpt-5").Prompt("Q1"),
@@ -37,6 +41,7 @@ func TestBatchBuilder(t *testing.T) {
 	})
 
 	t.Run("Clear", func(t *testing.T) {
+		t.Parallel()
 		client := New()
 		batch := client.Batch().
 			Add(client.Text().Model("gpt-5").Prompt("Q1")).
@@ -49,12 +54,14 @@ func TestBatchBuilder(t *testing.T) {
 	})
 
 	t.Run("Concurrency setting", func(t *testing.T) {
+		t.Parallel()
 		client := New()
 		batch := client.Batch().Concurrency(5)
 		assert.Equal(t, 5, batch.concurrency)
 	})
 
 	t.Run("default concurrency is 10", func(t *testing.T) {
+		t.Parallel()
 		client := New()
 		batch := client.Batch()
 		assert.Equal(t, 10, batch.concurrency)
@@ -62,8 +69,10 @@ func TestBatchBuilder(t *testing.T) {
 }
 
 func TestBatchBuilderExecution(t *testing.T) {
+	t.Parallel()
 	// Skip if no provider configured - this tests the structure, not actual API calls
 	t.Run("results preserve order", func(t *testing.T) {
+		t.Parallel()
 		client := New(WithOpenAI("test-key"))
 
 		// These will fail without real API, but we can check the results structure
@@ -90,6 +99,7 @@ func TestBatchBuilderExecution(t *testing.T) {
 	})
 
 	t.Run("context cancellation stops execution", func(t *testing.T) {
+		t.Parallel()
 		client := New(WithOpenAI("test-key"))
 
 		batch := client.Batch().
@@ -109,7 +119,9 @@ func TestBatchBuilderExecution(t *testing.T) {
 }
 
 func TestBatchBuilderExecuteCollect(t *testing.T) {
+	t.Parallel()
 	t.Run("separates successes and failures", func(t *testing.T) {
+		t.Parallel()
 		client := New(WithOpenAI("test-key"))
 
 		batch := client.Batch().
@@ -128,7 +140,9 @@ func TestBatchBuilderExecuteCollect(t *testing.T) {
 }
 
 func TestBatchBuilderExecuteFirst(t *testing.T) {
+	t.Parallel()
 	t.Run("empty batch returns error", func(t *testing.T) {
+		t.Parallel()
 		client := New()
 		resp, err := client.Batch().ExecuteFirst(context.Background())
 		assert.Nil(t, resp)
@@ -137,6 +151,7 @@ func TestBatchBuilderExecuteFirst(t *testing.T) {
 	})
 
 	t.Run("returns first success", func(t *testing.T) {
+		t.Parallel()
 		client := New(WithOpenAI("test-key"))
 
 		batch := client.Batch().
@@ -155,7 +170,9 @@ func TestBatchBuilderExecuteFirst(t *testing.T) {
 }
 
 func TestBatchBuilderConcurrencyLimiting(t *testing.T) {
+	t.Parallel()
 	t.Run("respects concurrency limit", func(t *testing.T) {
+		t.Parallel()
 		client := New(WithOpenAI("test-key"))
 
 		// Track concurrent executions
@@ -185,7 +202,9 @@ func TestBatchBuilderConcurrencyLimiting(t *testing.T) {
 // For comprehensive mock testing, use the testing.MockProviderFactory pattern
 
 func TestBatchBuilderWithAdaptiveConcurrency(t *testing.T) {
+	t.Parallel()
 	t.Run("adaptive concurrency enabled", func(t *testing.T) {
+		t.Parallel()
 		client := New(WithOpenAI("test-key"))
 
 		// Enable adaptive concurrency with default config
@@ -227,6 +246,7 @@ func TestBatchBuilderWithAdaptiveConcurrency(t *testing.T) {
 	})
 
 	t.Run("provider-specific adaptive concurrency", func(t *testing.T) {
+		t.Parallel()
 		client := New(WithOpenAI("test-key"))
 
 		// Enable adaptive concurrency with default config
@@ -253,6 +273,7 @@ func TestBatchBuilderWithAdaptiveConcurrency(t *testing.T) {
 	})
 
 	t.Run("adaptive concurrency with ExecuteFirst", func(t *testing.T) {
+		t.Parallel()
 		client := New(WithOpenAI("test-key"))
 
 		// Enable adaptive concurrency
@@ -275,6 +296,7 @@ func TestBatchBuilderWithAdaptiveConcurrency(t *testing.T) {
 	})
 
 	t.Run("adaptive concurrency with ExecuteCollect", func(t *testing.T) {
+		t.Parallel()
 		client := New(WithOpenAI("test-key"))
 
 		// Enable adaptive concurrency
@@ -297,6 +319,7 @@ func TestBatchBuilderWithAdaptiveConcurrency(t *testing.T) {
 	})
 
 	t.Run("adaptive concurrency disabled", func(t *testing.T) {
+		t.Parallel()
 		client := New(WithOpenAI("test-key"))
 
 		// Do NOT enable adaptive concurrency

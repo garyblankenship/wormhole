@@ -19,6 +19,8 @@ type ProviderConformanceConfig struct {
 }
 
 // RunProviderConformance runs reusable contract checks for custom providers.
+//
+//nolint:gocyclo // One table-like public conformance harness keeps provider contract failures in one place.
 func RunProviderConformance(t *stdtesting.T, cfg ProviderConformanceConfig) {
 	t.Helper()
 	if cfg.Provider == nil {

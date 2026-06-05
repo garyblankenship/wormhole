@@ -9,6 +9,7 @@ import (
 )
 
 func TestOpenAIStreamingTransformer(t *testing.T) {
+	t.Parallel()
 	transformer := NewOpenAIStreamingTransformer()
 
 	// Test OpenAI-style streaming chunk
@@ -68,6 +69,7 @@ func TestOpenAIStreamingTransformer(t *testing.T) {
 }
 
 func TestOpenAIStreamingTransformer_SimpleText(t *testing.T) {
+	t.Parallel()
 	transformer := NewOpenAIStreamingTransformer()
 
 	// Simple text chunk without tool calls or usage
@@ -96,6 +98,7 @@ func TestOpenAIStreamingTransformer_SimpleText(t *testing.T) {
 }
 
 func TestOpenAIStreamingTransformer_FinishReasonMapping(t *testing.T) {
+	t.Parallel()
 	transformer := NewOpenAIStreamingTransformer()
 
 	testCases := []struct {
@@ -113,6 +116,7 @@ func TestOpenAIStreamingTransformer_FinishReasonMapping(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			data := []byte(`{
 				"id": "test",
 				"model": "gpt-4",
@@ -132,6 +136,7 @@ func TestOpenAIStreamingTransformer_FinishReasonMapping(t *testing.T) {
 }
 
 func TestAnthropicStreamingTransformer(t *testing.T) {
+	t.Parallel()
 	transformer := NewAnthropicStreamingTransformer()
 
 	// Note: Anthropic uses event-based streaming which is more complex
@@ -154,6 +159,7 @@ func TestAnthropicStreamingTransformer(t *testing.T) {
 }
 
 func TestOllamaStreamingTransformer(t *testing.T) {
+	t.Parallel()
 	transformer := NewOllamaStreamingTransformer()
 
 	// Test Ollama-style streaming chunk
@@ -178,6 +184,7 @@ func TestOllamaStreamingTransformer(t *testing.T) {
 }
 
 func TestStreamingTransformer_EmptyData(t *testing.T) {
+	t.Parallel()
 	transformer := NewOpenAIStreamingTransformer()
 
 	// Empty data should error
@@ -190,6 +197,7 @@ func TestStreamingTransformer_EmptyData(t *testing.T) {
 }
 
 func TestStreamingTransformer_MissingFields(t *testing.T) {
+	t.Parallel()
 	transformer := NewOpenAIStreamingTransformer()
 
 	// Data without required fields should still parse

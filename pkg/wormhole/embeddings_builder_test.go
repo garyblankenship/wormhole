@@ -9,9 +9,11 @@ import (
 )
 
 func TestEmbeddingsRequestBuilder(t *testing.T) {
+	t.Parallel()
 	client := New()
 
 	t.Run("Builder Method Chaining", func(t *testing.T) {
+		t.Parallel()
 		builder := client.Embeddings()
 		assert.NotNil(t, builder)
 
@@ -40,12 +42,14 @@ func TestEmbeddingsRequestBuilder(t *testing.T) {
 
 	t.Run("Model Method", func(t *testing.T) {
 		t.Run("valid model", func(t *testing.T) {
+			t.Parallel()
 			builder := client.Embeddings()
 			result := builder.Model("text-embedding-3-small")
 			assert.Equal(t, "text-embedding-3-small", result.request.Model)
 		})
 
 		t.Run("empty model allowed at build time, error at generate", func(t *testing.T) {
+			t.Parallel()
 			builder := client.Embeddings()
 			// Empty model is allowed at build time (Go idiom: validate at execution)
 			result := builder.Model("")
@@ -56,18 +60,21 @@ func TestEmbeddingsRequestBuilder(t *testing.T) {
 
 	t.Run("Input Method", func(t *testing.T) {
 		t.Run("single input", func(t *testing.T) {
+			t.Parallel()
 			builder := client.Embeddings()
 			builder.Input("test input")
 			assert.Equal(t, []string{"test input"}, builder.request.Input)
 		})
 
 		t.Run("multiple inputs", func(t *testing.T) {
+			t.Parallel()
 			builder := client.Embeddings()
 			builder.Input("input1", "input2", "input3")
 			assert.Equal(t, []string{"input1", "input2", "input3"}, builder.request.Input)
 		})
 
 		t.Run("empty input slice allowed at build time", func(t *testing.T) {
+			t.Parallel()
 			builder := client.Embeddings()
 			// Empty input is allowed at build time (Go idiom: validate at execution)
 			builder.Input()
@@ -76,6 +83,7 @@ func TestEmbeddingsRequestBuilder(t *testing.T) {
 		})
 
 		t.Run("empty string in input allowed at build time", func(t *testing.T) {
+			t.Parallel()
 			builder := client.Embeddings()
 			// Empty strings allowed at build time (validation at Generate())
 			builder.Input("valid", "", "also valid")
@@ -85,6 +93,7 @@ func TestEmbeddingsRequestBuilder(t *testing.T) {
 
 	t.Run("AddInput Method", func(t *testing.T) {
 		t.Run("add single input", func(t *testing.T) {
+			t.Parallel()
 			builder := client.Embeddings()
 			builder.Input("first")
 			builder.AddInput("second")
@@ -92,6 +101,7 @@ func TestEmbeddingsRequestBuilder(t *testing.T) {
 		})
 
 		t.Run("add multiple inputs", func(t *testing.T) {
+			t.Parallel()
 			builder := client.Embeddings()
 			builder.Input("first")
 			builder.AddInput("second")
@@ -100,6 +110,7 @@ func TestEmbeddingsRequestBuilder(t *testing.T) {
 		})
 
 		t.Run("empty input allowed at build time", func(t *testing.T) {
+			t.Parallel()
 			builder := client.Embeddings()
 			// Empty strings allowed at build time (validation at Generate())
 			builder.AddInput("")
@@ -109,6 +120,7 @@ func TestEmbeddingsRequestBuilder(t *testing.T) {
 
 	t.Run("Dimensions Method", func(t *testing.T) {
 		t.Run("valid dimensions", func(t *testing.T) {
+			t.Parallel()
 			builder := client.Embeddings()
 			builder.Dimensions(512)
 			require.NotNil(t, builder.request.Dimensions)
@@ -116,6 +128,7 @@ func TestEmbeddingsRequestBuilder(t *testing.T) {
 		})
 
 		t.Run("zero dimensions allowed at build time", func(t *testing.T) {
+			t.Parallel()
 			builder := client.Embeddings()
 			// Zero is allowed at build time - provider may have defaults
 			builder.Dimensions(0)
@@ -124,6 +137,7 @@ func TestEmbeddingsRequestBuilder(t *testing.T) {
 		})
 
 		t.Run("negative dimensions allowed at build time", func(t *testing.T) {
+			t.Parallel()
 			builder := client.Embeddings()
 			// Negative values allowed at build time (validation at Generate())
 			builder.Dimensions(-1)
@@ -132,6 +146,7 @@ func TestEmbeddingsRequestBuilder(t *testing.T) {
 		})
 
 		t.Run("large dimensions allowed at build time", func(t *testing.T) {
+			t.Parallel()
 			builder := client.Embeddings()
 			// Large values allowed at build time (provider validates)
 			builder.Dimensions(20000)
@@ -142,6 +157,7 @@ func TestEmbeddingsRequestBuilder(t *testing.T) {
 
 	t.Run("ProviderOptions Method", func(t *testing.T) {
 		t.Run("set options", func(t *testing.T) {
+			t.Parallel()
 			builder := client.Embeddings()
 			options := map[string]any{
 				"taskType": "SEMANTIC_SIMILARITY",
@@ -152,12 +168,14 @@ func TestEmbeddingsRequestBuilder(t *testing.T) {
 		})
 
 		t.Run("nil options", func(t *testing.T) {
+			t.Parallel()
 			builder := client.Embeddings()
 			builder.ProviderOptions(nil)
 			assert.Nil(t, builder.request.ProviderOptions)
 		})
 
 		t.Run("empty options", func(t *testing.T) {
+			t.Parallel()
 			builder := client.Embeddings()
 			options := map[string]any{}
 			builder.ProviderOptions(options)
@@ -167,6 +185,7 @@ func TestEmbeddingsRequestBuilder(t *testing.T) {
 
 	t.Run("Memory Pool Usage", func(t *testing.T) {
 		t.Run("new builder gets clean request", func(t *testing.T) {
+			t.Parallel()
 			builder1 := client.Embeddings()
 			builder2 := client.Embeddings()
 
@@ -182,6 +201,7 @@ func TestEmbeddingsRequestBuilder(t *testing.T) {
 		})
 
 		t.Run("request reset after pool retrieval", func(t *testing.T) {
+			t.Parallel()
 			// First builder sets some values
 			builder1 := client.Embeddings().Model("test-model").Input("test")
 			assert.Equal(t, "test-model", builder1.request.Model)
@@ -199,6 +219,7 @@ func TestEmbeddingsRequestBuilder(t *testing.T) {
 	})
 
 	t.Run("Input Slice Capacity Preservation", func(t *testing.T) {
+		t.Parallel()
 		// This tests that the memory pool properly reuses slice capacity
 		builder := client.Embeddings()
 
@@ -220,7 +241,9 @@ func TestEmbeddingsRequestBuilder(t *testing.T) {
 }
 
 func TestEmbeddingsRequestBuilderConcurrency(t *testing.T) {
+	t.Parallel()
 	t.Run("concurrent builder creation is safe", func(t *testing.T) {
+		t.Parallel()
 		client := New()
 		const numGoroutines = 10
 

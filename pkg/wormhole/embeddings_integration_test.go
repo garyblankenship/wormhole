@@ -77,6 +77,7 @@ func runConcurrentEmbeddingRequests(t *testing.T, client *Wormhole, ctx context.
 }
 
 func TestEmbeddingsIntegration(t *testing.T) {
+	t.Parallel()
 	if testing.Short() {
 		t.Skip("Skipping integration tests in short mode")
 	}
@@ -86,6 +87,7 @@ func TestEmbeddingsIntegration(t *testing.T) {
 	defer cancel()
 
 	t.Run("OpenAI embeddings", func(t *testing.T) {
+		t.Parallel()
 		if os.Getenv("OPENAI_API_KEY") == "" {
 			t.Skip("OPENAI_API_KEY not set")
 		}
@@ -94,6 +96,7 @@ func TestEmbeddingsIntegration(t *testing.T) {
 	})
 
 	t.Run("Gemini embeddings", func(t *testing.T) {
+		t.Parallel()
 		if os.Getenv("GEMINI_API_KEY") == "" {
 			t.Skip("GEMINI_API_KEY not set")
 		}
@@ -102,6 +105,7 @@ func TestEmbeddingsIntegration(t *testing.T) {
 	})
 
 	t.Run("Ollama embeddings", func(t *testing.T) {
+		t.Parallel()
 		if os.Getenv("SKIP_OLLAMA") != "" {
 			t.Skip("SKIP_OLLAMA is set")
 		}
@@ -110,6 +114,7 @@ func TestEmbeddingsIntegration(t *testing.T) {
 	})
 
 	t.Run("Anthropic embeddings should fail", func(t *testing.T) {
+		t.Parallel()
 		if os.Getenv("ANTHROPIC_API_KEY") == "" {
 			t.Skip("ANTHROPIC_API_KEY not set")
 		}
@@ -120,6 +125,7 @@ func TestEmbeddingsIntegration(t *testing.T) {
 
 func testOpenAIEmbeddings(t *testing.T, client *Wormhole, ctx context.Context) {
 	t.Run("single input", func(t *testing.T) {
+		t.Parallel()
 		resp, err := client.Embeddings().
 			Using("openai").
 			Model("text-embedding-3-small").
@@ -143,6 +149,7 @@ func testOpenAIEmbeddings(t *testing.T, client *Wormhole, ctx context.Context) {
 	})
 
 	t.Run("multiple inputs", func(t *testing.T) {
+		t.Parallel()
 		inputs := []string{
 			"First text for embedding",
 			"Second text for embedding",
@@ -167,6 +174,7 @@ func testOpenAIEmbeddings(t *testing.T, client *Wormhole, ctx context.Context) {
 	})
 
 	t.Run("custom dimensions", func(t *testing.T) {
+		t.Parallel()
 		dimensions := 512
 
 		resp, err := client.Embeddings().
@@ -185,6 +193,7 @@ func testOpenAIEmbeddings(t *testing.T, client *Wormhole, ctx context.Context) {
 	})
 
 	t.Run("large model", func(t *testing.T) {
+		t.Parallel()
 		resp, err := client.Embeddings().
 			Using("openai").
 			Model("text-embedding-3-large").
@@ -200,6 +209,7 @@ func testOpenAIEmbeddings(t *testing.T, client *Wormhole, ctx context.Context) {
 	})
 
 	t.Run("embedding similarity", func(t *testing.T) {
+		t.Parallel()
 		// Generate embeddings for similar and dissimilar texts
 		similarTexts := []string{
 			"The cat sits on the mat",
@@ -236,6 +246,7 @@ func testGeminiEmbeddings(t *testing.T, client *Wormhole, ctx context.Context) {
 	}
 
 	t.Run("basic embedding", func(t *testing.T) {
+		t.Parallel()
 		resp, err := client.Embeddings().
 			Using("gemini").
 			Model("gemini-embedding-001").
@@ -255,6 +266,7 @@ func testGeminiEmbeddings(t *testing.T, client *Wormhole, ctx context.Context) {
 	})
 
 	t.Run("invalid model should fail", func(t *testing.T) {
+		t.Parallel()
 		_, err := client.Embeddings().
 			Using("gemini").
 			Model("invalid-model"). // Should be an embedding model
@@ -268,6 +280,7 @@ func testGeminiEmbeddings(t *testing.T, client *Wormhole, ctx context.Context) {
 
 func testOllamaEmbeddings(t *testing.T, client *Wormhole, ctx context.Context) {
 	t.Run("basic embedding", func(t *testing.T) {
+		t.Parallel()
 		resp, err := client.Embeddings().
 			Using("ollama").
 			Model("nomic-embed-text").
@@ -288,6 +301,7 @@ func testOllamaEmbeddings(t *testing.T, client *Wormhole, ctx context.Context) {
 	})
 
 	t.Run("multiple inputs", func(t *testing.T) {
+		t.Parallel()
 		inputs := []string{
 			"First Ollama text",
 			"Second Ollama text",
@@ -325,11 +339,13 @@ func testAnthropicEmbeddingsFailure(t *testing.T, client *Wormhole, ctx context.
 }
 
 func TestEmbeddingsValidation(t *testing.T) {
+	t.Parallel()
 	client := New()
 
 	ctx := context.Background()
 
 	t.Run("empty input should fail", func(t *testing.T) {
+		t.Parallel()
 		// This test needs a configured provider to reach the validation logic
 		testClient := New(WithOpenAI("test-key"))
 		_, err := testClient.Embeddings().
@@ -342,6 +358,7 @@ func TestEmbeddingsValidation(t *testing.T) {
 	})
 
 	t.Run("empty model should fail", func(t *testing.T) {
+		t.Parallel()
 		// This test needs a configured provider to reach the validation logic
 		testClient := New(WithOpenAI("test-key"))
 		_, err := testClient.Embeddings().
@@ -354,6 +371,7 @@ func TestEmbeddingsValidation(t *testing.T) {
 	})
 
 	t.Run("unsupported provider should fail", func(t *testing.T) {
+		t.Parallel()
 		_, err := client.Embeddings().
 			Using("nonexistent").
 			Model("any-model").
@@ -366,6 +384,7 @@ func TestEmbeddingsValidation(t *testing.T) {
 }
 
 func TestEmbeddingsEdgeCases(t *testing.T) {
+	t.Parallel()
 	if testing.Short() {
 		t.Skip("Skipping edge case tests in short mode")
 	}
@@ -380,6 +399,7 @@ func TestEmbeddingsEdgeCases(t *testing.T) {
 	defer cancel()
 
 	t.Run("extremely long input text", func(t *testing.T) {
+		t.Parallel()
 		// Create a very long input (near token limits)
 		longText := strings.Repeat("This is a very long text for embedding generation. ", 1000)
 
@@ -400,6 +420,7 @@ func TestEmbeddingsEdgeCases(t *testing.T) {
 	})
 
 	t.Run("maximum batch size", func(t *testing.T) {
+		t.Parallel()
 		// Test with a large batch of inputs
 		inputs := make([]string, 100)
 		for i := range inputs {
@@ -423,6 +444,7 @@ func TestEmbeddingsEdgeCases(t *testing.T) {
 	})
 
 	t.Run("special characters and unicode", func(t *testing.T) {
+		t.Parallel()
 		specialTexts := []string{
 			"Hello 世界! 🌍🚀",
 			"Émojis and àccénts",
@@ -445,6 +467,7 @@ func TestEmbeddingsEdgeCases(t *testing.T) {
 	})
 
 	t.Run("timeout handling", func(t *testing.T) {
+		t.Parallel()
 		// Create a very short timeout context
 		shortCtx, cancel := context.WithTimeout(context.Background(), 1*time.Millisecond)
 		defer cancel()
@@ -461,6 +484,7 @@ func TestEmbeddingsEdgeCases(t *testing.T) {
 	})
 
 	t.Run("custom dimensions validation", func(t *testing.T) {
+		t.Parallel()
 		// Test dimension limits for different models
 		testCases := []struct {
 			model      string
@@ -475,6 +499,7 @@ func TestEmbeddingsEdgeCases(t *testing.T) {
 
 		for _, tc := range testCases {
 			t.Run(fmt.Sprintf("%s_dims_%d", tc.model, tc.dimensions), func(t *testing.T) {
+				t.Parallel()
 				resp, err := client.Embeddings().
 					Using("openai").
 					Model(tc.model).
@@ -494,6 +519,7 @@ func TestEmbeddingsEdgeCases(t *testing.T) {
 	})
 
 	t.Run("provider options usage", func(t *testing.T) {
+		t.Parallel()
 		// Test that ProviderOptions can be set and don't cause errors
 		resp, err := client.Embeddings().
 			Using("openai").
@@ -509,6 +535,7 @@ func TestEmbeddingsEdgeCases(t *testing.T) {
 	})
 
 	t.Run("concurrent requests", func(t *testing.T) {
+		t.Parallel()
 		const numConcurrent = 5
 		successCount := runConcurrentEmbeddingRequests(t, client, ctx, numConcurrent)
 		// At least half should succeed (accounting for rate limits)
@@ -518,9 +545,11 @@ func TestEmbeddingsEdgeCases(t *testing.T) {
 }
 
 func TestEmbeddingsBuilder(t *testing.T) {
+	t.Parallel()
 	client := New()
 
 	t.Run("builder pattern", func(t *testing.T) {
+		t.Parallel()
 		builder := client.Embeddings().
 			Using("openai").
 			Model("text-embedding-3-small").
@@ -533,6 +562,7 @@ func TestEmbeddingsBuilder(t *testing.T) {
 	})
 
 	t.Run("method chaining", func(t *testing.T) {
+		t.Parallel()
 		// Test that all methods return the builder for chaining
 		builder := client.Embeddings()
 
@@ -554,6 +584,7 @@ func TestEmbeddingsBuilder(t *testing.T) {
 }
 
 func TestEmbeddingsMiddleware(t *testing.T) {
+	t.Parallel()
 	// Test with a simple logging middleware
 	var middlewareCalled bool
 	mw := func(next middleware.Handler) middleware.Handler {

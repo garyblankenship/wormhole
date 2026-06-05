@@ -19,6 +19,7 @@ import (
 
 // TestOpenAIProvider_IntegrationTextGeneration tests the complete text generation flow
 func TestOpenAIProvider_IntegrationTextGeneration(t *testing.T) {
+	t.Parallel()
 	testCases := []struct {
 		name        string
 		model       string
@@ -47,6 +48,7 @@ func TestOpenAIProvider_IntegrationTextGeneration(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			// Track the actual request sent to the API
 			var capturedRequest map[string]any
 
@@ -151,6 +153,7 @@ func TestOpenAIProvider_IntegrationTextGeneration(t *testing.T) {
 
 // TestOpenAIProvider_IntegrationStreaming tests streaming functionality
 func TestOpenAIProvider_IntegrationStreaming(t *testing.T) {
+	t.Parallel()
 	// Create a mock server that returns streaming responses
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// Verify streaming request
@@ -232,6 +235,7 @@ func TestOpenAIProvider_IntegrationStreaming(t *testing.T) {
 
 // TestOpenAIProvider_ErrorHandling tests various error scenarios
 func TestOpenAIProvider_ErrorHandling(t *testing.T) {
+	t.Parallel()
 	testCases := []struct {
 		name          string
 		statusCode    int
@@ -289,6 +293,7 @@ func TestOpenAIProvider_ErrorHandling(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			// Create mock server that returns error
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				w.Header().Set("Content-Type", "application/json")
@@ -339,7 +344,9 @@ func TestOpenAIProvider_ErrorHandling(t *testing.T) {
 
 // TestOpenAIProvider_Authentication tests API key validation
 func TestOpenAIProvider_Authentication(t *testing.T) {
+	t.Parallel()
 	t.Run("missing API key", func(t *testing.T) {
+		t.Parallel()
 		// Create provider without API key
 		provider := openai.New(types.ProviderConfig{
 			BaseURL: "https://api.openai.com/v1",
@@ -362,6 +369,7 @@ func TestOpenAIProvider_Authentication(t *testing.T) {
 	})
 
 	t.Run("API key in headers", func(t *testing.T) {
+		t.Parallel()
 		// Track authorization header
 		var authHeader string
 
@@ -414,6 +422,7 @@ func TestOpenAIProvider_Authentication(t *testing.T) {
 
 // TestOpenAIProvider_ToolCalling tests function calling functionality
 func TestOpenAIProvider_ToolCalling(t *testing.T) {
+	t.Parallel()
 	// Create mock server that returns tool call response
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// Verify tools in request

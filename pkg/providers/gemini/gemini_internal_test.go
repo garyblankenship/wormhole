@@ -109,3 +109,60 @@ func TestSchemaToMapActualSchemaTypes(t *testing.T) {
 		},
 	}))
 }
+
+func TestTransformTextResponse_SyntheticToolCallIDs(t *testing.T) {
+	t.Parallel()
+
+	provider := New("test-key", types.ProviderConfig{})
+
+	// Failure mode under test: the same function is called twice in one
+	// turn. With name-as-ID the two IDs collided; synthetic IDs must differ.
+	resp := &geminiTextResponse{
+		Candidates: []candidate{
+			{
+				Content: content{
+					Parts: []part{
+						{FunctionCall: &functionCall{Name: "get_weather", Args: map[string]any{"city": "NYC"}}},
+						{FunctionCall: &functionCall{Name: "get_weather", Args: map[string]any{"city": "LA"}}},
+					},
+				},
+			},
+		},
+	}
+
+	out, err := provider.transformTextResponse(resp)
+	assert.NoError(t, err)
+	assert.Len(t, out.ToolCalls, 2)
+
+	assert.Equal(t, "get_weather", out.ToolCalls[0].Name)
+	assert.Equal(t, "get_weather", out.ToolCalls[1].Name)
+	assert.Equal(t, "gemini-call-0-get_weather", out.ToolCalls[0].ID)
+	assert.Equal(t, "gemini-call-1-get_weather", out.ToolCalls[1].ID)
+	assert.NotEqual(t, out.ToolCalls[0].ID, out.ToolCalls[1].ID)
+}
+
+func TestProcessStreamCandidate_SyntheticToolCallIDs(t *testing.T) {
+	t.Parallel()
+
+	provider := New("test-key", types.ProviderConfig{})
+
+	cand := candidate{
+		Content: content{
+			Parts: []part{
+				{FunctionCall: &functionCall{Name: "lookup", Args: map[string]any{"q": "a"}}},
+				{FunctionCall: &functionCall{Name: "lookup", Args: map[string]any{"q": "b"}}},
+			},
+		},
+	}
+
+	chunks := provider.processStreamCandidate(cand)
+
+	var ids []string
+	for _, c := range chunks {
+		if c.ToolCall != nil {
+			ids = append(ids, c.ToolCall.ID)
+			assert.Equal(t, "lookup", c.ToolCall.Name)
+		}
+	}
+	assert.Equal(t, []string{"gemini-call-0-lookup", "gemini-call-1-lookup"}, ids)
+}

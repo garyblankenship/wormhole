@@ -11,7 +11,9 @@ import (
 )
 
 func TestUnlimitedTimeoutConfiguration(t *testing.T) {
+	t.Parallel()
 	t.Run("WithUnlimitedTimeout sets DefaultTimeout to 0", func(t *testing.T) {
+		t.Parallel()
 		wormhole := New(
 			WithOpenAI("test-key"),
 			WithUnlimitedTimeout(),
@@ -22,6 +24,7 @@ func TestUnlimitedTimeoutConfiguration(t *testing.T) {
 	})
 
 	t.Run("WithTimeout with 0 enables unlimited timeout", func(t *testing.T) {
+		t.Parallel()
 		wormhole := New(
 			WithOpenAI("test-key"),
 			WithTimeout(0),
@@ -32,6 +35,7 @@ func TestUnlimitedTimeoutConfiguration(t *testing.T) {
 	})
 
 	t.Run("Provider gets unlimited timeout when DefaultTimeout is 0", func(t *testing.T) {
+		t.Parallel()
 		// Register a test provider factory that captures config
 		var capturedConfig types.ProviderConfig
 		testFactory := func(config types.ProviderConfig) (types.Provider, error) {
@@ -55,6 +59,7 @@ func TestUnlimitedTimeoutConfiguration(t *testing.T) {
 	})
 
 	t.Run("Normal timeout still works", func(t *testing.T) {
+		t.Parallel()
 		var capturedConfig types.ProviderConfig
 		testFactory := func(config types.ProviderConfig) (types.Provider, error) {
 			capturedConfig = config

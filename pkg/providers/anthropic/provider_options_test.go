@@ -7,6 +7,7 @@ import (
 )
 
 func TestProviderOptionsMergedIntoMessagePayload(t *testing.T) {
+	t.Parallel()
 	provider := New(types.NewProviderConfig("key").
 		WithDefaultProviderOptions(map[string]any{"metadata": map[string]any{"source": "default"}, "thinking": false}).
 		WithProviderOptionsForModel("claude-test", map[string]any{"thinking": true}))

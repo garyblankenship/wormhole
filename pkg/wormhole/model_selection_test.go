@@ -20,6 +20,7 @@ func (f staticModelFetcher) FetchModels(context.Context) ([]*types.ModelInfo, er
 }
 
 func TestSelectModelsFiltersAndSorts(t *testing.T) {
+	t.Parallel()
 	client := New(WithDiscovery(false))
 	client.discoveryService = discovery.NewDiscoveryService(discovery.DiscoveryConfig{}, staticModelFetcher{
 		name: "testai",
@@ -63,6 +64,7 @@ func TestSelectModelsFiltersAndSorts(t *testing.T) {
 }
 
 func TestSelectModelHonorsPreferredProvider(t *testing.T) {
+	t.Parallel()
 	client := New(WithDiscovery(false))
 	client.discoveryService = discovery.NewDiscoveryService(discovery.DiscoveryConfig{},
 		staticModelFetcher{name: "test-openai", models: []*types.ModelInfo{{

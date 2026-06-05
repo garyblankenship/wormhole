@@ -9,6 +9,7 @@ import (
 )
 
 func TestAnthropicProvider(t *testing.T) {
+	t.Parallel()
 	config := types.ProviderConfig{
 		APIKey: "test-key",
 	}
@@ -20,6 +21,7 @@ func TestAnthropicProvider(t *testing.T) {
 }
 
 func TestMessageRoleMapping(t *testing.T) {
+	t.Parallel()
 	// Anthropic uses different role names
 	testCases := []struct {
 		input    types.Role
@@ -38,6 +40,7 @@ func TestMessageRoleMapping(t *testing.T) {
 }
 
 func TestToolFormat(t *testing.T) {
+	t.Parallel()
 	tool := types.NewTool(
 		"get_weather",
 		"Get weather information",
@@ -60,12 +63,15 @@ func TestToolFormat(t *testing.T) {
 }
 
 func TestContentParts(t *testing.T) {
+	t.Parallel()
 	t.Run("text content", func(t *testing.T) {
+		t.Parallel()
 		msg := types.NewUserMessage("Hello")
 		assert.Equal(t, "Hello", msg.GetContent())
 	})
 
 	t.Run("multimodal content", func(t *testing.T) {
+		t.Parallel()
 		parts := []types.MessagePart{
 			types.TextPart("Look at this image:"),
 			types.ImagePart(map[string]any{
@@ -85,6 +91,7 @@ func TestContentParts(t *testing.T) {
 	})
 
 	t.Run("tool use content", func(t *testing.T) {
+		t.Parallel()
 		msg := types.NewAssistantMessage("Let me help you with that.")
 		msg.ToolCalls = []types.ToolCall{
 			{
@@ -103,6 +110,7 @@ func TestContentParts(t *testing.T) {
 }
 
 func TestStopReasonMapping(t *testing.T) {
+	t.Parallel()
 	testCases := []struct {
 		anthropicReason string
 		expected        types.FinishReason

@@ -18,6 +18,7 @@ import (
 
 // TestGeminiProvider_IntegrationTextGeneration tests the complete text generation flow
 func TestGeminiProvider_IntegrationTextGeneration(t *testing.T) {
+	t.Parallel()
 	testCases := []struct {
 		name          string
 		model         string
@@ -109,6 +110,7 @@ func TestGeminiProvider_IntegrationTextGeneration(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			// Track the actual request sent to the API
 			var capturedHeaders http.Header
 			var capturedURL string
@@ -229,6 +231,7 @@ func TestGeminiProvider_IntegrationTextGeneration(t *testing.T) {
 }
 
 func TestGeminiProvider_IntegrationToolCalling(t *testing.T) {
+	t.Parallel()
 	// Create a mock server that handles tool calling scenario
 	var capturedRequests []map[string]any
 
@@ -324,7 +327,7 @@ func TestGeminiProvider_IntegrationToolCalling(t *testing.T) {
 
 	// Verify tool call details
 	toolCall := response.ToolCalls[0]
-	assert.Equal(t, "get_weather", toolCall.ID) // Gemini uses function name as ID
+	assert.Equal(t, "gemini-call-0-get_weather", toolCall.ID) // Gemini synthesizes unique IDs: "gemini-call-<idx>-<name>"
 	assert.Equal(t, "get_weather", toolCall.Name)
 
 	assert.Equal(t, "San Francisco", toolCall.Arguments["location"])
@@ -364,6 +367,7 @@ func TestGeminiProvider_IntegrationToolCalling(t *testing.T) {
 }
 
 func TestGeminiProvider_IntegrationMultimodalMessage(t *testing.T) {
+	t.Parallel()
 	var capturedRequest map[string]any
 
 	// Create mock server
@@ -452,6 +456,7 @@ func TestGeminiProvider_IntegrationMultimodalMessage(t *testing.T) {
 }
 
 func TestGeminiProvider_IntegrationStructuredOutput(t *testing.T) {
+	t.Parallel()
 	var capturedRequest map[string]any
 
 	// Create mock server
@@ -562,6 +567,7 @@ func TestGeminiProvider_IntegrationStructuredOutput(t *testing.T) {
 }
 
 func TestGeminiProvider_IntegrationEmbeddings(t *testing.T) {
+	t.Parallel()
 	var capturedRequest map[string]any
 
 	// Create mock server
@@ -649,6 +655,7 @@ func TestGeminiProvider_IntegrationEmbeddings(t *testing.T) {
 }
 
 func TestGeminiProvider_IntegrationErrorHandling(t *testing.T) {
+	t.Parallel()
 	testCases := []struct {
 		name           string
 		serverResponse func(w http.ResponseWriter, r *http.Request)
@@ -739,6 +746,7 @@ func TestGeminiProvider_IntegrationErrorHandling(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			// Create mock server
 			server := httptest.NewServer(http.HandlerFunc(tc.serverResponse))
 			t.Cleanup(func() { server.Close() })
@@ -757,6 +765,7 @@ func TestGeminiProvider_IntegrationErrorHandling(t *testing.T) {
 			ctx := context.Background()
 
 			t.Run("Text method", func(t *testing.T) {
+				t.Parallel()
 				request := types.TextRequest{
 					BaseRequest: types.BaseRequest{Model: "gemini-pro"},
 					Messages:    []types.Message{types.NewUserMessage("test")},
@@ -774,6 +783,7 @@ func TestGeminiProvider_IntegrationErrorHandling(t *testing.T) {
 			})
 
 			t.Run("Structured method", func(t *testing.T) {
+				t.Parallel()
 				request := types.StructuredRequest{
 					BaseRequest: types.BaseRequest{Model: "gemini-pro"},
 					Messages:    []types.Message{types.NewUserMessage("test")},
@@ -786,6 +796,7 @@ func TestGeminiProvider_IntegrationErrorHandling(t *testing.T) {
 			})
 
 			t.Run("Embeddings method", func(t *testing.T) {
+				t.Parallel()
 				request := types.EmbeddingsRequest{
 					Model: "text-embedding-004",
 					Input: []string{"test"},
@@ -800,6 +811,7 @@ func TestGeminiProvider_IntegrationErrorHandling(t *testing.T) {
 }
 
 func TestGeminiProvider_IntegrationTimeout(t *testing.T) {
+	t.Parallel()
 	// Create server that delays response
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		time.Sleep(200 * time.Millisecond)
@@ -850,6 +862,7 @@ func TestGeminiProvider_IntegrationTimeout(t *testing.T) {
 }
 
 func TestGeminiProvider_IntegrationConversation(t *testing.T) {
+	t.Parallel()
 	// Simulate a multi-turn conversation with tool usage
 	var requestCount int
 	var capturedRequests []map[string]any

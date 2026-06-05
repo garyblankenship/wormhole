@@ -17,6 +17,7 @@ import (
 
 // TestAnthropicProvider_IntegrationTextGeneration tests the complete text generation flow
 func TestAnthropicProvider_IntegrationTextGeneration(t *testing.T) {
+	t.Parallel()
 	testCases := []struct {
 		name         string
 		model        string
@@ -49,6 +50,7 @@ func TestAnthropicProvider_IntegrationTextGeneration(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			// Track the actual request sent to the API
 			var capturedRequest map[string]any
 			var capturedHeaders http.Header
@@ -216,6 +218,7 @@ func TestAnthropicProvider_SystemMessagesInMessageList(t *testing.T) {
 
 // TestAnthropicProvider_IntegrationStreaming tests streaming functionality
 func TestAnthropicProvider_IntegrationStreaming(t *testing.T) {
+	t.Parallel()
 	// Create a mock server that returns streaming responses
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// Verify streaming request
@@ -326,6 +329,7 @@ func TestAnthropicProvider_IntegrationStreaming(t *testing.T) {
 
 // TestAnthropicProvider_IntegrationStructuredOutput tests structured output functionality
 func TestAnthropicProvider_IntegrationStructuredOutput(t *testing.T) {
+	t.Parallel()
 	// Create mock server that returns tool call response
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// Verify tools in request
@@ -428,6 +432,7 @@ func TestAnthropicProvider_IntegrationStructuredOutput(t *testing.T) {
 
 // TestAnthropicProvider_ErrorHandling tests various error scenarios
 func TestAnthropicProvider_ErrorHandling(t *testing.T) {
+	t.Parallel()
 	testCases := []struct {
 		name         string
 		statusCode   int
@@ -482,6 +487,7 @@ func TestAnthropicProvider_ErrorHandling(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			// Create mock server that returns error
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				w.Header().Set("Content-Type", "application/json")
@@ -521,7 +527,9 @@ func TestAnthropicProvider_ErrorHandling(t *testing.T) {
 
 // TestAnthropicProvider_Authentication tests API key validation
 func TestAnthropicProvider_Authentication(t *testing.T) {
+	t.Parallel()
 	t.Run("missing API key", func(t *testing.T) {
+		t.Parallel()
 		// Create provider without API key
 		provider := anthropic.New(types.ProviderConfig{
 			BaseURL: "https://api.anthropic.com/v1",
@@ -545,6 +553,7 @@ func TestAnthropicProvider_Authentication(t *testing.T) {
 	})
 
 	t.Run("API key and headers in request", func(t *testing.T) {
+		t.Parallel()
 		// Track headers
 		var authHeader, versionHeader string
 
@@ -600,6 +609,7 @@ func TestAnthropicProvider_Authentication(t *testing.T) {
 
 // TestAnthropicProvider_ToolCalling tests function calling functionality
 func TestAnthropicProvider_ToolCalling(t *testing.T) {
+	t.Parallel()
 	// Create mock server that returns tool call response
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// Verify tools in request
@@ -700,6 +710,7 @@ func TestAnthropicProvider_ToolCalling(t *testing.T) {
 
 // TestAnthropicProvider_MultimodalMessages tests image input functionality
 func TestAnthropicProvider_MultimodalMessages(t *testing.T) {
+	t.Parallel()
 	// Create mock server that handles image messages
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// Verify multimodal content in request
@@ -787,6 +798,7 @@ func TestAnthropicProvider_MultimodalMessages(t *testing.T) {
 
 // TestAnthropicProvider_UnsupportedFeatures tests that unsupported features return appropriate errors
 func TestAnthropicProvider_UnsupportedFeatures(t *testing.T) {
+	t.Parallel()
 	provider := anthropic.New(types.ProviderConfig{
 		APIKey: "test-api-key",
 	})
@@ -794,6 +806,7 @@ func TestAnthropicProvider_UnsupportedFeatures(t *testing.T) {
 	ctx := context.Background()
 
 	t.Run("embeddings not supported", func(t *testing.T) {
+		t.Parallel()
 		request := &types.EmbeddingsRequest{
 			Model: "claude-3-sonnet-20240229",
 			Input: []string{"test text"},
@@ -805,6 +818,7 @@ func TestAnthropicProvider_UnsupportedFeatures(t *testing.T) {
 	})
 
 	t.Run("audio not supported", func(t *testing.T) {
+		t.Parallel()
 		request := &types.AudioRequest{
 			Model: "claude-3-sonnet-20240229",
 			Input: "test audio input",
@@ -816,6 +830,7 @@ func TestAnthropicProvider_UnsupportedFeatures(t *testing.T) {
 	})
 
 	t.Run("images not supported", func(t *testing.T) {
+		t.Parallel()
 		request := &types.ImagesRequest{
 			Model:  "claude-3-sonnet-20240229",
 			Prompt: "test image prompt",

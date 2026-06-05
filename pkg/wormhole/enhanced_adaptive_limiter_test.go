@@ -11,6 +11,7 @@ import (
 )
 
 func TestPIDController(t *testing.T) {
+	t.Parallel()
 	config := DefaultPIDConfig()
 	pid := NewPIDController(config)
 
@@ -44,6 +45,7 @@ func TestPIDController(t *testing.T) {
 }
 
 func TestProviderAdaptiveState(t *testing.T) {
+	t.Parallel()
 	key := ProviderKey{Provider: "test", Model: "model1"}
 	state := NewProviderAdaptiveState(key, 100*time.Millisecond, 1, 10, 5, 10)
 
@@ -78,6 +80,7 @@ func TestProviderAdaptiveState(t *testing.T) {
 }
 
 func TestEnhancedAdaptiveLimiterBasic(t *testing.T) {
+	t.Parallel()
 	config := DefaultEnhancedAdaptiveConfig()
 	config.AdjustmentInterval = 100 * time.Millisecond // Fast for testing
 	config.QueryInterval = 0                           // Disable metrics query for test
@@ -116,6 +119,7 @@ func TestEnhancedAdaptiveLimiterBasic(t *testing.T) {
 }
 
 func TestEnhancedAdaptiveLimiterProviderSpecific(t *testing.T) {
+	t.Parallel()
 	config := DefaultEnhancedAdaptiveConfig()
 	config.AdjustmentInterval = 100 * time.Millisecond
 	config.QueryInterval = 0
@@ -172,6 +176,7 @@ func TestEnhancedAdaptiveLimiterProviderSpecific(t *testing.T) {
 }
 
 func TestEnhancedAdaptiveLimiterWithMetrics(t *testing.T) {
+	t.Parallel()
 	// Create a metrics collector
 	metricsConfig := middleware.DefaultEnhancedMetricsConfig()
 	metricsCollector := middleware.NewEnhancedMetricsCollector(metricsConfig)
@@ -204,6 +209,7 @@ func TestEnhancedAdaptiveLimiterWithMetrics(t *testing.T) {
 }
 
 func TestEnhancedAdaptiveLimiterModelLevel(t *testing.T) {
+	t.Parallel()
 	config := DefaultEnhancedAdaptiveConfig()
 	config.EnableModelLevel = true
 	config.AdjustmentInterval = 100 * time.Millisecond
@@ -235,6 +241,7 @@ func TestEnhancedAdaptiveLimiterModelLevel(t *testing.T) {
 }
 
 func TestAcquireTokenBasic(t *testing.T) {
+	t.Parallel()
 	config := DefaultEnhancedAdaptiveConfig()
 	config.AdjustmentInterval = 100 * time.Millisecond
 	config.QueryInterval = 0
@@ -266,6 +273,7 @@ func TestAcquireTokenBasic(t *testing.T) {
 }
 
 func TestAcquireTokenContextCanceled(t *testing.T) {
+	t.Parallel()
 	config := DefaultEnhancedAdaptiveConfig()
 	config.InitialCapacity = 1
 	config.MaxCapacity = 1
@@ -296,6 +304,7 @@ func TestAcquireTokenContextCanceled(t *testing.T) {
 }
 
 func TestAcquireTokenSurvivesLimiterSwap(t *testing.T) {
+	t.Parallel()
 	config := DefaultEnhancedAdaptiveConfig()
 	config.InitialCapacity = 5
 	config.MinCapacity = 1
@@ -327,6 +336,7 @@ func TestAcquireTokenSurvivesLimiterSwap(t *testing.T) {
 }
 
 func TestEnhancedAdaptiveLimiterEvictsIdleModelStates(t *testing.T) {
+	t.Parallel()
 	config := DefaultEnhancedAdaptiveConfig()
 	config.EnableModelLevel = true
 	config.QueryInterval = 0

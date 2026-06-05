@@ -46,6 +46,10 @@ const (
 
 	// FallbackLoadBalancerHealthInterval is used only if env var not set
 	FallbackLoadBalancerHealthInterval = 30 * time.Second
+
+	// FallbackAnthropicMaxTokens is used only if WORMHOLE_ANTHROPIC_MAX_TOKENS not set
+	// and the request does not specify MaxTokens. Anthropic requires the max_tokens field.
+	FallbackAnthropicMaxTokens = 4096
 )
 
 // Backwards compatibility aliases - DO NOT USE DIRECTLY
@@ -130,4 +134,16 @@ func GetDefaultHealthCheckInterval() time.Duration {
 		}
 	}
 	return FallbackHealthCheckInterval
+}
+
+// GetDefaultAnthropicMaxTokens returns the Anthropic max_tokens default with environment variable override.
+// Environment variable: WORMHOLE_ANTHROPIC_MAX_TOKENS (optional, positive integer)
+// Falls back to FallbackAnthropicMaxTokens if not set or invalid.
+func GetDefaultAnthropicMaxTokens() int {
+	if env := os.Getenv("WORMHOLE_ANTHROPIC_MAX_TOKENS"); env != "" {
+		if tokens, err := strconv.Atoi(env); err == nil && tokens > 0 {
+			return tokens
+		}
+	}
+	return FallbackAnthropicMaxTokens
 }

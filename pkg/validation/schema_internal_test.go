@@ -9,6 +9,7 @@ import (
 )
 
 func TestParseSchemaInferenceAndTypes(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name   string
 		schema map[string]any
@@ -44,6 +45,7 @@ func TestParseSchemaInferenceAndTypes(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			parsed, err := parseSchema(tt.schema)
 			require.NoError(t, err)
 			assert.Equal(t, tt.want, parsed.GetType())
@@ -52,6 +54,7 @@ func TestParseSchemaInferenceAndTypes(t *testing.T) {
 }
 
 func TestParseSchemaErrorsAndFallbacks(t *testing.T) {
+	t.Parallel()
 	_, err := parseSchema(nil)
 	require.Error(t, err)
 
@@ -83,6 +86,7 @@ func TestParseSchemaErrorsAndFallbacks(t *testing.T) {
 }
 
 func TestParseScalarSchemas(t *testing.T) {
+	t.Parallel()
 	stringSchema := parseStringSchema(map[string]any{
 		"type":        "string",
 		"description": "name",

@@ -9,6 +9,7 @@ import (
 )
 
 func TestSchemaBuilders(t *testing.T) {
+	t.Parallel()
 	nameSchema := NewStringSchema().
 		Description("person name").
 		MinLength(2).
@@ -54,6 +55,7 @@ func TestSchemaBuilders(t *testing.T) {
 }
 
 func TestArrayAndConvenienceSchemaBuilders(t *testing.T) {
+	t.Parallel()
 	itemSchema := StringWithDesc("tag")
 	arraySchema := NewArraySchema(&itemSchema).
 		Description("tags").
@@ -89,6 +91,7 @@ func TestArrayAndConvenienceSchemaBuilders(t *testing.T) {
 }
 
 func TestSimpleConvenienceSchemas(t *testing.T) {
+	t.Parallel()
 	assert.Equal(t, "name", StringWithDesc("name").Description)
 	assert.Equal(t, "number", Number().Type)
 	assert.Equal(t, "boolean", Boolean().Type)

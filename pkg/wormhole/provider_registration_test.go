@@ -10,7 +10,9 @@ import (
 )
 
 func TestProviderRegistration(t *testing.T) {
+	t.Parallel()
 	t.Run("built-in providers are registered", func(t *testing.T) {
+		t.Parallel()
 		wormhole := New(WithOpenAI("test-key"))
 
 		// Verify that core built-in providers are registered
@@ -25,6 +27,7 @@ func TestProviderRegistration(t *testing.T) {
 	})
 
 	t.Run("custom provider registration", func(t *testing.T) {
+		t.Parallel()
 		// Register a custom provider via functional options
 		customFactory := func(config types.ProviderConfig) (types.Provider, error) {
 			return mockpkg.NewMockProvider("custom"), nil
@@ -45,6 +48,7 @@ func TestProviderRegistration(t *testing.T) {
 	})
 
 	t.Run("provider factory creates instances", func(t *testing.T) {
+		t.Parallel()
 		// Register a test provider factory with call counting
 		callCount := 0
 		testFactory := func(config types.ProviderConfig) (types.Provider, error) {
@@ -71,6 +75,7 @@ func TestProviderRegistration(t *testing.T) {
 	})
 
 	t.Run("unregistered provider returns error", func(t *testing.T) {
+		t.Parallel()
 		wormhole := New() // Empty client with no providers
 
 		_, err := wormhole.Provider("nonexistent")
@@ -81,6 +86,7 @@ func TestProviderRegistration(t *testing.T) {
 	})
 
 	t.Run("custom provider with auto-config works", func(t *testing.T) {
+		t.Parallel()
 		// WithCustomProvider automatically creates a config placeholder
 		wormhole := New(
 			WithCustomProvider("autoconfigured", func(config types.ProviderConfig) (types.Provider, error) {
@@ -97,7 +103,9 @@ func TestProviderRegistration(t *testing.T) {
 }
 
 func TestWithOpenAICompatibleOption(t *testing.T) {
+	t.Parallel()
 	t.Run("WithOpenAICompatible option registers provider", func(t *testing.T) {
+		t.Parallel()
 		// Use WithOpenAICompatible option to add a provider during initialization
 		wormhole := New(
 			WithOpenAICompatible("custom-openai", "https://api.example.com", types.ProviderConfig{
@@ -112,6 +120,7 @@ func TestWithOpenAICompatibleOption(t *testing.T) {
 	})
 
 	t.Run("WithGemini option stores config correctly", func(t *testing.T) {
+		t.Parallel()
 		// Use WithGemini option to add provider during initialization
 		wormhole := New(
 			WithGemini("test-api-key", types.ProviderConfig{

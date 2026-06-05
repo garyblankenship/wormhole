@@ -282,6 +282,7 @@ func TestGetDefaultHealthCheckInterval(t *testing.T) {
 }
 
 func TestConstants(t *testing.T) {
+	t.Parallel()
 	// Verify that critical constants are properly defined
 	if FallbackHTTPTimeout != 300*time.Second {
 		t.Errorf("FallbackHTTPTimeout = %v, expected 300s", FallbackHTTPTimeout)
@@ -313,6 +314,7 @@ func TestConstants(t *testing.T) {
 }
 
 func TestBackwardsCompatibilityAliases(t *testing.T) {
+	t.Parallel()
 	// Verify backwards compatibility constants
 	if DefaultMaxRetries != FallbackMaxRetries {
 		t.Errorf("DefaultMaxRetries = %v, should equal FallbackMaxRetries = %v",

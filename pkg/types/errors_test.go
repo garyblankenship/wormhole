@@ -12,7 +12,9 @@ import (
 )
 
 func TestWormholeError_Creation(t *testing.T) {
+	t.Parallel()
 	t.Run("basic creation", func(t *testing.T) {
+		t.Parallel()
 		err := NewWormholeError(ErrorCodeAuth, "test message", true)
 
 		assert.Equal(t, ErrorCodeAuth, err.Code)
@@ -26,6 +28,7 @@ func TestWormholeError_Creation(t *testing.T) {
 	})
 
 	t.Run("with cause", func(t *testing.T) {
+		t.Parallel()
 		originalErr := errors.New("original error")
 		err := WrapError(ErrorCodeNetwork, "wrapped message", true, originalErr)
 
@@ -37,13 +40,16 @@ func TestWormholeError_Creation(t *testing.T) {
 }
 
 func TestWormholeError_ErrorInterface(t *testing.T) {
+	t.Parallel()
 	t.Run("basic error message", func(t *testing.T) {
+		t.Parallel()
 		err := NewWormholeError(ErrorCodeAuth, "authentication failed", false)
 		expected := "AUTH_ERROR: authentication failed"
 		assert.Equal(t, expected, err.Error())
 	})
 
 	t.Run("error message with details", func(t *testing.T) {
+		t.Parallel()
 		err := NewWormholeError(ErrorCodeAuth, "authentication failed", false).
 			WithDetails("invalid API key format")
 		expected := "AUTH_ERROR: authentication failed (invalid API key format)"
@@ -51,6 +57,7 @@ func TestWormholeError_ErrorInterface(t *testing.T) {
 	})
 
 	t.Run("unwrap returns cause", func(t *testing.T) {
+		t.Parallel()
 		originalErr := errors.New("network timeout")
 		err := WrapError(ErrorCodeNetwork, "request failed", true, originalErr)
 
@@ -58,13 +65,16 @@ func TestWormholeError_ErrorInterface(t *testing.T) {
 	})
 
 	t.Run("unwrap returns nil when no cause", func(t *testing.T) {
+		t.Parallel()
 		err := NewWormholeError(ErrorCodeAuth, "auth failed", false)
 		assert.Nil(t, err.Unwrap())
 	})
 }
 
 func TestWormholeError_Chaining(t *testing.T) {
+	t.Parallel()
 	t.Run("with provider", func(t *testing.T) {
+		t.Parallel()
 		err := NewWormholeError(ErrorCodeModel, "model error", false).
 			WithProvider("openai")
 
@@ -73,6 +83,7 @@ func TestWormholeError_Chaining(t *testing.T) {
 	})
 
 	t.Run("with model", func(t *testing.T) {
+		t.Parallel()
 		err := NewWormholeError(ErrorCodeModel, "model error", false).
 			WithModel("gpt-5")
 
@@ -80,6 +91,7 @@ func TestWormholeError_Chaining(t *testing.T) {
 	})
 
 	t.Run("with details", func(t *testing.T) {
+		t.Parallel()
 		err := NewWormholeError(ErrorCodeRequest, "bad request", false).
 			WithDetails("missing required field 'model'")
 
@@ -87,6 +99,7 @@ func TestWormholeError_Chaining(t *testing.T) {
 	})
 
 	t.Run("with status code", func(t *testing.T) {
+		t.Parallel()
 		err := NewWormholeError(ErrorCodeAuth, "unauthorized", false).
 			WithStatusCode(401)
 
@@ -94,6 +107,7 @@ func TestWormholeError_Chaining(t *testing.T) {
 	})
 
 	t.Run("with cause", func(t *testing.T) {
+		t.Parallel()
 		originalErr := errors.New("connection refused")
 		err := NewWormholeError(ErrorCodeNetwork, "network error", true).
 			WithCause(originalErr)
@@ -102,6 +116,7 @@ func TestWormholeError_Chaining(t *testing.T) {
 	})
 
 	t.Run("chaining multiple methods", func(t *testing.T) {
+		t.Parallel()
 		originalErr := errors.New("timeout")
 		err := NewWormholeError(ErrorCodeTimeout, "request timeout", true).
 			WithProvider("anthropic").
@@ -120,6 +135,7 @@ func TestWormholeError_Chaining(t *testing.T) {
 	})
 
 	t.Run("chaining creates new instances", func(t *testing.T) {
+		t.Parallel()
 		original := NewWormholeError(ErrorCodeAuth, "auth error", false)
 		modified := original.WithProvider("openai")
 
@@ -133,18 +149,22 @@ func TestWormholeError_Chaining(t *testing.T) {
 }
 
 func TestWormholeError_IsRetryable(t *testing.T) {
+	t.Parallel()
 	t.Run("retryable error", func(t *testing.T) {
+		t.Parallel()
 		err := NewWormholeError(ErrorCodeRateLimit, "rate limited", true)
 		assert.True(t, err.IsRetryable())
 	})
 
 	t.Run("non-retryable error", func(t *testing.T) {
+		t.Parallel()
 		err := NewWormholeError(ErrorCodeAuth, "invalid key", false)
 		assert.False(t, err.IsRetryable())
 	})
 }
 
 func TestPredefinedErrors(t *testing.T) {
+	t.Parallel()
 	testCases := []struct {
 		name      string
 		err       *WormholeError
@@ -170,6 +190,7 @@ func TestPredefinedErrors(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			assert.Equal(t, tc.code, tc.err.Code)
 			assert.Equal(t, tc.retryable, tc.err.Retryable)
 			assert.NotEmpty(t, tc.err.Message)
@@ -178,6 +199,7 @@ func TestPredefinedErrors(t *testing.T) {
 }
 
 func TestHTTPStatusToError(t *testing.T) {
+	t.Parallel()
 	testCases := []struct {
 		status       int
 		expectedCode ErrorCode
@@ -199,6 +221,7 @@ func TestHTTPStatusToError(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(fmt.Sprintf("status_%d", tc.status), func(t *testing.T) {
+			t.Parallel()
 			body := "error response body"
 			err := HTTPStatusToError(tc.status, body)
 
@@ -211,7 +234,9 @@ func TestHTTPStatusToError(t *testing.T) {
 }
 
 func TestErrorTypeChecking(t *testing.T) {
+	t.Parallel()
 	t.Run("IsWormholeError", func(t *testing.T) {
+		t.Parallel()
 		wormholeErr := NewWormholeError(ErrorCodeAuth, "auth error", false)
 		regularErr := errors.New("regular error")
 
@@ -221,6 +246,7 @@ func TestErrorTypeChecking(t *testing.T) {
 	})
 
 	t.Run("AsWormholeError", func(t *testing.T) {
+		t.Parallel()
 		wormholeErr := NewWormholeError(ErrorCodeAuth, "auth error", false)
 		regularErr := errors.New("regular error")
 
@@ -241,6 +267,7 @@ func TestErrorTypeChecking(t *testing.T) {
 	})
 
 	t.Run("IsRetryableError", func(t *testing.T) {
+		t.Parallel()
 		retryableErr := NewWormholeError(ErrorCodeRateLimit, "rate limited", true)
 		nonRetryableErr := NewWormholeError(ErrorCodeAuth, "auth failed", false)
 		regularErr := errors.New("regular error")
@@ -253,7 +280,9 @@ func TestErrorTypeChecking(t *testing.T) {
 }
 
 func TestModelConstraintError(t *testing.T) {
+	t.Parallel()
 	t.Run("creation and properties", func(t *testing.T) {
+		t.Parallel()
 		err := NewModelConstraintError("gpt-5", "temperature", 1.0, 0.7)
 
 		assert.Equal(t, ErrorCodeProvider, err.Code)
@@ -268,6 +297,7 @@ func TestModelConstraintError(t *testing.T) {
 	})
 
 	t.Run("error message", func(t *testing.T) {
+		t.Parallel()
 		err := NewModelConstraintError("gpt-5", "max_tokens", 4096, 8192)
 		errMsg := err.Error()
 
@@ -277,6 +307,7 @@ func TestModelConstraintError(t *testing.T) {
 	})
 
 	t.Run("is WormholeError", func(t *testing.T) {
+		t.Parallel()
 		err := NewModelConstraintError("gpt-5", "temperature", 1.0, 0.5)
 
 		assert.True(t, IsWormholeError(err))
@@ -288,7 +319,9 @@ func TestModelConstraintError(t *testing.T) {
 }
 
 func TestWormholeError_JSONSerialization(t *testing.T) {
+	t.Parallel()
 	t.Run("marshal to JSON", func(t *testing.T) {
+		t.Parallel()
 		err := NewWormholeError(ErrorCodeAuth, "authentication failed", true).
 			WithProvider("openai").
 			WithModel("gpt-5").
@@ -316,6 +349,7 @@ func TestWormholeError_JSONSerialization(t *testing.T) {
 	})
 
 	t.Run("unmarshal from JSON", func(t *testing.T) {
+		t.Parallel()
 		jsonData := `{
 			"code": "RATE_LIMIT_ERROR",
 			"message": "rate limit exceeded",
@@ -341,6 +375,7 @@ func TestWormholeError_JSONSerialization(t *testing.T) {
 	})
 
 	t.Run("round trip JSON", func(t *testing.T) {
+		t.Parallel()
 		original := NewWormholeError(ErrorCodeTimeout, "request timeout", true).
 			WithProvider("groq").
 			WithModel("llama-3").
@@ -367,6 +402,7 @@ func TestWormholeError_JSONSerialization(t *testing.T) {
 }
 
 func TestErrorCodes(t *testing.T) {
+	t.Parallel()
 	expectedCodes := []ErrorCode{
 		ErrorCodeAuth,
 		ErrorCodeModel,
@@ -380,6 +416,7 @@ func TestErrorCodes(t *testing.T) {
 
 	for _, code := range expectedCodes {
 		t.Run(string(code), func(t *testing.T) {
+			t.Parallel()
 			assert.NotEmpty(t, string(code))
 			assert.Contains(t, string(code), "_ERROR")
 		})

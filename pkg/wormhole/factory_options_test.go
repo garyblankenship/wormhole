@@ -56,6 +56,7 @@ func TestEmbeddingsBuilderConfigurationCloneAndValidate(t *testing.T) {
 }
 
 func TestFactoryProviderConstructors(t *testing.T) {
+	t.Parallel()
 	factory := NewSimpleFactory()
 
 	openai := factory.OpenAI("openai-key")
@@ -116,11 +117,16 @@ func TestFactoryProviderConstructors(t *testing.T) {
 	_ = openrouter.Close()
 }
 
+func setEnvForFactoryTest(t *testing.T, key, value string) {
+	t.Helper()
+	t.Setenv(key, value)
+}
+
 func TestFactoryEnvironmentAndMiddlewareOptions(t *testing.T) {
-	t.Setenv("OLLAMA_BASE_URL", "")
-	t.Setenv("LMSTUDIO_BASE_URL", "")
-	t.Setenv("OPENROUTER_API_KEY", "")
-	t.Setenv("OPENAI_API_KEY", "env-openai")
+	setEnvForFactoryTest(t, "OLLAMA_BASE_URL", "")
+	setEnvForFactoryTest(t, "LMSTUDIO_BASE_URL", "")
+	setEnvForFactoryTest(t, "OPENROUTER_API_KEY", "")
+	setEnvForFactoryTest(t, "OPENAI_API_KEY", "env-openai")
 
 	factory := NewSimpleFactory()
 	if got := factory.getAPIKey(nil, "OPENAI_API_KEY"); got != "env-openai" {
@@ -167,12 +173,12 @@ func TestFactoryEnvironmentAndMiddlewareOptions(t *testing.T) {
 }
 
 func TestOptionHelpersAndConfigWarnings(t *testing.T) {
-	t.Setenv("OPENAI_API_KEY", "openai-env")
-	t.Setenv("ANTHROPIC_API_KEY", "anthropic-env")
-	t.Setenv("GEMINI_API_KEY", "gemini-env")
-	t.Setenv("GROQ_API_KEY", "groq-env")
-	t.Setenv("MISTRAL_API_KEY", "mistral-env")
-	t.Setenv("OPENROUTER_API_KEY", "router-env")
+	setEnvForFactoryTest(t, "OPENAI_API_KEY", "openai-env")
+	setEnvForFactoryTest(t, "ANTHROPIC_API_KEY", "anthropic-env")
+	setEnvForFactoryTest(t, "GEMINI_API_KEY", "gemini-env")
+	setEnvForFactoryTest(t, "GROQ_API_KEY", "groq-env")
+	setEnvForFactoryTest(t, "MISTRAL_API_KEY", "mistral-env")
+	setEnvForFactoryTest(t, "OPENROUTER_API_KEY", "router-env")
 
 	logger := slog.Default()
 	var cfg Config
@@ -231,6 +237,7 @@ func TestOptionHelpersAndConfigWarnings(t *testing.T) {
 }
 
 func TestDiscoveryConfigExplicitDisableOptions(t *testing.T) {
+	t.Parallel()
 	var cfg Config
 	WithDiscoveryConfig(discovery.DiscoveryConfig{
 		DisableFileCache:         true,
@@ -245,5 +252,38 @@ func TestDiscoveryConfigExplicitDisableOptions(t *testing.T) {
 	}
 	if cfg.DiscoveryConfig.CacheTTL == 0 || cfg.DiscoveryConfig.FileCachePath == "" {
 		t.Fatalf("discovery defaults not preserved: %#v", cfg.DiscoveryConfig)
+	}
+}
+
+func TestWithModels_PopulatesRegistry(t *testing.T) {
+	t.Parallel()
+
+	original := types.DefaultModelRegistry
+	types.DefaultModelRegistry = types.NewModelRegistry()
+	t.Cleanup(func() { types.DefaultModelRegistry = original })
+
+	model := &types.ModelInfo{
+		ID:           "test-model-x",
+		Provider:     "openai",
+		Capabilities: []types.ModelCapability{types.CapabilityChat},
+	}
+
+	if _, ok := types.DefaultModelRegistry.Get("test-model-x"); ok {
+		t.Fatal("registry should be empty before WithModels")
+	}
+
+	_ = New(
+		WithDefaultProvider("openai"),
+		WithOpenAI("test-key"),
+		WithModels(model),
+		WithDiscovery(false),
+	)
+
+	got, ok := types.DefaultModelRegistry.Get("test-model-x")
+	if !ok {
+		t.Fatal("WithModels did not populate DefaultModelRegistry")
+	}
+	if got.Provider != "openai" {
+		t.Errorf("provider = %q, want %q", got.Provider, "openai")
 	}
 }

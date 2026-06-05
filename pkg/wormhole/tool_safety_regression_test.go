@@ -9,6 +9,7 @@ import (
 )
 
 func TestToolExecutor_UnsupportedSafetySettingsFailFast(t *testing.T) {
+	t.Parallel()
 	registry := NewToolRegistry()
 	called := false
 

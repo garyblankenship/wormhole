@@ -79,6 +79,7 @@ func verifyRequestTools(t *testing.T, capturedRequest map[string]any, request ty
 }
 
 func TestGeminiProvider_New(t *testing.T) {
+	t.Parallel()
 	testCases := []struct {
 		name        string
 		apiKey      string
@@ -116,6 +117,7 @@ func TestGeminiProvider_New(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			provider := gemini.New(tc.apiKey, tc.config)
 
 			require.NotNil(t, provider)
@@ -129,6 +131,7 @@ func TestGeminiProvider_New(t *testing.T) {
 }
 
 func TestGeminiProvider_Text(t *testing.T) {
+	t.Parallel()
 	testCases := []struct {
 		name                string
 		request             types.TextRequest
@@ -351,6 +354,7 @@ func TestGeminiProvider_Text(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			var capturedRequest map[string]any
 			var capturedURL string
 
@@ -439,6 +443,7 @@ func TestGeminiProvider_Text(t *testing.T) {
 }
 
 func TestGeminiProvider_Structured(t *testing.T) {
+	t.Parallel()
 	testCases := []struct {
 		name          string
 		request       types.StructuredRequest
@@ -516,6 +521,7 @@ func TestGeminiProvider_Structured(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			var capturedRequest map[string]any
 
 			// Create mock server
@@ -576,6 +582,7 @@ func TestGeminiProvider_Structured(t *testing.T) {
 }
 
 func TestGeminiProvider_Embeddings(t *testing.T) {
+	t.Parallel()
 	testCases := []struct {
 		name           string
 		request        types.EmbeddingsRequest
@@ -634,6 +641,7 @@ func TestGeminiProvider_Embeddings(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			// Skip server creation for model validation errors
 			if tc.expectedError == "does not appear to be an embedding model" {
 				config := types.ProviderConfig{}
@@ -690,12 +698,14 @@ func TestGeminiProvider_Embeddings(t *testing.T) {
 }
 
 func TestGeminiProvider_UnsupportedMethods(t *testing.T) {
+	t.Parallel()
 	config := types.ProviderConfig{}
 	provider := gemini.New("test-api-key", config)
 
 	ctx := context.Background()
 
 	t.Run("Audio not supported", func(t *testing.T) {
+		t.Parallel()
 		audioReq := types.AudioRequest{
 			Model: "gemini-pro",
 		}
@@ -706,6 +716,7 @@ func TestGeminiProvider_UnsupportedMethods(t *testing.T) {
 	})
 
 	t.Run("Images not supported", func(t *testing.T) {
+		t.Parallel()
 		imagesReq := types.ImagesRequest{
 			Model: "gemini-pro",
 		}
@@ -717,6 +728,7 @@ func TestGeminiProvider_UnsupportedMethods(t *testing.T) {
 }
 
 func TestGeminiProvider_MessageTransformation(t *testing.T) {
+	t.Parallel()
 	testCases := []struct {
 		name             string
 		messages         []types.Message
@@ -734,12 +746,12 @@ func TestGeminiProvider_MessageTransformation(t *testing.T) {
 			expectedRoles:    []string{"user", "model", "user"},
 		},
 		{
-			name: "system message mapped to model",
+			name: "system message skipped from contents",
 			messages: []types.Message{
 				types.NewSystemMessage("You are helpful"),
 			},
-			expectedContents: 1,
-			expectedRoles:    []string{"model"},
+			expectedContents: 0,
+			expectedRoles:    []string{},
 		},
 		{
 			name: "tool result message",
@@ -775,6 +787,7 @@ func TestGeminiProvider_MessageTransformation(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			var capturedRequest map[string]any
 
 			// Create mock server that captures request
@@ -836,6 +849,7 @@ func TestGeminiProvider_MessageTransformation(t *testing.T) {
 }
 
 func TestGeminiProvider_ErrorHandling(t *testing.T) {
+	t.Parallel()
 	testCases := []struct {
 		name           string
 		serverResponse func(w http.ResponseWriter, r *http.Request)
@@ -899,6 +913,7 @@ func TestGeminiProvider_ErrorHandling(t *testing.T) {
 		}
 
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			// Create mock server
 			server := httptest.NewServer(http.HandlerFunc(tc.serverResponse))
 			t.Cleanup(func() { server.Close() })
@@ -931,6 +946,7 @@ func TestGeminiProvider_ErrorHandling(t *testing.T) {
 
 	// Test context timeout separately
 	t.Run("Context timeout", func(t *testing.T) {
+		t.Parallel()
 		// Create mock server that delays response
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			time.Sleep(100 * time.Millisecond)
@@ -979,6 +995,7 @@ func TestGeminiProvider_ErrorHandling(t *testing.T) {
 }
 
 func TestGeminiProvider_FinishReasonMapping(t *testing.T) {
+	t.Parallel()
 	testCases := []struct {
 		geminiReason string
 		expected     types.FinishReason
@@ -994,6 +1011,7 @@ func TestGeminiProvider_FinishReasonMapping(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.geminiReason, func(t *testing.T) {
+			t.Parallel()
 			// Create mock server
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				response := map[string]any{

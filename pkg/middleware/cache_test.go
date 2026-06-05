@@ -14,6 +14,7 @@ const (
 )
 
 func TestMemoryCache(t *testing.T) {
+	t.Parallel()
 	cache := NewMemoryCache(3)
 
 	// Test Set and Get
@@ -88,6 +89,7 @@ func TestMemoryCache(t *testing.T) {
 }
 
 func TestTTLCache(t *testing.T) {
+	t.Parallel()
 	cache := NewTTLCache(10, 50*time.Millisecond)
 
 	// Test SetDefault uses default TTL
@@ -104,6 +106,7 @@ func TestTTLCache(t *testing.T) {
 }
 
 func TestLRUCache(t *testing.T) {
+	t.Parallel()
 	cache := NewLRUCache(2)
 
 	// Test basic set and get
@@ -150,7 +153,9 @@ func TestLRUCache(t *testing.T) {
 }
 
 func TestCacheClose(t *testing.T) {
+	t.Parallel()
 	t.Run("memory cache", func(t *testing.T) {
+		t.Parallel()
 		cache := NewMemoryCache(1)
 		if err := cache.Close(); err != nil {
 			t.Fatalf("MemoryCache.Close() error = %v", err)
@@ -158,6 +163,7 @@ func TestCacheClose(t *testing.T) {
 	})
 
 	t.Run("ttl cache", func(t *testing.T) {
+		t.Parallel()
 		cache := NewTTLCache(1, time.Minute)
 		if err := cache.Close(); err != nil {
 			t.Fatalf("TTLCache.Close() error = %v", err)
@@ -165,6 +171,7 @@ func TestCacheClose(t *testing.T) {
 	})
 
 	t.Run("lru cache", func(t *testing.T) {
+		t.Parallel()
 		cache := NewLRUCache(1)
 		if err := cache.Close(); err != nil {
 			t.Fatalf("LRUCache.Close() error = %v", err)
@@ -173,6 +180,7 @@ func TestCacheClose(t *testing.T) {
 }
 
 func TestDefaultCacheKeyGenerator(t *testing.T) {
+	t.Parallel()
 	// Test with simple struct
 	type TestRequest struct {
 		Model  string `json:"model"`
@@ -210,6 +218,7 @@ func TestDefaultCacheKeyGenerator(t *testing.T) {
 }
 
 func TestCacheMiddleware(t *testing.T) {
+	t.Parallel()
 	cache := NewMemoryCache(10)
 	config := CacheConfig{
 		Cache: cache,
@@ -266,6 +275,7 @@ func TestCacheMiddleware(t *testing.T) {
 }
 
 func TestCacheMiddlewareWithCacheableFunc(t *testing.T) {
+	t.Parallel()
 	cache := NewMemoryCache(10)
 	config := CacheConfig{
 		Cache: cache,
@@ -310,6 +320,7 @@ func TestCacheMiddlewareWithCacheableFunc(t *testing.T) {
 }
 
 func TestCacheMiddlewareErrorHandling(t *testing.T) {
+	t.Parallel()
 	cache := NewMemoryCache(10)
 	config := CacheConfig{
 		Cache: cache,
@@ -340,6 +351,7 @@ func TestCacheMiddlewareErrorHandling(t *testing.T) {
 }
 
 func TestCacheMiddlewareKeyGeneratorError(t *testing.T) {
+	t.Parallel()
 	cache := NewMemoryCache(10)
 	config := CacheConfig{
 		Cache: cache,

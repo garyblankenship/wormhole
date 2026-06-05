@@ -5,6 +5,7 @@ import (
 )
 
 func TestAvailableMiddleware(t *testing.T) {
+	t.Parallel()
 	middlewares := AvailableMiddleware()
 
 	// Should have at least the core middleware
@@ -51,6 +52,7 @@ func TestAvailableMiddleware(t *testing.T) {
 }
 
 func TestMiddlewareInfoStructure(t *testing.T) {
+	t.Parallel()
 	middlewares := AvailableMiddleware()
 
 	// Test specific examples for correctness

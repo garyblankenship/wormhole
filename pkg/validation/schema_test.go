@@ -5,6 +5,7 @@ import (
 )
 
 func TestValidateAgainstSchema(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name        string
 		data        map[string]any
@@ -126,6 +127,7 @@ func TestValidateAgainstSchema(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			err := ValidateAgainstSchema(tt.data, tt.schema)
 			if tt.shouldError && err == nil {
 				t.Errorf("expected error but got none")

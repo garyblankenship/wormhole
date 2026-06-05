@@ -1,8 +1,10 @@
 package gemini
 
 import (
+	"context"
 	"encoding/base64"
 	"encoding/json"
+	"fmt"
 	"io"
 	"strings"
 
@@ -35,6 +37,12 @@ func (g *Gemini) transformMessages(messages []types.Message) ([]map[string]any, 
 	contents := make([]map[string]any, 0, len(messages))
 
 	for _, msg := range messages {
+		// Skip system messages — Gemini carries system text in the top-level
+		// systemInstruction field (see buildTextPayload), not in contents.
+		if msg.GetRole() == types.RoleSystem {
+			continue
+		}
+
 		content := map[string]any{
 			"role": g.mapRole(string(msg.GetRole())),
 		}
@@ -336,13 +344,16 @@ func (g *Gemini) transformTextResponse(response *geminiTextResponse) (*types.Tex
 	var text string
 	var toolCalls []types.ToolCall
 
-	for _, part := range candidate.Content.Parts {
+	for idx, part := range candidate.Content.Parts {
 		if part.Text != "" {
 			text += part.Text
 		}
 		if part.FunctionCall != nil {
+			// Gemini provides no tool-call IDs and the function name alone
+			// collides when the same function is called twice in one turn.
+			// Synthesize a unique-per-part ID so tool results map correctly.
 			toolCalls = append(toolCalls, types.ToolCall{
-				ID:        part.FunctionCall.Name, // Gemini doesn't provide IDs
+				ID:        fmt.Sprintf("gemini-call-%d-%s", idx, part.FunctionCall.Name),
 				Name:      part.FunctionCall.Name,
 				Arguments: part.FunctionCall.Args,
 			})
@@ -420,7 +431,7 @@ func (g *Gemini) transformStructuredResponse(response *geminiTextResponse, schem
 }
 
 // transformEmbeddingsResponse converts Gemini response to types.EmbeddingsResponse
-func (g *Gemini) transformEmbeddingsResponse(response *geminiEmbeddingsResponse) (*types.EmbeddingsResponse, error) {
+func (g *Gemini) transformEmbeddingsResponse(response *geminiEmbeddingsResponse) *types.EmbeddingsResponse {
 	embeddings := make([]types.Embedding, 0, len(response.Embeddings))
 
 	for i, emb := range response.Embeddings {
@@ -435,14 +446,14 @@ func (g *Gemini) transformEmbeddingsResponse(response *geminiEmbeddingsResponse)
 		Metadata: map[string]any{
 			"provider": "gemini",
 		},
-	}, nil
+	}
 }
 
 // processStreamCandidate extracts chunks from a candidate response
 func (g *Gemini) processStreamCandidate(candidate candidate) []types.TextChunk {
 	chunks := make([]types.TextChunk, 0, len(candidate.Content.Parts)+1)
 
-	for _, part := range candidate.Content.Parts {
+	for idx, part := range candidate.Content.Parts {
 		if part.Text != "" {
 			chunks = append(chunks, types.TextChunk{
 				Text:  part.Text,
@@ -450,9 +461,11 @@ func (g *Gemini) processStreamCandidate(candidate candidate) []types.TextChunk {
 			})
 		}
 		if part.FunctionCall != nil {
+			// Synthetic unique-per-part ID (Gemini provides none); see
+			// transformTextResponse for rationale.
 			chunks = append(chunks, types.TextChunk{
 				ToolCall: &types.ToolCall{
-					ID:        part.FunctionCall.Name,
+					ID:        fmt.Sprintf("gemini-call-%d-%s", idx, part.FunctionCall.Name),
 					Name:      part.FunctionCall.Name,
 					Arguments: part.FunctionCall.Args,
 				},
@@ -495,8 +508,10 @@ func (g *Gemini) parseStreamEvent(data string) ([]types.TextChunk, bool, error) 
 	return g.processStreamCandidate(response.Candidates[0]), false, nil
 }
 
-// handleStream processes streaming responses
-func (g *Gemini) handleStream(stream io.ReadCloser) <-chan types.TextChunk {
+// handleStream processes streaming responses. Every send is guarded by
+// ctx.Done() so the goroutine exits and the body closes if the consumer
+// stops reading.
+func (g *Gemini) handleStream(ctx context.Context, stream io.ReadCloser) <-chan types.TextChunk {
 	ch := make(chan types.TextChunk)
 
 	go func() {
@@ -509,19 +524,29 @@ func (g *Gemini) handleStream(stream io.ReadCloser) <-chan types.TextChunk {
 		for scanner.Scan() {
 			chunks, done, err := g.parseStreamEvent(scanner.Event().Data)
 			if err != nil {
-				ch <- types.TextChunk{Error: err}
+				select {
+				case ch <- types.TextChunk{Error: err}:
+				case <-ctx.Done():
+				}
 				return
 			}
 			if done {
 				return
 			}
 			for _, chunk := range chunks {
-				ch <- chunk
+				select {
+				case ch <- chunk:
+				case <-ctx.Done():
+					return
+				}
 			}
 		}
 
 		if err := scanner.Err(); err != nil {
-			ch <- types.TextChunk{Error: err}
+			select {
+			case ch <- types.TextChunk{Error: err}:
+			case <-ctx.Done():
+			}
 		}
 	}()
 

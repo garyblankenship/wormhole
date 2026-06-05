@@ -13,6 +13,7 @@ import (
 )
 
 func TestWormholeToOrchestrationAdapterCreateCompletion(t *testing.T) {
+	t.Parallel()
 	mock := wmtest.NewMockProvider("mock").WithTextResponse(types.TextResponse{
 		ID:      "resp-1",
 		Model:   "mock-model",
@@ -39,6 +40,7 @@ func TestWormholeToOrchestrationAdapterCreateCompletion(t *testing.T) {
 }
 
 func TestWormholeToOrchestrationAdapterCreateCompletionReturnsProviderError(t *testing.T) {
+	t.Parallel()
 	mock := wmtest.NewMockProvider("mock").WithError("provider failed")
 	adapter := NewWormholeToOrchestrationAdapter(mock, ProviderOpenAI, "default-model")
 
@@ -51,6 +53,7 @@ func TestWormholeToOrchestrationAdapterCreateCompletionReturnsProviderError(t *t
 }
 
 func TestWormholeToOrchestrationAdapterCreateCompletionHandlesMissingUsage(t *testing.T) {
+	t.Parallel()
 	mock := wmtest.NewMockProvider("mock").WithTextResponse(types.TextResponse{
 		ID:    "resp-1",
 		Model: "mock-model",
@@ -69,6 +72,7 @@ func TestWormholeToOrchestrationAdapterCreateCompletionHandlesMissingUsage(t *te
 }
 
 func TestWormholeToOrchestrationAdapterStreaming(t *testing.T) {
+	t.Parallel()
 	stop := types.FinishReasonStop
 	mock := wmtest.NewMockProvider("mock").WithStreamChunks([]types.TextChunk{
 		{Text: "hello "},
@@ -99,6 +103,7 @@ func TestWormholeToOrchestrationAdapterStreaming(t *testing.T) {
 }
 
 func TestWormholeToOrchestrationAdapterStreamingCallbackError(t *testing.T) {
+	t.Parallel()
 	mock := wmtest.NewMockProvider("mock").WithStreamChunks([]types.TextChunk{
 		{Delta: &types.ChunkDelta{Content: "hello"}},
 	})
@@ -115,6 +120,7 @@ func TestWormholeToOrchestrationAdapterStreamingCallbackError(t *testing.T) {
 }
 
 func TestWormholeToOrchestrationAdapterStreamingChunkError(t *testing.T) {
+	t.Parallel()
 	chunkErr := errors.New("chunk failed")
 	mock := wmtest.NewMockProvider("mock").WithStreamChunks([]types.TextChunk{
 		{Error: chunkErr},
@@ -131,6 +137,7 @@ func TestWormholeToOrchestrationAdapterStreamingChunkError(t *testing.T) {
 }
 
 func TestWormholeToOrchestrationAdapterEstimateCost(t *testing.T) {
+	t.Parallel()
 	mock := wmtest.NewMockProvider("mock")
 
 	tests := []struct {
@@ -172,6 +179,7 @@ func TestWormholeToOrchestrationAdapterEstimateCost(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			adapter := NewWormholeToOrchestrationAdapter(mock, tt.provider, tt.model)
 			assert.InEpsilon(t, tt.wantCost, adapter.EstimateCost(tt.req), 0.000001)
 		})
@@ -179,13 +187,16 @@ func TestWormholeToOrchestrationAdapterEstimateCost(t *testing.T) {
 }
 
 func TestWormholeToOrchestrationAdapterHealthCheck(t *testing.T) {
+	t.Parallel()
 	t.Run("success", func(t *testing.T) {
+		t.Parallel()
 		mock := wmtest.NewMockProvider("mock")
 		adapter := NewWormholeToOrchestrationAdapter(mock, ProviderOpenAI, "gpt-test")
 		require.NoError(t, adapter.HealthCheck(context.Background()))
 	})
 
 	t.Run("error", func(t *testing.T) {
+		t.Parallel()
 		mock := wmtest.NewMockProvider("mock").WithError("unhealthy")
 		adapter := NewWormholeToOrchestrationAdapter(mock, ProviderOpenAI, "gpt-test")
 		err := adapter.HealthCheck(context.Background())

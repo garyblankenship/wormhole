@@ -7,8 +7,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"time"
-
-	"github.com/garyblankenship/wormhole/pkg/types"
 )
 
 const defaultIdempotencyTTL = 24 * time.Hour
@@ -63,34 +61,6 @@ func executeTrackedRequest[T any](ctx context.Context, p *Wormhole, operation st
 	p.idempotencyMu.Unlock()
 
 	return result, err
-}
-
-func wrapTrackedStream(ctx context.Context, p *Wormhole, release func(), src <-chan types.StreamChunk) <-chan types.StreamChunk {
-	dst := make(chan types.StreamChunk)
-	go func() {
-		defer close(dst)
-		defer p.untrackRequest()
-		defer release()
-
-		for {
-			select {
-			case <-ctx.Done():
-				return
-			case chunk, ok := <-src:
-				if !ok {
-					return
-				}
-
-				select {
-				case dst <- chunk:
-				case <-ctx.Done():
-					return
-				}
-			}
-		}
-	}()
-
-	return dst
 }
 
 func cachedIdempotentValue[T any](entry *idempotencyEntry) (T, error) {

@@ -7,6 +7,7 @@ import (
 )
 
 func TestProviderProfilesExposeKnownProviders(t *testing.T) {
+	t.Parallel()
 	profiles := KnownProviderProfiles()
 	if len(profiles) == 0 {
 		t.Fatal("expected provider profiles")
@@ -24,6 +25,7 @@ func TestProviderProfilesExposeKnownProviders(t *testing.T) {
 }
 
 func TestProfiledOpenAICompatibleUsesProfileBaseURL(t *testing.T) {
+	t.Parallel()
 	client := New(WithGroq("test-key"), WithDiscovery(false))
 	cfg, ok := client.config.Providers["groq"]
 	if !ok {
@@ -35,6 +37,7 @@ func TestProfiledOpenAICompatibleUsesProfileBaseURL(t *testing.T) {
 }
 
 func TestProfiledOpenAICompatibleAllowsConfigOverride(t *testing.T) {
+	t.Parallel()
 	client := New(WithGroq("test-key", types.ProviderConfig{BaseURL: "http://localhost:9999/v1"}), WithDiscovery(false))
 	if got := client.config.Providers["groq"].BaseURL; got != "http://localhost:9999/v1" {
 		t.Fatalf("base URL override = %q", got)

@@ -12,6 +12,7 @@ import (
 )
 
 func TestCircuitBreakerErrorPolicyOpensFastForTerminalClasses(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name string
 		err  error
@@ -24,6 +25,7 @@ func TestCircuitBreakerErrorPolicyOpensFastForTerminalClasses(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			cb := NewCircuitBreaker(5, time.Hour)
 			_, err := cb.Execute(context.Background(), func() (any, error) {
 				return nil, tt.err
@@ -35,6 +37,7 @@ func TestCircuitBreakerErrorPolicyOpensFastForTerminalClasses(t *testing.T) {
 }
 
 func TestCircuitBreakerErrorPolicyKeepsTransientThreshold(t *testing.T) {
+	t.Parallel()
 	cb := NewCircuitBreaker(5, time.Hour)
 	_, err := cb.Execute(context.Background(), func() (any, error) {
 		return nil, errors.New("temporary failure")

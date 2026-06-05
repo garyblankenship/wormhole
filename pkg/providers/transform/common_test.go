@@ -11,6 +11,7 @@ import (
 )
 
 func TestMapFinishReason(t *testing.T) {
+	t.Parallel()
 	tests := map[string]types.FinishReason{
 		"stop":                      types.FinishReasonStop,
 		"end_turn":                  types.FinishReasonStop,
@@ -29,12 +30,14 @@ func TestMapFinishReason(t *testing.T) {
 
 	for input, want := range tests {
 		t.Run(input, func(t *testing.T) {
+			t.Parallel()
 			assert.Equal(t, want, MapFinishReason(input))
 		})
 	}
 }
 
 func TestResponseTransformCommonHelpers(t *testing.T) {
+	t.Parallel()
 	transformer := NewResponseTransform()
 	created := time.Unix(100, 0)
 	usage := transformer.BuildUsageFromTokens(1, 2, 3)
@@ -56,6 +59,7 @@ func TestResponseTransformCommonHelpers(t *testing.T) {
 }
 
 func TestResponseTransformChoiceExtraction(t *testing.T) {
+	t.Parallel()
 	transformer := NewResponseTransform()
 	choices := []map[string]any{
 		{"message": map[string]any{"content": ""}},
@@ -84,6 +88,7 @@ func TestResponseTransformChoiceExtraction(t *testing.T) {
 }
 
 func TestResponseTransformParseToolCallVariants(t *testing.T) {
+	t.Parallel()
 	transformer := NewResponseTransform()
 
 	openaiCall := transformer.ParseToolCallFromMap(map[string]any{
@@ -122,6 +127,7 @@ func TestResponseTransformParseToolCallVariants(t *testing.T) {
 }
 
 func TestResponseTransformParsingHelpers(t *testing.T) {
+	t.Parallel()
 	transformer := NewResponseTransform()
 	response := map[string]any{
 		"id":      "resp-1",
@@ -153,6 +159,7 @@ func TestResponseTransformParsingHelpers(t *testing.T) {
 }
 
 func TestStreamingTransformerCustomConfig(t *testing.T) {
+	t.Parallel()
 	transformer := NewStreamingTransformer(StreamingConfig{
 		TextFieldPath:     "items.0.text",
 		ToolCallFieldPath: "items.0.tool",
@@ -190,6 +197,7 @@ func TestStreamingTransformerCustomConfig(t *testing.T) {
 }
 
 func TestStreamingTransformerErrorPathsAndBatches(t *testing.T) {
+	t.Parallel()
 	batch := NewGeminiStreamingTransformer()
 	_, err := batch.ParseChunk([]byte(`{}`))
 	require.Error(t, err)
@@ -224,6 +232,7 @@ func TestStreamingTransformerErrorPathsAndBatches(t *testing.T) {
 }
 
 func TestStreamingTransformerDefaultToolCallAndUsageVariants(t *testing.T) {
+	t.Parallel()
 	transformer := NewStreamingTransformer(StreamingConfig{
 		ToolCallFieldPath: "tool_calls",
 		UsagePath:         "usage",

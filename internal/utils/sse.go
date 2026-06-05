@@ -40,10 +40,14 @@ func (s *SSEScanner) Scan() bool {
 	hasDataOrEvent := false
 
 	for s.scanner.Scan() {
-		line := strings.TrimSpace(s.scanner.Text())
+		// Strip only \r (for CRLF lines); leading spaces/tabs are significant
+		// for field-name trimming inside parseSSEField, trailing are preserved.
+		raw := strings.TrimRight(s.scanner.Text(), "\r")
+		// Trim leading spaces/tabs only for empty-line and comment detection.
+		trimmed := strings.TrimLeft(raw, " \t")
 
 		// Empty line signals end of event
-		if line == "" {
+		if trimmed == "" {
 			// An event is valid if it has data or event fields (even if empty)
 			// This allows empty data/event fields but excludes ID-only events
 			if hasDataOrEvent {
@@ -54,30 +58,19 @@ func (s *SSEScanner) Scan() bool {
 		}
 
 		// Skip comments
-		if strings.HasPrefix(line, ":") {
+		if strings.HasPrefix(trimmed, ":") {
 			continue
 		}
 
-		// Parse field
-		if colonIndex := strings.Index(line, ":"); colonIndex != -1 {
-			field := strings.TrimSpace(line[:colonIndex])
-			value := strings.TrimSpace(line[colonIndex+1:])
-
-			switch field {
-			case sseFieldEvent:
-				event.Event = value
+		// event/data fields make the event valid; id alone does not.
+		if colonIndex := strings.Index(raw, ":"); colonIndex != -1 {
+			if field := strings.Trim(raw[:colonIndex], " \t"); field == sseFieldEvent || field == sseFieldData {
 				hasDataOrEvent = true
-			case sseFieldData:
-				if event.Data != "" {
-					event.Data += "\n"
-				}
-				event.Data += value
-				hasDataOrEvent = true
-			case sseFieldID:
-				event.ID = value
-				// ID field doesn't make an event valid by itself
 			}
 		}
+
+		// Parse and apply the field via the shared helper (single source of truth).
+		parseSSEField(raw, event)
 	}
 
 	// Check for final event without trailing newline
@@ -98,4 +91,33 @@ func (s *SSEScanner) Event() *SSEEvent {
 // Err returns any scanning error
 func (s *SSEScanner) Err() error {
 	return s.err
+}
+
+// parseSSEField parses a single SSE field line ("field: value") and applies
+// the parsed field to event. It is the single source of truth for SSE field
+// semantics shared by SSEScanner and SSEParser.
+//
+// Per the SSE spec, exactly one leading space is stripped from the value
+// (strings.TrimPrefix(value, " ")); trailing whitespace is preserved.
+// The field name is leniently trimmed of surrounding spaces and tabs.
+// Lines without a colon are ignored (no field applied).
+func parseSSEField(line string, event *SSEEvent) {
+	colonIndex := strings.Index(line, ":")
+	if colonIndex == -1 {
+		return
+	}
+	field := strings.Trim(line[:colonIndex], " \t")
+	value := strings.TrimPrefix(line[colonIndex+1:], " ")
+
+	switch field {
+	case sseFieldEvent:
+		event.Event = value
+	case sseFieldData:
+		if event.Data != "" {
+			event.Data += "\n"
+		}
+		event.Data += value
+	case sseFieldID:
+		event.ID = value
+	}
 }

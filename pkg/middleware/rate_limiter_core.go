@@ -3,6 +3,7 @@ package middleware
 import (
 	"context"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/garyblankenship/wormhole/pkg/types"
@@ -21,6 +22,7 @@ type RateLimiter struct {
 	tokens       float64
 	lastRefill   time.Time
 	requestQueue chan struct{}
+	closed       atomic.Bool
 }
 
 // NewRateLimiter creates a new rate limiter.
@@ -38,6 +40,10 @@ func NewRateLimiter(requestsPerSecond int) *RateLimiter {
 
 // Wait blocks until a token is available or context is canceled.
 func (rl *RateLimiter) Wait(ctx context.Context) error {
+	if rl.closed.Load() {
+		return ErrRateLimitExceeded
+	}
+
 	if err := rl.TryAcquire(); err == nil {
 		return nil
 	}
@@ -106,8 +112,12 @@ func (rl *RateLimiter) GetAvailableTokens() int {
 	return int(rl.tokens)
 }
 
-// Close releases rate limiter resources.
+// Close marks the rate limiter as closed. It is safe to call concurrently
+// with Wait and may be called more than once. After Close, Wait returns
+// ErrRateLimitExceeded instead of blocking. The request queue channel is
+// intentionally not closed: doing so would race with concurrent Wait
+// writers (write-to-closed-channel panic); the channel is reclaimed by GC.
 func (rl *RateLimiter) Close() error {
-	close(rl.requestQueue)
+	rl.closed.CompareAndSwap(false, true)
 	return nil
 }

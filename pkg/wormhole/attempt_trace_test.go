@@ -22,6 +22,7 @@ func (p *modelFallbackProvider) Text(_ context.Context, request types.TextReques
 }
 
 func TestAttemptTraceRecordsGenerateFallback(t *testing.T) {
+	t.Parallel()
 	var events []AttemptEvent
 	client := New(
 		WithDefaultProvider("mock"),
@@ -51,6 +52,7 @@ func TestAttemptTraceRecordsGenerateFallback(t *testing.T) {
 }
 
 func TestAttemptTraceRecordsStreamSuccess(t *testing.T) {
+	t.Parallel()
 	var events []AttemptEvent
 	mock := whtest.NewMockProvider("mock").WithStreamChunks(whtest.StreamChunksFrom("ok"))
 	client := New(
@@ -180,9 +182,9 @@ func TestStreamTraceContextCancellation(t *testing.T) {
 	)
 
 	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 	stream, err := client.Text().Model("test").Prompt("hi").Stream(ctx)
 	if err != nil {
-		cancel()
 		t.Fatal(err)
 	}
 	// Read one chunk then cancel

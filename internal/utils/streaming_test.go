@@ -1,10 +1,12 @@
 package utils
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"io"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -223,7 +225,7 @@ data: [DONE]
 		processor := NewStreamProcessor(strings.NewReader(input), transformer)
 		chunks := make(chan types.TextChunk, 10)
 
-		go processor.Process(chunks)
+		go processor.Process(context.Background(), chunks)
 
 		// Collect chunks
 		var received []types.TextChunk
@@ -250,7 +252,7 @@ data: [DONE]
 		processor := NewStreamProcessor(strings.NewReader(input), transformer)
 		chunks := make(chan types.TextChunk, 10)
 
-		go processor.Process(chunks)
+		go processor.Process(context.Background(), chunks)
 
 		// Should receive error chunk
 		chunk := <-chunks
@@ -271,7 +273,7 @@ data: [DONE]
 		processor := NewStreamProcessor(errorReader, transformer)
 		chunks := make(chan types.TextChunk, 10)
 
-		go processor.Process(chunks)
+		go processor.Process(context.Background(), chunks)
 
 		// Should receive error chunk
 		chunk := <-chunks
@@ -299,7 +301,7 @@ data: [DONE]
 		processor := NewStreamProcessor(strings.NewReader(input), transformer)
 		chunks := make(chan types.TextChunk, 10)
 
-		go processor.Process(chunks)
+		go processor.Process(context.Background(), chunks)
 
 		// Collect chunks
 		var received []types.TextChunk
@@ -334,7 +336,7 @@ data: {"text": "World"}
 		processor := NewStreamProcessor(strings.NewReader(input), transformer)
 		chunks := make(chan types.TextChunk, 10)
 
-		go processor.Process(chunks)
+		go processor.Process(context.Background(), chunks)
 
 		// Collect chunks
 		var received []types.TextChunk
@@ -577,7 +579,7 @@ data: [DONE]
 		processor := NewStreamProcessor(strings.NewReader(input), openAIStreamTransformer)
 		chunks := make(chan types.TextChunk, 10)
 
-		go processor.Process(chunks)
+		go processor.Process(context.Background(), chunks)
 
 		// Collect chunks
 		var received []types.TextChunk
@@ -618,7 +620,7 @@ data: {"type":"message_stop"}
 		processor := NewStreamProcessor(strings.NewReader(input), anthropicStreamTransformer)
 		chunks := make(chan types.TextChunk, 10)
 
-		go processor.Process(chunks)
+		go processor.Process(context.Background(), chunks)
 
 		// Collect chunks
 		var received []types.TextChunk
@@ -665,7 +667,7 @@ data: {"text": "process-this"}
 		processor := NewStreamProcessor(strings.NewReader(input), transformer)
 		chunks := make(chan types.TextChunk, 10)
 
-		go processor.Process(chunks)
+		go processor.Process(context.Background(), chunks)
 
 		// Should only receive one chunk
 		chunk := <-chunks
@@ -694,7 +696,7 @@ data: [DONE]
 		processor := NewStreamProcessor(strings.NewReader(input), transformer)
 		chunks := make(chan types.TextChunk, 10)
 
-		go processor.Process(chunks)
+		go processor.Process(context.Background(), chunks)
 
 		// Read chunks concurrently
 		received := make(map[string]bool)
@@ -718,7 +720,7 @@ func TestProcessStreamWithIdleTimeout_Disabled(t *testing.T) {
 		return &types.TextChunk{Text: string(data)}, nil
 	}
 
-	ch := ProcessStreamWithIdleTimeout(body, transformer, 10, 0)
+	ch := ProcessStreamWithIdleTimeout(context.Background(), body, transformer, 10, 0)
 	var chunks []types.TextChunk
 	for c := range ch {
 		chunks = append(chunks, c)
@@ -739,7 +741,7 @@ func TestProcessStreamWithIdleTimeout_NormalCompletion(t *testing.T) {
 		return &types.TextChunk{Text: string(data)}, nil
 	}
 
-	ch := ProcessStreamWithIdleTimeout(body, transformer, 10, 5*time.Second)
+	ch := ProcessStreamWithIdleTimeout(context.Background(), body, transformer, 10, 5*time.Second)
 	var chunks []types.TextChunk
 	for c := range ch {
 		chunks = append(chunks, c)
@@ -760,11 +762,11 @@ func TestProcessStreamWithIdleTimeout_StallDetected(t *testing.T) {
 		return &types.TextChunk{Text: string(data)}, nil
 	}
 
-	ch := ProcessStreamWithIdleTimeout(body, transformer, 10, 50*time.Millisecond)
+	ch := ProcessStreamWithIdleTimeout(context.Background(), body, transformer, 10, 50*time.Millisecond)
 
 	// Send one chunk, then stall
 	go func() {
-		writer.Write([]byte("data: first\n\n"))
+		_, _ = writer.Write([]byte("data: first\n\n"))
 		// Block \u2014 never close writer
 	}()
 
@@ -780,7 +782,7 @@ func TestProcessStreamWithIdleTimeout_StallDetected(t *testing.T) {
 	assert.Contains(t, chunks[1].Error.Error(), "stream idle timeout")
 
 	// Clean up so the blocked writer goroutine doesn't leak
-	writer.Close()
+	require.NoError(t, writer.Close())
 }
 
 func TestProcessStreamWithIdleTimeout_NoFirstChunk(t *testing.T) {
@@ -794,7 +796,7 @@ func TestProcessStreamWithIdleTimeout_NoFirstChunk(t *testing.T) {
 		return &types.TextChunk{Text: string(data)}, nil
 	}
 
-	ch := ProcessStreamWithIdleTimeout(body, transformer, 10, 50*time.Millisecond)
+	ch := ProcessStreamWithIdleTimeout(context.Background(), body, transformer, 10, 50*time.Millisecond)
 
 	var chunks []types.TextChunk
 	for c := range ch {
@@ -804,4 +806,51 @@ func TestProcessStreamWithIdleTimeout_NoFirstChunk(t *testing.T) {
 	require.Len(t, chunks, 1)
 	assert.Error(t, chunks[0].Error)
 	assert.Contains(t, chunks[0].Error.Error(), "stream idle timeout")
+}
+
+func TestProcessStream_ConsumerStopsReading_GoroutineExits(t *testing.T) {
+	t.Parallel()
+
+	// Body that yields more chunks than the channel buffer can hold, so the
+	// producer goroutine will block on send once the (zero-reading) consumer
+	// stalls. Canceling ctx must unblock the send and close the body.
+	var sb strings.Builder
+	for i := 0; i < 50; i++ {
+		sb.WriteString("data: \"x\"\n\n")
+	}
+	closed := make(chan struct{})
+	body := &trackingCloser{Reader: strings.NewReader(sb.String()), closed: closed}
+
+	transformer := func(data []byte) (*types.TextChunk, error) {
+		return &types.TextChunk{Text: string(data)}, nil
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	// bufferSize 1 so the producer blocks on the second send while we never read.
+	chunks := ProcessStream(ctx, body, transformer, 1)
+
+	// Do NOT read from chunks. Cancel and confirm the goroutine exits
+	// (body.Close runs) within a bounded time.
+	cancel()
+
+	select {
+	case <-closed:
+		// goroutine exited and closed the body — leak fixed.
+	case <-time.After(2 * time.Second):
+		t.Fatal("producer goroutine did not exit after ctx cancellation (leaked send)")
+	}
+
+	_ = chunks
+}
+
+// trackingCloser signals on close so a test can assert the producer goroutine exited.
+type trackingCloser struct {
+	io.Reader
+	once   sync.Once
+	closed chan struct{}
+}
+
+func (t *trackingCloser) Close() error {
+	t.once.Do(func() { close(t.closed) })
+	return nil
 }

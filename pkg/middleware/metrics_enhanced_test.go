@@ -11,7 +11,9 @@ import (
 )
 
 func TestEnhancedMetricsCollector(t *testing.T) {
+	t.Parallel()
 	t.Run("records basic request metrics", func(t *testing.T) {
+		t.Parallel()
 		collector := NewEnhancedMetricsCollector(nil)
 
 		labels := &RequestLabels{
@@ -32,6 +34,7 @@ func TestEnhancedMetricsCollector(t *testing.T) {
 	})
 
 	t.Run("records error requests", func(t *testing.T) {
+		t.Parallel()
 		collector := NewEnhancedMetricsCollector(nil)
 
 		labels := &RequestLabels{
@@ -52,6 +55,7 @@ func TestEnhancedMetricsCollector(t *testing.T) {
 	})
 
 	t.Run("detects error types", func(t *testing.T) {
+		t.Parallel()
 		detector := &ErrorTypeDetector{}
 
 		tests := []struct {
@@ -69,6 +73,7 @@ func TestEnhancedMetricsCollector(t *testing.T) {
 
 		for _, tt := range tests {
 			t.Run(tt.name, func(t *testing.T) {
+				t.Parallel()
 				result := detector.DetectErrorType(tt.err)
 				assert.Equal(t, tt.expected, result)
 			})
@@ -76,6 +81,7 @@ func TestEnhancedMetricsCollector(t *testing.T) {
 	})
 
 	t.Run("exports Prometheus format", func(t *testing.T) {
+		t.Parallel()
 		collector := NewEnhancedMetricsCollector(nil)
 
 		labels := &RequestLabels{
@@ -95,6 +101,7 @@ func TestEnhancedMetricsCollector(t *testing.T) {
 	})
 
 	t.Run("exports JSON format", func(t *testing.T) {
+		t.Parallel()
 		collector := NewEnhancedMetricsCollector(nil)
 
 		labels1 := &RequestLabels{
@@ -125,6 +132,7 @@ func TestEnhancedMetricsCollector(t *testing.T) {
 	})
 
 	t.Run("resets metrics", func(t *testing.T) {
+		t.Parallel()
 		collector := NewEnhancedMetricsCollector(nil)
 
 		labels := &RequestLabels{
@@ -146,6 +154,7 @@ func TestEnhancedMetricsCollector(t *testing.T) {
 	})
 
 	t.Run("handles label aggregation", func(t *testing.T) {
+		t.Parallel()
 		config := &EnhancedMetricsConfig{
 			DefaultHistogramBuckets: []float64{10, 50, 100, 500, 1000},
 			EnableLabels:            true,
@@ -183,6 +192,7 @@ func TestEnhancedMetricsCollector(t *testing.T) {
 	})
 
 	t.Run("handles nil labels", func(t *testing.T) {
+		t.Parallel()
 		collector := NewEnhancedMetricsCollector(nil)
 
 		// Record without labels
@@ -194,7 +204,9 @@ func TestEnhancedMetricsCollector(t *testing.T) {
 }
 
 func TestTypedEnhancedMetricsMiddleware(t *testing.T) {
+	t.Parallel()
 	t.Run("implements ProviderMiddleware interface", func(t *testing.T) {
+		t.Parallel()
 		collector := NewEnhancedMetricsCollector(nil)
 		middleware := NewTypedEnhancedMetricsMiddleware(collector)
 
@@ -208,6 +220,7 @@ func TestTypedEnhancedMetricsMiddleware(t *testing.T) {
 	})
 
 	t.Run("extracts labels from context", func(t *testing.T) {
+		t.Parallel()
 		ctx := context.WithValue(context.Background(), CtxKeyWormholeProvider, "openai")
 
 		labels := requestLabelsFromContext(ctx, "text", "gpt-4")
@@ -217,6 +230,7 @@ func TestTypedEnhancedMetricsMiddleware(t *testing.T) {
 	})
 
 	t.Run("falls back to unknown provider", func(t *testing.T) {
+		t.Parallel()
 		labels := requestLabelsFromContext(context.Background(), "stream", "claude-3")
 		assert.Equal(t, "unknown", labels.Provider)
 		assert.Equal(t, "claude-3", labels.Model)
@@ -225,7 +239,9 @@ func TestTypedEnhancedMetricsMiddleware(t *testing.T) {
 }
 
 func TestEnhancedMetricsConfig(t *testing.T) {
+	t.Parallel()
 	t.Run("default configuration", func(t *testing.T) {
+		t.Parallel()
 		config := DefaultEnhancedMetricsConfig()
 
 		assert.NotEmpty(t, config.DefaultHistogramBuckets)
@@ -236,6 +252,7 @@ func TestEnhancedMetricsConfig(t *testing.T) {
 	})
 
 	t.Run("custom configuration", func(t *testing.T) {
+		t.Parallel()
 		config := &EnhancedMetricsConfig{
 			DefaultHistogramBuckets:   []float64{5, 25, 100, 250},
 			EnableLabels:              false,

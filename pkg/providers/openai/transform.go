@@ -164,13 +164,11 @@ func (p *Provider) transformTextResponse(response *chatCompletionResponse) *type
 	choice := response.Choices[0]
 	content := choice.Message.Content
 
-	// Clean JSON responses that may be wrapped in markdown code blocks
-	// This is particularly needed for Anthropic models via OpenRouter that return JSON in code blocks
-	if strings.Contains(content, "```") &&
-		(strings.Contains(strings.ToLower(response.Model), "claude") ||
-			strings.Contains(strings.ToLower(response.Model), "anthropic")) {
-		content = cleanJSONResponse(content)
-	}
+	// Strip markdown code fences from JSON responses regardless of model.
+	// cleanJSONResponse is a no-op when there are no backticks and only
+	// strips when the extracted content is valid-looking JSON, so this is
+	// safe for every provider/model and avoids brittle model-name sniffing.
+	content = cleanJSONResponse(content)
 
 	return &types.TextResponse{
 		ID:           response.ID,
@@ -300,11 +298,15 @@ func (p *Provider) convertToolCalls(toolCalls []toolCall) []types.ToolCall {
 }
 
 func (p *Provider) convertUsage(u usage) *types.Usage {
-	return &types.Usage{
+	usage := &types.Usage{
 		PromptTokens:     u.PromptTokens,
 		CompletionTokens: u.CompletionTokens,
 		TotalTokens:      u.TotalTokens,
 	}
+	if u.PromptTokensDetails != nil {
+		usage.CacheReadTokens = u.PromptTokensDetails.CachedTokens
+	}
+	return usage
 }
 
 func (p *Provider) mapFinishReason(reason string) types.FinishReason {
