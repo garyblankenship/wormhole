@@ -1,5 +1,18 @@
 # Changelog
 
+## v1.13.0 (2026-06-04)
+
+### Features
+- add per-chunk stream idle timeout via `WithStreamIdleTimeout` option and watchdog wrapper
+- add stream lifecycle trace events via `StreamTraceFunc` and `WithStreamTrace` (started/ended/error)
+- derive proxy route prefixes from `provider_profiles.json` data instead of hardcoded provider lists
+
+### Fixes
+- repair tool-call conversations at the `PrepareMessages` boundary — UTF-8 sanitization, ID synthesis, duplicate detection
+
+### Other
+- split anthropic transform into focused files (messages, response, stream, tools) and extract gemini system-message handling; broaden test coverage
+
 ## v1.10.0 (2026-05-29)
 
 ### Features
