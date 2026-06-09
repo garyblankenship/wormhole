@@ -180,11 +180,27 @@ img, err := client.Image().
     Model("gemini-2.5-flash-image").
     Prompt("A square app icon for a provider gateway").
     ProviderOptions(map[string]any{
+        "aspect_ratio": "1:1",
+        "image_size":   "2K",
         "generationConfig": map[string]any{
             "candidateCount": 1,
         },
-        "imageConfig": map[string]any{
-            "aspectRatio": "1:1",
+    }).
+    Generate(ctx)
+```
+
+Reference images are sent as inline Gemini `inlineData` parts. Import
+`github.com/garyblankenship/wormhole/pkg/providers/gemini` for the image input
+type:
+
+```go
+img, err := client.Image().
+    Using("gemini").
+    Model("gemini-2.5-flash-image").
+    Prompt("Make this product photo look like a watercolor illustration").
+    ProviderOptions(map[string]any{
+        "images": []gemini.ImageInput{
+            {Data: imageBytes, MimeType: "image/png"},
         },
     }).
     Generate(ctx)
