@@ -467,6 +467,7 @@ func (g *Gemini) transformImagesResponse(response *geminiTextResponse, model str
 
 	var text strings.Builder
 	var images []types.GeneratedImage
+	var mimeTypes []string
 	for _, candidate := range response.Candidates {
 		for _, part := range candidate.Content.Parts {
 			if part.Text != "" {
@@ -476,12 +477,17 @@ func (g *Gemini) transformImagesResponse(response *geminiTextResponse, model str
 				images = append(images, types.GeneratedImage{
 					B64JSON: part.InlineData.Data,
 				})
+				mimeTypes = append(mimeTypes, part.InlineData.MimeType)
 			}
 		}
 	}
+	if len(images) == 0 {
+		return nil, g.ProviderError("no images in response")
+	}
 
 	metadata := map[string]any{
-		"provider": "gemini",
+		"provider":   "gemini",
+		"mime_types": mimeTypes,
 	}
 	if text.Len() > 0 {
 		metadata["text"] = text.String()

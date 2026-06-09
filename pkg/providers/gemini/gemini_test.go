@@ -736,11 +736,13 @@ func TestGeminiProvider_Images(t *testing.T) {
 		Model:  "gemini-2.5-flash-image",
 		Prompt: "draw a small portal",
 		ProviderOptions: map[string]any{
+			"images": []gemini.ImageInput{
+				{Data: []byte("reference-image"), MimeType: "image/png"},
+			},
+			"aspect_ratio": "1:1",
+			"image_size":   "2K",
 			"generationConfig": map[string]any{
 				"candidateCount": 1,
-			},
-			"imageConfig": map[string]any{
-				"aspectRatio": "1:1",
 			},
 			"responseFormat": "image/png",
 		},
@@ -752,6 +754,7 @@ func TestGeminiProvider_Images(t *testing.T) {
 	assert.Equal(t, generatedB64, resp.Images[0].B64JSON)
 	assert.Equal(t, "created image", resp.Metadata["text"])
 	assert.Equal(t, "gemini", resp.Metadata["provider"])
+	assert.Equal(t, []string{"image/png"}, resp.Metadata["mime_types"])
 
 	assert.Equal(t, "/models/gemini-2.5-flash-image:generateContent", capturedPath)
 	assert.Equal(t, "key=test-api-key", capturedQuery)
@@ -761,13 +764,16 @@ func TestGeminiProvider_Images(t *testing.T) {
 	require.Len(t, contents, 1)
 	content := contents[0].(map[string]any)
 	parts := content["parts"].([]any)
-	require.Len(t, parts, 1)
+	require.Len(t, parts, 2)
 	assert.Equal(t, "draw a small portal", parts[0].(map[string]any)["text"])
+	inlineData := parts[1].(map[string]any)["inlineData"].(map[string]any)
+	assert.Equal(t, "image/png", inlineData["mimeType"])
+	assert.Equal(t, "cmVmZXJlbmNlLWltYWdl", inlineData["data"])
 
 	generationConfig := capturedRequest["generationConfig"].(map[string]any)
 	assert.Equal(t, []any{"TEXT", "IMAGE"}, generationConfig["responseModalities"])
 	assert.Equal(t, float64(1), generationConfig["candidateCount"])
-	assert.Equal(t, map[string]any{"aspectRatio": "1:1"}, capturedRequest["imageConfig"])
+	assert.Equal(t, map[string]any{"aspectRatio": "1:1", "imageSize": "2K"}, generationConfig["imageConfig"])
 	assert.Equal(t, "image/png", capturedRequest["responseFormat"])
 }
 

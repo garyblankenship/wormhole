@@ -117,6 +117,13 @@ type geminiError struct {
 	Status  string `json:"status"`
 }
 
+// ImageInput represents a reference image for Gemini image generation.
+type ImageInput struct {
+	Data       []byte
+	Base64Data string
+	MimeType   string
+}
+
 // Embeddings response types
 type geminiEmbeddingsResponse struct {
 	Embeddings []embedding `json:"embeddings"`
