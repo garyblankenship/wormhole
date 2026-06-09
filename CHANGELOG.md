@@ -1,5 +1,14 @@
 # Changelog
 
+## v1.14.0 (2026-06-09)
+
+### Features
+- add Gemini image generation support with native `generateContent` image responses
+
+### Other
+- update package metadata files
+- update package tests
+
 ## v1.13.0 (2026-06-04)
 
 ### Features
