@@ -15,12 +15,12 @@ func TestProviderSupportedCapabilities(t *testing.T) {
 	provider := gemini.New("test-key", types.ProviderConfig{})
 	capabilities := provider.SupportedCapabilities()
 
-	require.Len(t, capabilities, 6)
+	require.Len(t, capabilities, 7)
 	assert.Contains(t, capabilities, types.CapabilityText)
 	assert.Contains(t, capabilities, types.CapabilityChat)
 	assert.Contains(t, capabilities, types.CapabilityStructured)
 	assert.Contains(t, capabilities, types.CapabilityEmbeddings)
+	assert.Contains(t, capabilities, types.CapabilityImages)
 	assert.Contains(t, capabilities, types.CapabilityStream)
 	assert.Contains(t, capabilities, types.CapabilityFunctions)
-	assert.NotContains(t, capabilities, types.CapabilityImages)
 }

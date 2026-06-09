@@ -1,12 +1,14 @@
 package server
 
 import (
+	"context"
 	"encoding/json"
 	"io"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
 
 	wmtest "github.com/garyblankenship/wormhole/pkg/testing"
@@ -30,6 +32,53 @@ func newTestProxy(mock *wmtest.MockProvider, opts ...wormhole.Option) *proxy {
 		WormholeOpts: baseOpts,
 		Logger:       slog.New(slog.NewTextHandler(io.Discard, nil)),
 	})
+}
+
+func newCapturingTestProxy(provider *capturingTextProvider) *proxy {
+	return New(Config{
+		WormholeOpts: []wormhole.Option{
+			wormhole.WithCustomProvider("openai", func(types.ProviderConfig) (types.Provider, error) {
+				return provider, nil
+			}),
+			wormhole.WithProviderConfig("openai", types.ProviderConfig{}),
+			wormhole.WithDefaultProvider("openai"),
+			wormhole.WithDiscovery(false),
+		},
+		Logger: slog.New(slog.NewTextHandler(io.Discard, nil)),
+	})
+}
+
+type capturingTextProvider struct {
+	*wmtest.MockProvider
+	mu       sync.Mutex
+	requests []types.TextRequest
+}
+
+func newCapturingTextProvider(name string) *capturingTextProvider {
+	return &capturingTextProvider{
+		MockProvider: wmtest.NewMockProvider(name).WithTextResponse(types.TextResponse{
+			ID:           "chat-1",
+			Model:        "gpt-test",
+			Text:         "ok",
+			FinishReason: types.FinishReasonStop,
+		}),
+	}
+}
+
+func (p *capturingTextProvider) Text(ctx context.Context, request types.TextRequest) (*types.TextResponse, error) {
+	p.mu.Lock()
+	p.requests = append(p.requests, request)
+	p.mu.Unlock()
+	return p.MockProvider.Text(ctx, request)
+}
+
+func (p *capturingTextProvider) lastRequest() types.TextRequest {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if len(p.requests) == 0 {
+		return types.TextRequest{}
+	}
+	return p.requests[len(p.requests)-1]
 }
 
 func performRequest(p *proxy, method, path, body string) *httptest.ResponseRecorder {
@@ -136,6 +185,101 @@ func TestProxyChatCompletions(t *testing.T) {
 	assert.Equal(t, "hello from mock", out.Choices[0].Message.Content)
 	require.NotNil(t, out.Usage)
 	assert.Equal(t, 7, out.Usage.TotalTokens)
+}
+
+func TestProxyChatContentStringStillBuildsTextMessage(t *testing.T) {
+	t.Parallel()
+
+	capturingProvider := newCapturingTextProvider("openai")
+	p := newCapturingTestProxy(capturingProvider)
+
+	rec := performRequest(p, http.MethodPost, "/v1/chat/completions", `{
+		"model":"openai/gpt-test",
+		"messages":[{"role":"user","content":"hello"}]
+	}`)
+
+	require.Equal(t, http.StatusOK, rec.Code)
+	last := capturingProvider.lastRequest()
+	require.Len(t, last.Messages, 1)
+	user, ok := last.Messages[0].(*types.UserMessage)
+	require.True(t, ok)
+	assert.Equal(t, "hello", user.Content)
+	assert.Empty(t, user.Media)
+}
+
+func TestProxyChatContentPartsDataURLRoutesToUserMedia(t *testing.T) {
+	t.Parallel()
+
+	capturingProvider := newCapturingTextProvider("openai")
+	p := newCapturingTestProxy(capturingProvider)
+
+	rec := performRequest(p, http.MethodPost, "/v1/chat/completions", `{
+		"model":"openai/gpt-test",
+		"messages":[{
+			"role":"user",
+			"content":[
+				{"type":"text","text":"describe this"},
+				{"type":"image_url","image_url":{"url":"data:image/png;base64,aW1hZ2U="}}
+			]
+		}]
+	}`)
+
+	require.Equal(t, http.StatusOK, rec.Code)
+	last := capturingProvider.lastRequest()
+	require.Len(t, last.Messages, 1)
+	user, ok := last.Messages[0].(*types.UserMessage)
+	require.True(t, ok)
+	assert.Equal(t, "describe this", user.Content)
+	require.Len(t, user.Media, 1)
+	image, ok := user.Media[0].(*types.ImageMedia)
+	require.True(t, ok)
+	assert.Equal(t, "image/png", image.MimeType)
+	assert.Equal(t, "aW1hZ2U=", image.Base64Data)
+	assert.Empty(t, image.Data)
+}
+
+func TestProxyChatRejectsMalformedImageDataURL(t *testing.T) {
+	t.Parallel()
+
+	p := newTestProxy(wmtest.NewMockProvider("openai"))
+	rec := performRequest(p, http.MethodPost, "/v1/chat/completions", `{
+		"model":"gpt-test",
+		"messages":[{
+			"role":"user",
+			"content":[
+				{"type":"text","text":"describe this"},
+				{"type":"image_url","image_url":{"url":"data:image/png;base64,not valid base64"}}
+			]
+		}]
+	}`)
+
+	require.Equal(t, http.StatusBadRequest, rec.Code)
+	var out ErrorResponse
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &out))
+	assert.Equal(t, "invalid_json", out.Error.Code)
+	assert.Contains(t, out.Error.Message, "malformed image data URL")
+}
+
+func TestProxyChatRejectsNonUserImageParts(t *testing.T) {
+	t.Parallel()
+
+	p := newTestProxy(wmtest.NewMockProvider("openai"))
+	rec := performRequest(p, http.MethodPost, "/v1/chat/completions", `{
+		"model":"gpt-test",
+		"messages":[{
+			"role":"assistant",
+			"content":[
+				{"type":"text","text":"here"},
+				{"type":"image_url","image_url":{"url":"data:image/png;base64,aW1hZ2U="}}
+			]
+		}]
+	}`)
+
+	require.Equal(t, http.StatusBadRequest, rec.Code)
+	var out ErrorResponse
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &out))
+	assert.Equal(t, "unsupported_content_part", out.Error.Code)
+	assert.Contains(t, out.Error.Message, "only supported on user messages")
 }
 
 func TestProxyChatValidationAndUpstreamErrors(t *testing.T) {

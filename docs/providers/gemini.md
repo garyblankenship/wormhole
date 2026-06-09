@@ -102,6 +102,7 @@ The Gemini provider supports the following capabilities:
 - `CapabilityStream` - Streaming responses
 - `CapabilityFunctions` - Function/tool calling
 - `CapabilityEmbeddings` - Text embeddings
+- `CapabilityImages` - Text-to-image generation through Gemini `generateContent`
 
 ## Gemini-Specific Features
 
@@ -129,18 +130,61 @@ response, err := client.Text().
 
 ### Multimodal Input
 
-Gemini supports image and audio input alongside text:
+Gemini supports inline image input alongside text:
 
 ```go
 imageData, _ := os.ReadFile("image.jpg")
 
 response, err := client.Text().
     Model("gemini-2.5-flash-image").
-    Prompt("What do you see in this image?").
-    Media([]types.Media{
-        &types.ImageMedia{
-            MimeType: "image/jpeg",
-            Data:     imageData,
+    Messages(&types.UserMessage{
+        Content: "What do you see in this image?",
+        Media: []types.Media{
+            &types.ImageMedia{
+                MimeType: "image/jpeg",
+                Data:     imageData,
+            },
+        },
+    }).
+    Generate(ctx)
+```
+
+Gemini native requests require inline bytes or base64 data. URL-only images are
+rejected by the Gemini provider.
+
+### Image Generation
+
+Use `Image()` with a Gemini image-capable model for text-to-image generation:
+
+```go
+img, err := client.Image().
+    Using("gemini").
+    Model("gemini-2.5-flash-image").
+    Prompt("A clean isometric diagram of a Go service gateway").
+    Generate(ctx)
+if err != nil {
+    panic(err)
+}
+
+fmt.Println(img.Images[0].B64JSON) // base64 image data from Gemini inlineData
+```
+
+Gemini image requests are sent to
+`/models/{model}:generateContent?key=...` with
+`generationConfig.responseModalities` set to `["TEXT", "IMAGE"]`.
+Provider-specific image options can be passed with `ProviderOptions`:
+
+```go
+img, err := client.Image().
+    Using("gemini").
+    Model("gemini-2.5-flash-image").
+    Prompt("A square app icon for a provider gateway").
+    ProviderOptions(map[string]any{
+        "generationConfig": map[string]any{
+            "candidateCount": 1,
+        },
+        "imageConfig": map[string]any{
+            "aspectRatio": "1:1",
         },
     }).
     Generate(ctx)
@@ -339,11 +383,12 @@ client := wormhole.New(
 The following features are not supported by Gemini and will return `NotImplementedError`:
 
 - `Audio()` - Audio transcription (use native audio models instead)
-- `Images()` - Image generation (use `gemini-2.0-flash-preview-image-generation` for text-to-image)
 
 ## Provider Options
 
-Pass Gemini-specific options via `ProviderOptions`:
+Pass Gemini-specific options via `ProviderOptions`. Text requests merge options
+into the Gemini request body; image requests merge `generationConfig` with the
+SDK's required image response modalities and pass other Gemini fields through:
 
 ```go
 response, err := client.Text().
@@ -358,6 +403,7 @@ response, err := client.Text().
 ## Reference
 
 - [Google Gemini API](https://ai.google.dev/gemini-api/docs)
+- [Gemini Image Generation](https://ai.google.dev/gemini-api/docs/image-generation)
 - [Gemini Models](https://ai.google.dev/gemini-api/docs/models)
 - [Function Calling](https://ai.google.dev/gemini-api/docs/function-calling)
 - [Embeddings](https://ai.google.dev/gemini-api/docs/models/text-embedding)

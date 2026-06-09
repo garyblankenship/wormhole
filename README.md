@@ -102,7 +102,7 @@ does not need a second garage.
 | --- | --- | --- |
 | OpenAI | `WithOpenAI(key)` or `WithOpenAIResponses(key)` | text, streaming, structured output, embeddings, images, audio, tools |
 | Anthropic | `WithAnthropic(key)` | text, streaming, structured output, tools, vision input |
-| Gemini | `WithGemini(key)` | text, streaming, structured output, embeddings, tools, vision input |
+| Gemini | `WithGemini(key)` | text, streaming, structured output, embeddings, images, tools, vision input |
 | Ollama | `WithOllama(config)` | text, streaming, structured output, embeddings, local model helpers |
 | OpenRouter | `WithOpenAICompatible(...)` or `QuickOpenRouter()` | OpenAI-compatible text, streaming, structured output, tools where supported |
 | Groq | `WithGroq(key)` | OpenAI-compatible text and streaming |
@@ -490,6 +490,25 @@ Supported proxy endpoints:
 Set `WORMHOLE_API_KEY` to require `Authorization: Bearer <token>` on proxy
 requests. Do that before exposing the portal outside localhost unless your
 incident-review strategy is "pretend the timeline never happened."
+
+The proxy accepts OpenAI-style image chat content parts. Data URLs are converted
+to inline media before routing, so Gemini models can receive image-aware chat
+requests through the same `/v1/chat/completions` endpoint:
+
+```bash
+curl -s http://localhost:8080/v1/chat/completions \
+	-H 'Content-Type: application/json' \
+	-d '{
+		"model": "gemini/gemini-2.5-flash-image",
+		"messages": [{
+			"role": "user",
+			"content": [
+				{"type": "text", "text": "Describe this image."},
+				{"type": "image_url", "image_url": {"url": "data:image/png;base64,..."}}
+			]
+		}]
+	}'
+```
 
 ## Custom Providers
 

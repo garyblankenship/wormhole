@@ -12,7 +12,7 @@ import (
 	wormhole "github.com/garyblankenship/wormhole/pkg/wormhole"
 )
 
-const maxProxyRequestBodyBytes = 1 << 20
+const maxProxyRequestBodyBytes = 20 << 20
 
 func (p *proxy) handleHealth(w http.ResponseWriter, _ *http.Request) {
 	writeJSON(w, http.StatusOK, HealthResponse{
@@ -46,13 +46,31 @@ func (p *proxy) handleChatCompletions(w http.ResponseWriter, r *http.Request) {
 	for _, m := range req.Messages {
 		switch m.Role {
 		case "system":
-			msgs = append(msgs, types.NewSystemMessage(m.Content))
+			if len(m.Content.Media) > 0 {
+				writeError(w, http.StatusBadRequest, "unsupported_content_part",
+					"image content parts are only supported on user messages", "invalid_request_error")
+				return
+			}
+			msgs = append(msgs, types.NewSystemMessage(m.Content.Text))
 		case "user":
-			msgs = append(msgs, types.NewUserMessage(m.Content))
+			msgs = append(msgs, &types.UserMessage{
+				Content: m.Content.Text,
+				Media:   m.Content.Media,
+			})
 		case "assistant":
-			msgs = append(msgs, types.NewAssistantMessage(m.Content))
+			if len(m.Content.Media) > 0 {
+				writeError(w, http.StatusBadRequest, "unsupported_content_part",
+					"image content parts are only supported on user messages", "invalid_request_error")
+				return
+			}
+			msgs = append(msgs, types.NewAssistantMessage(m.Content.Text))
 		default:
-			msgs = append(msgs, types.NewUserMessage(m.Content))
+			if len(m.Content.Media) > 0 {
+				writeError(w, http.StatusBadRequest, "unsupported_content_part",
+					"image content parts are only supported on user messages", "invalid_request_error")
+				return
+			}
+			msgs = append(msgs, types.NewUserMessage(m.Content.Text))
 		}
 	}
 

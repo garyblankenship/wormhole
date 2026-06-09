@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"strings"
+	"time"
 
 	"github.com/garyblankenship/wormhole/internal/utils"
 	providerTransform "github.com/garyblankenship/wormhole/pkg/providers/transform"
@@ -131,15 +132,21 @@ func (g *Gemini) transformMessageToParts(msg types.Message) ([]map[string]any, e
 func (g *Gemini) transformMedia(media types.Media) (map[string]any, error) {
 	switch m := media.(type) {
 	case *types.ImageMedia:
-		if m.URL != "" {
-			// Gemini requires base64 encoded images
-			return nil, g.ValidationError("Gemini requires base64 encoded images", "URLs are not supported")
+		data := m.Base64Data
+		if data == "" && len(m.Data) > 0 {
+			data = base64.StdEncoding.EncodeToString(m.Data)
+		}
+		if data == "" {
+			if m.URL != "" {
+				return nil, g.ValidationError("Gemini requires inline image data", "URL-only images are not supported")
+			}
+			return nil, g.ValidationError("Gemini requires inline image data")
 		}
 
 		return map[string]any{
 			"inlineData": map[string]any{
 				"mimeType": m.MimeType,
-				"data":     base64.StdEncoding.EncodeToString(m.Data),
+				"data":     data,
 			},
 		}, nil
 
@@ -447,6 +454,45 @@ func (g *Gemini) transformEmbeddingsResponse(response *geminiEmbeddingsResponse)
 			"provider": "gemini",
 		},
 	}
+}
+
+func (g *Gemini) transformImagesResponse(response *geminiTextResponse, model string) (*types.ImagesResponse, error) {
+	if response.Error != nil {
+		return nil, g.ProviderError(response.Error.Message)
+	}
+
+	if len(response.Candidates) == 0 {
+		return nil, g.ProviderError("no candidates in response")
+	}
+
+	var text strings.Builder
+	var images []types.GeneratedImage
+	for _, candidate := range response.Candidates {
+		for _, part := range candidate.Content.Parts {
+			if part.Text != "" {
+				text.WriteString(part.Text)
+			}
+			if part.InlineData != nil && part.InlineData.Data != "" {
+				images = append(images, types.GeneratedImage{
+					B64JSON: part.InlineData.Data,
+				})
+			}
+		}
+	}
+
+	metadata := map[string]any{
+		"provider": "gemini",
+	}
+	if text.Len() > 0 {
+		metadata["text"] = text.String()
+	}
+
+	return &types.ImagesResponse{
+		Model:    model,
+		Images:   images,
+		Created:  time.Now(),
+		Metadata: metadata,
+	}, nil
 }
 
 // processStreamCandidate extracts chunks from a candidate response

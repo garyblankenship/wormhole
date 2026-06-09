@@ -67,6 +67,12 @@ func (b *ImageRequestBuilder) ResponseFormat(format string) *ImageRequestBuilder
 	return b
 }
 
+// ProviderOptions sets provider-specific image generation options.
+func (b *ImageRequestBuilder) ProviderOptions(options map[string]any) *ImageRequestBuilder {
+	b.request.ProviderOptions = options
+	return b
+}
+
 // Generate executes the request and returns generated images
 func (b *ImageRequestBuilder) Generate(ctx context.Context) (*types.ImageResponse, error) {
 	request := cloneImageRequest(b.request)

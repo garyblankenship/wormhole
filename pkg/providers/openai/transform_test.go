@@ -4,7 +4,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/garyblankenship/wormhole/pkg/types"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestCleanJSONResponse(t *testing.T) {
@@ -180,4 +182,48 @@ func TestTransformTextResponsePlainTextUnchanged(t *testing.T) {
 
 	expected := "Just plain text, no JSON here."
 	assert.Equal(t, expected, result.Text)
+}
+
+func TestBuildChatPayloadKeepsTextOnlyUserContentString(t *testing.T) {
+	t.Parallel()
+
+	provider := New(types.ProviderConfig{APIKey: "test-key"})
+	payload := provider.buildChatPayload(&types.TextRequest{
+		BaseRequest: types.BaseRequest{Model: "gpt-4o-mini"},
+		Messages: []types.Message{
+			types.NewUserMessage("plain text"),
+		},
+	})
+
+	messages := payload["messages"].([]map[string]any)
+	require.Len(t, messages, 1)
+	assert.Equal(t, "plain text", messages[0]["content"])
+}
+
+func TestBuildChatPayloadSerializesUserMediaAsImageURLParts(t *testing.T) {
+	t.Parallel()
+
+	provider := New(types.ProviderConfig{APIKey: "test-key"})
+	payload := provider.buildChatPayload(&types.TextRequest{
+		BaseRequest: types.BaseRequest{Model: "gpt-4o-mini"},
+		Messages: []types.Message{
+			&types.UserMessage{
+				Content: "compare these",
+				Media: []types.Media{
+					&types.ImageMedia{MimeType: "image/png", Base64Data: "aW1hZ2U="},
+					&types.ImageMedia{URL: "https://example.test/image.jpg"},
+				},
+			},
+		},
+	})
+
+	messages := payload["messages"].([]map[string]any)
+	require.Len(t, messages, 1)
+	parts := messages[0]["content"].([]map[string]any)
+	require.Len(t, parts, 3)
+	assert.Equal(t, map[string]any{"type": "text", "text": "compare these"}, parts[0])
+	assert.Equal(t, "image_url", parts[1]["type"])
+	assert.Equal(t, map[string]any{"url": "data:image/png;base64,aW1hZ2U="}, parts[1]["image_url"])
+	assert.Equal(t, "image_url", parts[2]["type"])
+	assert.Equal(t, map[string]any{"url": "https://example.test/image.jpg"}, parts[2]["image_url"])
 }

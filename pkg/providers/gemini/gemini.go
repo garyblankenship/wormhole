@@ -54,6 +54,7 @@ func (g *Gemini) SupportedCapabilities() []types.ModelCapability {
 		types.CapabilityChat,
 		types.CapabilityStructured,
 		types.CapabilityEmbeddings,
+		types.CapabilityImages,
 		types.CapabilityStream,
 		types.CapabilityFunctions,
 	}
@@ -151,9 +152,58 @@ func (g *Gemini) Audio(ctx context.Context, request types.AudioRequest) (*types.
 	return nil, g.NotImplementedError("Audio")
 }
 
-// Images is not supported by Gemini
+// Images generates images using Gemini's native generateContent endpoint.
 func (g *Gemini) Images(ctx context.Context, request types.ImagesRequest) (*types.ImagesResponse, error) {
-	return nil, g.NotImplementedError("images")
+	payload := g.buildImagesPayload(request)
+
+	modelName := normalizeModelResource(request.Model)
+	endpoint := fmt.Sprintf("%s/models/%s:generateContent?key=%s",
+		g.GetBaseURL(),
+		modelName,
+		g.apiKey,
+	)
+
+	var response geminiTextResponse
+	if err := g.DoRequest(ctx, "POST", endpoint, payload, &response); err != nil {
+		return nil, err
+	}
+
+	return g.transformImagesResponse(&response, request.Model)
+}
+
+// GenerateImage generates images through the unified image-generation interface.
+func (g *Gemini) GenerateImage(ctx context.Context, request types.ImageRequest) (*types.ImageResponse, error) {
+	return g.Images(ctx, request)
+}
+
+func (g *Gemini) buildImagesPayload(request types.ImagesRequest) map[string]any {
+	generationConfig := map[string]any{
+		"responseModalities": []string{"TEXT", "IMAGE"},
+	}
+	payload := map[string]any{
+		"contents": []map[string]any{
+			{
+				"parts": []map[string]any{
+					{"text": request.Prompt},
+				},
+			},
+		},
+		"generationConfig": generationConfig,
+	}
+
+	for k, v := range g.Config.MergedProviderOptions(request.Model, request.ProviderOptions) {
+		if k == "generationConfig" {
+			if opts, ok := v.(map[string]any); ok {
+				for optKey, optValue := range opts {
+					generationConfig[optKey] = optValue
+				}
+				continue
+			}
+		}
+		payload[k] = v
+	}
+
+	return payload
 }
 
 // buildTextPayload builds the request payload for text generation

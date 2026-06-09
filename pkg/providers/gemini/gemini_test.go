@@ -697,6 +697,142 @@ func TestGeminiProvider_Embeddings(t *testing.T) {
 	}
 }
 
+func TestGeminiProvider_Images(t *testing.T) {
+	t.Parallel()
+
+	const generatedB64 = "iVBORw0KGgo="
+	var capturedRequest map[string]any
+	var capturedPath string
+	var capturedQuery string
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		capturedPath = r.URL.Path
+		capturedQuery = r.URL.RawQuery
+		require.Equal(t, http.MethodPost, r.Method)
+		require.NoError(t, json.NewDecoder(r.Body).Decode(&capturedRequest))
+
+		w.Header().Set("Content-Type", "application/json")
+		require.NoError(t, json.NewEncoder(w).Encode(map[string]any{
+			"candidates": []map[string]any{
+				{
+					"content": map[string]any{
+						"parts": []map[string]any{
+							{"text": "created image"},
+							{"inlineData": map[string]any{
+								"mimeType": "image/png",
+								"data":     generatedB64,
+							}},
+						},
+						"role": "model",
+					},
+				},
+			},
+		}))
+	}))
+	defer server.Close()
+
+	provider := gemini.New("test-api-key", types.ProviderConfig{BaseURL: server.URL})
+	resp, err := provider.Images(context.Background(), types.ImagesRequest{
+		Model:  "gemini-2.5-flash-image",
+		Prompt: "draw a small portal",
+		ProviderOptions: map[string]any{
+			"generationConfig": map[string]any{
+				"candidateCount": 1,
+			},
+			"imageConfig": map[string]any{
+				"aspectRatio": "1:1",
+			},
+			"responseFormat": "image/png",
+		},
+	})
+
+	require.NoError(t, err)
+	require.NotNil(t, resp)
+	require.Len(t, resp.Images, 1)
+	assert.Equal(t, generatedB64, resp.Images[0].B64JSON)
+	assert.Equal(t, "created image", resp.Metadata["text"])
+	assert.Equal(t, "gemini", resp.Metadata["provider"])
+
+	assert.Equal(t, "/models/gemini-2.5-flash-image:generateContent", capturedPath)
+	assert.Equal(t, "key=test-api-key", capturedQuery)
+
+	contents, ok := capturedRequest["contents"].([]any)
+	require.True(t, ok)
+	require.Len(t, contents, 1)
+	content := contents[0].(map[string]any)
+	parts := content["parts"].([]any)
+	require.Len(t, parts, 1)
+	assert.Equal(t, "draw a small portal", parts[0].(map[string]any)["text"])
+
+	generationConfig := capturedRequest["generationConfig"].(map[string]any)
+	assert.Equal(t, []any{"TEXT", "IMAGE"}, generationConfig["responseModalities"])
+	assert.Equal(t, float64(1), generationConfig["candidateCount"])
+	assert.Equal(t, map[string]any{"aspectRatio": "1:1"}, capturedRequest["imageConfig"])
+	assert.Equal(t, "image/png", capturedRequest["responseFormat"])
+}
+
+func TestGeminiProvider_TextImageMediaBase64DataIsNotDoubleEncoded(t *testing.T) {
+	t.Parallel()
+
+	const imageB64 = "aW1hZ2UtYnl0ZXM="
+	var capturedRequest map[string]any
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		require.NoError(t, json.NewDecoder(r.Body).Decode(&capturedRequest))
+		w.Header().Set("Content-Type", "application/json")
+		require.NoError(t, json.NewEncoder(w).Encode(map[string]any{
+			"candidates": []map[string]any{
+				{
+					"content": map[string]any{
+						"parts": []map[string]any{{"text": "ok"}},
+						"role":  "model",
+					},
+					"finishReason": "STOP",
+				},
+			},
+		}))
+	}))
+	defer server.Close()
+
+	provider := gemini.New("test-api-key", types.ProviderConfig{BaseURL: server.URL})
+	_, err := provider.Text(context.Background(), types.TextRequest{
+		BaseRequest: types.BaseRequest{Model: "gemini-pro"},
+		Messages: []types.Message{
+			&types.UserMessage{
+				Content: "what is this?",
+				Media: []types.Media{
+					&types.ImageMedia{MimeType: "image/png", Base64Data: imageB64},
+				},
+			},
+		},
+	})
+	require.NoError(t, err)
+
+	contents := capturedRequest["contents"].([]any)
+	parts := contents[0].(map[string]any)["parts"].([]any)
+	inlineData := parts[1].(map[string]any)["inlineData"].(map[string]any)
+	assert.Equal(t, imageB64, inlineData["data"])
+	assert.NotEqual(t, "YVcxaFoyVXRZbmwwWlhNPQ==", inlineData["data"])
+}
+
+func TestGeminiProvider_TextRejectsURLOnlyImageMedia(t *testing.T) {
+	t.Parallel()
+
+	provider := gemini.New("test-api-key", types.ProviderConfig{})
+	_, err := provider.Text(context.Background(), types.TextRequest{
+		BaseRequest: types.BaseRequest{Model: "gemini-pro"},
+		Messages: []types.Message{
+			&types.UserMessage{
+				Content: "what is this?",
+				Media: []types.Media{
+					&types.ImageMedia{MimeType: "image/png", URL: "https://example.test/image.png"},
+				},
+			},
+		},
+	})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "URL-only images are not supported")
+}
+
 func TestGeminiProvider_UnsupportedMethods(t *testing.T) {
 	t.Parallel()
 	config := types.ProviderConfig{}
@@ -715,16 +851,6 @@ func TestGeminiProvider_UnsupportedMethods(t *testing.T) {
 		assert.Contains(t, err.Error(), "gemini provider does not support Audio")
 	})
 
-	t.Run("Images not supported", func(t *testing.T) {
-		t.Parallel()
-		imagesReq := types.ImagesRequest{
-			Model: "gemini-pro",
-		}
-
-		_, err := provider.Images(ctx, imagesReq)
-		require.Error(t, err)
-		assert.Contains(t, err.Error(), "gemini provider does not support images")
-	})
 }
 
 func TestGeminiProvider_MessageTransformation(t *testing.T) {

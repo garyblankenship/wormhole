@@ -1,7 +1,9 @@
 package openai
 
 import (
+	"encoding/base64"
 	"encoding/json"
+	"fmt"
 	"strings"
 	"time"
 
@@ -95,6 +97,10 @@ func (p *Provider) transformMessages(messages []types.Message) []map[string]any 
 		// This handles role, content, tool calls, and tool call IDs
 		openAIMsg := p.requestBuilder.TransformMessage(msg)
 
+		if userMsg, ok := msg.(*types.UserMessage); ok && len(userMsg.Media) > 0 {
+			openAIMsg["content"] = p.transformUserMessageContent(userMsg)
+		}
+
 		// Transform content if it's multi-modal ([]types.MessagePart)
 		// OpenAI requires specific format for multi-modal content
 		if content, ok := openAIMsg["content"].([]types.MessagePart); ok {
@@ -120,6 +126,44 @@ func (p *Provider) transformMessages(messages []types.Message) []map[string]any 
 	}
 
 	return result
+}
+
+func (p *Provider) transformUserMessageContent(msg *types.UserMessage) any {
+	parts := make([]map[string]any, 0, 1+len(msg.Media))
+	if msg.Content != "" {
+		parts = append(parts, map[string]any{
+			"type": "text",
+			"text": msg.Content,
+		})
+	}
+
+	for _, media := range msg.Media {
+		if image, ok := media.(*types.ImageMedia); ok {
+			url := image.URL
+			if url == "" {
+				data := image.Base64Data
+				if data == "" && len(image.Data) > 0 {
+					data = base64.StdEncoding.EncodeToString(image.Data)
+				}
+				if data == "" {
+					continue
+				}
+				mimeType := image.MimeType
+				if mimeType == "" {
+					mimeType = "image/png"
+				}
+				url = fmt.Sprintf("data:%s;base64,%s", mimeType, data)
+			}
+			parts = append(parts, map[string]any{
+				"type": "image_url",
+				"image_url": map[string]any{
+					"url": url,
+				},
+			})
+		}
+	}
+
+	return parts
 }
 
 // transformTools converts internal tools to OpenAI format
