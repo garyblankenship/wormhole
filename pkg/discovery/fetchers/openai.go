@@ -60,6 +60,8 @@ func (f *OpenAIFetcher) FetchModels(ctx context.Context) ([]*types.ModelInfo, er
 			ID:           m.ID,
 			Name:         formatModelName(m.ID),
 			Provider:     "openai",
+			Created:      m.Created,
+			OwnedBy:      m.OwnedBy,
 			Capabilities: inferOpenAICapabilities(m.ID),
 		})
 	}

@@ -10,6 +10,8 @@ type ModelInfo struct {
 	ID            string            `json:"id"`
 	Name          string            `json:"name"`
 	Provider      string            `json:"provider"`
+	Created       int64             `json:"created,omitempty"`
+	OwnedBy       string            `json:"owned_by,omitempty"`
 	Description   string            `json:"description,omitempty"`
 	ContextLength int               `json:"context_length,omitempty"`
 	MaxTokens     int               `json:"max_tokens,omitempty"`
