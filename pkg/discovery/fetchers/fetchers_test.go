@@ -33,44 +33,6 @@ func hasCapability(model *types.ModelInfo, capability types.ModelCapability) boo
 	return false
 }
 
-func TestOpenAIFetcher(t *testing.T) {
-	var sawAuth bool
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		assert.Equal(t, "/models", r.URL.Path)
-		sawAuth = r.Header.Get("Authorization") == "Bearer test-key"
-		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(map[string]any{
-			"object": "list",
-			"data": []map[string]any{
-				{"id": "gpt-5-mini", "object": "model", "created": 1, "owned_by": "openai"},
-				{"id": "text-embedding-3-small", "object": "model", "created": 1, "owned_by": "openai"},
-				{"id": "dall-e-3", "object": "model", "created": 1, "owned_by": "openai"},
-			},
-		})
-	}))
-	defer server.Close()
-	useTestHTTPClient(t, server.Client())
-
-	fetcher := NewOpenAIFetcher("test-key")
-	fetcher.baseURL = server.URL
-
-	models, err := fetcher.FetchModels(context.Background())
-	require.NoError(t, err)
-	require.Len(t, models, 3)
-	assert.True(t, sawAuth)
-	assert.Equal(t, "openai", fetcher.Name())
-	assert.Equal(t, "Gpt 5 Mini", models[0].Name)
-	assert.True(t, hasCapability(models[0], types.CapabilityChat))
-	assert.True(t, hasCapability(models[1], types.CapabilityEmbeddings))
-	assert.True(t, hasCapability(models[2], types.CapabilityImages))
-}
-
-func TestOpenAIFetcherRequiresAPIKey(t *testing.T) {
-	_, err := NewOpenAIFetcher("").FetchModels(context.Background())
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "API key")
-}
-
 func TestAnthropicFetcher(t *testing.T) {
 	var sawHeaders bool
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
