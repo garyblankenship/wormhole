@@ -37,6 +37,26 @@
     "auto_env": true
   },
   {
+    "name": "synthetic",
+    "display_name": "Synthetic.new",
+    "kind": "openai-compatible",
+    "default_base_url": "https://api.synthetic.new/v1",
+    "api_key_env": ["SYNTHETIC_API_KEY"],
+    "base_url_env": "SYNTHETIC_BASE_URL",
+    "discovery": "openai-compatible",
+    "auto_env": true
+  },
+  {
+    "name": "zai",
+    "display_name": "z.ai",
+    "kind": "openai-compatible",
+    "default_base_url": "https://api.z.ai/api/coding/paas/v4",
+    "api_key_env": ["ZAI_API_KEY"],
+    "base_url_env": "ZAI_BASE_URL",
+    "discovery": "openai-compatible",
+    "auto_env": true
+  },
+  {
     "name": "groq",
     "display_name": "Groq",
     "kind": "openai-compatible",

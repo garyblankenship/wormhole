@@ -173,6 +173,40 @@ func TestIdempotencyDeduplicatesRepeatedRequests(t *testing.T) {
 	assert.Equal(t, int32(3), provider.callCount.Load())
 }
 
+func TestIdempotencyDuplicateWaitHonorsCallerContext(t *testing.T) {
+	t.Parallel()
+	provider := newBlockingTextProvider("blocking")
+	client := wormhole.New(
+		wormhole.WithDefaultProvider("blocking"),
+		wormhole.WithCustomProvider("blocking", func(cfg types.ProviderConfig) (types.Provider, error) {
+			return provider, nil
+		}),
+		wormhole.WithProviderConfig("blocking", types.ProviderConfig{}),
+		wormhole.WithIdempotencyKey("same-request", time.Minute),
+	)
+
+	firstDone := make(chan error, 1)
+	go func() {
+		_, err := client.Text().Model("test-model").Prompt("repeat me").Generate(context.Background())
+		firstDone <- err
+	}()
+
+	select {
+	case <-provider.started:
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for first request to start")
+	}
+
+	duplicateCtx, cancel := context.WithCancel(context.Background())
+	cancel()
+	_, err := client.Text().Model("test-model").Prompt("repeat me").Generate(duplicateCtx)
+	require.ErrorIs(t, err, context.Canceled)
+	assert.Equal(t, int32(1), provider.callCount.Load())
+
+	close(provider.unblock)
+	require.NoError(t, <-firstDone)
+}
+
 func TestBaseURLOverridePreservesProviderConfigAndFactory(t *testing.T) {
 	t.Parallel()
 	var (

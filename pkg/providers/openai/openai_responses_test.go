@@ -123,6 +123,61 @@ func TestProviderResponsesAPIToolCalling(t *testing.T) {
 	assert.Equal(t, types.FinishReasonToolCalls, resp.FinishReason)
 }
 
+func TestProviderResponsesAPIPreparesMessages(t *testing.T) {
+	t.Parallel()
+	provider, _ := newOpenAITestProvider(t, func(w http.ResponseWriter, r *http.Request) {
+		var req map[string]any
+		require.NoError(t, json.NewDecoder(r.Body).Decode(&req))
+
+		input := req["input"].([]any)
+		require.Len(t, input, 3)
+		user := input[0].(map[string]any)
+		assert.Equal(t, "hello", user["content"])
+
+		call := input[1].(map[string]any)
+		callID, ok := call["call_id"].(string)
+		require.True(t, ok)
+		assert.NotEmpty(t, callID)
+		assert.Equal(t, callID, call["id"])
+
+		result := input[2].(map[string]any)
+		assert.Equal(t, "tool result", result["output"])
+
+		w.Header().Set("Content-Type", "application/json")
+		require.NoError(t, json.NewEncoder(w).Encode(responsesResponse{
+			ID:        "resp-prepared",
+			CreatedAt: 100,
+			Model:     "gpt-5",
+			Status:    "completed",
+			Output: []responsesOutputItem{{
+				Type:   responsesItemMessage,
+				Role:   "assistant",
+				Status: "completed",
+				Content: []responsesContentPart{{
+					Type: responsesContentOutputText,
+					Text: "ok",
+				}},
+			}},
+		}))
+	})
+	provider.Config.UseResponsesAPI = true
+
+	_, err := provider.Text(context.Background(), types.TextRequest{
+		BaseRequest: types.BaseRequest{Model: "gpt-5"},
+		Messages: []types.Message{
+			types.NewUserMessage("hel\xfflo"),
+			&types.AssistantMessage{
+				ToolCalls: []types.ToolCall{{
+					Name:      "lookup",
+					Arguments: map[string]any{"q": "ada"},
+				}},
+			},
+			types.NewToolResultMessage("missing-result-id", "tool result"),
+		},
+	})
+	require.NoError(t, err)
+}
+
 func TestProviderResponsesAPIStream(t *testing.T) {
 	t.Parallel()
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

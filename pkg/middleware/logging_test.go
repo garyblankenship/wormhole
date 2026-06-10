@@ -180,6 +180,41 @@ func TestTypedLoggingMiddleware(t *testing.T) {
 	}
 }
 
+func TestTypedLoggingStreamForwardHonorsContextCancellation(t *testing.T) {
+	t.Parallel()
+
+	var buf bytes.Buffer
+	mw := NewDebugTypedLoggingMiddleware(newTestLogger(&buf))
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	upstream := make(chan types.StreamChunk)
+	wrapped, err := mw.ApplyStream(func(context.Context, types.TextRequest) (<-chan types.StreamChunk, error) {
+		return upstream, nil
+	})(ctx, types.TextRequest{BaseRequest: types.BaseRequest{Model: "gpt"}})
+	if err != nil {
+		t.Fatalf("typed stream logging error: %v", err)
+	}
+
+	upstream <- types.StreamChunk{Text: "one"}
+	<-wrapped
+	upstream <- types.StreamChunk{Text: "two"}
+	cancel()
+
+	done := make(chan struct{})
+	go func() {
+		upstream <- types.StreamChunk{Text: "three"}
+		upstream <- types.StreamChunk{Text: "four"}
+		close(done)
+	}()
+
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("typed logging stream wrapper stayed blocked after context cancellation")
+	}
+}
+
 func TestProviderLoggingMiddleware(t *testing.T) {
 	t.Parallel()
 

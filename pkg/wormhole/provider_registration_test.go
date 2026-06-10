@@ -1,6 +1,10 @@
 package wormhole
 
 import (
+	"context"
+	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 
 	mockpkg "github.com/garyblankenship/wormhole/pkg/testing"
@@ -106,17 +110,37 @@ func TestWithOpenAICompatibleOption(t *testing.T) {
 	t.Parallel()
 	t.Run("WithOpenAICompatible option registers provider", func(t *testing.T) {
 		t.Parallel()
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			assert.Equal(t, "/chat/completions", r.URL.Path)
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = fmt.Fprint(w, `{"id":"chatcmpl-alias","created":100,"model":"alias-model","choices":[{"index":0,"message":{"role":"assistant","content":"ok"},"finish_reason":"stop"}]}`)
+		}))
+		t.Cleanup(server.Close)
+
 		// Use WithOpenAICompatible option to add a provider during initialization
 		wormhole := New(
-			WithOpenAICompatible("custom-openai", "https://api.example.com", types.ProviderConfig{
+			WithOpenAICompatible("custom-openai", server.URL, types.ProviderConfig{
 				APIKey: "test-key",
 			}),
+			WithDiscovery(false),
 		)
 
 		// Verify the provider is registered and configured
 		assert.Contains(t, wormhole.providerFactories, "custom-openai")
 		assert.Contains(t, wormhole.config.Providers, "custom-openai")
-		assert.Equal(t, "https://api.example.com", wormhole.config.Providers["custom-openai"].BaseURL)
+		assert.Equal(t, server.URL, wormhole.config.Providers["custom-openai"].BaseURL)
+
+		provider, err := wormhole.Provider("custom-openai")
+		require.NoError(t, err)
+		assert.Equal(t, "custom-openai", provider.Name())
+
+		resp, err := wormhole.Text().
+			Using("custom-openai").
+			Model("alias-model").
+			Prompt("hi").
+			Generate(context.Background())
+		require.NoError(t, err)
+		assert.Equal(t, "custom-openai", resp.Provider)
 	})
 
 	t.Run("WithGemini option stores config correctly", func(t *testing.T) {

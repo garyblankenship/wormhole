@@ -2,6 +2,7 @@ package providers
 
 import (
 	"context"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"sync"
@@ -50,6 +51,52 @@ func TestKeyRotationFiresOnRetry(t *testing.T) {
 	var out map[string]any
 	err := wrapper.DoRequest(context.Background(), http.MethodPost, server.URL, nil, &out)
 	require.NoError(t, err)
+
+	mu.Lock()
+	defer mu.Unlock()
+	assert.Equal(t, []string{"Bearer key-A", "Bearer key-B"}, seen)
+}
+
+func TestKeyRotationFiresOnStreamRetry(t *testing.T) {
+	t.Parallel()
+
+	var attempt int64
+	var mu sync.Mutex
+	var seen []string
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		n := atomic.AddInt64(&attempt, 1) - 1
+		mu.Lock()
+		seen = append(seen, r.Header.Get("Authorization"))
+		mu.Unlock()
+		if n == 0 {
+			w.WriteHeader(http.StatusTooManyRequests)
+			return
+		}
+		w.Header().Set(types.HeaderContentType, types.ContentTypeEventStream)
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte("data: ok\n\n"))
+	}))
+	t.Cleanup(server.Close)
+
+	maxRetries := 2
+	retryDelay := time.Millisecond
+	config := types.ProviderConfig{
+		BaseURL:    server.URL,
+		APIKeys:    []string{"key-A", "key-B"},
+		MaxRetries: &maxRetries,
+		RetryDelay: &retryDelay,
+	}
+
+	wrapper := NewHTTPClientWrapper("test", config, nil, &BearerAuthStrategy{}, server.Client())
+
+	body, err := wrapper.StreamRequest(context.Background(), http.MethodPost, server.URL, nil)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = body.Close() })
+
+	data, err := io.ReadAll(body)
+	require.NoError(t, err)
+	assert.Equal(t, "data: ok\n\n", string(data))
 
 	mu.Lock()
 	defer mu.Unlock()
