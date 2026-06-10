@@ -40,7 +40,11 @@ func executeTrackedRequest[T any](ctx context.Context, p *Wormhole, operation st
 
 	entry, created := p.loadOrCreateIdempotencyEntry(cacheKey, now, ttl)
 	if !created {
-		<-entry.ready
+		select {
+		case <-entry.ready:
+		case <-ctx.Done():
+			return zero, ctx.Err()
+		}
 		return cachedIdempotentValue[T](entry)
 	}
 

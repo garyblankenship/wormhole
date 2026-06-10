@@ -74,8 +74,10 @@ func ollamaFactory() types.ProviderFactory {
 	}
 }
 
-func openAICompatibleFactory() types.ProviderFactory {
-	return openAIFactory()
+func namedOpenAICompatibleFactory(name string) types.ProviderFactory {
+	return func(c types.ProviderConfig) (types.Provider, error) {
+		return openai.NewWithName(name, c), nil
+	}
 }
 
 const (

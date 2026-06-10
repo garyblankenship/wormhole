@@ -28,12 +28,17 @@ var _ types.Provider = (*Provider)(nil)
 
 // New creates a new OpenAI provider
 func New(config types.ProviderConfig) *Provider {
+	return NewWithName("openai", config)
+}
+
+// NewWithName creates an OpenAI-compatible provider with a caller-visible provider name.
+func NewWithName(name string, config types.ProviderConfig) *Provider {
 	if config.BaseURL == "" {
 		config.BaseURL = defaultBaseURL
 	}
 
 	return &Provider{
-		BaseProvider:         providers.NewBaseProvider("openai", config),
+		BaseProvider:         providers.NewBaseProvider(name, config),
 		requestBuilder:       providers.NewRequestBuilder(),
 		responseTransform:    transform.NewResponseTransform(),
 		streamingTransformer: transform.NewOpenAIStreamingTransformer(),

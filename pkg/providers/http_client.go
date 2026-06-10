@@ -327,33 +327,14 @@ func (w *HTTPClientWrapper) DoRequest(ctx context.Context, method, url string, b
 }
 
 func (w *HTTPClientWrapper) StreamRequest(ctx context.Context, method, url string, body any) (io.ReadCloser, error) {
-	var reqBody io.Reader
-	if body != nil {
-		payload, err := w.marshalRequestBody(body)
-		if err != nil {
-			return nil, err
-		}
-		reqBody = bytes.NewReader(payload)
-	}
-
-	req, err := http.NewRequestWithContext(ctx, method, url, reqBody)
+	req, err := w.buildRequest(ctx, method, url, body)
 	if err != nil {
-		return nil, types.Errorf("create request", err)
+		return nil, err
 	}
-
-	req.Header.Set(types.HeaderContentType, types.ContentTypeJSON)
 	req.Header.Set(types.HeaderAccept, types.ContentTypeEventStream)
 	req.Header.Set(types.HeaderCacheControl, "no-cache")
 
-	if err := w.authStrategy.Apply(req, w.authConfig()); err != nil {
-		return nil, err
-	}
-
-	for k, v := range w.Config.Headers {
-		req.Header.Set(k, v)
-	}
-
-	resp, err := w.httpClient.Do(req)
+	resp, err := w.retryClient.Do(req)
 	if err != nil {
 		return nil, w.handleRequestError(ctx, err)
 	}

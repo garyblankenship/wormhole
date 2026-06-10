@@ -31,7 +31,7 @@ func registerOpenAICompatible(c *Config, name string, cfg types.ProviderConfig) 
 		c.CustomFactories = make(map[string]types.ProviderFactory)
 	}
 	c.Providers[name] = cfg
-	c.CustomFactories[name] = openAICompatibleFactory()
+	c.CustomFactories[name] = namedOpenAICompatibleFactory(name)
 }
 
 // WithDefaultProvider sets the default provider for requests.

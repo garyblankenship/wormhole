@@ -110,21 +110,59 @@ func (m *TypedLoggingMiddleware) ApplyStream(next types.StreamHandler) types.Str
 			go func() {
 				defer close(wrappedStream)
 				chunkCount := 0
-				for chunk := range stream {
-					chunkCount++
-					if m.config.LogResponses && chunkCount == 1 {
-						m.config.Logger.Debug("First stream chunk received")
+				for {
+					select {
+					case chunk, ok := <-stream:
+						if !ok {
+							if m.config.LogTiming {
+								m.config.Logger.Debug("Stream completed", "chunks", chunkCount, "duration", time.Since(start))
+							}
+							return
+						}
+						chunkCount++
+						if m.config.LogResponses && chunkCount == 1 {
+							m.config.Logger.Debug("First stream chunk received")
+						}
+						select {
+						case wrappedStream <- chunk:
+						case <-ctx.Done():
+							drainStreamUntilIdle(stream)
+							return
+						}
+					case <-ctx.Done():
+						drainStreamUntilIdle(stream)
+						return
 					}
-					wrappedStream <- chunk
-				}
-				if m.config.LogTiming {
-					m.config.Logger.Debug("Stream completed", "chunks", chunkCount, "duration", time.Since(start))
 				}
 			}()
 			return wrappedStream, nil
 		}
 
 		return stream, err
+	}
+}
+
+func drainStreamUntilIdle(stream <-chan types.StreamChunk) {
+	const idleTimeout = 50 * time.Millisecond
+	timer := time.NewTimer(idleTimeout)
+	defer timer.Stop()
+
+	for {
+		select {
+		case _, ok := <-stream:
+			if !ok {
+				return
+			}
+			if !timer.Stop() {
+				select {
+				case <-timer.C:
+				default:
+				}
+			}
+			timer.Reset(idleTimeout)
+		case <-timer.C:
+			return
+		}
 	}
 }
 

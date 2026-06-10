@@ -8,6 +8,7 @@ import (
 
 	"github.com/garyblankenship/wormhole/internal/pool"
 	"github.com/garyblankenship/wormhole/internal/utils"
+	"github.com/garyblankenship/wormhole/pkg/providers"
 	"github.com/garyblankenship/wormhole/pkg/types"
 )
 
@@ -59,9 +60,13 @@ func (p *Provider) responsesStream(ctx context.Context, request types.TextReques
 }
 
 func (p *Provider) buildResponsesPayload(request *types.TextRequest) map[string]any {
+	messages, err := providers.PrepareMessages(request.Messages)
+	if err != nil {
+		messages = request.Messages // fall through; provider will surface the issue
+	}
 	payload := map[string]any{
 		"model": request.Model,
-		"input": p.transformResponsesInput(request.Messages),
+		"input": p.transformResponsesInput(messages),
 	}
 
 	if request.Temperature != nil {
