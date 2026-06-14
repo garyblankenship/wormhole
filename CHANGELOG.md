@@ -1,5 +1,14 @@
 # Changelog
 
+## v1.16.0 (2026-06-14)
+
+### Features
+- add provider-neutral reasoning controls for OpenAI, Anthropic, and Gemini text requests
+- add profile-backed request policy for provider/model token parameter quirks
+
+### Other
+- expand provider option and response streaming regression coverage
+
 ## v1.14.0 (2026-06-09)
 
 ### Features
