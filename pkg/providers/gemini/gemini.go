@@ -331,6 +331,9 @@ func (g *Gemini) buildTextPayload(request types.TextRequest) (map[string]any, er
 	if stop, ok := stdConfig["stop"]; ok {
 		generationConfig["stopSequences"] = stop
 	}
+	if thinking := geminiThinkingConfig(request.Reasoning); len(thinking) > 0 {
+		generationConfig["thinkingConfig"] = thinking
+	}
 
 	if len(generationConfig) > 0 {
 		payload["generationConfig"] = generationConfig
@@ -352,6 +355,20 @@ func (g *Gemini) buildTextPayload(request types.TextRequest) (map[string]any, er
 	}
 
 	return payload, nil
+}
+
+func geminiThinkingConfig(reasoning *types.Reasoning) map[string]any {
+	if reasoning == nil {
+		return nil
+	}
+	out := make(map[string]any, 2)
+	if reasoning.MaxTokens > 0 {
+		out["thinkingBudget"] = reasoning.MaxTokens
+	}
+	if reasoning.Enabled != nil {
+		out["includeThoughts"] = *reasoning.Enabled
+	}
+	return out
 }
 
 // buildStructuredPayload builds the request payload for structured generation

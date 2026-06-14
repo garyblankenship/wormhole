@@ -30,3 +30,29 @@ func TestProviderOptionsMergedIntoTextPayload(t *testing.T) {
 		t.Fatal("safetySettings option missing")
 	}
 }
+
+func TestTypedReasoningMergedIntoGenerationConfig(t *testing.T) {
+	t.Parallel()
+	include := true
+	provider := New("key", types.NewProviderConfig("key"))
+
+	payload, err := provider.buildTextPayload(types.TextRequest{
+		BaseRequest: types.BaseRequest{
+			Model: "gemini-test",
+			Reasoning: &types.Reasoning{
+				MaxTokens: 512,
+				Enabled:   &include,
+			},
+		},
+		Messages: []types.Message{types.NewUserMessage("hi")},
+	})
+	if err != nil {
+		t.Fatalf("buildTextPayload returned error: %v", err)
+	}
+
+	generationConfig := payload["generationConfig"].(map[string]any)
+	thinkingConfig := generationConfig["thinkingConfig"].(map[string]any)
+	if thinkingConfig["thinkingBudget"] != 512 || thinkingConfig["includeThoughts"] != true {
+		t.Fatalf("thinkingConfig = %#v", thinkingConfig)
+	}
+}

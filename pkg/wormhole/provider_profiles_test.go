@@ -37,6 +37,17 @@ func TestProviderProfilesExposeKnownProviders(t *testing.T) {
 			}
 		})
 	}
+
+	openai, ok := ProviderProfileByName("openai")
+	if !ok {
+		t.Fatal("expected openai profile")
+	}
+	if openai.RequestPolicy.MaxTokensParam != "max_tokens" {
+		t.Fatalf("openai max token param = %q", openai.RequestPolicy.MaxTokensParam)
+	}
+	if len(openai.RequestPolicy.MaxTokensParamRules) != 1 {
+		t.Fatalf("openai max token rules = %#v", openai.RequestPolicy.MaxTokensParamRules)
+	}
 }
 
 func TestProfiledOpenAICompatibleUsesProfileBaseURL(t *testing.T) {
@@ -71,6 +82,18 @@ func TestProfiledOpenAICompatibleAllowsConfigOverride(t *testing.T) {
 	client := New(WithGroq("test-key", types.ProviderConfig{BaseURL: "http://localhost:9999/v1"}), WithDiscovery(false))
 	if got := client.config.Providers["groq"].BaseURL; got != "http://localhost:9999/v1" {
 		t.Fatalf("base URL override = %q", got)
+	}
+}
+
+func TestProviderProfileRequestPolicyFlowsIntoConfig(t *testing.T) {
+	t.Parallel()
+	client := New(WithOpenAI("test-key"), WithDiscovery(false))
+	cfg := client.config.Providers["openai"]
+	if cfg.RequestPolicy.MaxTokensParam != "max_tokens" {
+		t.Fatalf("max token param = %q", cfg.RequestPolicy.MaxTokensParam)
+	}
+	if len(cfg.RequestPolicy.MaxTokensParamRules) != 1 {
+		t.Fatalf("max token rules = %#v", cfg.RequestPolicy.MaxTokensParamRules)
 	}
 }
 

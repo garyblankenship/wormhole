@@ -14,15 +14,31 @@ var providerProfilesJSON []byte
 
 // ProviderProfile describes the stable configuration shape for a known provider.
 type ProviderProfile struct {
-	Name           string   `json:"name"`
-	DisplayName    string   `json:"display_name,omitempty"`
-	Kind           string   `json:"kind"`
-	DefaultBaseURL string   `json:"default_base_url,omitempty"`
-	APIKeyEnv      []string `json:"api_key_env,omitempty"`
-	BaseURLEnv     string   `json:"base_url_env,omitempty"`
-	Discovery      string   `json:"discovery,omitempty"`
-	AutoEnv        bool     `json:"auto_env,omitempty"`
-	Local          bool     `json:"local,omitempty"`
+	Name           string                `json:"name"`
+	DisplayName    string                `json:"display_name,omitempty"`
+	Kind           string                `json:"kind"`
+	DefaultBaseURL string                `json:"default_base_url,omitempty"`
+	APIKeyEnv      []string              `json:"api_key_env,omitempty"`
+	BaseURLEnv     string                `json:"base_url_env,omitempty"`
+	Discovery      string                `json:"discovery,omitempty"`
+	RequestPolicy  ProviderRequestPolicy `json:"request_policy,omitempty"`
+	AutoEnv        bool                  `json:"auto_env,omitempty"`
+	Local          bool                  `json:"local,omitempty"`
+}
+
+// ProviderRequestPolicy describes provider/model request serialization quirks
+// that should live with provider profile data instead of adapter conditionals.
+type ProviderRequestPolicy struct {
+	MaxTokensParam      string               `json:"max_tokens_param,omitempty"`
+	MaxTokensParamRules []MaxTokensParamRule `json:"max_tokens_param_rules,omitempty"`
+	MaxTokensCap        int                  `json:"max_tokens_cap,omitempty"`
+}
+
+// MaxTokensParamRule selects a request parameter name when ModelContains is
+// found in the model name, case-insensitively.
+type MaxTokensParamRule struct {
+	ModelContains string `json:"model_contains"`
+	Param         string `json:"param"`
 }
 
 const (

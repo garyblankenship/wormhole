@@ -49,3 +49,41 @@ func TestProviderOptionsMergedIntoResponsesPayload(t *testing.T) {
 		t.Fatal("reasoning option missing")
 	}
 }
+
+func TestTypedReasoningMergedIntoPayloads(t *testing.T) {
+	t.Parallel()
+	enabled := true
+	provider := New(types.NewProviderConfig("key"))
+
+	chatPayload := provider.buildChatPayload(&types.TextRequest{
+		BaseRequest: types.BaseRequest{
+			Model: "gpt-test",
+			Reasoning: &types.Reasoning{
+				Effort:    types.ReasoningEffortLow,
+				MaxTokens: 256,
+				Enabled:   &enabled,
+			},
+		},
+		Messages: []types.Message{types.NewUserMessage("hi")},
+	})
+
+	reasoning, ok := chatPayload["reasoning"].(map[string]any)
+	if !ok {
+		t.Fatalf("chat reasoning = %#v, want map", chatPayload["reasoning"])
+	}
+	if reasoning["effort"] != "low" || reasoning["max_tokens"] != 256 || reasoning["enabled"] != true {
+		t.Fatalf("chat reasoning = %#v", reasoning)
+	}
+
+	responsesPayload := provider.buildResponsesPayload(&types.TextRequest{
+		BaseRequest: types.BaseRequest{
+			Model:     "gpt-test",
+			Reasoning: &types.Reasoning{Effort: types.ReasoningEffortHigh},
+		},
+		Messages: []types.Message{types.NewUserMessage("hi")},
+	})
+	reasoning, ok = responsesPayload["reasoning"].(map[string]any)
+	if !ok || reasoning["effort"] != "high" {
+		t.Fatalf("responses reasoning = %#v", responsesPayload["reasoning"])
+	}
+}

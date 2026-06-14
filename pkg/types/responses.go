@@ -39,6 +39,7 @@ type TextResponse struct {
 	Provider     string         `json:"provider,omitempty"`
 	Model        string         `json:"model"`
 	Text         string         `json:"text"`
+	Thinking     *Thinking      `json:"thinking,omitempty"`
 	ToolCalls    []ToolCall     `json:"tool_calls,omitempty"`
 	FinishReason FinishReason   `json:"finish_reason"`
 	Usage        *Usage         `json:"usage,omitempty"`
@@ -119,6 +120,7 @@ type TextChunk struct {
 	Provider     string        `json:"provider,omitempty"`
 	Model        string        `json:"model,omitempty"`
 	Text         string        `json:"text,omitempty"`
+	Thinking     *Thinking     `json:"thinking,omitempty"`
 	Delta        *ChunkDelta   `json:"delta,omitempty"` // For OpenAI compatibility
 	ToolCall     *ToolCall     `json:"tool_call,omitempty"`
 	ToolCalls    []ToolCall    `json:"tool_calls,omitempty"` // For multi-tool calls
@@ -157,7 +159,15 @@ func (c *TextChunk) HasToolCalls() bool {
 // ChunkDelta represents streaming delta content
 type ChunkDelta struct {
 	Content   string     `json:"content,omitempty"`
+	Thinking  *Thinking  `json:"thinking,omitempty"`
 	ToolCalls []ToolCall `json:"tool_calls,omitempty"`
+}
+
+// Thinking carries provider-reported reasoning text or a provider signature
+// associated with reasoning content.
+type Thinking struct {
+	Content   string `json:"content,omitempty"`
+	Signature string `json:"signature,omitempty"`
 }
 
 // EmbeddingsResponse represents an embeddings response

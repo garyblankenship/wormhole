@@ -161,6 +161,7 @@ type ProviderConfig struct {
 
 	DefaultProviderOptions map[string]any            `json:"default_provider_options,omitempty"`
 	ProviderOptionsByModel map[string]map[string]any `json:"provider_options_by_model,omitempty"`
+	RequestPolicy          ProviderRequestPolicy     `json:"request_policy,omitempty"`
 
 	// ChatPath overrides the chat-completions path appended to BaseURL.
 	// Empty means the provider's default ("/chat/completions" for OpenAI).
@@ -184,6 +185,21 @@ type ProviderConfig struct {
 	MaxRetries    *int           `json:"max_retries,omitempty"`
 	RetryDelay    *time.Duration `json:"retry_delay,omitempty"`
 	RetryMaxDelay *time.Duration `json:"retry_max_delay,omitempty"`
+}
+
+// ProviderRequestPolicy describes provider/model request serialization quirks
+// resolved before a provider adapter serializes a request.
+type ProviderRequestPolicy struct {
+	MaxTokensParam      string               `json:"max_tokens_param,omitempty"`
+	MaxTokensParamRules []MaxTokensParamRule `json:"max_tokens_param_rules,omitempty"`
+	MaxTokensCap        int                  `json:"max_tokens_cap,omitempty"`
+}
+
+// MaxTokensParamRule selects a request parameter name when ModelContains is
+// found in the model name, case-insensitively.
+type MaxTokensParamRule struct {
+	ModelContains string `json:"model_contains"`
+	Param         string `json:"param"`
 }
 
 // ==================== ProviderConfig Builder Methods ====================

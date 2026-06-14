@@ -217,6 +217,10 @@ func cloneProviderConfig(config types.ProviderConfig) types.ProviderConfig {
 		cloned.Params = make(map[string]any, len(config.Params))
 		maps.Copy(cloned.Params, config.Params)
 	}
+	if len(config.RequestPolicy.MaxTokensParamRules) > 0 {
+		cloned.RequestPolicy.MaxTokensParamRules = make([]types.MaxTokensParamRule, len(config.RequestPolicy.MaxTokensParamRules))
+		copy(cloned.RequestPolicy.MaxTokensParamRules, config.RequestPolicy.MaxTokensParamRules)
+	}
 	if config.MaxRetries != nil {
 		maxRetries := *config.MaxRetries
 		cloned.MaxRetries = &maxRetries

@@ -166,6 +166,14 @@ func (b *TextRequestBuilder) TopP(topP float32) *TextRequestBuilder {
 	return b
 }
 
+// Reasoning sets provider-neutral reasoning controls for models that support
+// thinking or effort parameters. ProviderOptions can still override provider
+// wire fields for advanced use.
+func (b *TextRequestBuilder) Reasoning(reasoning types.Reasoning) *TextRequestBuilder {
+	b.request.Reasoning = &reasoning
+	return b
+}
+
 // Stop sets sequences that will halt generation when encountered.
 // The model stops generating when it produces any of these sequences.
 // Useful for controlling output format or preventing runaway generation.

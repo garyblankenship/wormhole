@@ -135,6 +135,8 @@ github.com/garyblankenship/wormhole
 
 Known OpenAI-compatible provider URLs, env var names, local-provider flags, and
 model discovery modes live in `pkg/wormhole/provider_profiles.json`.
+Profile-backed request policy also keeps provider/model token parameter quirks
+such as `max_completion_tokens` out of adapter conditionals.
 `KnownProviderProfiles()` returns all built-in profiles, and
 `ProviderProfileByName(name)` returns one profile.
 
@@ -184,6 +186,7 @@ All request builders support these common methods:
 | `APIKey(key)` | Set API key |
 | `Temperature(n)` | Set temperature (0-2) |
 | `MaxTokens(n)` | Set max tokens |
+| `Reasoning(types.Reasoning{...})` | Set provider-neutral reasoning controls where supported |
 | `TopP(n)` | Set top-p sampling |
 | `Validate()` | Validate configuration |
 | `MustValidate()` | Validate or panic |

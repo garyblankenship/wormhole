@@ -107,6 +107,13 @@ type responsesStreamEvent struct {
 	Item     *responsesOutputItem `json:"item,omitempty"`
 }
 
+func (e responsesStreamEvent) responseModel() string {
+	if e.Response == nil {
+		return ""
+	}
+	return e.Response.Model
+}
+
 type streamChoice struct {
 	Index        int          `json:"index"`
 	Delta        messageDelta `json:"delta"`

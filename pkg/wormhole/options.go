@@ -19,6 +19,7 @@ func registerProvider(c *Config, name, apiKey string, cfgs ...types.ProviderConf
 	if len(cfgs) > 0 {
 		cfg = cfgs[0]
 	}
+	applyProviderProfileConfig(name, &cfg)
 	cfg.APIKey = apiKey
 	c.Providers[name] = cfg
 }
@@ -128,10 +129,37 @@ func WithOpenAICompatible(name, baseURL string, config types.ProviderConfig) Opt
 // using the provider profile's default or environment-provided base URL.
 func WithProfiledOpenAICompatible(name string, config types.ProviderConfig) Option {
 	return func(c *Config) {
-		if profile, ok := providerProfile(name); ok && config.BaseURL == "" {
-			config.BaseURL = configuredBaseURL(profile)
+		if profile, ok := providerProfile(name); ok {
+			if config.BaseURL == "" {
+				config.BaseURL = configuredBaseURL(profile)
+			}
+			applyProviderProfile(profile, &config)
 		}
 		registerOpenAICompatible(c, name, config)
+	}
+}
+
+func applyProviderProfileConfig(name string, config *types.ProviderConfig) {
+	if profile, ok := providerProfile(name); ok {
+		applyProviderProfile(profile, config)
+	}
+}
+
+func applyProviderProfile(profile ProviderProfile, config *types.ProviderConfig) {
+	if config.RequestPolicy.MaxTokensParam == "" {
+		config.RequestPolicy.MaxTokensParam = profile.RequestPolicy.MaxTokensParam
+	}
+	if len(config.RequestPolicy.MaxTokensParamRules) == 0 && len(profile.RequestPolicy.MaxTokensParamRules) > 0 {
+		config.RequestPolicy.MaxTokensParamRules = make([]types.MaxTokensParamRule, 0, len(profile.RequestPolicy.MaxTokensParamRules))
+		for _, rule := range profile.RequestPolicy.MaxTokensParamRules {
+			config.RequestPolicy.MaxTokensParamRules = append(config.RequestPolicy.MaxTokensParamRules, types.MaxTokensParamRule{
+				ModelContains: rule.ModelContains,
+				Param:         rule.Param,
+			})
+		}
+	}
+	if config.RequestPolicy.MaxTokensCap == 0 {
+		config.RequestPolicy.MaxTokensCap = profile.RequestPolicy.MaxTokensCap
 	}
 }
 

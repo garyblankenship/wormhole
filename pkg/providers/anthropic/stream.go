@@ -34,6 +34,14 @@ func (p *Provider) parseStreamChunk(data []byte) (*types.StreamChunk, error) {
 			chunk.Delta = &types.ChunkDelta{
 				Content: event.Delta.Text,
 			}
+		} else if event.Delta.Type == "thinking_delta" {
+			thinking := &types.Thinking{Content: event.Delta.Thinking}
+			chunk.Thinking = thinking
+			chunk.Delta = &types.ChunkDelta{Thinking: thinking}
+		} else if event.Delta.Type == "signature_delta" {
+			thinking := &types.Thinking{Signature: event.Delta.Signature}
+			chunk.Thinking = thinking
+			chunk.Delta = &types.ChunkDelta{Thinking: thinking}
 		}
 
 	case "message_delta":

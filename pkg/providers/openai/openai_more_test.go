@@ -97,6 +97,21 @@ func TestGetMaxTokensParam(t *testing.T) {
 			model:    "gpt-5",
 			expected: "custom_tokens",
 		},
+		{
+			name: "request policy rule selects parameter",
+			config: types.ProviderConfig{
+				APIKey: "test-key",
+				RequestPolicy: types.ProviderRequestPolicy{
+					MaxTokensParam: "max_tokens",
+					MaxTokensParamRules: []types.MaxTokensParamRule{{
+						ModelContains: "reasoning-model",
+						Param:         "max_completion_tokens",
+					}},
+				},
+			},
+			model:    "vendor/reasoning-model-large",
+			expected: "max_completion_tokens",
+		},
 	}
 
 	for _, tt := range tests {
@@ -107,6 +122,26 @@ func TestGetMaxTokensParam(t *testing.T) {
 			assert.Equal(t, tt.expected, provider.getMaxTokensParam(tt.model))
 		})
 	}
+}
+
+func TestRequestPolicyCapsMaxTokens(t *testing.T) {
+	t.Parallel()
+
+	provider := New(types.ProviderConfig{
+		APIKey: "test-key",
+		RequestPolicy: types.ProviderRequestPolicy{
+			MaxTokensCap: 64,
+		},
+	})
+	maxTokens := 128
+	payload := provider.buildChatPayload(&types.TextRequest{
+		BaseRequest: types.BaseRequest{
+			Model:     "gpt-4o-mini",
+			MaxTokens: &maxTokens,
+		},
+		Messages: []types.Message{types.NewUserMessage("hi")},
+	})
+	assert.Equal(t, 64, payload["max_tokens"])
 }
 
 func TestTransformToolChoiceOpenAIFallbacks(t *testing.T) {

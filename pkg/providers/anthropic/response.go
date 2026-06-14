@@ -11,6 +11,7 @@ import (
 // transformTextResponse converts Anthropic response to internal format
 func (p *Provider) transformTextResponse(response *messageResponse) *types.TextResponse {
 	text := ""
+	var thinking *types.Thinking
 	var toolCalls []types.ToolCall
 
 	// Extract content from response
@@ -18,6 +19,11 @@ func (p *Provider) transformTextResponse(response *messageResponse) *types.TextR
 		switch content.Type {
 		case contentTypeText:
 			text += content.Text
+		case contentTypeThinking:
+			thinking = &types.Thinking{
+				Content:   content.Thinking,
+				Signature: content.Signature,
+			}
 		case contentTypeToolUse:
 			args, _ := json.Marshal(content.Input)
 			toolCalls = append(toolCalls, types.ToolCall{
@@ -35,6 +41,7 @@ func (p *Provider) transformTextResponse(response *messageResponse) *types.TextR
 		ID:           response.ID,
 		Model:        response.Model,
 		Text:         text,
+		Thinking:     thinking,
 		ToolCalls:    toolCalls,
 		FinishReason: p.mapStopReason(response.StopReason),
 		Usage:        p.convertUsage(response.Usage),

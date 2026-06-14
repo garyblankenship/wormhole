@@ -6,6 +6,15 @@
     "api_key_env": ["OPENAI_API_KEY"],
     "base_url_env": "OPENAI_BASE_URL",
     "discovery": "openai",
+    "request_policy": {
+      "max_tokens_param": "max_tokens",
+      "max_tokens_param_rules": [
+        {
+          "model_contains": "gpt-5",
+          "param": "max_completion_tokens"
+        }
+      ]
+    },
     "auto_env": true
   },
   {

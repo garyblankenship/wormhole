@@ -106,6 +106,14 @@ func cloneBaseRequestFields(dst, src *types.BaseRequest) {
 		seed := *src.Seed
 		dst.Seed = &seed
 	}
+	if src.Reasoning != nil {
+		reasoning := *src.Reasoning
+		if src.Reasoning.Enabled != nil {
+			enabled := *src.Reasoning.Enabled
+			reasoning.Enabled = &enabled
+		}
+		dst.Reasoning = &reasoning
+	}
 	if len(src.Stop) > 0 {
 		dst.Stop = make([]string, len(src.Stop))
 		copy(dst.Stop, src.Stop)

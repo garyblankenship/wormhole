@@ -21,6 +21,10 @@ const (
 	responsesContentOutputText      = "output_text"
 	responsesContentRefusal         = "refusal"
 	responsesEventOutputTextDelta   = "response.output_text.delta"
+	responsesEventOutputItemAdded   = "response.output_item.added"
+	responsesEventFunctionArgsDelta = "response.function_call_arguments.delta"
+	responsesEventReasoningDelta    = "response.reasoning_summary_text.delta"
+	responsesEventReasoningDone     = "response.reasoning_summary_part.done"
 	responsesEventCompleted         = "response.completed"
 	responsesEventFailed            = "response.failed"
 	responsesEventIncomplete        = "response.incomplete"
@@ -76,7 +80,11 @@ func (p *Provider) buildResponsesPayload(request *types.TextRequest) map[string]
 		payload["top_p"] = *request.TopP
 	}
 	if request.MaxTokens != nil && *request.MaxTokens > 0 {
-		payload["max_output_tokens"] = *request.MaxTokens
+		payload["max_output_tokens"] = p.maxTokensValue(*request.MaxTokens)
+	}
+
+	if reasoning := reasoningPayload(request.Reasoning); len(reasoning) > 0 {
+		payload["reasoning"] = reasoning
 	}
 
 	if len(request.Tools) > 0 {
@@ -354,6 +362,49 @@ func (p *Provider) parseResponsesStreamChunk(data []byte) (*types.TextChunk, err
 			Delta: &types.ChunkDelta{
 				Content: event.Delta,
 			},
+		}, nil
+	case responsesEventOutputItemAdded:
+		if event.Item == nil || event.Item.Type != responsesItemFunctionCall {
+			return nil, nil
+		}
+		toolCall := responseFunctionCallToToolCall(*event.Item)
+		return &types.TextChunk{
+			ID:        event.ItemID,
+			Model:     event.responseModel(),
+			ToolCall:  &toolCall,
+			ToolCalls: []types.ToolCall{toolCall},
+			Delta:     &types.ChunkDelta{ToolCalls: []types.ToolCall{toolCall}},
+		}, nil
+	case responsesEventFunctionArgsDelta:
+		toolCall := types.ToolCall{
+			ID:   event.ItemID,
+			Type: "function",
+			Function: &types.ToolCallFunction{
+				Arguments: event.Delta,
+			},
+		}
+		return &types.TextChunk{
+			ID:        event.ItemID,
+			Model:     event.responseModel(),
+			ToolCall:  &toolCall,
+			ToolCalls: []types.ToolCall{toolCall},
+			Delta:     &types.ChunkDelta{ToolCalls: []types.ToolCall{toolCall}},
+		}, nil
+	case responsesEventReasoningDelta:
+		thinking := &types.Thinking{Content: event.Delta}
+		return &types.TextChunk{
+			ID:       event.ItemID,
+			Model:    event.responseModel(),
+			Thinking: thinking,
+			Delta:    &types.ChunkDelta{Thinking: thinking},
+		}, nil
+	case responsesEventReasoningDone:
+		thinking := &types.Thinking{Signature: event.ItemID}
+		return &types.TextChunk{
+			ID:       event.ItemID,
+			Model:    event.responseModel(),
+			Thinking: thinking,
+			Delta:    &types.ChunkDelta{Thinking: thinking},
 		}, nil
 	case responsesEventCompleted, responsesEventIncomplete:
 		if event.Response == nil {

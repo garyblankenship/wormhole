@@ -28,3 +28,24 @@ func TestProviderOptionsMergedIntoMessagePayload(t *testing.T) {
 		t.Fatalf("metadata source = %v, want request", metadata["source"])
 	}
 }
+
+func TestTypedReasoningMergedIntoMessagePayload(t *testing.T) {
+	t.Parallel()
+	provider := New(types.NewProviderConfig("key"))
+
+	payload := provider.buildMessagePayload(&types.TextRequest{
+		BaseRequest: types.BaseRequest{
+			Model:     "claude-test",
+			Reasoning: &types.Reasoning{MaxTokens: 1024},
+		},
+		Messages: []types.Message{types.NewUserMessage("hi")},
+	})
+
+	thinking, ok := payload["thinking"].(map[string]any)
+	if !ok {
+		t.Fatalf("thinking = %#v, want map", payload["thinking"])
+	}
+	if thinking["type"] != "enabled" || thinking["budget_tokens"] != 1024 {
+		t.Fatalf("thinking = %#v", thinking)
+	}
+}

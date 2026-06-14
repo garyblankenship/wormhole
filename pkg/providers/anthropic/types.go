@@ -13,11 +13,13 @@ type messageResponse struct {
 }
 
 type contentPart struct {
-	Type  string    `json:"type"`
-	Text  string    `json:"text,omitempty"`
-	ID    string    `json:"id,omitempty"`
-	Name  string    `json:"name,omitempty"`
-	Input toolInput `json:"input,omitempty"`
+	Type      string    `json:"type"`
+	Text      string    `json:"text,omitempty"`
+	Thinking  string    `json:"thinking,omitempty"`
+	Signature string    `json:"signature,omitempty"`
+	ID        string    `json:"id,omitempty"`
+	Name      string    `json:"name,omitempty"`
+	Input     toolInput `json:"input,omitempty"`
 }
 
 type toolInput map[string]any
@@ -42,8 +44,10 @@ type contentBlockDeltaEvent struct {
 	Type  string `json:"type"`
 	Index int    `json:"index"`
 	Delta struct {
-		Type string `json:"type"`
-		Text string `json:"text"`
+		Type      string `json:"type"`
+		Text      string `json:"text"`
+		Thinking  string `json:"thinking"`
+		Signature string `json:"signature"`
 	} `json:"delta"`
 }
 

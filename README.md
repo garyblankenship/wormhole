@@ -85,6 +85,7 @@ this one special client" taped to the side of your service.
 | Text to speech | `client.Audio().TextToSpeech().Model("tts-1").Input("...").Voice("alloy").Generate(ctx)` |
 | Tool calling | `wormhole.RegisterTypedTool(client, name, desc, handler)` |
 | Agent loop | `client.Agent().Model("gpt-5.2").Run(ctx, "task")` |
+| Reasoning controls | `client.Text().Model("gpt-5.2").Reasoning(types.Reasoning{Effort: types.ReasoningEffortLow})` |
 | Model fallback | `client.Text().Model("gpt-5.2").WithFallback("gpt-5-mini").Generate(ctx)` |
 | Model selection | `client.SelectModel(ctx, wormhole.ModelQuery{Capabilities: []types.ModelCapability{types.CapabilityText}})` |
 | Attempt tracing | `wormhole.WithAttemptTrace(func(ctx context.Context, e wormhole.AttemptEvent) { ... })` |

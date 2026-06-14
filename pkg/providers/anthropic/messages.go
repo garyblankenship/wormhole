@@ -11,8 +11,9 @@ import (
 
 // Content type constants
 const (
-	contentTypeText    = "text"
-	contentTypeToolUse = "tool_use"
+	contentTypeText     = "text"
+	contentTypeThinking = "thinking"
+	contentTypeToolUse  = "tool_use"
 )
 
 // Role constant
@@ -52,6 +53,10 @@ func (p *Provider) buildMessagePayload(request *types.TextRequest) map[string]an
 		delete(payload, "stop")
 	}
 
+	if thinking := anthropicThinkingPayload(request.Reasoning); len(thinking) > 0 {
+		payload["thinking"] = thinking
+	}
+
 	// Tools
 	if len(request.Tools) > 0 {
 		payload["tools"] = p.transformTools(request.Tools)
@@ -66,6 +71,22 @@ func (p *Provider) buildMessagePayload(request *types.TextRequest) map[string]an
 	}
 
 	return payload
+}
+
+func anthropicThinkingPayload(reasoning *types.Reasoning) map[string]any {
+	if reasoning == nil {
+		return nil
+	}
+	out := make(map[string]any, 2)
+	if reasoning.Enabled != nil && !*reasoning.Enabled {
+		out["type"] = "disabled"
+		return out
+	}
+	if reasoning.MaxTokens > 0 {
+		out["type"] = "enabled"
+		out["budget_tokens"] = reasoning.MaxTokens
+	}
+	return out
 }
 
 // transformMessages converts internal messages to Anthropic format

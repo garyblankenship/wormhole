@@ -11,7 +11,26 @@ type BaseRequest struct {
 	FrequencyPenalty *float32       `json:"frequency_penalty,omitempty"`
 	Seed             *int           `json:"seed,omitempty"`
 	ProviderOptions  map[string]any `json:"-"`
+	Reasoning        *Reasoning     `json:"reasoning,omitempty"`
 }
+
+// Reasoning describes provider-neutral reasoning controls for models that
+// expose thinking, effort, or token-budget controls.
+type Reasoning struct {
+	Effort    ReasoningEffort `json:"effort,omitempty"`
+	MaxTokens int             `json:"max_tokens,omitempty"`
+	Enabled   *bool           `json:"enabled,omitempty"`
+}
+
+// ReasoningEffort is a provider-neutral effort hint.
+type ReasoningEffort string
+
+const (
+	ReasoningEffortNone   ReasoningEffort = "none"
+	ReasoningEffortLow    ReasoningEffort = "low"
+	ReasoningEffortMedium ReasoningEffort = "medium"
+	ReasoningEffortHigh   ReasoningEffort = "high"
+)
 
 // TextRequest represents a text generation request
 type TextRequest struct {

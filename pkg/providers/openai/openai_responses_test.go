@@ -226,3 +226,32 @@ func TestProviderResponsesAPIStream(t *testing.T) {
 	require.NotNil(t, final.Usage)
 	assert.Equal(t, 3, final.Usage.TotalTokens)
 }
+
+func TestParseResponsesStreamFunctionCallAndThinkingEvents(t *testing.T) {
+	t.Parallel()
+	provider := New(types.ProviderConfig{APIKey: "test-key", UseResponsesAPI: true})
+
+	start, err := provider.parseResponsesStreamChunk([]byte(`{"type":"response.output_item.added","item_id":"item-1","item":{"type":"function_call","call_id":"call-1","name":"lookup","arguments":""}}`))
+	require.NoError(t, err)
+	require.NotNil(t, start)
+	require.Len(t, start.ToolCalls, 1)
+	assert.Equal(t, "call-1", start.ToolCalls[0].ID)
+	assert.Equal(t, "lookup", start.ToolCalls[0].Name)
+	require.NotNil(t, start.Delta)
+	require.Len(t, start.Delta.ToolCalls, 1)
+
+	args, err := provider.parseResponsesStreamChunk([]byte(`{"type":"response.function_call_arguments.delta","item_id":"call-1","delta":"{\"q\""}`))
+	require.NoError(t, err)
+	require.NotNil(t, args)
+	require.Len(t, args.ToolCalls, 1)
+	require.NotNil(t, args.ToolCalls[0].Function)
+	assert.Equal(t, `{"q"`, args.ToolCalls[0].Function.Arguments)
+
+	thinking, err := provider.parseResponsesStreamChunk([]byte(`{"type":"response.reasoning_summary_text.delta","item_id":"rs-1","delta":"considering"}`))
+	require.NoError(t, err)
+	require.NotNil(t, thinking)
+	require.NotNil(t, thinking.Thinking)
+	assert.Equal(t, "considering", thinking.Thinking.Content)
+	require.NotNil(t, thinking.Delta)
+	require.NotNil(t, thinking.Delta.Thinking)
+}
