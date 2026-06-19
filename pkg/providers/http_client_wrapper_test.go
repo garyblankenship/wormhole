@@ -172,6 +172,11 @@ func TestHTTPClientWrapperErrorHelpers(t *testing.T) {
 		t.Fatalf("timeout error = %T %[1]v, want Wormhole timeout", err)
 	}
 
+	err = wrapper.handleRequestError(context.Background(), errors.New("dial tcp 127.0.0.1:8000: connect: operation not permitted"))
+	if !strings.Contains(err.Error(), "operation not permitted") {
+		t.Fatalf("network error = %v, want low-level cause in top-level string", err)
+	}
+
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 	if err := wrapper.handleRequestError(ctx, errors.New("network")); !errors.Is(err, context.Canceled) {

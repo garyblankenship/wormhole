@@ -1,5 +1,17 @@
 # Changelog
 
+## v1.16.1 (2026-06-19)
+
+### Features
+- add first-class no-auth local OpenAI-compatible setup and smoke diagnostics
+
+### Fixes
+- preserve low-level network causes in top-level provider errors
+- skip OpenAI key-prefix validation for custom OpenAI-compatible base URLs
+
+### Other
+- document local-compatible base URL expectations and retry behavior
+
 ## v1.16.0 (2026-06-14)
 
 ### Features

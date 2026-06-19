@@ -41,7 +41,11 @@ func NewBaseProviderWithAuth(name string, providerConfig types.ProviderConfig, t
 	}
 
 	if authStrategy == nil {
-		authStrategy = &BearerAuthStrategy{}
+		if providerConfig.NoAuth {
+			authStrategy = &NoAuthStrategy{}
+		} else {
+			authStrategy = &BearerAuthStrategy{}
+		}
 	}
 
 	bp := &BaseProvider{

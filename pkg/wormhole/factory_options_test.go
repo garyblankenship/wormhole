@@ -107,6 +107,15 @@ func TestFactoryProviderConstructors(t *testing.T) {
 	}
 	_ = lmstudio.Close()
 
+	local, err := factory.LocalOpenAI("http://localhost:8000/v1")
+	if err != nil {
+		t.Fatalf("LocalOpenAI returned error: %v", err)
+	}
+	if local.config.DefaultProvider != "local" || !local.config.Providers["local"].NoAuth || !local.config.Providers["local"].DynamicModels {
+		t.Fatalf("LocalOpenAI config = %#v", local.config)
+	}
+	_ = local.Close()
+
 	openrouter, err := factory.OpenRouter("router-key")
 	if err != nil {
 		t.Fatalf("OpenRouter returned error: %v", err)
@@ -140,6 +149,9 @@ func TestFactoryEnvironmentAndMiddlewareOptions(t *testing.T) {
 	}
 	if _, err := factory.LMStudio(); err == nil {
 		t.Fatal("LMStudio without base URL returned nil error")
+	}
+	if _, err := factory.LocalOpenAI(""); err == nil {
+		t.Fatal("LocalOpenAI without base URL returned nil error")
 	}
 	if _, err := factory.OpenRouter(); err == nil {
 		t.Fatal("OpenRouter without API key returned nil error")
@@ -190,6 +202,7 @@ func TestOptionHelpersAndConfigWarnings(t *testing.T) {
 		WithDiscoveryConfig(discovery.DiscoveryConfig{OfflineMode: true}),
 		WithOfflineMode(true),
 		WithOpenAICompatible("vllm", "http://localhost:8000/v1", types.ProviderConfig{}),
+		WithLocalOpenAI("http://localhost:8000/v1"),
 		WithVLLM(types.ProviderConfig{BaseURL: "http://localhost:8000/v1"}),
 		WithOllamaOpenAI(types.ProviderConfig{BaseURL: "http://localhost:11434/v1"}),
 		WithProviderFromEnv("openai"),
@@ -209,7 +222,7 @@ func TestOptionHelpersAndConfigWarnings(t *testing.T) {
 	if cfg.DiscoveryConfig.CacheTTL == 0 || cfg.DiscoveryConfig.FileCachePath == "" || !cfg.DiscoveryConfig.EnableFileCache {
 		t.Fatalf("discovery defaults not preserved for partial config: %#v", cfg.DiscoveryConfig)
 	}
-	for _, provider := range []string{"openai", "anthropic", "gemini", "groq", "mistral", "openrouter", "vllm", "ollama-openai"} {
+	for _, provider := range []string{"openai", "anthropic", "gemini", "groq", "mistral", "openrouter", "local", "vllm", "ollama-openai"} {
 		if _, ok := cfg.Providers[provider]; !ok {
 			t.Fatalf("provider %q not configured by options", provider)
 		}

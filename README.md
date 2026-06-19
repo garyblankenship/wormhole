@@ -105,6 +105,7 @@ does not need a second garage.
 | Anthropic | `WithAnthropic(key)` | text, streaming, structured output, tools, vision input |
 | Gemini | `WithGemini(key)` | text, streaming, structured output, embeddings, images, tools, vision input |
 | Ollama | `WithOllama(config)` | text, streaming, structured output, embeddings, local model helpers |
+| Local OpenAI-compatible | `WithLocalOpenAI(baseURL)` or `QuickLocalOpenAI(baseURL)` | no-auth local text and streaming |
 | OpenRouter | `WithOpenAICompatible(...)` or `QuickOpenRouter()` | OpenAI-compatible text, streaming, structured output, tools where supported |
 | Groq | `WithGroq(key)` | OpenAI-compatible text and streaming |
 | Mistral | `WithMistral(config)` | OpenAI-compatible text and streaming |
@@ -126,6 +127,43 @@ client := wormhole.New(
 	wormhole.WithOpenAIResponses(os.Getenv("OPENAI_API_KEY")),
 )
 ```
+
+For local OpenAI-compatible servers, use the dedicated local helper. It
+registers provider name `local`, makes it the default when no default provider
+is already set, skips authentication, enables dynamic model names, and disables
+automatic retries unless you pass retry settings explicitly:
+
+```go
+client := wormhole.New(
+	wormhole.WithLocalOpenAI("http://127.0.0.1:8000/v1"),
+)
+
+resp, err := client.Text().
+	Model("default").
+	Prompt("hello").
+	Generate(ctx)
+```
+
+Pass the OpenAI-compatible API root as the base URL. Wormhole appends
+`/chat/completions`, so local servers usually need `http://host:port/v1`, not
+just `http://host:port`. Use `types.ProviderConfig{APIKey: "..."}`
+or `WithOpenAICompatible(...)` when the compatible endpoint expects bearer auth.
+`WithOpenAI(key, types.ProviderConfig{BaseURL: ...})` still names the provider
+`openai`; when the base URL is not `api.openai.com`, Wormhole treats the key as
+OpenAI-compatible and does not enforce the `sk-` OpenAI key prefix.
+
+For endpoint diagnostics, run one built-in smoke request:
+
+```go
+result, err := wormhole.RunOpenAICompatibleSmoke(ctx, wormhole.OpenAICompatibleSmokeConfig{
+	BaseURL: "http://127.0.0.1:8000/v1",
+	Model:   "default",
+})
+```
+
+The smoke uses the same adapter as normal generation, sends one chat completion,
+parses the response, and returns errors that include the underlying network
+cause when connection setup fails.
 
 ### What The Portal Does Not Do
 

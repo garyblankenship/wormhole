@@ -193,6 +193,22 @@ client := wormhole.New(
 )
 ```
 
+#### WithLocalOpenAI
+
+Configure a no-auth local OpenAI-compatible provider named `local`:
+
+```go
+client := wormhole.New(
+    wormhole.WithLocalOpenAI("http://localhost:8000/v1"),
+)
+```
+
+`WithLocalOpenAI` enables dynamic models and disables automatic retries by
+default for faster local diagnostics. Pass the OpenAI-compatible API root;
+Wormhole appends `/chat/completions`, so most local servers should use
+`http://host:port/v1`. If the server requires bearer auth, use
+`WithOpenAICompatible("local", baseURL, types.ProviderConfig{APIKey: key})`.
+
 #### WithVLLM
 
 Configure a vLLM deployment:

@@ -35,6 +35,11 @@ func registerOpenAICompatible(c *Config, name string, cfg types.ProviderConfig) 
 	c.CustomFactories[name] = namedOpenAICompatibleFactory(name)
 }
 
+func disableProviderRetries(config *types.ProviderConfig) {
+	maxRetries := 0
+	config.MaxRetries = &maxRetries
+}
+
 // WithDefaultProvider sets the default provider for requests.
 func WithDefaultProvider(name string) Option {
 	return func(c *Config) {
@@ -122,6 +127,28 @@ func WithOpenAICompatible(name, baseURL string, config types.ProviderConfig) Opt
 	return func(c *Config) {
 		config.BaseURL = baseURL
 		registerOpenAICompatible(c, name, config)
+	}
+}
+
+// WithLocalOpenAI configures a no-auth local OpenAI-compatible endpoint under
+// provider name "local". Pass the OpenAI-compatible API root, usually
+// "http://host:port/v1"; Wormhole appends "/chat/completions".
+func WithLocalOpenAI(baseURL string, config ...types.ProviderConfig) Option {
+	return func(c *Config) {
+		var cfg types.ProviderConfig
+		if len(config) > 0 {
+			cfg = config[0]
+		}
+		cfg.BaseURL = baseURL
+		cfg.NoAuth = true
+		cfg.DynamicModels = true
+		if cfg.MaxRetries == nil {
+			disableProviderRetries(&cfg)
+		}
+		registerOpenAICompatible(c, "local", cfg)
+		if c.DefaultProvider == "" {
+			c.DefaultProvider = "local"
+		}
 	}
 }
 

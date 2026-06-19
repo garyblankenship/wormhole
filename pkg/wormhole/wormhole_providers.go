@@ -3,6 +3,7 @@ package wormhole
 import (
 	"fmt"
 	"maps"
+	"net/url"
 	"sort"
 	"strings"
 	"sync/atomic"
@@ -43,6 +44,21 @@ func validateAPIKey(provider, apiKey string) error {
 		}
 	}
 	return nil
+}
+
+func shouldValidateAPIKey(provider string, config types.ProviderConfig) bool {
+	if config.APIKey == "" || config.NoAuth {
+		return false
+	}
+	if provider != providerOpenAI || config.BaseURL == "" {
+		return true
+	}
+
+	parsed, err := url.Parse(config.BaseURL)
+	if err != nil {
+		return true
+	}
+	return strings.EqualFold(parsed.Hostname(), "api.openai.com")
 }
 
 func openAIFactory() types.ProviderFactory {
@@ -249,7 +265,7 @@ func (p *Wormhole) createProviderWithConfig(name string, config types.ProviderCo
 		return nil, err
 	}
 
-	if config.APIKey != "" {
+	if shouldValidateAPIKey(name, config) {
 		if err := validateAPIKey(name, config.APIKey); err != nil {
 			return nil, fmt.Errorf("invalid API key for provider %s: %w", name, err)
 		}
@@ -366,6 +382,9 @@ func validateConfig(c *Config) []string {
 
 	for name, cfg := range c.Providers {
 		profile, knownProfile := providerProfile(name)
+		if cfg.NoAuth {
+			continue
+		}
 		if (!knownProfile || !profile.Local) && cfg.APIKey == "" {
 			warnings = append(warnings, fmt.Sprintf(
 				"Provider '%s' is configured but has no API key. Requests will likely fail.",

@@ -100,6 +100,15 @@ func (f *SimpleFactory) LMStudio(baseURL ...string) (*Wormhole, error) {
 	), nil
 }
 
+// LocalOpenAI creates a no-auth OpenAI-compatible local client. The base URL
+// should include the compatible API root, usually http://host:port/v1.
+func (f *SimpleFactory) LocalOpenAI(baseURL string, config ...types.ProviderConfig) (*Wormhole, error) {
+	if baseURL == "" {
+		return nil, fmt.Errorf("local OpenAI-compatible base URL is required")
+	}
+	return New(WithLocalOpenAI(baseURL, config...)), nil
+}
+
 // OpenRouter creates a Wormhole client configured for OpenRouter (multi-provider gateway)
 func (f *SimpleFactory) OpenRouter(apiKey ...string) (*Wormhole, error) {
 	key := f.getProfileAPIKey(apiKey, providerOpenRouter)
@@ -249,6 +258,11 @@ func QuickOllama(baseURL ...string) (*Wormhole, error) {
 // QuickLMStudio creates an LMStudio client with minimal configuration
 func QuickLMStudio(baseURL ...string) (*Wormhole, error) {
 	return Quick.LMStudio(baseURL...)
+}
+
+// QuickLocalOpenAI creates a no-auth OpenAI-compatible local client.
+func QuickLocalOpenAI(baseURL string, config ...types.ProviderConfig) (*Wormhole, error) {
+	return Quick.LocalOpenAI(baseURL, config...)
 }
 
 // QuickGroq creates a Groq client with minimal configuration

@@ -31,6 +31,9 @@ func WrapProviderError(providerName string, code ErrorCode, message string, caus
 	err := NewWormholeError(code, message, isRetryableCode(code))
 	err.Provider = providerName
 	err.Cause = cause
+	if cause != nil {
+		err.Details = cause.Error()
+	}
 	return err
 }
 

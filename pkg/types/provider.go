@@ -155,6 +155,7 @@ type ProviderConfig struct {
 	APIKey        string            `json:"api_key"`
 	BaseURL       string            `json:"base_url,omitempty"`
 	Headers       map[string]string `json:"headers,omitempty"`
+	NoAuth        bool              `json:"no_auth,omitempty"`
 	Timeout       int               `json:"timeout,omitempty"`
 	DynamicModels bool              `json:"dynamic_models,omitempty"` // Skip local registry validation for providers with dynamic model catalogs
 	Params        map[string]any    `json:"params,omitempty"`         // Provider-specific parameters for customization
@@ -225,6 +226,13 @@ func (c ProviderConfig) WithBaseURL(url string) ProviderConfig {
 	return c
 }
 
+// WithNoAuth disables provider authentication. Use this for local
+// OpenAI-compatible endpoints that do not expect an Authorization header.
+func (c ProviderConfig) WithNoAuth() ProviderConfig {
+	c.NoAuth = true
+	return c
+}
+
 // WithHeaders adds custom HTTP headers to all requests.
 // Headers are merged with any existing headers.
 func (c ProviderConfig) WithHeaders(headers map[string]string) ProviderConfig {
@@ -269,6 +277,13 @@ func (c ProviderConfig) WithTimeoutDuration(d time.Duration) ProviderConfig {
 func (c ProviderConfig) WithRetries(maxRetries int, delay time.Duration) ProviderConfig {
 	c.MaxRetries = &maxRetries
 	c.RetryDelay = &delay
+	return c
+}
+
+// WithNoRetries disables automatic HTTP retries for this provider.
+func (c ProviderConfig) WithNoRetries() ProviderConfig {
+	maxRetries := 0
+	c.MaxRetries = &maxRetries
 	return c
 }
 
