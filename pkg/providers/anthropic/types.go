@@ -44,17 +44,32 @@ type contentBlockDeltaEvent struct {
 	Type  string `json:"type"`
 	Index int    `json:"index"`
 	Delta struct {
-		Type      string `json:"type"`
-		Text      string `json:"text"`
-		Thinking  string `json:"thinking"`
-		Signature string `json:"signature"`
+		Type        string `json:"type"`
+		Text        string `json:"text"`
+		Thinking    string `json:"thinking"`
+		Signature   string `json:"signature"`
+		PartialJSON string `json:"partial_json"` // input_json_delta tool-arg fragment
 	} `json:"delta"`
 }
-
 type messageDeltaEvent struct {
 	Type  string `json:"type"`
 	Delta struct {
 		StopReason string       `json:"stop_reason,omitempty"`
 		Usage      messageUsage `json:"usage,omitempty"`
 	} `json:"delta"`
+}
+
+type contentBlockStartEvent struct {
+	Type         string `json:"type"`
+	Index        int    `json:"index"`
+	ContentBlock struct {
+		Type string `json:"type"` // "tool_use" for tool calls
+		ID   string `json:"id"`
+		Name string `json:"name"`
+	} `json:"content_block"`
+}
+
+type contentBlockStopEvent struct {
+	Type  string `json:"type"`
+	Index int    `json:"index"`
 }
