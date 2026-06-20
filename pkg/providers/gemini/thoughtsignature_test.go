@@ -36,7 +36,7 @@ func TestThoughtSignatureRoundTrip(t *testing.T) {
 
 		// Replay: feed the parsed ToolCall back through the outgoing transform.
 		assistantMsg := &types.AssistantMessage{ToolCalls: result.ToolCalls}
-		parts, err := g.transformMessageToParts(assistantMsg)
+		parts, err := g.transformMessageToParts(assistantMsg, "")
 		require.NoError(t, err)
 		require.Len(t, parts, 1)
 		assert.Equal(t, sig, parts[0]["thoughtSignature"]) // REPLAY
@@ -58,7 +58,7 @@ func TestThoughtSignatureRoundTrip(t *testing.T) {
 		assert.Empty(t, result.ToolCalls[0].ThoughtSignature) // no leak
 
 		assistantMsg := &types.AssistantMessage{ToolCalls: result.ToolCalls}
-		parts, err := g.transformMessageToParts(assistantMsg)
+		parts, err := g.transformMessageToParts(assistantMsg, "")
 		require.NoError(t, err)
 		require.Len(t, parts, 1)
 		_, hasKey := parts[0]["thoughtSignature"]
