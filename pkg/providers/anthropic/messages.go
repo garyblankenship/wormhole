@@ -188,6 +188,19 @@ func (p *Provider) buildContent(msg types.Message) []map[string]any {
 		}
 	}
 
+	// Anthropic requires the prior turn's signed thinking block echoed back
+	// (and it MUST be the first block) when extended thinking is interleaved
+	// with tool_use. Prepend it when present.
+	if assistantMsg, ok := msg.(*types.AssistantMessage); ok &&
+		assistantMsg.Thinking != nil && assistantMsg.Thinking.Signature != "" {
+		thinkingBlock := map[string]any{
+			"type":      contentTypeThinking,
+			"thinking":  assistantMsg.Thinking.Content,
+			"signature": assistantMsg.Thinking.Signature,
+		}
+		contentParts = append([]map[string]any{thinkingBlock}, contentParts...)
+	}
+
 	return contentParts
 }
 

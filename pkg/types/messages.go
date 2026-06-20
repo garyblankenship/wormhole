@@ -111,6 +111,10 @@ func NewUserMessage(content string) *UserMessage {
 type AssistantMessage struct {
 	Content   string     `json:"content"`
 	ToolCalls []ToolCall `json:"tool_calls,omitempty"`
+	// Thinking carries the provider's signed reasoning block from the prior
+	// turn. Anthropic requires the signed thinking block echoed back when
+	// extended thinking is interleaved with tool_use; nil = nothing replayed.
+	Thinking *Thinking `json:"thinking,omitempty"`
 }
 
 func (m *AssistantMessage) GetRole() Role {
@@ -126,10 +130,12 @@ func (m *AssistantMessage) MarshalJSON() ([]byte, error) {
 		Role      Role       `json:"role"`
 		Content   string     `json:"content"`
 		ToolCalls []ToolCall `json:"tool_calls,omitempty"`
+		Thinking  *Thinking  `json:"thinking,omitempty"`
 	}{
 		Role:      RoleAssistant,
 		Content:   m.Content,
 		ToolCalls: m.ToolCalls,
+		Thinking:  m.Thinking,
 	})
 }
 

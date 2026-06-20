@@ -234,10 +234,12 @@ func (b *AgentBuilder) Run(ctx context.Context, prompt string) (*AgentResult, er
 		steps = append(steps, event)
 		b.fireStepEvent(event)
 
-		// Build conversation continuation
+		// Build conversation continuation. Thinking carries the signed reasoning
+		// block so Anthropic extended-thinking + tool_use replay doesn't hard-400.
 		assistantMsg := &types.AssistantMessage{
 			Content:   resp.Text,
 			ToolCalls: resp.ToolCalls,
+			Thinking:  resp.Thinking,
 		}
 
 		toolResultMsg := executor.BuildToolResultMessage(toolResults)

@@ -390,10 +390,13 @@ func (e *ToolExecutor) ExecuteWithTools(
 		// Execute all tool calls
 		toolResults := e.ExecuteAll(ctx, response.ToolCalls)
 
-		// Build assistant message with the tool calls (for conversation history)
+		// Build assistant message with the tool calls (for conversation history).
+		// Thinking carries the provider's signed reasoning block so Anthropic
+		// extended-thinking + tool_use round-trips don't hard-400 on replay.
 		assistantMessage := &types.AssistantMessage{
 			Content:   response.Text,
 			ToolCalls: response.ToolCalls,
+			Thinking:  response.Thinking,
 		}
 
 		// Build tool result message
