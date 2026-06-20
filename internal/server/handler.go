@@ -71,6 +71,23 @@ func (p *proxy) handleChatCompletions(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 			msgs = append(msgs, types.NewToolResultMessage(m.ToolCallID, m.Content.Text))
+		case "developer":
+			// OpenAI's "developer" role is the system-tier instruction in newer
+			// models; map it to a system message.
+			if len(m.Content.Media) > 0 {
+				writeError(w, http.StatusBadRequest, "unsupported_content_part",
+					"image content parts are only supported on user messages", "invalid_request_error")
+				return
+			}
+			msgs = append(msgs, types.NewSystemMessage(m.Content.Text))
+		case "function":
+			// Legacy OpenAI "function" role is a tool result; map it like "tool".
+			if len(m.Content.Media) > 0 {
+				writeError(w, http.StatusBadRequest, "unsupported_content_part",
+					"image content parts are only supported on user messages", "invalid_request_error")
+				return
+			}
+			msgs = append(msgs, types.NewToolResultMessage(m.ToolCallID, m.Content.Text))
 		default:
 			if len(m.Content.Media) > 0 {
 				writeError(w, http.StatusBadRequest, "unsupported_content_part",

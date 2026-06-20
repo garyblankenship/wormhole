@@ -87,3 +87,29 @@ func TestProxyMapsUpstreamErrorStatus(t *testing.T) {
 		})
 	}
 }
+
+func TestProxyMapsDeveloperAndFunctionRoles(t *testing.T) {
+	t.Parallel()
+
+	prov := newCapturingTextProvider("openai")
+	p := newCapturingTestProxy(prov)
+
+	body := `{"model":"gpt-test","messages":[` +
+		`{"role":"developer","content":"be terse"},` +
+		`{"role":"function","tool_call_id":"call_1","content":"result"},` +
+		`{"role":"user","content":"hi"}` +
+		`]}`
+
+	rec := performRequest(p, http.MethodPost, "/v1/chat/completions", body)
+	require.Equal(t, http.StatusOK, rec.Code)
+
+	msgs := prov.lastRequest().Messages
+	require.Len(t, msgs, 3)
+	assert.Equal(t, types.RoleSystem, msgs[0].GetRole(), "developer role must map to system")
+	assert.Equal(t, types.RoleTool, msgs[1].GetRole(), "function role must map to tool result")
+	assert.Equal(t, types.RoleUser, msgs[2].GetRole())
+
+	toolMsg, ok := msgs[1].(*types.ToolResultMessage)
+	require.True(t, ok, "function message must be a *types.ToolResultMessage")
+	assert.Equal(t, "call_1", toolMsg.ToolCallID)
+}
