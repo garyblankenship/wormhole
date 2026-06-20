@@ -159,12 +159,26 @@ func (p *Provider) buildContent(msg types.Message) []map[string]any {
 	// Handle assistant messages with tool calls
 	if assistantMsg, ok := msg.(*types.AssistantMessage); ok && len(assistantMsg.ToolCalls) > 0 {
 		for _, toolCall := range assistantMsg.ToolCalls {
-			var input map[string]any
-			_ = utils.UnmarshalAnthropicToolArgs(toolCall.Function.Arguments, &input)
+			// types.ToolCall carries top-level Name/Arguments (Gemini-origin and
+			// public map-form calls) OR an optional *ToolCallFunction (OpenAI-form).
+			// Never deref a nil Function.
+			name := toolCall.Name
+			if name == "" && toolCall.Function != nil {
+				name = toolCall.Function.Name
+			}
+
+			input := toolCall.Arguments
+			if input == nil {
+				input = map[string]any{}
+				if toolCall.Function != nil {
+					_ = utils.UnmarshalAnthropicToolArgs(toolCall.Function.Arguments, &input)
+				}
+			}
+
 			contentParts = append(contentParts, map[string]any{
 				"type":  "tool_use",
 				"id":    toolCall.ID,
-				"name":  toolCall.Function.Name,
+				"name":  name,
 				"input": input,
 			})
 		}
