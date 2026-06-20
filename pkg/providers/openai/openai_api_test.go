@@ -156,6 +156,56 @@ func TestProviderStructuredJSONAndTools(t *testing.T) {
 	})
 }
 
+func TestStructuredStrictEmitsJSONSchema(t *testing.T) {
+	t.Parallel()
+
+	schema := map[string]any{
+		"type": "object",
+		"properties": map[string]any{
+			"name": map[string]any{"type": "string"},
+		},
+	}
+
+	provider, _ := newOpenAITestProvider(t, func(w http.ResponseWriter, r *http.Request) {
+		var req map[string]any
+		require.NoError(t, json.NewDecoder(r.Body).Decode(&req))
+
+		responseFormat, ok := req["response_format"].(map[string]any)
+		require.True(t, ok)
+		assert.Equal(t, "json_schema", responseFormat["type"])
+
+		jsonSchema, ok := responseFormat["json_schema"].(map[string]any)
+		require.True(t, ok)
+		assert.Equal(t, "person", jsonSchema["name"])
+		assert.Equal(t, true, jsonSchema["strict"])
+		schemaData, ok := jsonSchema["schema"].(map[string]any)
+		require.True(t, ok)
+		assert.Equal(t, schema, schemaData)
+
+		w.Header().Set("Content-Type", "application/json")
+		require.NoError(t, json.NewEncoder(w).Encode(chatCompletionResponse{
+			ID:      "chatcmpl-strict-json-schema",
+			Created: 100,
+			Model:   "gpt-4o-mini",
+			Choices: []struct {
+				Index        int     `json:"index"`
+				Message      message `json:"message"`
+				FinishReason string  `json:"finish_reason"`
+			}{{Message: message{Role: "assistant", Content: `{"name":"Ada"}`}, FinishReason: "stop"}},
+		}))
+	})
+
+	resp, err := provider.Structured(context.Background(), types.StructuredRequest{
+		BaseRequest: types.BaseRequest{Model: "gpt-4o-mini"},
+		Messages:    []types.Message{types.NewUserMessage("strict")},
+		Mode:        types.StructuredModeStrict,
+		Schema:      schema,
+		SchemaName:  "person",
+	})
+	require.NoError(t, err)
+	assert.Equal(t, map[string]any{"name": "Ada"}, resp.Data)
+}
+
 func TestProviderEmbeddingsImagesAndAudio(t *testing.T) {
 	t.Parallel()
 	provider, _ := newOpenAITestProvider(t, func(w http.ResponseWriter, r *http.Request) {

@@ -165,6 +165,26 @@ func (p *Provider) Structured(ctx context.Context, request types.StructuredReque
 	// Determine the best method for structured output
 	if request.Mode == types.StructuredModeJSON {
 		textRequest.ResponseFormat = map[string]string{"type": "json_object"}
+	} else if request.Mode == types.StructuredModeStrict {
+		// Native OpenAI strict structured output: emit a json_schema response_format.
+		// This is the Chat Completions (nested) shape; buildResponsesPayload reshapes
+		// it to the flattened Responses API shape when that transport is active.
+		schemaMap, err := schemaToMap(request.Schema)
+		if err != nil {
+			return nil, err
+		}
+		name := request.SchemaName
+		if name == "" {
+			name = "structured_output"
+		}
+		textRequest.ResponseFormat = map[string]any{
+			"type": "json_schema",
+			"json_schema": map[string]any{
+				"name":   name,
+				"strict": true,
+				"schema": schemaMap,
+			},
+		}
 	} else {
 		// Use function calling for structured output
 		tool, err := p.schemaToTool(request.Schema, request.SchemaName)
@@ -185,7 +205,7 @@ func (p *Provider) Structured(ctx context.Context, request types.StructuredReque
 
 	// Extract structured data from response
 	var data any
-	if request.Mode == types.StructuredModeJSON {
+	if request.Mode == types.StructuredModeJSON || request.Mode == types.StructuredModeStrict {
 		err = json.Unmarshal([]byte(response.Text), &data)
 	} else if len(response.ToolCalls) > 0 {
 		argsBytes, marshalErr := pool.Marshal(response.ToolCalls[0].Arguments)

@@ -423,18 +423,27 @@ func (p *Provider) transformToolChoice(choice *types.ToolChoice) any {
 	return sharedResult
 }
 
+// schemaToMap converts a Schema (any) into a map[string]any via JSON round-trip.
+// Single source of truth for schema->wire-map, reused by structured-output paths.
+func schemaToMap(schema types.Schema) (map[string]any, error) {
+	schemaBytes, err := json.Marshal(schema)
+	if err != nil {
+		return nil, err
+	}
+	var m map[string]any
+	if err := json.Unmarshal(schemaBytes, &m); err != nil {
+		return nil, err
+	}
+	return m, nil
+}
+
 func (p *Provider) schemaToTool(schema types.Schema, name string) (*types.Tool, error) {
 	if name == "" {
 		name = "structured_output"
 	}
 
-	// Convert Schema interface to map[string]any
-	schemaBytes, err := json.Marshal(schema)
+	params, err := schemaToMap(schema)
 	if err != nil {
-		return nil, err
-	}
-	var params map[string]any
-	if err := json.Unmarshal(schemaBytes, &params); err != nil {
 		return nil, err
 	}
 
