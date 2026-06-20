@@ -393,11 +393,16 @@ func (g *Gemini) transformTextResponse(response *geminiTextResponse) (*types.Tex
 
 	// Extract text and tool calls
 	var text string
+	var thinking string
 	var toolCalls []types.ToolCall
 
 	for idx, part := range candidate.Content.Parts {
 		if part.Text != "" {
-			text += part.Text
+			if part.Thought {
+				thinking += part.Text
+			} else {
+				text += part.Text
+			}
 		}
 		if part.FunctionCall != nil {
 			// Gemini provides no tool-call IDs and the function name alone
@@ -418,6 +423,10 @@ func (g *Gemini) transformTextResponse(response *geminiTextResponse) (*types.Tex
 		Text:         text,
 		ToolCalls:    toolCalls,
 		FinishReason: finishReason,
+	}
+
+	if thinking != "" {
+		result.Thinking = &types.Thinking{Content: thinking}
 	}
 
 	result.Usage = convertUsage(response.UsageMetadata)
@@ -552,10 +561,17 @@ func (g *Gemini) processStreamCandidate(candidate candidate) []types.TextChunk {
 
 	for idx, part := range candidate.Content.Parts {
 		if part.Text != "" {
-			chunks = append(chunks, types.TextChunk{
-				Text:  part.Text,
-				Model: "gemini",
-			})
+			if part.Thought {
+				chunks = append(chunks, types.TextChunk{
+					Thinking: &types.Thinking{Content: part.Text},
+					Model:    "gemini",
+				})
+			} else {
+				chunks = append(chunks, types.TextChunk{
+					Text:  part.Text,
+					Model: "gemini",
+				})
+			}
 		}
 		if part.FunctionCall != nil {
 			// Synthetic unique-per-part ID (Gemini provides none); see

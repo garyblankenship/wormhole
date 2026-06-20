@@ -24,6 +24,7 @@ type content struct {
 
 type part struct {
 	Text             string            `json:"text,omitempty"`
+	Thought          bool              `json:"thought,omitempty"` // Gemini thinking models flag reasoning parts
 	InlineData       *inlineData       `json:"inlineData,omitempty"`
 	FunctionCall     *functionCall     `json:"functionCall,omitempty"`
 	FunctionResponse *functionResponse `json:"functionResponse,omitempty"`

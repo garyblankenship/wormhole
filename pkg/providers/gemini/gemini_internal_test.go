@@ -185,3 +185,55 @@ func TestProcessStreamCandidate_SyntheticToolCallIDs(t *testing.T) {
 	}
 	assert.Equal(t, []string{"gemini-call-0-lookup", "gemini-call-1-lookup"}, ids)
 }
+
+func TestTransformTextResponse_ThoughtPartsRouteToThinking(t *testing.T) {
+	t.Parallel()
+
+	provider := New("test-key", types.ProviderConfig{})
+	resp := &geminiTextResponse{
+		Candidates: []candidate{
+			{
+				Content: content{
+					Parts: []part{
+						{Text: "reasoning", Thought: true},
+						{Text: "answer"},
+					},
+				},
+			},
+		},
+	}
+
+	result, err := provider.transformTextResponse(resp)
+	assert.NoError(t, err)
+	assert.Equal(t, "answer", result.Text)
+	if assert.NotNil(t, result.Thinking) {
+		assert.Equal(t, "reasoning", result.Thinking.Content)
+	}
+}
+
+func TestParseStreamEvent_ThoughtPartsRouteToThinkingChunks(t *testing.T) {
+	t.Parallel()
+
+	provider := New("test-key", types.ProviderConfig{})
+
+	chunks, done, err := provider.parseStreamEvent(`{"candidates":[{"content":{"parts":[{"text":"reasoning","thought":true},{"text":"answer"}],"role":"model"},"finishReason":"STOP"}]}`)
+	assert.NoError(t, err)
+	assert.False(t, done)
+
+	var thinkingFound bool
+	var textChunkFound bool
+	for _, chunk := range chunks {
+		if chunk.Thinking != nil {
+			thinkingFound = true
+			assert.Equal(t, "reasoning", chunk.Thinking.Content)
+		}
+		if chunk.Text != "" {
+			assert.NotContains(t, chunk.Text, "reasoning")
+			if chunk.Text == "answer" {
+				textChunkFound = true
+			}
+		}
+	}
+	assert.True(t, thinkingFound)
+	assert.True(t, textChunkFound)
+}
