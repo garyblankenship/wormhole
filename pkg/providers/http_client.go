@@ -460,14 +460,25 @@ func (w *HTTPClientWrapper) handleRequestError(ctx context.Context, err error) e
 func (w *HTTPClientWrapper) buildErrorResponse(statusCode int, status, url string, respBody []byte) error {
 	errorCode := w.mapHTTPStatusToErrorCode(statusCode)
 	errorMessage := w.extractErrorMessage(statusCode, status, respBody)
+	retryable := utils.IsRetryableStatusCode(statusCode)
+	reportedStatusCode := statusCode
+
+	details := fmt.Sprintf("URL: %s\nResponse: %s", w.maskAPIKeyInURL(url), string(respBody))
+	if typeCode := extractErrorTypeCode(respBody); typeCode != "" {
+		details = typeCode + "\n" + details
+		if strings.Contains(typeCode, "type=insufficient_quota") {
+			retryable = false
+			reportedStatusCode = 0
+		}
+	}
 
 	wormholeErr := types.NewWormholeError(
 		errorCode,
 		errorMessage,
-		utils.IsRetryableStatusCode(statusCode),
-	).WithDetails(fmt.Sprintf("URL: %s\nResponse: %s", w.maskAPIKeyInURL(url), string(respBody)))
+		retryable,
+	).WithDetails(details)
 
-	wormholeErr.StatusCode = statusCode
+	wormholeErr.StatusCode = reportedStatusCode
 	wormholeErr.Provider = w.providerName
 	return wormholeErr
 }
@@ -491,6 +502,53 @@ func (w *HTTPClientWrapper) extractErrorMessage(statusCode int, status string, r
 	}
 
 	return errorMessage
+}
+
+// extractErrorTypeCode pulls the provider's structured error type/code/status
+// from the error body so the classifier (ClassifyError) can distinguish e.g.
+// an OpenAI 429 "insufficient_quota" (quota cap, non-retryable) from a plain
+// rate-limit 429. Handles the three provider shapes:
+//
+//	OpenAI:    {"error":{"type":...,"code":...}}
+//	Anthropic: {"type":"error","error":{"type":...}}
+//	Gemini:    {"error":{"code":...,"status":...}}
+//
+// Returns "" when nothing structured is present.
+func extractErrorTypeCode(respBody []byte) string {
+	if len(respBody) == 0 {
+		return ""
+	}
+	var errorResp map[string]any
+	if err := json.Unmarshal(respBody, &errorResp); err != nil {
+		return ""
+	}
+
+	var parts []string
+	add := func(label string, v any) {
+		switch s := v.(type) {
+		case string:
+			if s != "" {
+				parts = append(parts, label+"="+s)
+			}
+		case float64:
+			parts = append(parts, fmt.Sprintf("%s=%v", label, s))
+		}
+	}
+
+	if errorObj, ok := errorResp["error"].(map[string]any); ok {
+		add("type", errorObj["type"])
+		add("code", errorObj["code"])
+		add("status", errorObj["status"])
+	}
+	// Anthropic carries a top-level "type":"error"; only surface it when the
+	// nested error object did not already provide a type.
+	if !strings.Contains(strings.Join(parts, " "), "type=") {
+		if topType, ok := errorResp["type"].(string); ok && topType != "" && topType != "error" {
+			parts = append(parts, "type="+topType)
+		}
+	}
+
+	return strings.Join(parts, " ")
 }
 
 func (w *HTTPClientWrapper) parseResponse(respBody []byte, result any) error {

@@ -192,3 +192,66 @@ func TestHTTPClientWrapperClose(t *testing.T) {
 		t.Fatalf("Close returned error: %v", err)
 	}
 }
+
+// FIX: buildErrorResponse must surface the provider's structured error
+// type/code in Details so ClassifyError can tell an OpenAI 429
+// "insufficient_quota" (quota cap) from a plain rate-limit, and an Anthropic
+// "overloaded_error" from a generic 5xx.
+func TestBuildErrorResponseSurfacesProviderTypeCode(t *testing.T) {
+	t.Parallel()
+	w := NewHTTPClientWrapper("test", types.ProviderConfig{}, nil, &NoAuthStrategy{}, nil)
+
+	tests := []struct {
+		name       string
+		statusCode int
+		body       string
+		wantSubstr []string
+	}{
+		{
+			name:       "openai insufficient_quota",
+			statusCode: 429,
+			body:       `{"error":{"message":"You exceeded your quota","type":"insufficient_quota","code":"insufficient_quota"}}`,
+			wantSubstr: []string{"type=insufficient_quota", "code=insufficient_quota"},
+		},
+		{
+			name:       "anthropic overloaded_error",
+			statusCode: 529,
+			body:       `{"type":"error","error":{"type":"overloaded_error","message":"Overloaded"}}`,
+			wantSubstr: []string{"type=overloaded_error"},
+		},
+		{
+			name:       "gemini resource_exhausted",
+			statusCode: 429,
+			body:       `{"error":{"code":429,"status":"RESOURCE_EXHAUSTED","message":"Resource has been exhausted"}}`,
+			wantSubstr: []string{"status=RESOURCE_EXHAUSTED"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			err := w.buildErrorResponse(tt.statusCode, "", "https://example.test", []byte(tt.body))
+			wErr, ok := types.AsWormholeError(err)
+			if !ok {
+				t.Fatalf("expected *types.WormholeError, got %T", err)
+			}
+			for _, want := range tt.wantSubstr {
+				if !strings.Contains(wErr.Details, want) {
+					t.Fatalf("Details %q missing %q", wErr.Details, want)
+				}
+			}
+		})
+	}
+}
+
+// FIX: the surfaced type/code must make ClassifyError robust — an OpenAI
+// insufficient_quota 429 classifies as quota, not a retryable rate-limit.
+func TestBuildErrorResponseClassifiesInsufficientQuotaAsQuota(t *testing.T) {
+	t.Parallel()
+	w := NewHTTPClientWrapper("test", types.ProviderConfig{}, nil, &NoAuthStrategy{}, nil)
+	body := `{"error":{"message":"You exceeded your quota","type":"insufficient_quota","code":"insufficient_quota"}}`
+	err := w.buildErrorResponse(429, "", "https://example.test", []byte(body))
+	if got := types.ClassifyError(err); got != types.ErrorClassQuota {
+		t.Fatalf("ClassifyError = %v, want %v", got, types.ErrorClassQuota)
+	}
+}
