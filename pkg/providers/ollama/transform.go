@@ -1,6 +1,7 @@
 package ollama
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"strings"
@@ -127,6 +128,32 @@ func convertMultimodalParts(parts []types.MessagePart) (string, []string) {
 	return strings.Join(textParts, "\n"), images
 }
 
+// extractMediaImages pulls base64-encoded image data from a UserMessage's Media
+// slice into the Ollama `images` wire field. Ollama expects raw base64 (no data:
+// URL prefix). URL-only images (image.URL set) are skipped because Ollama's chat
+// API takes inline base64, not remote URLs.
+func extractMediaImages(media []types.Media) []string {
+	images := make([]string, 0, len(media))
+	for _, m := range media {
+		image, ok := m.(*types.ImageMedia)
+		if !ok {
+			continue
+		}
+		data := image.Base64Data
+		if data == "" && len(image.Data) > 0 {
+			data = base64.StdEncoding.EncodeToString(image.Data)
+		}
+		if data == "" {
+			continue
+		}
+		images = append(images, data)
+	}
+	if len(images) == 0 {
+		return nil
+	}
+	return images
+}
+
 // transformMessages converts internal messages to Ollama format
 func (p *Provider) transformMessages(messages []types.Message, systemPrompt string) []message {
 	capacity := len(messages)
@@ -158,6 +185,17 @@ func (p *Provider) transformMessages(messages []types.Message, systemPrompt stri
 			}
 		default:
 			ollamaMsg.Content = fmt.Sprintf("%v", c)
+		}
+
+		// UserMessage.Media carries images set by the proxy/ImageMedia path,
+		// which the content switch above does not see. Pull them in if the
+		// MessagePart path did not already populate Images.
+		if len(ollamaMsg.Images) == 0 {
+			if userMsg, ok := msg.(*types.UserMessage); ok && len(userMsg.Media) > 0 {
+				if imgs := extractMediaImages(userMsg.Media); len(imgs) > 0 {
+					ollamaMsg.Images = imgs
+				}
+			}
 		}
 
 		result = append(result, ollamaMsg)
