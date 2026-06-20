@@ -171,7 +171,7 @@ func TestPredefinedErrors(t *testing.T) {
 		code      ErrorCode
 		retryable bool
 	}{
-		{"ErrInvalidAPIKey", ErrInvalidAPIKey, ErrorCodeAuth, true},
+		{"ErrInvalidAPIKey", ErrInvalidAPIKey, ErrorCodeAuth, false},
 		{"ErrMissingAPIKey", ErrMissingAPIKey, ErrorCodeAuth, false},
 		{"ErrModelNotFound", ErrModelNotFound, ErrorCodeModel, false},
 		{"ErrModelNotSupported", ErrModelNotSupported, ErrorCodeModel, false},
@@ -205,7 +205,7 @@ func TestHTTPStatusToError(t *testing.T) {
 		expectedCode ErrorCode
 		retryable    bool
 	}{
-		{http.StatusUnauthorized, ErrorCodeAuth, true},
+		{http.StatusUnauthorized, ErrorCodeAuth, false},
 		{http.StatusForbidden, ErrorCodeRateLimit, false},
 		{http.StatusNotFound, ErrorCodeModel, false},
 		{http.StatusTooManyRequests, ErrorCodeRateLimit, true},

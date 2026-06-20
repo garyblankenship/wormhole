@@ -39,7 +39,7 @@ func WrapProviderError(providerName string, code ErrorCode, message string, caus
 
 func isRetryableCode(code ErrorCode) bool {
 	switch code {
-	case ErrorCodeAuth, ErrorCodeRateLimit, ErrorCodeTimeout,
+	case ErrorCodeRateLimit, ErrorCodeTimeout,
 		ErrorCodeProvider, ErrorCodeNetwork:
 		return true
 	default:
@@ -107,7 +107,7 @@ func ModelErrorf(providerName, format string, args ...any) error {
 
 // AuthError returns a WormholeError with ErrorCodeAuth
 func AuthError(providerName, message string, details ...string) error {
-	err := NewWormholeError(ErrorCodeAuth, message, true) // auth errors often retryable
+	err := NewWormholeError(ErrorCodeAuth, message, false) // auth errors do not recover on retry
 	err.Provider = providerName
 	if len(details) > 0 {
 		err.Details = details[0]

@@ -27,7 +27,7 @@ const (
 
 var (
 	// Authentication errors
-	ErrInvalidAPIKey = NewWormholeError(ErrorCodeAuth, "invalid API key", true)
+	ErrInvalidAPIKey = NewWormholeError(ErrorCodeAuth, "invalid API key", false)
 	ErrMissingAPIKey = NewWormholeError(ErrorCodeAuth, "API key is required", false)
 
 	// Model errors
