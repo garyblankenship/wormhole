@@ -122,7 +122,7 @@ func (p *Provider) Stream(ctx context.Context, request types.TextRequest) (<-cha
 		return nil, err
 	}
 
-	return p.stampProvider(utils.ProcessStream(ctx, body, p.parseStreamChunk, 100)), nil
+	return p.stampProvider(p.accumulatingStream(ctx, utils.ProcessStream(ctx, body, p.parseStreamChunk, 100))), nil
 }
 
 // stampProvider sets Provider on the terminal chunk. Sole closer of out;

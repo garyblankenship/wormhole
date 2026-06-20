@@ -358,22 +358,23 @@ func (p *Provider) convertToolCalls(toolCalls []toolCall) []types.ToolCall {
 	result := make([]types.ToolCall, len(toolCalls))
 
 	for i, tc := range toolCalls {
-		// Parse arguments from JSON string to map[string]any
+		// Parse arguments from JSON string to map[string]any. For streaming
+		// fragments tc.Function.Arguments is partial JSON that will not parse;
+		// the accumulator (stream_accumulator.go) stitches fragments by index
+		// and parses once. We always carry the raw fragment string in
+		// Function.Arguments so the accumulator can reassemble it.
 		var argsMap map[string]any
 		if tc.Function.Arguments != "" {
 			if err := json.Unmarshal([]byte(tc.Function.Arguments), &argsMap); err != nil {
-				// If parsing fails, create empty map
-				argsMap = make(map[string]any)
+				argsMap = nil // partial fragment; not a complete arg set
 			}
-		} else {
-			argsMap = make(map[string]any)
 		}
 
 		result[i] = types.ToolCall{
 			ID:        tc.ID,
 			Type:      tc.Type,
-			Name:      tc.Function.Name, // Set top-level Name field
-			Arguments: argsMap,          // Set top-level Arguments field
+			Name:      tc.Function.Name,
+			Arguments: argsMap,
 			Function: &types.ToolCallFunction{
 				Name:      tc.Function.Name,
 				Arguments: tc.Function.Arguments,

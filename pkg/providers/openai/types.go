@@ -24,6 +24,11 @@ type message struct {
 }
 
 type toolCall struct {
+	// Index keys a streaming tool-call fragment. OpenAI streams
+	// tool_calls[].function.arguments in fragments across chunks, all sharing
+	// the same index; nil on non-streaming responses. Pointer so a real index
+	// of 0 is distinguishable from "absent".
+	Index    *int   `json:"index,omitempty"`
 	ID       string `json:"id"`
 	Type     string `json:"type"`
 	Function struct {
