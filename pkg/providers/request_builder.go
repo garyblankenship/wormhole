@@ -392,7 +392,6 @@ func PrepareMessages(messages []types.Message) ([]types.Message, []string, error
 				repaired = append(repaired, msg)
 				continue
 			}
-			// Rebuild the assistant message with only the matched calls.
 			am := *m
 			am.ToolCalls = kept
 			repaired = append(repaired, &am)

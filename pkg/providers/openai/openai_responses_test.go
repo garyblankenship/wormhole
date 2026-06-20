@@ -168,11 +168,12 @@ func TestProviderResponsesAPIPreparesMessages(t *testing.T) {
 			types.NewUserMessage("hel\xfflo"),
 			&types.AssistantMessage{
 				ToolCalls: []types.ToolCall{{
+					ID:        "call-1",
 					Name:      "lookup",
 					Arguments: map[string]any{"q": "ada"},
 				}},
 			},
-			types.NewToolResultMessage("missing-result-id", "tool result"),
+			types.NewToolResultMessage("call-1", "tool result"),
 		},
 	})
 	require.NoError(t, err)

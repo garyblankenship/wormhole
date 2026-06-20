@@ -888,13 +888,16 @@ func TestGeminiProvider_MessageTransformation(t *testing.T) {
 		{
 			name: "tool result message",
 			messages: []types.Message{
+				&types.AssistantMessage{
+					ToolCalls: []types.ToolCall{{ID: "tool_123", Name: "get_weather"}},
+				},
 				&types.ToolResultMessage{
 					ToolCallID: "tool_123",
 					Content:    "Weather result",
 				},
 			},
-			expectedContents: 1,
-			expectedRoles:    []string{"function"},
+			expectedContents: 2,
+			expectedRoles:    []string{"model", "function"},
 		},
 		{
 			name: "assistant with tool calls",
