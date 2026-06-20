@@ -2,7 +2,6 @@ package openai
 
 import (
 	"context"
-	"encoding/json"
 
 	"github.com/garyblankenship/wormhole/pkg/types"
 )
@@ -113,14 +112,7 @@ func (s *streamFragmentAccumulator) finish() []types.ToolCall {
 	}
 	out := make([]types.ToolCall, 0, len(s.calls))
 	for _, acc := range s.calls {
-		argsMap := make(map[string]any)
-		var parseErr error
-		if len(acc.args) > 0 {
-			parseErr = json.Unmarshal(acc.args, &argsMap)
-			if parseErr != nil {
-				argsMap = make(map[string]any)
-			}
-		}
+		argsMap, parseErrMsg := types.ParseToolArgs(string(acc.args), map[string]any{})
 		toolCall := types.ToolCall{
 			ID:        acc.id,
 			Type:      acc.typ,
@@ -131,10 +123,7 @@ func (s *streamFragmentAccumulator) finish() []types.ToolCall {
 				Arguments: string(acc.args),
 			},
 		}
-		if parseErr != nil {
-			toolCall.ArgsInvalid = true
-			toolCall.ArgsParseError = parseErr.Error()
-		}
+		toolCall.MarkArgsError(parseErrMsg)
 		out = append(out, toolCall)
 	}
 	return out

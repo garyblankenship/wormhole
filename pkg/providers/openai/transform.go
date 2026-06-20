@@ -363,14 +363,9 @@ func (p *Provider) convertToolCalls(toolCalls []toolCall) []types.ToolCall {
 		// the accumulator (stream_accumulator.go) stitches fragments by index
 		// and parses once. We always carry the raw fragment string in
 		// Function.Arguments so the accumulator can reassemble it.
-		var argsMap map[string]any
-		var parseErr error
-		if tc.Function.Arguments != "" {
-			parseErr = json.Unmarshal([]byte(tc.Function.Arguments), &argsMap)
-			if parseErr != nil {
-				argsMap = nil // partial fragment; not a complete arg set
-			}
-		}
+		// Empty default nil: an absent arg set stays a nil map here (the streaming
+		// accumulator carries the raw fragment in Function.Arguments and reparses).
+		argsMap, parseErrMsg := types.ParseToolArgs(tc.Function.Arguments, nil)
 
 		toolCall := types.ToolCall{
 			ID:        tc.ID,
@@ -382,10 +377,7 @@ func (p *Provider) convertToolCalls(toolCalls []toolCall) []types.ToolCall {
 				Arguments: tc.Function.Arguments,
 			},
 		}
-		if parseErr != nil {
-			toolCall.ArgsInvalid = true
-			toolCall.ArgsParseError = parseErr.Error()
-		}
+		toolCall.MarkArgsError(parseErrMsg)
 		result[i] = toolCall
 	}
 
