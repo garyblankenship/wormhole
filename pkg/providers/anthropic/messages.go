@@ -148,11 +148,15 @@ func (p *Provider) buildContent(msg types.Message) []map[string]any {
 		})
 	}
 
-	// Handle tool messages
+	// Handle tool messages: Anthropic requires a distinct tool_result block,
+	// not a text block with tool_use_id bolted on.
 	if toolMsg, ok := msg.(*types.ToolMessage); ok {
-		// Tool results are text content with tool_use_id
-		if len(contentParts) > 0 {
-			contentParts[0]["tool_use_id"] = toolMsg.ToolCallID
+		return []map[string]any{
+			{
+				"type":        "tool_result",
+				"tool_use_id": toolMsg.ToolCallID,
+				"content":     toolMsg.Content,
+			},
 		}
 	}
 

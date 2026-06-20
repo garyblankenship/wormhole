@@ -78,3 +78,23 @@ func TestBuildContent_ToolCall_PopulatedFunction(t *testing.T) {
 	require.True(t, ok, "input should be a map")
 	assert.Equal(t, "NYC", input["city"])
 }
+
+// FIX 2: a tool-result message must build exactly one tool_result block
+// (NOT a text block with tool_use_id), per Anthropic's wire format.
+func TestBuildContent_ToolResult(t *testing.T) {
+	t.Parallel()
+	p := &Provider{}
+	msg := &types.ToolMessage{
+		Content:    "72F and sunny",
+		ToolCallID: "call_abc",
+	}
+
+	parts := p.buildContent(msg)
+	require.Len(t, parts, 1, "expected exactly one block")
+	block := parts[0]
+	assert.Equal(t, "tool_result", block["type"])
+	assert.Equal(t, "call_abc", block["tool_use_id"])
+	assert.Equal(t, "72F and sunny", block["content"])
+	_, hasText := block["text"]
+	assert.False(t, hasText, "tool_result block must not carry a text field")
+}
