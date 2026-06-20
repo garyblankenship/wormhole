@@ -1,5 +1,28 @@
 # Changelog
 
+## v1.17.0 (2026-06-20)
+
+### Features
+- Gemini: preserve and replay thinking-model `thoughtSignature` tokens across multi-turn and cross-provider calls, including a sentinel for Gemini-3
+- Gemini: normalize JSON Schema union/nullable types and emit an explicit `type` on every typed-schema node for full structured-output fidelity
+- Anthropic: replay signed thinking blocks on multi-turn, guarded to same-provider origin
+- Flag malformed tool-call arguments (`ArgsInvalid`) instead of silently swallowing them, via a centralized parser in `pkg/types`
+- Add `ValidateMessageSequence` and cross-provider message-sequence repair: orphaned tool calls and stranded tool results are dropped before dispatch
+
+### Fixes
+- Anthropic: emit proper `tool_result` blocks for tool messages; guard nil Function on tool-call replay; capture `message_start` usage on streamed chunks; treat 529 `overloaded_error` as retryable; coalesce consecutive same-role messages into one turn
+- Gemini: request SSE framing (`alt=sse`) on `streamGenerateContent`; surface top-level `usageMetadata` and `cachedContentTokenCount` on the stream path; route thought parts to Thinking instead of answer text; strip the `google/` model prefix; coalesce consecutive same-role messages
+- OpenAI: set `stream_options.include_usage` and capture `cached_tokens` on streamed requests; nil partial args on malformed Responses-API tool calls; deterministically honor a canceled context in the stream send guard
+- Proxy: map the `developer` role to system and `function`/`tool` roles to tool-result messages; map upstream `WormholeError` status onto the HTTP response
+- Ollama: include `UserMessage` media images in the chat payload; route messages through the `PrepareMessages` repair seam
+- Errors: classify `insufficient_quota` 429 as a quota error rather than a retryable rate-limit; make auth errors non-retryable; surface provider error type/code in `Details`
+- Streaming: raise the SSE scanner buffer above 64KB to avoid truncating large events; don't let an empty trailing usage frame clobber real usage
+- Embeddings: backfill response `Model` from the request for OpenAI and Gemini
+
+### Other
+- Centralize tool-call argument parsing and the `ArgsInvalid` contract in `pkg/types/tool_args.go`
+- Expand provider regression coverage (Anthropic, Gemini, Ollama, OpenAI), including golden round-trips for `thoughtSignature` passthrough and message-sequence repair
+
 ## v1.16.1 (2026-06-19)
 
 ### Features
