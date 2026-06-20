@@ -290,3 +290,21 @@ func TestReadLimitedAllowsExactLimit(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, []byte("1234"), data)
 }
+
+func TestStreamPayloadSetsIncludeUsage(t *testing.T) {
+	t.Parallel()
+
+	provider := New(types.ProviderConfig{APIKey: "test-key"})
+	request := types.TextRequest{
+		BaseRequest: types.BaseRequest{Model: "gpt-4o-mini"},
+		Messages:    []types.Message{types.NewUserMessage("hi")},
+	}
+
+	payload := provider.buildChatPayload(&request)
+	payload["stream"] = true
+	payload["stream_options"] = map[string]any{"include_usage": true}
+
+	opts, ok := payload["stream_options"].(map[string]any)
+	require.True(t, ok, "stream_options must be a map")
+	assert.Equal(t, true, opts["include_usage"])
+}

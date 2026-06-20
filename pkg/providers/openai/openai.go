@@ -114,6 +114,9 @@ func (p *Provider) Stream(ctx context.Context, request types.TextRequest) (<-cha
 
 	payload := p.buildChatPayload(&request)
 	payload["stream"] = true
+	// Ask OpenAI to emit a final usage-bearing chunk on streamed responses;
+	// without this, streamed Usage is always nil.
+	payload["stream_options"] = map[string]any{"include_usage": true}
 
 	url := p.chatCompletionsURL()
 
