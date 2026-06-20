@@ -35,6 +35,13 @@ func (p *Provider) accumulatingStream(ctx context.Context, in <-chan types.TextC
 				acc.add(chunk.ToolCalls)
 				chunk.ToolCalls = nil
 			}
+			// The default transformer path also stamps the singular ToolCall
+			// pointer with the same per-fragment call. The plural slice above
+			// already fed the accumulator, so drop the singular to stop the raw
+			// fragment from leaking into MergeTextChunks (which folds singular
+			// ToolCall from every chunk). Without this, fragments surface as N
+			// separate tool calls instead of the one accumulated call.
+			chunk.ToolCall = nil
 			// On the terminal chunk, attach the assembled, parsed tool calls.
 			if chunk.IsDone() {
 				if calls := acc.finish(); len(calls) > 0 {
