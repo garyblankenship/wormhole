@@ -58,6 +58,8 @@ type ToolCall struct {
 	Name      string            `json:"name"`
 	Arguments map[string]any    `json:"arguments"`
 	Function  *ToolCallFunction `json:"function,omitempty"` // For OpenAI compatibility
+	// ThoughtSignature carries the opaque base64 token Gemini thinking models attach to functionCall parts; must be echoed verbatim on the next turn. Empty for all other providers.
+	ThoughtSignature string `json:"thought_signature,omitempty"`
 }
 
 // ToolCallFunction represents the function call details for OpenAI
