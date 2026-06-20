@@ -592,7 +592,20 @@ func (g *Gemini) parseStreamEvent(data string) ([]types.TextChunk, bool, error) 
 		return nil, false, nil
 	}
 
-	return g.processStreamCandidate(response.Candidates[0]), false, nil
+	chunks := g.processStreamCandidate(response.Candidates[0])
+
+	// usageMetadata is top-level on the Gemini response (not on the candidate)
+	// and the non-streaming path reads it via convertUsage; the stream path
+	// otherwise drops it. Append a usage-bearing chunk when present so streamed
+	// consumers see token counts.
+	if usage := convertUsage(response.UsageMetadata); usage != nil {
+		chunks = append(chunks, types.TextChunk{
+			Usage: usage,
+			Model: "gemini",
+		})
+	}
+
+	return chunks, false, nil
 }
 
 // handleStream processes streaming responses. Every send is guarded by
