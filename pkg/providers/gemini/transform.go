@@ -281,12 +281,24 @@ func (g *Gemini) schemaToMap(schema types.Schema) map[string]any {
 		}
 	}
 
-	// Handle schema interface
+	// Concrete schema pointer types (*ObjectSchema/*ArraySchema/*EnumSchema/
+	// *NumberSchema/*StringSchema) carry full fidelity (properties/required/
+	// items/enum) and MUST be converted here FIRST. They also satisfy
+	// SchemaInterface, so the lossy interface branch below would otherwise win
+	// and flatten them to {type,description} — gutting the schema Gemini sees.
+	switch schema.(type) {
+	case *types.ObjectSchema, *types.ArraySchema, *types.EnumSchema,
+		*types.NumberSchema, *types.StringSchema:
+		return g.schemaTypeToMap(schema)
+	}
+
+	// Fallback: a SchemaInterface implementation that is NOT one of the concrete
+	// types above (only type+description available).
 	if schemaIface, ok := schema.(types.SchemaInterface); ok {
 		return g.schemaInterfaceToMap(schemaIface)
 	}
 
-	// Handle specific schema types
+	// Final fallback for any other concrete type handled by schemaTypeToMap.
 	return g.schemaTypeToMap(schema)
 }
 
