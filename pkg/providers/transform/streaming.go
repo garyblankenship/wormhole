@@ -388,9 +388,36 @@ func NewOpenAIStreamingTransformer() *StreamingTransformer {
 		IDPath:              "id",
 		ModelPath:           "model",
 		FinishReasonAdapter: MapFinishReason,
+		UsageAdapter:        openAIStreamUsage,
 		ReturnsBatch:        false,
 		ChunkType:           "text_chunk",
 	})
+}
+
+// openAIStreamUsage parses OpenAI streamed usage including the cached-token
+// detail that parseDefaultUsage omits. OpenAI-specific: only the OpenAI
+// transformer wires this adapter, so other providers keep parseDefaultUsage.
+func openAIStreamUsage(data any) (*types.Usage, error) {
+	m, ok := data.(map[string]any)
+	if !ok {
+		return nil, fmt.Errorf("unsupported usage data type: %T", data)
+	}
+	usage := &types.Usage{}
+	if v, ok := m["prompt_tokens"].(float64); ok {
+		usage.PromptTokens = int(v)
+	}
+	if v, ok := m["completion_tokens"].(float64); ok {
+		usage.CompletionTokens = int(v)
+	}
+	if v, ok := m["total_tokens"].(float64); ok {
+		usage.TotalTokens = int(v)
+	}
+	if details, ok := m["prompt_tokens_details"].(map[string]any); ok {
+		if cached, ok := details["cached_tokens"].(float64); ok {
+			usage.CacheReadTokens = int(cached)
+		}
+	}
+	return usage, nil
 }
 
 // NewAnthropicStreamingTransformer creates a transformer configured for Anthropic

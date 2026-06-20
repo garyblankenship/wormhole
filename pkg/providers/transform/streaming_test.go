@@ -68,6 +68,22 @@ func TestOpenAIStreamingTransformer(t *testing.T) {
 	}
 }
 
+func TestOpenAIStreamingTransformer_UsageIncludesCachedTokens(t *testing.T) {
+	t.Parallel()
+	transformer := NewOpenAIStreamingTransformer()
+
+	data := []byte(`{"id":"c1","model":"gpt-4o-mini","choices":[{"delta":{},"finish_reason":"stop"}],"usage":{"prompt_tokens":100,"completion_tokens":50,"total_tokens":150,"prompt_tokens_details":{"cached_tokens":40}}}`)
+
+	chunk, err := transformer.ParseChunk(data)
+	require.NoError(t, err)
+	require.NotNil(t, chunk)
+
+	require.NotNil(t, chunk.Usage)
+	assert.Equal(t, 100, chunk.Usage.PromptTokens)
+	assert.Equal(t, 150, chunk.Usage.TotalTokens)
+	assert.Equal(t, 40, chunk.Usage.CacheReadTokens)
+}
+
 func TestOpenAIStreamingTransformer_SimpleText(t *testing.T) {
 	t.Parallel()
 	transformer := NewOpenAIStreamingTransformer()
