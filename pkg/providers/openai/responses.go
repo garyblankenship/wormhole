@@ -323,6 +323,7 @@ func responseFunctionCallToToolCall(item responsesOutputItem) types.ToolCall {
 		},
 	}
 	if parseErr != nil {
+		toolCall.Arguments = nil
 		toolCall.ArgsInvalid = true
 		toolCall.ArgsParseError = parseErr.Error()
 	}
