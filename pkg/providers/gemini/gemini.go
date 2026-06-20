@@ -90,7 +90,7 @@ func (g *Gemini) Text(ctx context.Context, request types.TextRequest) (*types.Te
 
 // stampProvider sets Provider on the terminal chunk. Sole closer of out;
 // exits when the upstream channel closes.
-func (g *Gemini) stampProvider(in <-chan types.TextChunk) <-chan types.TextChunk {
+func (g *Gemini) stampProvider(ctx context.Context, in <-chan types.TextChunk) <-chan types.TextChunk {
 	out := make(chan types.TextChunk)
 	go func() {
 		defer close(out)
@@ -98,7 +98,11 @@ func (g *Gemini) stampProvider(in <-chan types.TextChunk) <-chan types.TextChunk
 			if chunk.IsDone() {
 				chunk.Provider = g.Name()
 			}
-			out <- chunk
+			select {
+			case out <- chunk:
+			case <-ctx.Done():
+				return
+			}
 		}
 	}()
 	return out
@@ -126,7 +130,7 @@ func (g *Gemini) Stream(ctx context.Context, request types.TextRequest) (<-chan 
 		return nil, err
 	}
 
-	return g.stampProvider(g.handleStream(ctx, stream)), nil
+	return g.stampProvider(ctx, g.handleStream(ctx, stream)), nil
 }
 
 // Structured generates structured output using Gemini models

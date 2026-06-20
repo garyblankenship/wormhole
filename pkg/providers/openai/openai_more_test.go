@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/garyblankenship/wormhole/pkg/types"
 	"github.com/stretchr/testify/assert"
@@ -307,4 +308,56 @@ func TestStreamPayloadSetsIncludeUsage(t *testing.T) {
 	opts, ok := payload["stream_options"].(map[string]any)
 	require.True(t, ok, "stream_options must be a map")
 	assert.Equal(t, true, opts["include_usage"])
+}
+
+func TestStampProviderCtxGuard(t *testing.T) {
+	t.Parallel()
+
+	provider := New(types.ProviderConfig{APIKey: "test-key"})
+	finish := types.FinishReasonStop
+
+	t.Run("stamps terminal chunk and preserves order", func(t *testing.T) {
+		t.Parallel()
+
+		ctx := context.Background()
+		in := make(chan types.TextChunk, 2)
+		in <- types.TextChunk{Text: "alpha"}
+		in <- types.TextChunk{Text: "omega", FinishReason: &finish}
+		close(in)
+
+		out := provider.stampProvider(ctx, in)
+
+		got := make([]types.TextChunk, 0, 2)
+		for chunk := range out {
+			got = append(got, chunk)
+		}
+
+		require.Len(t, got, 2)
+		assert.Equal(t, "alpha", got[0].Text)
+		assert.Equal(t, "omega", got[1].Text)
+		assert.True(t, got[1].IsDone())
+		assert.Equal(t, "openai", got[1].Provider)
+		assert.Empty(t, got[0].Provider)
+	})
+
+	t.Run("returns when context is canceled before reading", func(t *testing.T) {
+		t.Parallel()
+
+		ctx, cancel := context.WithCancel(context.Background())
+		cancel()
+
+		in := make(chan types.TextChunk, 2)
+		in <- types.TextChunk{Text: "first"}
+		in <- types.TextChunk{Text: "second", FinishReason: &finish}
+		close(in)
+
+		out := provider.stampProvider(ctx, in)
+
+		select {
+		case _, ok := <-out:
+			assert.False(t, ok)
+		case <-time.After(200 * time.Millisecond):
+			t.Fatalf("stampProvider did not return after context cancellation")
+		}
+	})
 }

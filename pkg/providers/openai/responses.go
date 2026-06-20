@@ -60,7 +60,7 @@ func (p *Provider) responsesStream(ctx context.Context, request types.TextReques
 		return nil, err
 	}
 
-	return p.stampProvider(utils.ProcessStream(ctx, body, p.parseResponsesStreamChunk, 100)), nil
+	return p.stampProvider(ctx, utils.ProcessStream(ctx, body, p.parseResponsesStreamChunk, 100)), nil
 }
 
 func (p *Provider) buildResponsesPayload(request *types.TextRequest) map[string]any {
