@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/garyblankenship/wormhole/pkg/providers"
 	"github.com/garyblankenship/wormhole/pkg/types"
 )
 
@@ -19,9 +20,13 @@ const (
 
 // buildChatPayload builds the Ollama chat completion payload
 func (p *Provider) buildChatPayload(request *types.TextRequest) *chatRequest {
+	prepared, _, err := providers.PrepareMessages(request.Messages)
+	if err != nil {
+		prepared = request.Messages // fall through; provider will surface the issue
+	}
 	payload := &chatRequest{
 		Model:    request.Model,
-		Messages: p.transformMessages(request.Messages, request.SystemPrompt),
+		Messages: p.transformMessages(prepared, request.SystemPrompt),
 		Options:  p.buildOptions(request),
 	}
 
