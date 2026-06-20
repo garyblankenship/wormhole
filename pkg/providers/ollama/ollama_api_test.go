@@ -269,13 +269,12 @@ func TestTransformHelpers(t *testing.T) {
 	assert.Equal(t, seed, *payload.Options.Seed)
 	assert.Equal(t, []string{"stop"}, payload.Options.Stop)
 
-	require.Len(t, payload.Messages, 4)
+	require.Len(t, payload.Messages, 3)
 	assert.Equal(t, roleSystem, payload.Messages[0].Role)
 	assert.Equal(t, roleAssistant, payload.Messages[1].Role)
-	assert.Equal(t, roleTool, payload.Messages[2].Role)
-	assert.Equal(t, roleUser, payload.Messages[3].Role)
-	assert.Equal(t, "look", payload.Messages[3].Content)
-	assert.Equal(t, []string{"abc123"}, payload.Messages[3].Images)
+	assert.Equal(t, roleUser, payload.Messages[2].Role)
+	assert.Equal(t, "look", payload.Messages[2].Content)
+	assert.Equal(t, []string{"abc123"}, payload.Messages[2].Images)
 
 	assert.Equal(t, roleUser, provider.mapRole(types.Role("unknown")))
 	assert.Equal(t, []string{"raw"}, convertMultimodalPartsForTest([]types.MessagePart{{Type: "image", Data: "raw"}}))
