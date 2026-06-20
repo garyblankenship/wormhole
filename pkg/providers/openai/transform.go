@@ -364,13 +364,15 @@ func (p *Provider) convertToolCalls(toolCalls []toolCall) []types.ToolCall {
 		// and parses once. We always carry the raw fragment string in
 		// Function.Arguments so the accumulator can reassemble it.
 		var argsMap map[string]any
+		var parseErr error
 		if tc.Function.Arguments != "" {
-			if err := json.Unmarshal([]byte(tc.Function.Arguments), &argsMap); err != nil {
+			parseErr = json.Unmarshal([]byte(tc.Function.Arguments), &argsMap)
+			if parseErr != nil {
 				argsMap = nil // partial fragment; not a complete arg set
 			}
 		}
 
-		result[i] = types.ToolCall{
+		toolCall := types.ToolCall{
 			ID:        tc.ID,
 			Type:      tc.Type,
 			Name:      tc.Function.Name,
@@ -380,6 +382,11 @@ func (p *Provider) convertToolCalls(toolCalls []toolCall) []types.ToolCall {
 				Arguments: tc.Function.Arguments,
 			},
 		}
+		if parseErr != nil {
+			toolCall.ArgsInvalid = true
+			toolCall.ArgsParseError = parseErr.Error()
+		}
+		result[i] = toolCall
 	}
 
 	return result

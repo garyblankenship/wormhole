@@ -307,11 +307,12 @@ func responseFunctionCallToToolCall(item responsesOutputItem) types.ToolCall {
 	}
 
 	argsMap := make(map[string]any)
+	var parseErr error
 	if item.Arguments != "" {
-		_ = json.Unmarshal([]byte(item.Arguments), &argsMap)
+		parseErr = json.Unmarshal([]byte(item.Arguments), &argsMap)
 	}
 
-	return types.ToolCall{
+	toolCall := types.ToolCall{
 		ID:        callID,
 		Type:      "function",
 		Name:      item.Name,
@@ -321,6 +322,11 @@ func responseFunctionCallToToolCall(item responsesOutputItem) types.ToolCall {
 			Arguments: item.Arguments,
 		},
 	}
+	if parseErr != nil {
+		toolCall.ArgsInvalid = true
+		toolCall.ArgsParseError = parseErr.Error()
+	}
+	return toolCall
 }
 
 func responsesFinishReason(response *responsesResponse, toolCalls []types.ToolCall) types.FinishReason {

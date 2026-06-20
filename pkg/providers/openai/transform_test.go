@@ -227,3 +227,48 @@ func TestBuildChatPayloadSerializesUserMediaAsImageURLParts(t *testing.T) {
 	assert.Equal(t, "image_url", parts[2]["type"])
 	assert.Equal(t, map[string]any{"url": "https://example.test/image.jpg"}, parts[2]["image_url"])
 }
+
+func TestTransform_MalformedToolCallArgs_FlaggedNotSwallowed(t *testing.T) {
+	t.Parallel()
+
+	provider := &Provider{}
+	truncatedArgs := `{"path":"/tmp/file`
+
+	response := &chatCompletionResponse{
+		ID:      "malformed-tool-args",
+		Model:   "gpt-4o-mini",
+		Created: time.Now().Unix(),
+		Choices: []struct {
+			Index        int      `json:"index"`
+			Message      message  `json:"message"`
+			FinishReason string   `json:"finish_reason"`
+		}{
+			{
+				Message: message{
+					Role: "assistant",
+					ToolCalls: []toolCall{{
+						ID:   "call-1",
+						Type: "function",
+						Function: struct {
+							Name      string `json:"name"`
+							Arguments string `json:"arguments"`
+						}{
+							Name:      "read_file",
+							Arguments: truncatedArgs,
+						},
+					}},
+				},
+				FinishReason: "tool_calls",
+			},
+		},
+	}
+
+	result := provider.transformTextResponse(response)
+	require.Len(t, result.ToolCalls, 1)
+	call := result.ToolCalls[0]
+
+	assert.True(t, call.ArgsInvalid)
+	assert.NotEmpty(t, call.ArgsParseError)
+	assert.Equal(t, truncatedArgs, call.Function.Arguments)
+	assert.Empty(t, call.Arguments)
+}

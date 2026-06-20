@@ -114,12 +114,14 @@ func (s *streamFragmentAccumulator) finish() []types.ToolCall {
 	out := make([]types.ToolCall, 0, len(s.calls))
 	for _, acc := range s.calls {
 		argsMap := make(map[string]any)
+		var parseErr error
 		if len(acc.args) > 0 {
-			if err := json.Unmarshal(acc.args, &argsMap); err != nil {
+			parseErr = json.Unmarshal(acc.args, &argsMap)
+			if parseErr != nil {
 				argsMap = make(map[string]any)
 			}
 		}
-		out = append(out, types.ToolCall{
+		toolCall := types.ToolCall{
 			ID:        acc.id,
 			Type:      acc.typ,
 			Name:      acc.name,
@@ -128,7 +130,12 @@ func (s *streamFragmentAccumulator) finish() []types.ToolCall {
 				Name:      acc.name,
 				Arguments: string(acc.args),
 			},
-		})
+		}
+		if parseErr != nil {
+			toolCall.ArgsInvalid = true
+			toolCall.ArgsParseError = parseErr.Error()
+		}
+		out = append(out, toolCall)
 	}
 	return out
 }

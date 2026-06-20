@@ -60,6 +60,12 @@ type ToolCall struct {
 	Function  *ToolCallFunction `json:"function,omitempty"` // For OpenAI compatibility
 	// ThoughtSignature carries the opaque base64 token Gemini thinking models attach to functionCall parts; must be echoed verbatim on the next turn. Empty for all other providers.
 	ThoughtSignature string `json:"thought_signature,omitempty"`
+	// ArgsInvalid is true when the provider's tool-call arguments failed to parse as JSON
+	// (e.g. a truncated streaming tool_call). When set, Arguments is nil/empty and the raw
+	// fragment is retained in Function.Arguments. Empty/false for well-formed calls.
+	ArgsInvalid bool `json:"args_invalid,omitempty"`
+	// ArgsParseError holds the JSON parse error message when ArgsInvalid is true; empty otherwise.
+	ArgsParseError string `json:"args_parse_error,omitempty"`
 }
 
 // ToolCallFunction represents the function call details for OpenAI
