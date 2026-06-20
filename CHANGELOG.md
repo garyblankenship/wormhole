@@ -4,6 +4,7 @@
 
 ### Features
 - add first-class no-auth local OpenAI-compatible setup and smoke diagnostics
+- add cross-provider message-sequence repair: orphaned tool calls and stranded tool results are silently repaired (and tool-call IDs normalized) before provider dispatch
 
 ### Fixes
 - preserve low-level network causes in top-level provider errors
