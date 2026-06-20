@@ -3,6 +3,7 @@ package providers
 import (
 	"encoding/json"
 	"fmt"
+	"regexp"
 	"strings"
 
 	"github.com/garyblankenship/wormhole/pkg/types"
@@ -231,6 +232,25 @@ func NewRequestBuilder() *RequestBuilder {
 	return &RequestBuilder{}
 }
 
+// ToolCallIDSafePattern matches any character outside the charset accepted by
+// all supported providers. Such characters are replaced with '_' during ID
+// normalization. The accepted charset is [a-zA-Z0-9_-].
+var ToolCallIDSafePattern = regexp.MustCompile(`[^a-zA-Z0-9_\-]`)
+
+// ToolCallIDMaxLen is the maximum tool-call ID length accepted by all providers.
+const ToolCallIDMaxLen = 64
+
+// normalizeToolCallID replaces every character outside the shared safe charset
+// with '_' and truncates the result to ToolCallIDMaxLen. It is a no-op for IDs
+// that are already valid.
+func normalizeToolCallID(id string) string {
+	normalized := ToolCallIDSafePattern.ReplaceAllString(id, "_")
+	if len(normalized) > ToolCallIDMaxLen {
+		normalized = normalized[:ToolCallIDMaxLen]
+	}
+	return normalized
+}
+
 // PrepareMessages validates and repairs tool-call conversation history before
 // provider-specific serialization. It returns a copied slice — the caller-owned
 // input is never mutated.
@@ -240,9 +260,9 @@ func NewRequestBuilder() *RequestBuilder {
 //   - Missing tool-call IDs on assistant messages are synthesized.
 //   - Tool-result IDs are updated to match their originating tool-call IDs.
 //   - Duplicate normalized tool-call IDs within an assistant message produce an error.
-func PrepareMessages(messages []types.Message) ([]types.Message, error) {
+func PrepareMessages(messages []types.Message) ([]types.Message, []string, error) {
 	if len(messages) == 0 {
-		return nil, nil
+		return nil, nil, nil
 	}
 
 	// Build a copy.
@@ -276,12 +296,17 @@ func PrepareMessages(messages []types.Message) ([]types.Message, error) {
 						tc.ID = fmt.Sprintf("synth_%d_%d", i, j)
 					}
 
-					// Check duplicates within this assistant message.
+					// Normalize to the shared safe charset before any matching.
+					original := tc.ID
+					tc.ID = normalizeToolCallID(tc.ID)
+
+					// Check duplicates within this assistant message (post-normalization;
+					// two distinct originals that normalize to the same ID collide).
 					if _, dup := msgIDSet[tc.ID]; dup {
-						return nil, fmt.Errorf("duplicate tool-call ID %q in assistant message at index %d", tc.ID, i)
+						return nil, nil, fmt.Errorf("duplicate tool-call ID %q in assistant message at index %d", tc.ID, i)
 					}
 					msgIDSet[tc.ID] = struct{}{}
-					normalizedIDs[""+tc.ID] = tc.ID
+					normalizedIDs[original] = tc.ID
 				}
 			}
 
@@ -307,10 +332,19 @@ func PrepareMessages(messages []types.Message) ([]types.Message, error) {
 		}
 	}
 
-	// Second pass: update tool-result IDs to match normalized IDs.
-	// Tool results referencing tool calls whose IDs were synthesized need updating,
-	// but since we only synthesize for empty IDs (which have no corresponding result
-	// to update), this is a no-op for now. The structure supports future normalization.
+	// Second pass: normalize tool-result IDs so they match the normalized
+	// tool-call IDs produced in the first pass.
+	for i, msg := range out {
+		if tr, ok := msg.(*types.ToolResultMessage); ok {
+			repaired := *tr
+			if normalized, found := normalizedIDs[repaired.ToolCallID]; found {
+				repaired.ToolCallID = normalized
+			} else {
+				repaired.ToolCallID = normalizeToolCallID(repaired.ToolCallID)
+			}
+			out[i] = &repaired
+		}
+	}
 
-	return out, nil
+	return out, nil, nil
 }

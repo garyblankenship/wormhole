@@ -21,7 +21,7 @@ const roleUser = "user"
 
 // buildMessagePayload builds the Anthropic messages API payload
 func (p *Provider) buildMessagePayload(request *types.TextRequest) map[string]any {
-	prepared, err := providers.PrepareMessages(request.Messages)
+	prepared, _, err := providers.PrepareMessages(request.Messages)
 	if err != nil {
 		prepared = request.Messages
 	}

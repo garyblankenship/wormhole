@@ -1,6 +1,7 @@
 package providers
 
 import (
+	"strings"
 	"testing"
 	"unicode/utf8"
 
@@ -12,11 +13,11 @@ import (
 func TestPrepareMessages_EmptyInput(t *testing.T) {
 	t.Parallel()
 
-	result, err := PrepareMessages(nil)
+	result, _, err := PrepareMessages(nil)
 	require.NoError(t, err)
 	assert.Nil(t, result)
 
-	result, err = PrepareMessages([]types.Message{})
+	result, _, err = PrepareMessages([]types.Message{})
 	require.NoError(t, err)
 	assert.Nil(t, result)
 }
@@ -33,7 +34,7 @@ func TestPrepareMessages_SynthesizesMissingToolCallIDs(t *testing.T) {
 		},
 	}
 
-	result, err := PrepareMessages(input)
+	result, _, err := PrepareMessages(input)
 	require.NoError(t, err)
 	require.Len(t, result, 2)
 
@@ -56,7 +57,7 @@ func TestPrepareMessages_RejectsDuplicateToolCallIDs(t *testing.T) {
 		},
 	}
 
-	_, err := PrepareMessages(input)
+	_, _, err := PrepareMessages(input)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "duplicate tool-call ID")
 }
@@ -72,7 +73,7 @@ func TestPrepareMessages_SanitizesInvalidUTF8(t *testing.T) {
 		&types.SystemMessage{Content: invalidUTF8},
 	}
 
-	result, err := PrepareMessages(input)
+	result, _, err := PrepareMessages(input)
 	require.NoError(t, err)
 	require.Len(t, result, 3)
 
@@ -96,7 +97,7 @@ func TestPrepareMessages_ToolResultUTF8Sanitized(t *testing.T) {
 		types.NewToolResultMessage("call_1", "result\xffdata"),
 	}
 
-	result, err := PrepareMessages(input)
+	result, _, err := PrepareMessages(input)
 	require.NoError(t, err)
 	require.Len(t, result, 1)
 
@@ -118,7 +119,7 @@ func TestPrepareMessages_DoesNotMutateCallerSlice(t *testing.T) {
 		original,
 	}
 
-	result, err := PrepareMessages(input)
+	result, _, err := PrepareMessages(input)
 	require.NoError(t, err)
 
 	// Original should be untouched
@@ -144,7 +145,7 @@ func TestPrepareMessages_PreservesValidMessages(t *testing.T) {
 		types.NewToolResultMessage("call_abc", "results"),
 	}
 
-	result, err := PrepareMessages(input)
+	result, _, err := PrepareMessages(input)
 	require.NoError(t, err)
 	require.Len(t, result, 4)
 
@@ -174,7 +175,67 @@ func TestPrepareMessages_AllowsUniqueIDsAcrossAssistantMessages(t *testing.T) {
 	}
 
 	// This should succeed — duplicates are only rejected within the same assistant message
-	result, err := PrepareMessages(input)
+	result, _, err := PrepareMessages(input)
 	require.NoError(t, err)
 	require.Len(t, result, 3)
+}
+
+func TestNormalizeToolCallID_ValidPassthrough(t *testing.T) {
+	t.Parallel()
+	assert.Equal(t, "call_abc-123", normalizeToolCallID("call_abc-123"))
+}
+
+func TestNormalizeToolCallID_ColonReplaced(t *testing.T) {
+	t.Parallel()
+	assert.Equal(t, "toolu_01_foo", normalizeToolCallID("toolu_01:foo"))
+}
+
+func TestNormalizeToolCallID_TruncatedAt64(t *testing.T) {
+	t.Parallel()
+	long := strings.Repeat("a", 100)
+	got := normalizeToolCallID(long)
+	assert.Len(t, got, 64)
+	assert.Equal(t, strings.Repeat("a", 64), got)
+}
+
+func TestPrepareMessages_NormalizesIDsBeforeMatching(t *testing.T) {
+	t.Parallel()
+
+	input := []types.Message{
+		&types.AssistantMessage{
+			ToolCalls: []types.ToolCall{{ID: "toolu_01:x", Name: "search"}},
+		},
+		types.NewToolResultMessage("toolu_01:x", "result"),
+	}
+
+	result, _, err := PrepareMessages(input)
+	require.NoError(t, err)
+	require.Len(t, result, 2)
+
+	am, ok := result[0].(*types.AssistantMessage)
+	require.True(t, ok)
+	assert.Equal(t, "toolu_01_x", am.ToolCalls[0].ID, "tool-call ID should be normalized")
+
+	tr, ok := result[1].(*types.ToolResultMessage)
+	require.True(t, ok)
+	assert.Equal(t, "toolu_01_x", tr.ToolCallID, "tool-result ID should be normalized to match")
+}
+
+func TestPrepareMessages_CollisionAfterNormalization(t *testing.T) {
+	t.Parallel()
+
+	// "a:b" and "a-b" both normalize to "a_b"... actually "a-b" stays "a-b" (hyphen is safe).
+	// Use two originals that BOTH normalize to the same value: "a:b" -> "a_b" and "a;b" -> "a_b".
+	input := []types.Message{
+		&types.AssistantMessage{
+			ToolCalls: []types.ToolCall{
+				{ID: "a:b", Name: "x"},
+				{ID: "a;b", Name: "y"},
+			},
+		},
+	}
+
+	_, _, err := PrepareMessages(input)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "duplicate tool-call ID")
 }

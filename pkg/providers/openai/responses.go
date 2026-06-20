@@ -64,7 +64,7 @@ func (p *Provider) responsesStream(ctx context.Context, request types.TextReques
 }
 
 func (p *Provider) buildResponsesPayload(request *types.TextRequest) map[string]any {
-	messages, err := providers.PrepareMessages(request.Messages)
+	messages, _, err := providers.PrepareMessages(request.Messages)
 	if err != nil {
 		messages = request.Messages // fall through; provider will surface the issue
 	}

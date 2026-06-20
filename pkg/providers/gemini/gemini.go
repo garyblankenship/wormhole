@@ -291,7 +291,7 @@ func (g *Gemini) addImageConfig(generationConfig map[string]any, options map[str
 
 // buildTextPayload builds the request payload for text generation
 func (g *Gemini) buildTextPayload(request types.TextRequest) (map[string]any, error) {
-	prepared, prepareErr := providers.PrepareMessages(request.Messages)
+	prepared, _, prepareErr := providers.PrepareMessages(request.Messages)
 	if prepareErr != nil {
 		prepared = request.Messages
 	}

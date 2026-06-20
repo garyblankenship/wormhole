@@ -18,7 +18,7 @@ const toolChoiceAuto = "auto"
 
 // buildChatPayload builds the OpenAI chat completion payload
 func (p *Provider) buildChatPayload(request *types.TextRequest) map[string]any {
-	prepared, err := providers.PrepareMessages(request.Messages)
+	prepared, _, err := providers.PrepareMessages(request.Messages)
 	if err != nil {
 		prepared = request.Messages // fall through; provider will surface the issue
 	}
