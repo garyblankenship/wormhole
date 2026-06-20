@@ -110,7 +110,30 @@ func (p *Provider) transformMessages(messages []types.Message) []map[string]any 
 		result = append(result, anthropicMsg)
 	}
 
-	return result
+	return coalesceSameRole(result)
+}
+
+// coalesceSameRole merges consecutive messages that share the same mapped role
+// into a single message whose "content" block array is the concatenation of the
+// merged entries' blocks. Anthropic requires strict user/assistant alternation
+// and allows one role-turn to carry multiple content blocks, so a tool_result
+// turn (mapped to "user") followed by a real user turn becomes a single "user"
+// message holding both blocks. Order is preserved; nothing is dropped.
+func coalesceSameRole(messages []map[string]any) []map[string]any {
+	if len(messages) <= 1 {
+		return messages
+	}
+	merged := make([]map[string]any, 0, len(messages))
+	for _, msg := range messages {
+		if n := len(merged); n > 0 && merged[n-1]["role"] == msg["role"] {
+			prevBlocks, _ := merged[n-1]["content"].([]map[string]any)
+			curBlocks, _ := msg["content"].([]map[string]any)
+			merged[n-1]["content"] = append(prevBlocks, curBlocks...)
+			continue
+		}
+		merged = append(merged, msg)
+	}
+	return merged
 }
 
 // buildContent builds the content array for a message
