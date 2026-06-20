@@ -63,6 +63,30 @@ func (p *Provider) responsesStream(ctx context.Context, request types.TextReques
 	return p.stampProvider(ctx, utils.ProcessStream(ctx, body, p.parseResponsesStreamChunk, 100)), nil
 }
 
+// normalizeResponsesFormat adapts a Chat Completions response_format value to the
+// shape the Responses API expects under text.format. For json_schema, the Chat
+// shape nests {name,strict,schema} under a "json_schema" key; the Responses API
+// wants those fields flattened alongside "type". Any other format (e.g. a
+// json_object value) or non-map value is returned unchanged.
+func normalizeResponsesFormat(rf any) any {
+	m, ok := rf.(map[string]any)
+	if !ok {
+		return rf
+	}
+	if m["type"] != "json_schema" {
+		return rf
+	}
+	js, ok := m["json_schema"].(map[string]any)
+	if !ok {
+		return rf
+	}
+	flat := map[string]any{"type": "json_schema"}
+	for k, v := range js {
+		flat[k] = v
+	}
+	return flat
+}
+
 func (p *Provider) buildResponsesPayload(request *types.TextRequest) map[string]any {
 	messages, _, err := providers.PrepareMessages(request.Messages)
 	if err != nil {
@@ -96,7 +120,7 @@ func (p *Provider) buildResponsesPayload(request *types.TextRequest) map[string]
 
 	if request.ResponseFormat != nil {
 		payload["text"] = map[string]any{
-			"format": request.ResponseFormat,
+			"format": normalizeResponsesFormat(request.ResponseFormat),
 		}
 	}
 
