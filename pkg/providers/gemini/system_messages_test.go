@@ -19,7 +19,7 @@ func TestTransformMessages_SkipsSystemRole(t *testing.T) {
 	contents, err := g.transformMessages([]types.Message{
 		types.NewSystemMessage("you are helpful"),
 		types.NewUserMessage("hello"),
-	})
+	}, "")
 	require.NoError(t, err)
 
 	require.Len(t, contents, 1)

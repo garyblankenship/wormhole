@@ -20,6 +20,13 @@ const streamDoneMarker = "[DONE]"
 // Gemini role mappings
 const geminiRoleModel = "model"
 
+// geminiThoughtSignatureSentinel is Gemini's documented dummy thoughtSignature that
+// skips thought-signature validation. Emitted only for Gemini-3 targets on functionCall
+// parts that carry no real signature (cross-provider or synthetic-repair calls), which
+// would otherwise hard-400. Gemini 2.5 does not validate,
+// so emit nothing there to keep currently-working wire bytes unchanged.
+const geminiThoughtSignatureSentinel = "skip_thought_signature_validator"
+
 // convertUsage converts Gemini usage metadata to types.Usage.
 // Returns nil when metadata is absent.
 func convertUsage(meta *usageMetadata) *types.Usage {
@@ -33,8 +40,10 @@ func convertUsage(meta *usageMetadata) *types.Usage {
 	}
 }
 
-// transformMessages converts types.Message to Gemini format
-func (g *Gemini) transformMessages(messages []types.Message) ([]map[string]any, error) {
+// transformMessages converts types.Message to Gemini format. The model name is
+// threaded through so the replay path can apply Gemini-3-specific thoughtSignature
+// handling (see transformMessageToParts).
+func (g *Gemini) transformMessages(messages []types.Message, model string) ([]map[string]any, error) {
 	contents := make([]map[string]any, 0, len(messages))
 
 	for _, msg := range messages {
@@ -48,7 +57,7 @@ func (g *Gemini) transformMessages(messages []types.Message) ([]map[string]any, 
 			"role": g.mapRole(string(msg.GetRole())),
 		}
 
-		parts, err := g.transformMessageToParts(msg)
+		parts, err := g.transformMessageToParts(msg, model)
 		if err != nil {
 			return nil, err
 		}
@@ -74,8 +83,9 @@ func (g *Gemini) mapRole(role string) string {
 	}
 }
 
-// transformMessageToParts converts a message to Gemini parts
-func (g *Gemini) transformMessageToParts(msg types.Message) ([]map[string]any, error) {
+// transformMessageToParts converts a message to Gemini parts. model is the target
+// Gemini model name, used to decide Gemini-3 sentinel thoughtSignature handling.
+func (g *Gemini) transformMessageToParts(msg types.Message, model string) ([]map[string]any, error) {
 	var parts []map[string]any
 
 	switch m := msg.(type) {
@@ -106,8 +116,15 @@ func (g *Gemini) transformMessageToParts(msg types.Message) ([]map[string]any, e
 					"args": toolCall.Arguments,
 				},
 			}
-			if toolCall.ThoughtSignature != "" {
+			switch {
+			case toolCall.ThoughtSignature != "":
 				p["thoughtSignature"] = toolCall.ThoughtSignature
+			case strings.HasPrefix(model, "gemini-3"):
+				// Gemini 3 hard-400s on a functionCall part with no thoughtSignature.
+				// Cross-provider (OpenAI/Anthropic) or synthetic-repair calls have none;
+				// the documented sentinel skips validation. Gemini 2.5 does not validate,
+				// so emit nothing there to keep currently-working wire bytes unchanged.
+				p["thoughtSignature"] = geminiThoughtSignatureSentinel
 			}
 			parts = append(parts, p)
 		}

@@ -295,7 +295,7 @@ func (g *Gemini) buildTextPayload(request types.TextRequest) (map[string]any, er
 	if prepareErr != nil {
 		prepared = request.Messages
 	}
-	contents, err := g.transformMessages(prepared)
+	contents, err := g.transformMessages(prepared, request.Model)
 	if err != nil {
 		return nil, err
 	}
