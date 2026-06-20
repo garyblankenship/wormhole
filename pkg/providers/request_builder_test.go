@@ -32,11 +32,12 @@ func TestPrepareMessages_SynthesizesMissingToolCallIDs(t *testing.T) {
 				{ID: "", Name: "get_weather", Function: &types.ToolCallFunction{Name: "get_weather", Arguments: "{}"}},
 			},
 		},
+		types.NewToolResultMessage("synth_1_0", "ok"),
 	}
 
 	result, _, err := PrepareMessages(input)
 	require.NoError(t, err)
-	require.Len(t, result, 2)
+	require.Len(t, result, 3)
 
 	am, ok := result[1].(*types.AssistantMessage)
 	require.True(t, ok)
@@ -94,14 +95,17 @@ func TestPrepareMessages_ToolResultUTF8Sanitized(t *testing.T) {
 	t.Parallel()
 
 	input := []types.Message{
+		&types.AssistantMessage{
+			ToolCalls: []types.ToolCall{{ID: "call_1", Name: "result"}},
+		},
 		types.NewToolResultMessage("call_1", "result\xffdata"),
 	}
 
 	result, _, err := PrepareMessages(input)
 	require.NoError(t, err)
-	require.Len(t, result, 1)
+	require.Len(t, result, 2)
 
-	tr, ok := result[0].(*types.ToolResultMessage)
+	tr, ok := result[1].(*types.ToolResultMessage)
 	require.True(t, ok)
 	assert.True(t, utf8.ValidString(tr.Content), "tool result should be valid UTF-8")
 }
@@ -117,6 +121,7 @@ func TestPrepareMessages_DoesNotMutateCallerSlice(t *testing.T) {
 	input := []types.Message{
 		types.NewUserMessage("hi"),
 		original,
+		types.NewToolResultMessage("synth_1_0", "ok"),
 	}
 
 	result, _, err := PrepareMessages(input)
@@ -238,4 +243,142 @@ func TestPrepareMessages_CollisionAfterNormalization(t *testing.T) {
 	_, _, err := PrepareMessages(input)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "duplicate tool-call ID")
+}
+
+func TestPrepareMessages_DropsOrphanedToolCall(t *testing.T) {
+	t.Parallel()
+
+	input := []types.Message{
+		types.NewUserMessage("hi"),
+		&types.AssistantMessage{
+			Content:   "let me check",
+			ToolCalls: []types.ToolCall{{ID: "call_1", Name: "search"}},
+		},
+	}
+
+	result, warnings, err := PrepareMessages(input)
+	require.NoError(t, err)
+	require.Len(t, result, 2, "assistant message is kept even with all calls dropped")
+
+	am, ok := result[1].(*types.AssistantMessage)
+	require.True(t, ok)
+	assert.Empty(t, am.ToolCalls, "orphaned tool call should be dropped")
+	assert.Equal(t, "let me check", am.Content, "assistant text preserved")
+	require.Len(t, warnings, 1)
+	assert.Contains(t, warnings[0], "orphaned tool call")
+	assert.Contains(t, warnings[0], "call_1")
+}
+
+func TestPrepareMessages_KeepsMatchedToolCall(t *testing.T) {
+	t.Parallel()
+
+	input := []types.Message{
+		&types.AssistantMessage{
+			ToolCalls: []types.ToolCall{{ID: "call_1", Name: "search"}},
+		},
+		types.NewToolResultMessage("call_1", "ok"),
+	}
+
+	result, warnings, err := PrepareMessages(input)
+	require.NoError(t, err)
+	require.Len(t, result, 2)
+	assert.Empty(t, warnings, "no warnings for a matched call")
+
+	am, ok := result[0].(*types.AssistantMessage)
+	require.True(t, ok)
+	require.Len(t, am.ToolCalls, 1)
+	assert.Equal(t, "call_1", am.ToolCalls[0].ID)
+}
+
+func TestPrepareMessages_PartialOrphan(t *testing.T) {
+	t.Parallel()
+
+	input := []types.Message{
+		&types.AssistantMessage{
+			ToolCalls: []types.ToolCall{
+				{ID: "call_1", Name: "search"},
+				{ID: "call_2", Name: "lookup"},
+			},
+		},
+		types.NewToolResultMessage("call_1", "ok"),
+	}
+
+	result, warnings, err := PrepareMessages(input)
+	require.NoError(t, err)
+
+	am, ok := result[0].(*types.AssistantMessage)
+	require.True(t, ok)
+	require.Len(t, am.ToolCalls, 1, "only the unmatched call dropped")
+	assert.Equal(t, "call_1", am.ToolCalls[0].ID)
+	require.Len(t, warnings, 1)
+	assert.Contains(t, warnings[0], "call_2")
+}
+
+func TestPrepareMessages_AllCallsOrphaned(t *testing.T) {
+	t.Parallel()
+
+	input := []types.Message{
+		&types.AssistantMessage{
+			ToolCalls: []types.ToolCall{
+				{ID: "c1", Name: "a"},
+				{ID: "c2", Name: "b"},
+				{ID: "c3", Name: "c"},
+			},
+		},
+	}
+
+	result, warnings, err := PrepareMessages(input)
+	require.NoError(t, err)
+	require.Len(t, result, 1)
+
+	am, ok := result[0].(*types.AssistantMessage)
+	require.True(t, ok)
+	assert.Empty(t, am.ToolCalls)
+	require.Len(t, warnings, 3)
+}
+
+func TestPrepareMessages_DropsStrandedResult(t *testing.T) {
+	t.Parallel()
+
+	input := []types.Message{
+		types.NewUserMessage("hi"),
+		types.NewToolResultMessage("ghost", "result with no call"),
+	}
+
+	result, warnings, err := PrepareMessages(input)
+	require.NoError(t, err)
+	require.Len(t, result, 1, "stranded result dropped entirely")
+
+	_, isResult := result[0].(*types.ToolResultMessage)
+	assert.False(t, isResult, "no tool result should remain")
+	require.Len(t, warnings, 1)
+	assert.Contains(t, warnings[0], "stranded tool result")
+	assert.Contains(t, warnings[0], "ghost")
+}
+
+func TestPrepareMessages_StrandedAfterMatchedTurn(t *testing.T) {
+	t.Parallel()
+
+	input := []types.Message{
+		&types.AssistantMessage{
+			ToolCalls: []types.ToolCall{{ID: "call_1", Name: "search"}},
+		},
+		types.NewToolResultMessage("call_1", "ok"),
+		types.NewToolResultMessage("call_orphan", "stranded"),
+	}
+
+	result, warnings, err := PrepareMessages(input)
+	require.NoError(t, err)
+	require.Len(t, result, 2, "valid turn intact, stranded result dropped")
+
+	am, ok := result[0].(*types.AssistantMessage)
+	require.True(t, ok)
+	require.Len(t, am.ToolCalls, 1)
+
+	tr, ok := result[1].(*types.ToolResultMessage)
+	require.True(t, ok)
+	assert.Equal(t, "call_1", tr.ToolCallID)
+
+	require.Len(t, warnings, 1)
+	assert.Contains(t, warnings[0], "call_orphan")
 }

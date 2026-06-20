@@ -258,8 +258,16 @@ func normalizeToolCallID(id string) string {
 // Repair rules:
 //   - Text content is sanitized to valid UTF-8.
 //   - Missing tool-call IDs on assistant messages are synthesized.
-//   - Tool-result IDs are updated to match their originating tool-call IDs.
+//   - Tool-call IDs are normalized to the shared safe charset; tool-result IDs
+//     are updated to match.
 //   - Duplicate normalized tool-call IDs within an assistant message produce an error.
+//   - Orphaned tool calls (no matching tool result) are dropped from the
+//     assistant message; a warning is returned. The assistant message itself is kept.
+//   - Stranded tool results (no matching tool call) are dropped from the slice;
+//     a warning is returned.
+//
+// Returns the repaired slice, a list of human-readable warning strings for any
+// dropped entities (nil if none), and an error for hard constraint violations.
 func PrepareMessages(messages []types.Message) ([]types.Message, []string, error) {
 	if len(messages) == 0 {
 		return nil, nil, nil
@@ -346,5 +354,58 @@ func PrepareMessages(messages []types.Message) ([]types.Message, []string, error
 		}
 	}
 
-	return out, nil, nil
+	// Third pass: drop orphaned tool calls and stranded tool results.
+	// Matching is on the already-normalized IDs in `out`.
+	resultIDs := make(map[string]struct{}) // normalized tool-result IDs present
+	callIDs := make(map[string]struct{})   // normalized tool-call IDs present
+	for _, msg := range out {
+		switch m := msg.(type) {
+		case *types.AssistantMessage:
+			for _, tc := range m.ToolCalls {
+				callIDs[tc.ID] = struct{}{}
+			}
+		case *types.ToolResultMessage:
+			resultIDs[m.ToolCallID] = struct{}{}
+		}
+	}
+
+	var warnings []string
+	repaired := make([]types.Message, 0, len(out))
+	for i, msg := range out {
+		switch m := msg.(type) {
+		case *types.AssistantMessage:
+			if len(m.ToolCalls) == 0 {
+				repaired = append(repaired, msg)
+				continue
+			}
+			kept := make([]types.ToolCall, 0, len(m.ToolCalls))
+			dropped := false
+			for _, tc := range m.ToolCalls {
+				if _, matched := resultIDs[tc.ID]; matched {
+					kept = append(kept, tc)
+					continue
+				}
+				dropped = true
+				warnings = append(warnings, fmt.Sprintf("dropped orphaned tool call %s at assistant message index %d", tc.ID, i))
+			}
+			if !dropped {
+				repaired = append(repaired, msg)
+				continue
+			}
+			// Rebuild the assistant message with only the matched calls.
+			am := *m
+			am.ToolCalls = kept
+			repaired = append(repaired, &am)
+		case *types.ToolResultMessage:
+			if _, matched := callIDs[m.ToolCallID]; matched {
+				repaired = append(repaired, msg)
+				continue
+			}
+			warnings = append(warnings, fmt.Sprintf("dropped stranded tool result %s at index %d", m.ToolCallID, i))
+		default:
+			repaired = append(repaired, msg)
+		}
+	}
+
+	return repaired, warnings, nil
 }
