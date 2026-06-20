@@ -38,3 +38,22 @@ func TestParseStreamEventSurfacesTopLevelUsage(t *testing.T) {
 		t.Fatal("expected a chunk carrying Usage, found none")
 	}
 }
+
+func TestConvertUsageCacheReadTokens(t *testing.T) {
+	t.Parallel()
+	u := convertUsage(&usageMetadata{
+		PromptTokenCount:        100,
+		CandidatesTokenCount:    20,
+		TotalTokenCount:         120,
+		CachedContentTokenCount: 75,
+	})
+	if u == nil {
+		t.Fatal("expected non-nil usage")
+	}
+	if u.CacheReadTokens != 75 {
+		t.Fatalf("CacheReadTokens = %d, want 75", u.CacheReadTokens)
+	}
+	if u.PromptTokens != 100 || u.CompletionTokens != 20 || u.TotalTokens != 120 {
+		t.Fatalf("token counts wrong: %+v", u)
+	}
+}

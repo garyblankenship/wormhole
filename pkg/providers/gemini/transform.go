@@ -37,6 +37,7 @@ func convertUsage(meta *usageMetadata) *types.Usage {
 		PromptTokens:     meta.PromptTokenCount,
 		CompletionTokens: meta.CandidatesTokenCount,
 		TotalTokens:      meta.TotalTokenCount,
+		CacheReadTokens:  meta.CachedContentTokenCount,
 	}
 }
 
