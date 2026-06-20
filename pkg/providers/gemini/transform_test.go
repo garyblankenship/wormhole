@@ -1,4 +1,4 @@
-package gemini_test
+package gemini
 
 import (
 	"encoding/base64"
@@ -72,6 +72,55 @@ func TestGeminiProvider_MessageTransformations(t *testing.T) {
 		assert.Equal(t, "Weather: 22°C, sunny", msg.GetContent())
 		assert.Equal(t, types.RoleTool, msg.GetRole())
 		assert.Equal(t, "call_123", msg.ToolCallID)
+	})
+}
+
+func TestToolResultStructuredJSONNotDoubleEncoded(t *testing.T) {
+	t.Parallel()
+	provider := New("test-key", types.NewProviderConfig("test-key"))
+
+	t.Run("structured JSON content", func(t *testing.T) {
+		t.Parallel()
+		msg := &types.ToolResultMessage{
+			ToolCallID: "call_1",
+			Content:    `{"temp":22}`,
+		}
+
+		parts, err := provider.transformMessageToParts(msg, "")
+		assert.NoError(t, err)
+		assert.Len(t, parts, 1)
+
+		functionResponse, ok := parts[0]["functionResponse"].(map[string]any)
+		assert.True(t, ok)
+		response, ok := functionResponse["response"].(map[string]any)
+		assert.True(t, ok)
+		result := response["result"]
+
+		expected := map[string]any{"temp": float64(22)}
+		assert.Equal(t, expected, result)
+
+		_, isStr := result.(string)
+		assert.False(t, isStr)
+	})
+
+	t.Run("non-json content", func(t *testing.T) {
+		t.Parallel()
+		msg := &types.ToolResultMessage{
+			ToolCallID: "call_1",
+			Content:    "ok",
+		}
+
+		parts, err := provider.transformMessageToParts(msg, "")
+		assert.NoError(t, err)
+		assert.Len(t, parts, 1)
+
+		functionResponse, ok := parts[0]["functionResponse"].(map[string]any)
+		assert.True(t, ok)
+		response, ok := functionResponse["response"].(map[string]any)
+		assert.True(t, ok)
+		result := response["result"]
+
+		assert.Equal(t, "ok", result)
 	})
 }
 

@@ -154,15 +154,21 @@ func (g *Gemini) transformMessageToParts(msg types.Message, model string) ([]map
 		}
 
 	case *types.ToolResultMessage:
+		// Content is often already a JSON string; parse it so Gemini receives a
+		// structured object under response.result instead of a re-escaped string.
+		// Non-JSON content (plain text, empty) passes through verbatim as before.
+		var result any
+		if err := json.Unmarshal([]byte(m.Content), &result); err != nil {
+			result = m.Content
+		}
 		parts = append(parts, map[string]any{
 			"functionResponse": map[string]any{
 				"name": m.ToolCallID,
 				"response": map[string]any{
-					"result": m.Content,
+					"result": result,
 				},
 			},
 		})
-
 	case *types.SystemMessage:
 		parts = append(parts, map[string]any{"text": m.Content})
 
