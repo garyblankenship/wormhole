@@ -67,7 +67,30 @@ func (g *Gemini) transformMessages(messages []types.Message, model string) ([]ma
 		contents = append(contents, content)
 	}
 
-	return contents, nil
+	return coalesceSameRole(contents), nil
+}
+
+// coalesceSameRole merges consecutive contents entries that share the same role
+// into a single {role, parts} entry whose parts slice is the concatenation of
+// the merged entries' parts. Gemini requires alternating roles, so a function
+// turn (tool result) followed by a real user turn -- both mapping to a non-model
+// role -- would otherwise emit two adjacent same-role entries and 400. Order is
+// preserved; nothing is dropped.
+func coalesceSameRole(contents []map[string]any) []map[string]any {
+	if len(contents) <= 1 {
+		return contents
+	}
+	merged := make([]map[string]any, 0, len(contents))
+	for _, c := range contents {
+		if n := len(merged); n > 0 && merged[n-1]["role"] == c["role"] {
+			prevParts, _ := merged[n-1]["parts"].([]map[string]any)
+			curParts, _ := c["parts"].([]map[string]any)
+			merged[n-1]["parts"] = append(prevParts, curParts...)
+			continue
+		}
+		merged = append(merged, c)
+	}
+	return merged
 }
 
 // mapRole maps message roles to Gemini roles

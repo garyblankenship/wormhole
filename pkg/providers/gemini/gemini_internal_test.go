@@ -5,6 +5,7 @@ import (
 
 	"github.com/garyblankenship/wormhole/pkg/types"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestTransformToolChoiceActual(t *testing.T) {
@@ -251,4 +252,29 @@ func TestNormalizeModelResource(t *testing.T) {
 			t.Errorf("normalizeModelResource(%q) = %q, want %q", in, got, want)
 		}
 	}
+}
+
+// FIX (coalesce): consecutive messages mapping to the same Gemini role must
+// merge into ONE {role, parts} entry. Two consecutive user messages (both
+// mapping to "user") must NOT produce two adjacent same-role entries (Gemini
+// 400s on non-alternating roles).
+func TestTransformMessages_CoalescesConsecutiveSameRole(t *testing.T) {
+	t.Parallel()
+	g := &Gemini{}
+	msgs := []types.Message{
+		types.NewUserMessage("first user message"),
+		types.NewUserMessage("second user message"),
+	}
+
+	out, err := g.transformMessages(msgs, "gemini-2.5-flash")
+	require.NoError(t, err)
+
+	require.Len(t, out, 1, "two consecutive user messages must merge into one user turn")
+	assert.Equal(t, "user", out[0]["role"])
+
+	mergedParts, ok := out[0]["parts"].([]map[string]any)
+	require.True(t, ok, "merged parts must be []map[string]any")
+	require.Len(t, mergedParts, 2, "both user text parts must be present in the single merged turn")
+	assert.Equal(t, "first user message", mergedParts[0]["text"])
+	assert.Equal(t, "second user message", mergedParts[1]["text"])
 }
