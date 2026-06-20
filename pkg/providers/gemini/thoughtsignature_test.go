@@ -87,3 +87,58 @@ func TestThoughtSignatureRoundTrip(t *testing.T) {
 		assert.Equal(t, sig, got) // STREAMING CAPTURE
 	})
 }
+
+// TestThoughtSignatureSentinel verifies the Gemini-3 cross-provider sentinel:
+// a functionCall with no real signature targeting gemini-3 gets the dummy
+// validator-skip sentinel; the same call targeting gemini-2.5 emits no key;
+// a call carrying a real signature emits that signature regardless of model.
+func TestThoughtSignatureSentinel(t *testing.T) {
+	t.Parallel()
+
+	g := New("test-key", types.ProviderConfig{})
+
+	t.Run("gemini-3 empty signature emits sentinel", func(t *testing.T) {
+		t.Parallel()
+
+		msg := &types.AssistantMessage{
+			ToolCalls: []types.ToolCall{
+				{Name: "get_weather", Arguments: map[string]any{"city": "NYC"}},
+			},
+		}
+		parts, err := g.transformMessageToParts(msg, "gemini-3-pro-preview")
+		require.NoError(t, err)
+		require.Len(t, parts, 1)
+		assert.Equal(t, "skip_thought_signature_validator", parts[0]["thoughtSignature"])
+	})
+
+	t.Run("gemini-2.5 empty signature emits no key", func(t *testing.T) {
+		t.Parallel()
+
+		msg := &types.AssistantMessage{
+			ToolCalls: []types.ToolCall{
+				{Name: "get_weather", Arguments: map[string]any{"city": "NYC"}},
+			},
+		}
+		parts, err := g.transformMessageToParts(msg, "gemini-2.5-flash")
+		require.NoError(t, err)
+		require.Len(t, parts, 1)
+		_, hasKey := parts[0]["thoughtSignature"]
+		assert.False(t, hasKey)
+	})
+
+	t.Run("real signature wins regardless of model", func(t *testing.T) {
+		t.Parallel()
+
+		const real = "real-sig-xyz"
+		msg := &types.AssistantMessage{
+			ToolCalls: []types.ToolCall{
+				{Name: "get_weather", Arguments: map[string]any{"city": "NYC"}, ThoughtSignature: real},
+			},
+		}
+		// Even a gemini-3 target must emit the real signature, not the sentinel.
+		parts, err := g.transformMessageToParts(msg, "gemini-3-pro-preview")
+		require.NoError(t, err)
+		require.Len(t, parts, 1)
+		assert.Equal(t, real, parts[0]["thoughtSignature"])
+	})
+}
