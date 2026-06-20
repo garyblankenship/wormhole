@@ -371,6 +371,12 @@ func MergeTextChunks(chunks []types.TextChunk) *types.TextResponse {
 		if chunk.ToolCall != nil {
 			toolCalls = append(toolCalls, *chunk.ToolCall)
 		}
+		// Streaming providers accumulate fragmented tool calls and attach the
+		// assembled set to the terminal chunk's ToolCalls (plural). Fold those
+		// in too, otherwise streamed tool calls never reach the merged response.
+		if len(chunk.ToolCalls) > 0 {
+			toolCalls = append(toolCalls, chunk.ToolCalls...)
+		}
 	}
 
 	return &types.TextResponse{
