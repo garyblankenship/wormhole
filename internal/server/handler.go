@@ -106,7 +106,8 @@ func (p *proxy) handleChatCompletions(w http.ResponseWriter, r *http.Request) {
 	resp, err := builder.Generate(r.Context())
 	if err != nil {
 		p.logger.Error("text generation failed", "error", err, "model", req.Model)
-		writeError(w, http.StatusBadGateway, "upstream_error", err.Error(), "api_error")
+		status, errType := upstreamErrorStatus(err)
+		writeError(w, status, "upstream_error", err.Error(), errType)
 		return
 	}
 
@@ -147,7 +148,8 @@ func (p *proxy) streamChat(w http.ResponseWriter, r *http.Request, builder *worm
 	stream, err := builder.Stream(r.Context())
 	if err != nil {
 		p.logger.Error("stream creation failed", "error", err, "model", model)
-		writeError(w, http.StatusBadGateway, "upstream_error", err.Error(), "api_error")
+		status, errType := upstreamErrorStatus(err)
+		writeError(w, status, "upstream_error", err.Error(), errType)
 		return
 	}
 
@@ -236,7 +238,8 @@ func (p *proxy) handleEmbeddings(w http.ResponseWriter, r *http.Request) {
 	resp, err := builder.Generate(r.Context())
 	if err != nil {
 		p.logger.Error("embeddings failed", "error", err, "model", req.Model)
-		writeError(w, http.StatusBadGateway, "upstream_error", err.Error(), "api_error")
+		status, errType := upstreamErrorStatus(err)
+		writeError(w, status, "upstream_error", err.Error(), errType)
 		return
 	}
 
@@ -334,4 +337,38 @@ func writeError(w http.ResponseWriter, status int, code, message, errType string
 			Code:    code,
 		},
 	})
+}
+
+// upstreamErrorStatus maps a provider error to an OpenAI-style HTTP status and
+// error type. When err carries a *types.WormholeError (via errors.As), its
+// StatusCode and Code drive the response so clients can distinguish a 429 rate
+// limit from a 400 bad request from a 401 auth failure. Falls back to 502
+// (bad gateway) + "api_error" when no structured error is present or StatusCode
+// is unset.
+func upstreamErrorStatus(err error) (int, string) {
+	whErr, ok := types.AsWormholeError(err)
+	if !ok {
+		return http.StatusBadGateway, "api_error"
+	}
+
+	errType := wormholeErrorType(whErr.Code)
+
+	if whErr.StatusCode != 0 {
+		return whErr.StatusCode, errType
+	}
+	return http.StatusBadGateway, errType
+}
+
+// wormholeErrorType maps a WormholeError code to an OpenAI-style error type string.
+func wormholeErrorType(code types.ErrorCode) string {
+	switch code {
+	case types.ErrorCodeAuth:
+		return "authentication_error"
+	case types.ErrorCodeRateLimit:
+		return "rate_limit_error"
+	case types.ErrorCodeModel, types.ErrorCodeRequest, types.ErrorCodeValidation:
+		return "invalid_request_error"
+	default:
+		return "api_error"
+	}
 }
