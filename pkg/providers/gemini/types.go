@@ -27,6 +27,7 @@ type part struct {
 	InlineData       *inlineData       `json:"inlineData,omitempty"`
 	FunctionCall     *functionCall     `json:"functionCall,omitempty"`
 	FunctionResponse *functionResponse `json:"functionResponse,omitempty"`
+	ThoughtSignature string            `json:"thoughtSignature,omitempty"` // Gemini thinking models
 }
 
 type inlineData struct {
