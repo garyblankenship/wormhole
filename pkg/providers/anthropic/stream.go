@@ -24,6 +24,13 @@ func (p *Provider) parseStreamChunk(data []byte) (*types.StreamChunk, error) {
 		}
 		chunk.ID = event.Message.ID
 		chunk.Model = event.Message.Model
+		// Anthropic delivers input_tokens + cache_read/creation tokens here on
+		// message_start; only output_tokens arrives later on message_delta.
+		// Capture them now so streamed usage isn't dropped.
+		if u := event.Message.Usage; u.InputTokens > 0 ||
+			u.CacheReadInputTokens > 0 || u.CacheCreationInputTokens > 0 {
+			chunk.Usage = p.convertUsage(u)
+		}
 
 	case "content_block_start":
 		var event contentBlockStartEvent
