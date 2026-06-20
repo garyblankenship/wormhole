@@ -493,7 +493,7 @@ func (g *Gemini) transformStructuredResponse(response *geminiTextResponse, schem
 }
 
 // transformEmbeddingsResponse converts Gemini response to types.EmbeddingsResponse
-func (g *Gemini) transformEmbeddingsResponse(response *geminiEmbeddingsResponse) *types.EmbeddingsResponse {
+func (g *Gemini) transformEmbeddingsResponse(response *geminiEmbeddingsResponse, requestModel string) *types.EmbeddingsResponse {
 	embeddings := make([]types.Embedding, 0, len(response.Embeddings))
 
 	for i, emb := range response.Embeddings {
@@ -504,6 +504,7 @@ func (g *Gemini) transformEmbeddingsResponse(response *geminiEmbeddingsResponse)
 	}
 
 	return &types.EmbeddingsResponse{
+		Model:      requestModel,
 		Embeddings: embeddings,
 		Metadata: map[string]any{
 			"provider": "gemini",

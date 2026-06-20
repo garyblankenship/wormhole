@@ -57,3 +57,14 @@ func TestConvertUsageCacheReadTokens(t *testing.T) {
 		t.Fatalf("token counts wrong: %+v", u)
 	}
 }
+
+func TestTransformEmbeddingsResponseUsesRequestModel(t *testing.T) {
+	t.Parallel()
+	g := &Gemini{}
+
+	response := &geminiEmbeddingsResponse{}
+	result := g.transformEmbeddingsResponse(response, "req-z")
+	if result.Model != "req-z" {
+		t.Fatalf("Model = %q, want %q", result.Model, "req-z")
+	}
+}

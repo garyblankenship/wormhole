@@ -226,7 +226,7 @@ func (p *Provider) Embeddings(ctx context.Context, request types.EmbeddingsReque
 		return nil, err
 	}
 
-	resp := p.transformEmbeddingsResponse(&response)
+	resp := p.transformEmbeddingsResponse(&response, request.Model)
 	resp.Provider = p.Name()
 	return resp, nil
 }

@@ -272,3 +272,41 @@ func TestTransform_MalformedToolCallArgs_FlaggedNotSwallowed(t *testing.T) {
 	assert.Equal(t, truncatedArgs, call.Function.Arguments)
 	assert.Empty(t, call.Arguments)
 }
+
+func TestTransformEmbeddingsResponseBackfillsModel(t *testing.T) {
+	t.Parallel()
+
+	p := &Provider{}
+
+	t.Run("empty response model uses request model", func(t *testing.T) {
+		t.Parallel()
+		response := &embeddingsResponse{
+			Model: "",
+			Data: []struct {
+				Object    string    `json:"object"`
+				Index     int       `json:"index"`
+				Embedding []float32 `json:"embedding"`
+			}{
+				{Index: 0, Embedding: []float32{0.1, 0.2}},
+			},
+		}
+		result := p.transformEmbeddingsResponse(response, "req-x")
+		assert.Equal(t, "req-x", result.Model)
+	})
+
+	t.Run("provider model is preserved", func(t *testing.T) {
+		t.Parallel()
+		response := &embeddingsResponse{
+			Model: "prov-y",
+			Data: []struct {
+				Object    string    `json:"object"`
+				Index     int       `json:"index"`
+				Embedding []float32 `json:"embedding"`
+			}{
+				{Index: 0, Embedding: []float32{0.3, 0.4}},
+			},
+		}
+		result := p.transformEmbeddingsResponse(response, "req-x")
+		assert.Equal(t, "prov-y", result.Model)
+	})
+}

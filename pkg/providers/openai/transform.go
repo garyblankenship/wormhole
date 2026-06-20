@@ -269,7 +269,7 @@ func (p *Provider) transformTextResponse(response *chatCompletionResponse) *type
 }
 
 // transformEmbeddingsResponse converts OpenAI embeddings response
-func (p *Provider) transformEmbeddingsResponse(response *embeddingsResponse) *types.EmbeddingsResponse {
+func (p *Provider) transformEmbeddingsResponse(response *embeddingsResponse, requestModel string) *types.EmbeddingsResponse {
 	embeddings := make([]types.Embedding, len(response.Data))
 
 	for i, data := range response.Data {
@@ -284,8 +284,13 @@ func (p *Provider) transformEmbeddingsResponse(response *embeddingsResponse) *ty
 		}
 	}
 
+	model := response.Model
+	if model == "" {
+		model = requestModel
+	}
+
 	return &types.EmbeddingsResponse{
-		Model:      response.Model,
+		Model:      model,
 		Embeddings: embeddings,
 		Usage:      p.convertUsage(response.Usage),
 		Created:    time.Now(),
