@@ -112,7 +112,10 @@ func (g *Gemini) Stream(ctx context.Context, request types.TextRequest) (<-chan 
 	}
 
 	modelName := normalizeModelResource(request.Model)
-	endpoint := fmt.Sprintf("%s/models/%s:streamGenerateContent?key=%s",
+	// alt=sse is REQUIRED: streamGenerateContent defaults to a JSON-array stream,
+	// but handleStream parses with an SSE scanner. Without it the live endpoint
+	// returns an unparseable array. (Streaming endpoint only — not generateContent.)
+	endpoint := fmt.Sprintf("%s/models/%s:streamGenerateContent?alt=sse&key=%s",
 		g.GetBaseURL(),
 		modelName,
 		g.apiKey,

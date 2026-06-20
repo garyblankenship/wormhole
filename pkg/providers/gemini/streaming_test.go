@@ -291,6 +291,7 @@ data: [DONE]
 			if tc.verifyURL {
 				assert.Contains(t, capturedURL, "key=test-api-key")
 				assert.Contains(t, capturedURL, fmt.Sprintf("models/%s:streamGenerateContent", tc.request.Model))
+				assert.Contains(t, capturedURL, "alt=sse")
 			}
 		})
 	}
