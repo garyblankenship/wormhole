@@ -227,6 +227,7 @@ func (g *Gemini) transformToolSchema(schema map[string]any) map[string]any {
 	if _, ok := schema["type"]; !ok {
 		schema["type"] = "object"
 	}
+	normalizeSchemaMap(schema)
 	return schema
 }
 
@@ -272,12 +273,118 @@ func (g *Gemini) transformSchema(schema types.Schema) map[string]any {
 	return g.schemaToMap(schema)
 }
 
+// normalizeSchemaMap rewrites JSON Schema union types into Gemini-compatible form,
+// in place and recursively. Gemini/Vertex reject an array-valued `type`:
+//
+//	["T","null"]   -> {type:"T", nullable:true}
+//	["A","B",...]  -> {anyOf:[{type:"A"},{type:"B"},...] } (+ nullable:true if "null" present)
+//	["T"]          -> {type:"T"}
+//
+// It recurses into properties, items, and anyOf/oneOf/allOf/$defs/definitions.
+func normalizeSchemaMap(m map[string]any) {
+	if m == nil {
+		return
+	}
+	if raw, ok := m["type"]; ok {
+		if list, ok := typeStringList(raw); ok {
+			seen := map[string]bool{}
+			nonNull := make([]string, 0, len(list))
+			hasNull := false
+			for _, t := range list {
+				if t == "null" {
+					hasNull = true
+					continue
+				}
+				if !seen[t] {
+					seen[t] = true
+					nonNull = append(nonNull, t)
+				}
+			}
+			switch {
+			case len(nonNull) == 1:
+				m["type"] = nonNull[0]
+				if hasNull {
+					m["nullable"] = true
+				}
+			case len(nonNull) > 1:
+				branches := make([]any, 0, len(nonNull))
+				for _, t := range nonNull {
+					branches = append(branches, map[string]any{"type": t})
+				}
+				delete(m, "type")
+				m["anyOf"] = branches
+				if hasNull {
+					m["nullable"] = true
+				}
+			case hasNull:
+				m["type"] = "null"
+			}
+		}
+	}
+	if props, ok := m["properties"].(map[string]any); ok {
+		for _, v := range props {
+			if sub, ok := v.(map[string]any); ok {
+				normalizeSchemaMap(sub)
+			}
+		}
+	}
+	if items, ok := m["items"].(map[string]any); ok {
+		normalizeSchemaMap(items)
+	}
+	if itemsList, ok := m["items"].([]any); ok {
+		for _, v := range itemsList {
+			if sub, ok := v.(map[string]any); ok {
+				normalizeSchemaMap(sub)
+			}
+		}
+	}
+	for _, key := range []string{"anyOf", "oneOf", "allOf"} {
+		if arr, ok := m[key].([]any); ok {
+			for _, v := range arr {
+				if sub, ok := v.(map[string]any); ok {
+					normalizeSchemaMap(sub)
+				}
+			}
+		}
+	}
+	for _, key := range []string{"$defs", "definitions"} {
+		if defs, ok := m[key].(map[string]any); ok {
+			for _, v := range defs {
+				if sub, ok := v.(map[string]any); ok {
+					normalizeSchemaMap(sub)
+				}
+			}
+		}
+	}
+}
+
+// typeStringList coerces a JSON Schema `type` value that may be []any (post-unmarshal)
+// or []string into []string. Returns ok=false for a plain string or other shapes.
+func typeStringList(v any) ([]string, bool) {
+	switch t := v.(type) {
+	case []string:
+		return t, true
+	case []any:
+		out := make([]string, 0, len(t))
+		for _, e := range t {
+			s, ok := e.(string)
+			if !ok {
+				return nil, false
+			}
+			out = append(out, s)
+		}
+		return out, true
+	}
+	return nil, false
+}
+
 // schemaToMap recursively converts schema to map
 func (g *Gemini) schemaToMap(schema types.Schema) map[string]any {
 	// Handle raw JSON bytes
 	if bytes, ok := schema.([]byte); ok {
 		var result map[string]any
 		if err := json.Unmarshal(bytes, &result); err == nil {
+			normalizeSchemaMap(result)
 			return result
 		}
 	}

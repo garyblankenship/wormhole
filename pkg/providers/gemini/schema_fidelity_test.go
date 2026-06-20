@@ -42,3 +42,45 @@ func TestSchemaToMapObjectFullFidelity(t *testing.T) {
 		t.Fatalf("required = %#v, want [city]", req)
 	}
 }
+
+func TestNormalizeSchemaMap(t *testing.T) {
+	t.Parallel()
+	// [T,"null"] -> type:T + nullable:true
+	m := map[string]any{"type": []any{"string", "null"}}
+	normalizeSchemaMap(m)
+	if m["type"] != "string" || m["nullable"] != true {
+		t.Fatalf("nullable case: got %#v", m)
+	}
+	// multi-type union -> anyOf, type removed
+	m2 := map[string]any{"type": []any{"string", "number"}}
+	normalizeSchemaMap(m2)
+	if _, ok := m2["type"]; ok {
+		t.Fatalf("multi-type: type should be removed, got %#v", m2)
+	}
+	if branches, ok := m2["anyOf"].([]any); !ok || len(branches) != 2 {
+		t.Fatalf("multi-type: anyOf wrong, got %#v", m2)
+	}
+	// recursive: nested in properties + array items
+	m3 := map[string]any{
+		"type": "object",
+		"properties": map[string]any{
+			"name": map[string]any{"type": []any{"string", "null"}},
+			"tags": map[string]any{"type": "array", "items": map[string]any{"type": []any{"string", "null"}}},
+		},
+	}
+	normalizeSchemaMap(m3)
+	name := m3["properties"].(map[string]any)["name"].(map[string]any)
+	if name["type"] != "string" || name["nullable"] != true {
+		t.Fatalf("nested property not normalized: %#v", name)
+	}
+	items := m3["properties"].(map[string]any)["tags"].(map[string]any)["items"].(map[string]any)
+	if items["type"] != "string" || items["nullable"] != true {
+		t.Fatalf("nested items not normalized: %#v", items)
+	}
+	// no regression: plain object/string untouched
+	m4 := map[string]any{"type": "object", "properties": map[string]any{"x": map[string]any{"type": "string"}}}
+	normalizeSchemaMap(m4)
+	if m4["type"] != "object" {
+		t.Fatalf("plain object changed: %#v", m4)
+	}
+}
