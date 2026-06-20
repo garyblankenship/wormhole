@@ -100,12 +100,16 @@ func (g *Gemini) transformMessageToParts(msg types.Message) ([]map[string]any, e
 
 		// Handle tool calls
 		for _, toolCall := range m.ToolCalls {
-			parts = append(parts, map[string]any{
+			p := map[string]any{
 				"functionCall": map[string]any{
 					"name": toolCall.Name,
 					"args": toolCall.Arguments,
 				},
-			})
+			}
+			if toolCall.ThoughtSignature != "" {
+				p["thoughtSignature"] = toolCall.ThoughtSignature
+			}
+			parts = append(parts, p)
 		}
 
 	case *types.ToolResultMessage:
