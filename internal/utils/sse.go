@@ -13,6 +13,12 @@ const (
 	sseFieldID    = "id"
 )
 
+
+// maxSSEBufferBytes caps a single SSE line/token at 10 MB. bufio.Scanner's
+// default 64 KB (bufio.MaxScanTokenSize) is too small for large Gemini data:
+// frames (big text or functionCall args), which would fail Scan with
+// bufio.ErrTooLong and silently truncate the stream.
+const maxSSEBufferBytes = 10 << 20
 // SSEScanner provides a simple interface for reading Server-Sent Events
 type SSEScanner struct {
 	scanner *bufio.Scanner
@@ -29,8 +35,12 @@ type SSEEvent struct {
 
 // NewSSEScanner creates a new SSE scanner
 func NewSSEScanner(r io.Reader) *SSEScanner {
+	scanner := bufio.NewScanner(r)
+	// Raise the per-token cap above the default 64 KB so large SSE frames
+	// (e.g. Gemini functionCall args) are not truncated with ErrTooLong.
+	scanner.Buffer(make([]byte, 0, 64*1024), maxSSEBufferBytes)
 	return &SSEScanner{
-		scanner: bufio.NewScanner(r),
+		scanner: scanner,
 	}
 }
 
