@@ -321,8 +321,16 @@ func (g *Gemini) schemaTypeToMap(schema types.Schema) map[string]any {
 	case *types.ObjectSchema:
 		g.objectSchemaToMap(s, result)
 	case *types.ArraySchema:
+		result["type"] = "array"
 		result["items"] = g.schemaToMap(s.Items)
 	case *types.EnumSchema:
+		// Enum element type varies (string/number); prefer the declared type,
+		// fall back to "string" when unset so Gemini always sees a type.
+		if t := s.GetType(); t != "" {
+			result["type"] = t
+		} else {
+			result["type"] = "string"
+		}
 		result["enum"] = s.Enum
 	case *types.NumberSchema:
 		g.numberSchemaToMap(s, result)
@@ -335,6 +343,7 @@ func (g *Gemini) schemaTypeToMap(schema types.Schema) map[string]any {
 
 // objectSchemaToMap populates result map from ObjectSchema
 func (g *Gemini) objectSchemaToMap(s *types.ObjectSchema, result map[string]any) {
+	result["type"] = "object"
 	properties := make(map[string]any)
 	for name, prop := range s.Properties {
 		properties[name] = g.schemaToMap(prop)
@@ -347,6 +356,7 @@ func (g *Gemini) objectSchemaToMap(s *types.ObjectSchema, result map[string]any)
 
 // numberSchemaToMap populates result map from NumberSchema
 func (g *Gemini) numberSchemaToMap(s *types.NumberSchema, result map[string]any) {
+	result["type"] = "number"
 	if s.Minimum != nil {
 		result["minimum"] = *s.Minimum
 	}
@@ -357,6 +367,7 @@ func (g *Gemini) numberSchemaToMap(s *types.NumberSchema, result map[string]any)
 
 // stringSchemaToMap populates result map from StringSchema
 func (g *Gemini) stringSchemaToMap(s *types.StringSchema, result map[string]any) {
+	result["type"] = "string"
 	if s.MinLength != nil {
 		result["minLength"] = *s.MinLength
 	}

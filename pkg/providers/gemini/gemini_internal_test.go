@@ -78,6 +78,7 @@ func TestSchemaToMapActualSchemaTypes(t *testing.T) {
 	nameResult := map[string]any{}
 	provider.stringSchemaToMap(schema.Properties["name"].(*types.StringSchema), nameResult)
 	assert.Equal(t, map[string]any{
+		"type":      "string",
 		"minLength": minLength,
 		"maxLength": maxLength,
 		"pattern":   "^[a-z]+$",
@@ -86,22 +87,40 @@ func TestSchemaToMapActualSchemaTypes(t *testing.T) {
 	scoreResult := map[string]any{}
 	provider.numberSchemaToMap(schema.Properties["score"].(*types.NumberSchema), scoreResult)
 	assert.Equal(t, map[string]any{
+		"type":    "number",
 		"minimum": minimum,
 		"maximum": maximum,
 	}, scoreResult)
 
 	assert.Equal(t, map[string]any{
-		"type":        "string",
-		"description": "display name",
+		"type":      "string",
+		"minLength": minLength,
+		"maxLength": maxLength,
+		"pattern":   "^[a-z]+$",
 	}, properties["name"])
-	assert.Equal(t, map[string]any{"type": "number"}, properties["score"])
-	assert.Equal(t, map[string]any{"type": "array"}, properties["tags"])
+	assert.Equal(t, map[string]any{
+		"type":    "number",
+		"minimum": minimum,
+		"maximum": maximum,
+	}, properties["score"])
+	assert.Equal(t, map[string]any{
+		"type": "array",
+		"items": map[string]any{
+			"type": "string",
+			"enum": []any{"new", "known"},
+		},
+	}, properties["tags"])
 
 	assert.Equal(t, map[string]any{
+		"type": "string",
 		"enum": []any{"new", "known"},
 	}, provider.schemaTypeToMap(&types.EnumSchema{Enum: []any{"new", "known"}}))
 	assert.Equal(t, map[string]any{
-		"items": map[string]any{"type": "string"},
+		"type": "array",
+		"items": map[string]any{
+			"type": "string",
+			"enum": []any{"new", "known"},
+		},
 	}, provider.schemaTypeToMap(&types.ArraySchema{
 		Items: &types.EnumSchema{
 			BaseSchema: types.BaseSchema{Type: "string"},

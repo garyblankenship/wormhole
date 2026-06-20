@@ -22,8 +22,16 @@ func TestSchemaToMapObjectFullFidelity(t *testing.T) {
 
 	out := g.schemaToMap(schema)
 
-	if _, ok := out["properties"]; !ok {
+	if out["type"] != "object" {
+		t.Fatalf("expected type=object in output, got %#v", out)
+	}
+	props, ok := out["properties"].(map[string]any)
+	if !ok {
 		t.Fatalf("expected properties in output, got %#v", out)
+	}
+	city, ok := props["city"].(map[string]any)
+	if !ok || city["type"] != "string" {
+		t.Fatalf("expected city property with type=string, got %#v", props["city"])
 	}
 	req, ok := out["required"]
 	if !ok {
