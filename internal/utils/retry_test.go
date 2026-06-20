@@ -65,6 +65,7 @@ func TestIsRetryableStatusCode(t *testing.T) {
 		http.StatusBadGateway,          // 502
 		http.StatusServiceUnavailable,  // 503
 		http.StatusGatewayTimeout,      // 504
+		529,                            // 529 - Anthropic overloaded_error
 	}
 
 	nonRetryableCodes := []int{

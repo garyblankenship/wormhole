@@ -53,6 +53,10 @@ func (e *RetryableError) Unwrap() error {
 	return e.Err
 }
 
+// statusOverloaded is Anthropic's 529 overloaded_error — a transient
+// "server overloaded" signal with no stdlib http.Status* constant.
+const statusOverloaded = 529
+
 // IsRetryableStatusCode determines if an HTTP status code should be retried
 func IsRetryableStatusCode(statusCode int) bool {
 	switch statusCode {
@@ -61,7 +65,8 @@ func IsRetryableStatusCode(statusCode int) bool {
 		http.StatusInternalServerError, // 500 - Internal server error
 		http.StatusBadGateway,          // 502 - Bad gateway
 		http.StatusServiceUnavailable,  // 503 - Service unavailable
-		http.StatusGatewayTimeout:      // 504 - Gateway timeout
+		http.StatusGatewayTimeout,      // 504 - Gateway timeout
+		statusOverloaded:               // 529 - Anthropic overloaded_error
 		return true
 	default:
 		return false
