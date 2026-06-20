@@ -237,3 +237,18 @@ func TestParseStreamEvent_ThoughtPartsRouteToThinkingChunks(t *testing.T) {
 	assert.True(t, thinkingFound)
 	assert.True(t, textChunkFound)
 }
+
+func TestNormalizeModelResource(t *testing.T) {
+	t.Parallel()
+	cases := map[string]string{
+		"google/gemini-3-pro-preview":  "gemini-3-pro-preview",
+		"models/gemini-2.5-flash":      "gemini-2.5-flash",
+		"gemini-2.5-flash":             "gemini-2.5-flash",
+		"google/models/gemini-2.5-pro": "gemini-2.5-pro",
+	}
+	for in, want := range cases {
+		if got := normalizeModelResource(in); got != want {
+			t.Errorf("normalizeModelResource(%q) = %q, want %q", in, got, want)
+		}
+	}
+}

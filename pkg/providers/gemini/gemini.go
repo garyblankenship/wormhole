@@ -407,5 +407,6 @@ func (g *Gemini) buildStructuredPayload(request types.StructuredRequest) (map[st
 }
 
 func normalizeModelResource(model string) string {
+	model = strings.TrimPrefix(model, "google/")
 	return strings.TrimPrefix(model, "models/")
 }
