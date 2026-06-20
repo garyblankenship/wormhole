@@ -365,7 +365,10 @@ func MergeTextChunks(chunks []types.TextChunk) *types.TextResponse {
 		if chunk.FinishReason != nil {
 			finishReason = *chunk.FinishReason
 		}
-		if chunk.Usage != nil {
+		// Keep the latest usage that actually carries token counts. An empty but
+		// non-nil Usage on a trailing chunk (some OpenAI-compatible proxies emit
+		// "usage":{}) must not clobber a good earlier value.
+		if chunk.Usage != nil && !chunk.Usage.IsZero() {
 			usage = chunk.Usage
 		}
 		if chunk.ToolCall != nil {

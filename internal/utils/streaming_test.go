@@ -477,6 +477,24 @@ func TestMergeTextChunks(t *testing.T) {
 		assert.Equal(t, "new-model", response.Model)
 		assert.Equal(t, "Hello World", response.Text)
 	})
+
+	t.Run("empty trailing usage does not clobber real usage", func(t *testing.T) {
+		finishReason := types.FinishReasonStop
+		chunks := []types.TextChunk{
+			{Text: "Hello"},
+			{Usage: &types.Usage{PromptTokens: 10, CompletionTokens: 5, TotalTokens: 15}},
+			// Some OpenAI-compatible proxies emit an empty "usage":{} on a
+			// trailing chunk; it must not overwrite the real usage above.
+			{FinishReason: &finishReason, Usage: &types.Usage{}},
+		}
+
+		response := MergeTextChunks(chunks)
+
+		assert.NotNil(t, response.Usage)
+		assert.Equal(t, 10, response.Usage.PromptTokens)
+		assert.Equal(t, 5, response.Usage.CompletionTokens)
+		assert.Equal(t, 15, response.Usage.TotalTokens)
+	})
 }
 
 func TestJSONStreamParser_Creation(t *testing.T) {

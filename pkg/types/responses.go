@@ -33,6 +33,14 @@ type Usage struct {
 	CacheWriteTokens int `json:"cache_write_tokens,omitempty"`
 }
 
+// IsZero reports whether the Usage carries no token counts. Used to avoid
+// clobbering a populated usage with an empty "usage":{} payload that some
+// OpenAI-compatible proxies emit on a trailing stream chunk.
+func (u Usage) IsZero() bool {
+	return u.PromptTokens == 0 && u.CompletionTokens == 0 && u.TotalTokens == 0 &&
+		u.CacheReadTokens == 0 && u.CacheWriteTokens == 0
+}
+
 // TextResponse represents a text generation response
 type TextResponse struct {
 	ID           string         `json:"id"`
