@@ -25,6 +25,14 @@ func ClassifyError(err error) ErrorClass {
 		return ErrorClassUnknown
 	}
 	if wormholeErr, ok := AsWormholeError(err); ok {
+		// A quota/exhaustion signal in the message or details outranks the raw
+		// status code: an OpenAI 429 "insufficient_quota" or Gemini
+		// "RESOURCE_EXHAUSTED" is a quota cap (non-retryable), not a plain
+		// rate-limit, yet both arrive as HTTP 429. Check before the status map
+		// so the 429->rate_limit branch does not mask quota.
+		if containsAny(wormholeErr.Message+" "+wormholeErr.Details, "quota", "exhausted") {
+			return ErrorClassQuota
+		}
 		if class, ok := ClassifyStatusCode(wormholeErr.StatusCode); ok {
 			return class
 		}

@@ -460,25 +460,19 @@ func (w *HTTPClientWrapper) handleRequestError(ctx context.Context, err error) e
 func (w *HTTPClientWrapper) buildErrorResponse(statusCode int, status, url string, respBody []byte) error {
 	errorCode := w.mapHTTPStatusToErrorCode(statusCode)
 	errorMessage := w.extractErrorMessage(statusCode, status, respBody)
-	retryable := utils.IsRetryableStatusCode(statusCode)
-	reportedStatusCode := statusCode
 
 	details := fmt.Sprintf("URL: %s\nResponse: %s", w.maskAPIKeyInURL(url), string(respBody))
 	if typeCode := extractErrorTypeCode(respBody); typeCode != "" {
 		details = typeCode + "\n" + details
-		if strings.Contains(typeCode, "type=insufficient_quota") {
-			retryable = false
-			reportedStatusCode = 0
-		}
 	}
 
 	wormholeErr := types.NewWormholeError(
 		errorCode,
 		errorMessage,
-		retryable,
+		utils.IsRetryableStatusCode(statusCode),
 	).WithDetails(details)
 
-	wormholeErr.StatusCode = reportedStatusCode
+	wormholeErr.StatusCode = statusCode
 	wormholeErr.Provider = w.providerName
 	return wormholeErr
 }
