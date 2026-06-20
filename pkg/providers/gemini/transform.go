@@ -360,9 +360,10 @@ func (g *Gemini) transformTextResponse(response *geminiTextResponse) (*types.Tex
 			// collides when the same function is called twice in one turn.
 			// Synthesize a unique-per-part ID so tool results map correctly.
 			toolCalls = append(toolCalls, types.ToolCall{
-				ID:        fmt.Sprintf("gemini-call-%d-%s", idx, part.FunctionCall.Name),
-				Name:      part.FunctionCall.Name,
-				Arguments: part.FunctionCall.Args,
+				ID:               fmt.Sprintf("gemini-call-%d-%s", idx, part.FunctionCall.Name),
+				Name:             part.FunctionCall.Name,
+				Arguments:        part.FunctionCall.Args,
+				ThoughtSignature: part.ThoughtSignature,
 			})
 		}
 	}
@@ -517,9 +518,10 @@ func (g *Gemini) processStreamCandidate(candidate candidate) []types.TextChunk {
 			// transformTextResponse for rationale.
 			chunks = append(chunks, types.TextChunk{
 				ToolCall: &types.ToolCall{
-					ID:        fmt.Sprintf("gemini-call-%d-%s", idx, part.FunctionCall.Name),
-					Name:      part.FunctionCall.Name,
-					Arguments: part.FunctionCall.Args,
+					ID:               fmt.Sprintf("gemini-call-%d-%s", idx, part.FunctionCall.Name),
+					Name:             part.FunctionCall.Name,
+					Arguments:        part.FunctionCall.Args,
+					ThoughtSignature: part.ThoughtSignature,
 				},
 				Model: "gemini",
 			})
