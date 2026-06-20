@@ -139,6 +139,11 @@ func (p *Provider) stampProvider(ctx context.Context, in <-chan types.TextChunk)
 				chunk.Provider = p.Name()
 			}
 			select {
+			case <-ctx.Done():
+				return
+			default:
+			}
+			select {
 			case out <- chunk:
 			case <-ctx.Done():
 				return

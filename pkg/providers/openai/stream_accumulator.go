@@ -48,6 +48,11 @@ func (p *Provider) accumulatingStream(ctx context.Context, in <-chan types.TextC
 				}
 			}
 			select {
+			case <-ctx.Done():
+				return
+			default:
+			}
+			select {
 			case out <- chunk:
 			case <-ctx.Done():
 				return
