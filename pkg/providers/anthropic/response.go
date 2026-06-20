@@ -20,10 +20,7 @@ func (p *Provider) transformTextResponse(response *messageResponse) *types.TextR
 		case contentTypeText:
 			text += content.Text
 		case contentTypeThinking:
-			thinking = &types.Thinking{
-				Content:   content.Thinking,
-				Signature: content.Signature,
-			}
+			thinking = &types.Thinking{Content: content.Thinking, Signature: content.Signature, Provider: "anthropic"}
 		case contentTypeToolUse:
 			args, _ := json.Marshal(content.Input)
 			toolCalls = append(toolCalls, types.ToolCall{

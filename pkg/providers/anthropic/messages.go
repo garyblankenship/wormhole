@@ -215,7 +215,8 @@ func (p *Provider) buildContent(msg types.Message) []map[string]any {
 	// (and it MUST be the first block) when extended thinking is interleaved
 	// with tool_use. Prepend it when present.
 	if assistantMsg, ok := msg.(*types.AssistantMessage); ok &&
-		assistantMsg.Thinking != nil && assistantMsg.Thinking.Signature != "" {
+		assistantMsg.Thinking != nil && assistantMsg.Thinking.Signature != "" &&
+		(assistantMsg.Thinking.Provider == "" || assistantMsg.Thinking.Provider == "anthropic") {
 		thinkingBlock := map[string]any{
 			"type":      contentTypeThinking,
 			"thinking":  assistantMsg.Thinking.Content,

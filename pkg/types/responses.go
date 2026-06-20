@@ -176,6 +176,9 @@ type ChunkDelta struct {
 type Thinking struct {
 	Content   string `json:"content,omitempty"`
 	Signature string `json:"signature,omitempty"`
+	// Provider records which provider produced this thinking block, so a foreign signature is never replayed
+	// to a provider that cannot accept it.
+	Provider string `json:"provider,omitempty"`
 }
 
 // EmbeddingsResponse represents an embeddings response

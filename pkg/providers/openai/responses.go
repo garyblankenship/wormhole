@@ -398,7 +398,7 @@ func (p *Provider) parseResponsesStreamChunk(data []byte) (*types.TextChunk, err
 			Delta:    &types.ChunkDelta{Thinking: thinking},
 		}, nil
 	case responsesEventReasoningDone:
-		thinking := &types.Thinking{Signature: event.ItemID}
+		thinking := &types.Thinking{Signature: event.ItemID, Provider: "openai"}
 		return &types.TextChunk{
 			ID:       event.ItemID,
 			Model:    event.responseModel(),

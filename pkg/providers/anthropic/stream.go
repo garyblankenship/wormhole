@@ -67,7 +67,7 @@ func (p *Provider) parseStreamChunk(data []byte) (*types.StreamChunk, error) {
 			chunk.Thinking = thinking
 			chunk.Delta = &types.ChunkDelta{Thinking: thinking}
 		} else if event.Delta.Type == "signature_delta" {
-			thinking := &types.Thinking{Signature: event.Delta.Signature}
+			thinking := &types.Thinking{Signature: event.Delta.Signature, Provider: "anthropic"}
 			chunk.Thinking = thinking
 			chunk.Delta = &types.ChunkDelta{Thinking: thinking}
 		} else if event.Delta.Type == "input_json_delta" {
