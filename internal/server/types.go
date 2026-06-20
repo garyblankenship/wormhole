@@ -23,8 +23,9 @@ type ChatCompletionRequest struct {
 // ChatCompletionRequestMessage is a request-only chat message. OpenAI clients
 // may send content as either a plain string or a multimodal parts array.
 type ChatCompletionRequestMessage struct {
-	Role    string             `json:"role"`
-	Content ChatMessageContent `json:"content"`
+	Role       string             `json:"role"`
+	Content    ChatMessageContent `json:"content"`
+	ToolCallID string             `json:"tool_call_id,omitempty"`
 }
 
 type ChatMessageContent struct {

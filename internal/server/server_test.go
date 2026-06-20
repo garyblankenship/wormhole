@@ -454,3 +454,28 @@ func TestMergeProviderNames(t *testing.T) {
 
 	assert.Equal(t, []string{"openai", "groq", "anthropic", "mistral"}, got)
 }
+
+func TestProxyChatMapsToolRoleToToolResultMessage(t *testing.T) {
+	t.Parallel()
+
+	capturingProvider := newCapturingTextProvider("openai")
+	p := newCapturingTestProxy(capturingProvider)
+
+	rec := performRequest(p, http.MethodPost, "/v1/chat/completions", `{
+		"model":"openai/gpt-test",
+		"messages":[
+			{"role":"user","content":"weather?"},
+			{"role":"assistant","content":"checking"},
+			{"role":"tool","tool_call_id":"call_abc","content":"sunny"}
+		]
+	}`)
+
+	require.Equal(t, http.StatusOK, rec.Code)
+	last := capturingProvider.lastRequest()
+	require.Len(t, last.Messages, 3)
+
+	tr, ok := last.Messages[2].(*types.ToolResultMessage)
+	require.True(t, ok, "role:tool must map to ToolResultMessage, not UserMessage")
+	assert.Equal(t, "call_abc", tr.ToolCallID)
+	assert.Equal(t, "sunny", tr.Content)
+}
