@@ -1,5 +1,14 @@
 # Changelog
 
+## v1.18.0 (2026-06-20)
+
+### Fixes
+- OpenAI: honor `StructuredModeStrict` with native `json_schema` structured output (previously a silent downgrade to function-calling) on both Chat Completions and the Responses API
+- Gemini: pass structured tool-result JSON through `functionResponse.response` as an object instead of a double-encoded string
+
+### Other
+- Raise the minimum Go version to 1.25 (enables `testing/synctest`-based concurrency tests)
+
 ## v1.17.0 (2026-06-20)
 
 ### Features
