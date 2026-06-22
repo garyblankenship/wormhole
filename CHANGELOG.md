@@ -1,17 +1,12 @@
 # Changelog
 
-## Unreleased
-
-### Features
-- Proxy: accept OpenAI `response_format` (structured output) and thread it through to OpenAI and OpenAI-compatible providers. Anthropic, Gemini, and native Ollama return a clear `400` instead of silently producing unstructured output — drive structured output for those providers through the SDK.
-
 ## v1.19.0 (2026-06-22)
 
 ### Features
 - Proxy: OpenAI-compatible tool-call passthrough — accept `tools`/`tool_choice` on requests, return `tool_calls` on responses and as indexed `tool_call` deltas while streaming, and reconstruct inbound assistant tool calls for multi-turn conversations.
 - Errors: preserve provider retry timing on `WormholeError` via a new `RetryAfter` field and `WithRetryAfter` setter; add `types.ParseRetryAfterHeader` to normalize `Retry-After` (seconds or HTTP-date) and `x-ratelimit-reset-requests` (seconds or a Go-style duration like `1m26.4s`). `GetRetryAfter` now prefers an explicit provider hint over its code-based defaults.
 - Proxy: log a startup warning when `WORMHOLE_API_KEY` is unset and `/v1/` endpoints are served without authentication.
-
+- Proxy: accept OpenAI `response_format` (structured output) and thread it through to OpenAI and OpenAI-compatible providers. Anthropic, Gemini, and native Ollama return a clear `400` instead of silently producing unstructured output — drive structured output for those providers through the SDK.
 ### Fixes
 - Gemini: send the real function name in `functionResponse.name` instead of the synthetic call ID, fixing HTTP 400 on multi-turn tool calling.
 - Ollama: guard the streaming `stampProvider` send with `ctx.Done()` to prevent a goroutine leak on cancellation.
@@ -21,8 +16,8 @@
 - AdaptiveLimiter: `Stop()` now waits for the adjustment goroutine to exit instead of leaking it.
 
 ### Other
-- Docs: document the proxy tool-call passthrough and auth/redaction behavior in the README.
-- Tests: add proxy tool-call mapper, streaming delta indexing, error-redaction, and Gemini `functionResponse.name` coverage.
+- Docs: document the proxy tool-call passthrough, auth/redaction, and `response_format` behavior in the README.
+- Tests: add proxy tool-call mapper, streaming delta indexing, error-redaction, and Gemini `functionResponse.name` coverage; add `response_format` gate tests; add wire-conformance replay tests (real-payload SSE fixtures driven through the actual parse path) for Gemini, Anthropic, and OpenAI streaming.
 
 ## v1.18.0 (2026-06-20)
 
