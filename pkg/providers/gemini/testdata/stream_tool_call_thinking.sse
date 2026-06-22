@@ -1,0 +1,8 @@
+data: {"candidates":[{"content":{"parts":[{"text":"Let me check the weather for you.","thought":true}],"role":"model"}}]}
+
+data: {"candidates":[{"content":{"parts":[{"text":"Looking that up."}],"role":"model"}}]}
+
+data: {"candidates":[{"content":{"parts":[{"functionCall":{"name":"get_weather","args":{"city":"SF"}},"thoughtSignature":"sig-abc-123"}],"role":"model"}}]}
+
+data: {"candidates":[{"content":{"parts":[],"role":"model"},"finishReason":"STOP"}],"usageMetadata":{"promptTokenCount":10,"candidatesTokenCount":5,"totalTokenCount":15,"cachedContentTokenCount":2}}
+
