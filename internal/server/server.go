@@ -48,6 +48,10 @@ func New(cfg Config) *proxy {
 		apiKey: cfg.ProxyAPIKey,
 	}
 
+	if p.apiKey == "" {
+		p.logger.Warn("proxy authentication disabled: WORMHOLE_API_KEY not set; /v1/ endpoints are unauthenticated")
+	}
+
 	mux := http.NewServeMux()
 	mux.HandleFunc("POST /v1/chat/completions", p.handleChatCompletions)
 	mux.HandleFunc("POST /v1/embeddings", p.handleEmbeddings)
