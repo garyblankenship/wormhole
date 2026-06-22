@@ -656,3 +656,88 @@ func TestGeminiProvider_EdgeCases(t *testing.T) {
 		assert.Nil(t, msg.ToolCalls[0].Arguments)
 	})
 }
+
+func TestGeminiFunctionResponseName(t *testing.T) {
+	t.Parallel()
+	provider := New("test-key", types.NewProviderConfig("test-key"))
+
+	t.Run("explicit FunctionName is used", func(t *testing.T) {
+		t.Parallel()
+
+		msg := &types.ToolResultMessage{
+			Content:      "{\"temp\":72}",
+			ToolCallID:   "gemini-call-0-get_weather",
+			FunctionName: "get_weather",
+		}
+
+		parts, err := provider.transformMessageToParts(msg, "")
+		assert.NoError(t, err)
+		assert.Len(t, parts, 1)
+
+		functionResponse, ok := parts[0]["functionResponse"].(map[string]any)
+		assert.True(t, ok)
+		name, ok := functionResponse["name"].(string)
+		assert.True(t, ok)
+		assert.Equal(t, "get_weather", name)
+	})
+
+	t.Run("synthetic ToolCallID provides fallback", func(t *testing.T) {
+		t.Parallel()
+
+		msg := &types.ToolResultMessage{
+			Content:    "{\"temp\":72}",
+			ToolCallID: "gemini-call-0-get_weather",
+		}
+
+		parts, err := provider.transformMessageToParts(msg, "")
+		assert.NoError(t, err)
+		assert.Len(t, parts, 1)
+
+		functionResponse, ok := parts[0]["functionResponse"].(map[string]any)
+		assert.True(t, ok)
+		name, ok := functionResponse["name"].(string)
+		assert.True(t, ok)
+		assert.Equal(t, "get_weather", name)
+	})
+
+	t.Run("non-synthetic ToolCallID is preserved", func(t *testing.T) {
+		t.Parallel()
+
+		msg := &types.ToolResultMessage{
+			Content:    "ok",
+			ToolCallID: "call_abc123",
+		}
+
+		parts, err := provider.transformMessageToParts(msg, "")
+		assert.NoError(t, err)
+		assert.Len(t, parts, 1)
+
+		functionResponse, ok := parts[0]["functionResponse"].(map[string]any)
+		assert.True(t, ok)
+		name, ok := functionResponse["name"].(string)
+		assert.True(t, ok)
+		assert.Equal(t, "call_abc123", name)
+	})
+}
+
+func TestGeminiCallName(t *testing.T) {
+	t.Parallel()
+	testCases := []struct {
+		name     string
+		id       string
+		expected string
+	}{
+		{name: "synthetic gemini id", id: "gemini-call-0-get_weather", expected: "get_weather"},
+		{name: "multi-digit index", id: "gemini-call-12-do_thing", expected: "do_thing"},
+		{name: "non-synthetic id", id: "call_abc", expected: "call_abc"},
+		{name: "trailing empty name", id: "gemini-call-0-", expected: "gemini-call-0-"},
+		{name: "empty id", id: "", expected: ""},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			assert.Equal(t, tc.expected, geminiCallName(tc.id))
+		})
+	}
+}
