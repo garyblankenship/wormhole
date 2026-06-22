@@ -71,7 +71,7 @@ func (p *Provider) Text(ctx context.Context, request types.TextRequest) (*types.
 
 // stampProvider sets Provider on the terminal chunk. Sole closer of out;
 // exits when the upstream channel closes.
-func (p *Provider) stampProvider(in <-chan types.TextChunk) <-chan types.TextChunk {
+func (p *Provider) stampProvider(ctx context.Context, in <-chan types.TextChunk) <-chan types.TextChunk {
 	out := make(chan types.TextChunk)
 	go func() {
 		defer close(out)
@@ -79,7 +79,11 @@ func (p *Provider) stampProvider(in <-chan types.TextChunk) <-chan types.TextChu
 			if chunk.IsDone() {
 				chunk.Provider = p.Name()
 			}
-			out <- chunk
+			select {
+			case out <- chunk:
+			case <-ctx.Done():
+				return
+			}
 		}
 	}()
 	return out
@@ -97,7 +101,7 @@ func (p *Provider) Stream(ctx context.Context, request types.TextRequest) (<-cha
 		return nil, err
 	}
 
-	return p.stampProvider(utils.ProcessStream(ctx, body, p.parseStreamChunk, 100)), nil
+	return p.stampProvider(ctx, utils.ProcessStream(ctx, body, p.parseStreamChunk, 100)), nil
 }
 
 // Structured generates a structured response using JSON mode
