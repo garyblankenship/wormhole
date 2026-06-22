@@ -1,5 +1,24 @@
 # Changelog
 
+## Unreleased
+
+### Features
+- Proxy: OpenAI-compatible tool-call passthrough — accept `tools`/`tool_choice` on requests, return `tool_calls` on responses and as indexed `tool_call` deltas while streaming, and reconstruct inbound assistant tool calls for multi-turn conversations.
+- Errors: preserve provider retry timing on `WormholeError` via a new `RetryAfter` field and `WithRetryAfter` setter; add `types.ParseRetryAfterHeader` to normalize `Retry-After` (seconds or HTTP-date) and `x-ratelimit-reset-requests` (seconds or a Go-style duration like `1m26.4s`). `GetRetryAfter` now prefers an explicit provider hint over its code-based defaults.
+- Proxy: log a startup warning when `WORMHOLE_API_KEY` is unset and `/v1/` endpoints are served without authentication.
+
+### Fixes
+- Gemini: send the real function name in `functionResponse.name` instead of the synthetic call ID, fixing HTTP 400 on multi-turn tool calling.
+- Ollama: guard the streaming `stampProvider` send with `ctx.Done()` to prevent a goroutine leak on cancellation.
+- Proxy: compare the API key in constant time and add `ReadTimeout`/`IdleTimeout` for slowloris hardening (`WriteTimeout` is left unset to preserve long-lived SSE streams).
+- Proxy: redact upstream provider error details from client responses — the full error still reaches the server logs.
+- HTTP: log a failed re-auth during key rotation instead of silently swallowing the error.
+- AdaptiveLimiter: `Stop()` now waits for the adjustment goroutine to exit instead of leaking it.
+
+### Other
+- Docs: document the proxy tool-call passthrough and auth/redaction behavior in the README.
+- Tests: add proxy tool-call mapper, streaming delta indexing, error-redaction, and Gemini `functionResponse.name` coverage.
+
 ## v1.18.0 (2026-06-20)
 
 ### Fixes

@@ -315,11 +315,37 @@ Get suggested retry delay from error:
 ```go
 import "github.com/garyblankenship/wormhole/pkg/types"
 
-delay, ok := types.GetRetryAfter(err)
-if ok {
+// GetRetryAfter returns a suggested delay, or 0 when the error is not retryable.
+// It prefers a provider-supplied hint when present, then falls back to
+// code-based defaults (rate limit 30s, network 5s, timeout 10s).
+delay := types.GetRetryAfter(err)
+if delay > 0 {
     log.Printf("Retry suggested after %v", delay)
     time.Sleep(delay)
 }
+```
+
+#### Provider retry hints
+
+HTTP providers normalize `Retry-After` and rate-limit reset headers onto the
+error as `WormholeError.RetryAfter`. `GetRetryAfter` (above) returns this value
+when it is positive before falling back to code-based defaults.
+
+```go
+var werr *types.WormholeError
+if errors.As(err, &werr) && werr.RetryAfter > 0 {
+    time.Sleep(werr.RetryAfter)
+}
+```
+
+To parse a delay from raw response headers yourself, use
+`types.ParseRetryAfterHeader`. It reads `Retry-After` (integer seconds or an
+HTTP-date) and then `x-ratelimit-reset-requests` (integer seconds or a Go-style
+duration such as `1m26.4s`), returning `0` when no usable hint is present:
+
+```go
+delay := types.ParseRetryAfterHeader(resp.Header, time.Now())
+err = werr.WithRetryAfter(delay) // copy-style setter; returns a new *WormholeError
 ```
 
 ### Using Retry Middleware
