@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+### Features
+- Proxy: accept OpenAI `response_format` (structured output) and thread it through to OpenAI and OpenAI-compatible providers. Anthropic, Gemini, and native Ollama return a clear `400` instead of silently producing unstructured output — drive structured output for those providers through the SDK.
+
 ## v1.19.0 (2026-06-22)
 
 ### Features

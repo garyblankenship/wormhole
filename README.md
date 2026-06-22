@@ -583,6 +583,14 @@ curl -s http://localhost:8080/v1/chat/completions \
 	}'
 ```
 
+### Structured output through the proxy
+
+Send an OpenAI `response_format` (`{"type": "json_object"}` or a
+`{"type": "json_schema", ...}`) and the proxy threads it through to OpenAI and
+OpenAI-compatible providers. Anthropic, Gemini, and native Ollama return a clear
+`400` for `response_format` — drive structured output for those providers through
+the SDK instead.
+
 ## Custom Providers
 
 OpenAI-compatible providers only need a name and base URL. Congratulations, you
