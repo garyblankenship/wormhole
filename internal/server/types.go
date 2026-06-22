@@ -18,6 +18,8 @@ type ChatCompletionRequest struct {
 	TopP        *float64                       `json:"top_p,omitempty"`
 	Stop        []string                       `json:"stop,omitempty"`
 	Stream      bool                           `json:"stream,omitempty"`
+	Tools       []ChatTool                     `json:"tools,omitempty"`
+	ToolChoice  json.RawMessage                `json:"tool_choice,omitempty"`
 }
 
 // ChatCompletionRequestMessage is a request-only chat message. OpenAI clients
@@ -26,6 +28,7 @@ type ChatCompletionRequestMessage struct {
 	Role       string             `json:"role"`
 	Content    ChatMessageContent `json:"content"`
 	ToolCallID string             `json:"tool_call_id,omitempty"`
+	ToolCalls  []ChatToolCall     `json:"tool_calls,omitempty"`
 }
 
 type ChatMessageContent struct {
@@ -104,8 +107,37 @@ func parseImageURLPart(rawURL string) (*types.ImageMedia, error) {
 
 // ChatMessage is a message in the OpenAI chat format.
 type ChatMessage struct {
-	Role    string `json:"role"`
-	Content string `json:"content"`
+	Role      string         `json:"role"`
+	Content   string         `json:"content"`
+	ToolCalls []ChatToolCall `json:"tool_calls,omitempty"`
+}
+
+// ChatTool is an OpenAI-format tool definition on a request.
+type ChatTool struct {
+	Type     string           `json:"type"`
+	Function ChatToolFunction `json:"function"`
+}
+
+// ChatToolFunction is the function schema inside a ChatTool.
+type ChatToolFunction struct {
+	Name        string         `json:"name"`
+	Description string         `json:"description,omitempty"`
+	Parameters  map[string]any `json:"parameters,omitempty"`
+}
+
+// ChatToolCall is an OpenAI-format tool call on a response/delta or an inbound
+// assistant message. Index is set only on streaming deltas.
+type ChatToolCall struct {
+	Index    *int                 `json:"index,omitempty"`
+	ID       string               `json:"id"`
+	Type     string               `json:"type"`
+	Function ChatToolCallFunction `json:"function"`
+}
+
+// ChatToolCallFunction holds the called function name and raw JSON arguments.
+type ChatToolCallFunction struct {
+	Name      string `json:"name"`
+	Arguments string `json:"arguments"`
 }
 
 // ChatCompletionResponse is the OpenAI-compatible chat completion response.

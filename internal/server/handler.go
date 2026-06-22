@@ -63,7 +63,11 @@ func (p *proxy) handleChatCompletions(w http.ResponseWriter, r *http.Request) {
 					"image content parts are only supported on user messages", "invalid_request_error")
 				return
 			}
-			msgs = append(msgs, types.NewAssistantMessage(m.Content.Text))
+			am := types.NewAssistantMessage(m.Content.Text)
+			if len(m.ToolCalls) > 0 {
+				am.ToolCalls = toWormholeToolCalls(m.ToolCalls)
+			}
+			msgs = append(msgs, am)
 		case "tool":
 			if len(m.Content.Media) > 0 {
 				writeError(w, http.StatusBadRequest, "unsupported_content_part",
@@ -114,6 +118,12 @@ func (p *proxy) handleChatCompletions(w http.ResponseWriter, r *http.Request) {
 	if len(req.Stop) > 0 {
 		builder = builder.Stop(req.Stop...)
 	}
+	if len(req.Tools) > 0 {
+		builder = builder.Tools(toWormholeTools(req.Tools)...)
+	}
+	if tc := parseToolChoice(req.ToolChoice); tc != nil {
+		builder = builder.ToolChoice(tc)
+	}
 
 	if req.Stream {
 		p.streamChat(w, r, builder, model)
@@ -133,6 +143,11 @@ func (p *proxy) handleChatCompletions(w http.ResponseWriter, r *http.Request) {
 		fr = "stop"
 	}
 
+	msg := &ChatMessage{Role: "assistant", Content: resp.Text}
+	if len(resp.ToolCalls) > 0 {
+		msg.ToolCalls = fromWormholeToolCalls(resp.ToolCalls)
+	}
+
 	out := ChatCompletionResponse{
 		ID:      fmt.Sprintf("wh-%s", resp.ID),
 		Object:  "chat.completion",
@@ -140,7 +155,7 @@ func (p *proxy) handleChatCompletions(w http.ResponseWriter, r *http.Request) {
 		Model:   model,
 		Choices: []ChatChoice{{
 			Index:        0,
-			Message:      &ChatMessage{Role: "assistant", Content: resp.Text},
+			Message:      msg,
 			FinishReason: &fr,
 		}},
 	}
@@ -177,6 +192,7 @@ func (p *proxy) streamChat(w http.ResponseWriter, r *http.Request, builder *worm
 	flusher.Flush()
 
 	id := fmt.Sprintf("wh-%d", time.Now().UnixNano())
+	toolState := newStreamToolState()
 
 	for chunk := range stream {
 		if chunk.Error != nil {
@@ -184,6 +200,10 @@ func (p *proxy) streamChat(w http.ResponseWriter, r *http.Request, builder *worm
 			break
 		}
 
+		delta := &ChatMessage{Role: "assistant", Content: chunk.Content()}
+		if tcs := toolState.delta(chunk); len(tcs) > 0 {
+			delta.ToolCalls = tcs
+		}
 		chunkResp := ChatCompletionResponse{
 			ID:      id,
 			Object:  "chat.completion.chunk",
@@ -191,7 +211,7 @@ func (p *proxy) streamChat(w http.ResponseWriter, r *http.Request, builder *worm
 			Model:   model,
 			Choices: []ChatChoice{{
 				Index: 0,
-				Delta: &ChatMessage{Role: "assistant", Content: chunk.Content()},
+				Delta: delta,
 			}},
 		}
 
