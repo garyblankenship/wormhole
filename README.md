@@ -528,7 +528,11 @@ Supported proxy endpoints:
 
 Set `WORMHOLE_API_KEY` to require `Authorization: Bearer <token>` on proxy
 requests. Do that before exposing the portal outside localhost unless your
-incident-review strategy is "pretend the timeline never happened."
+incident-review strategy is "pretend the timeline never happened." When the key
+is unset the proxy logs a startup warning and serves `/v1/` endpoints without
+authentication. The token is compared in constant time, and upstream provider
+error details are redacted from client responses — the full error still reaches
+the server logs.
 
 The proxy accepts OpenAI-style image chat content parts. Data URLs are converted
 to inline media before routing, so Gemini models can receive image-aware chat
@@ -546,6 +550,36 @@ curl -s http://localhost:8080/v1/chat/completions \
 				{"type": "image_url", "image_url": {"url": "data:image/png;base64,..."}}
 			]
 		}]
+	}'
+```
+
+### Tool calling through the proxy
+
+The proxy passes tool calling through in both directions. Send OpenAI-style
+`tools` and `tool_choice` on a request and the model's `tool_calls` come back on
+the response — and as indexed `tool_call` deltas when `"stream": true`. To
+continue a multi-turn tool conversation, send the assistant's `tool_calls` and
+the matching `tool` results on the next turn.
+
+```bash
+curl -s http://localhost:8080/v1/chat/completions \
+	-H 'Content-Type: application/json' \
+	-d '{
+		"model": "anthropic/claude-sonnet-4-5",
+		"messages": [{"role": "user", "content": "What is the weather in SF?"}],
+		"tools": [{
+			"type": "function",
+			"function": {
+				"name": "get_weather",
+				"description": "Get the current weather for a city",
+				"parameters": {
+					"type": "object",
+					"properties": {"city": {"type": "string"}},
+					"required": ["city"]
+				}
+			}
+		}],
+		"tool_choice": "auto"
 	}'
 ```
 
