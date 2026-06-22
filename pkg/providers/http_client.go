@@ -274,7 +274,9 @@ func NewHTTPClientWrapper(name string, providerConfig types.ProviderConfig, tlsC
 			} else {
 				cfg.APIKey = pool.currentKey(now)
 			}
-			_ = auth.Apply(reqClone, cfg)
+			if err := auth.Apply(reqClone, cfg); err != nil {
+				slog.Warn("failed to re-apply auth on retry", "provider", w.providerName, "error", err)
+			}
 		}
 	}
 
