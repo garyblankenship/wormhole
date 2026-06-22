@@ -240,6 +240,7 @@ func (e *ToolExecutor) ExecuteAll(ctx context.Context, toolCalls []types.ToolCal
 						index: idx,
 						result: types.ToolResult{
 							ToolCallID: tc.ID,
+							Name:       tc.Name,
 							Error:      "concurrency limit exceeded or context canceled",
 						},
 					}
@@ -254,6 +255,7 @@ func (e *ToolExecutor) ExecuteAll(ctx context.Context, toolCalls []types.ToolCal
 						index: idx,
 						result: types.ToolResult{
 							ToolCallID: tc.ID,
+							Name:       tc.Name,
 							Error:      "concurrency limit exceeded or context canceled",
 						},
 					}
@@ -263,6 +265,7 @@ func (e *ToolExecutor) ExecuteAll(ctx context.Context, toolCalls []types.ToolCal
 			}
 
 			result := e.Execute(ctx, tc)
+			result.Name = tc.Name
 
 			// Record latency for adaptive concurrency control
 			if !startTime.IsZero() {
@@ -314,15 +317,18 @@ func (e *ToolExecutor) BuildToolResultMessage(toolResults []types.ToolResult) *t
 	}
 	content := builder.String()
 
-	// Use the first tool call ID (providers may handle multiple results differently)
+	// Use the first tool call ID/name (providers may handle multiple results differently)
 	toolCallID := ""
+	functionName := ""
 	if len(toolResults) > 0 {
 		toolCallID = toolResults[0].ToolCallID
+		functionName = toolResults[0].Name
 	}
 
 	return &types.ToolResultMessage{
-		Content:    content,
-		ToolCallID: toolCallID,
+		Content:      content,
+		ToolCallID:   toolCallID,
+		FunctionName: functionName,
 	}
 }
 

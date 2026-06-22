@@ -151,8 +151,9 @@ type ToolMessage = ToolResultMessage
 
 // ToolResultMessage represents a tool result message
 type ToolResultMessage struct {
-	Content    string `json:"content"`
-	ToolCallID string `json:"tool_call_id"`
+	Content      string `json:"content"`
+	ToolCallID   string `json:"tool_call_id"`
+	FunctionName string `json:"function_name,omitempty"`
 }
 
 func (m *ToolResultMessage) GetRole() Role {

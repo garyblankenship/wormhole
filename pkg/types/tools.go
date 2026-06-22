@@ -77,6 +77,7 @@ type ToolCallFunction struct {
 // ToolResult represents the result of a tool execution
 type ToolResult struct {
 	ToolCallID string `json:"tool_call_id"`
+	Name       string `json:"name,omitempty"`
 	Result     any    `json:"result"`
 	Error      string `json:"error,omitempty"`
 }

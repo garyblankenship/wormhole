@@ -161,9 +161,13 @@ func (g *Gemini) transformMessageToParts(msg types.Message, model string) ([]map
 		if err := json.Unmarshal([]byte(m.Content), &result); err != nil {
 			result = m.Content
 		}
+		fnName := m.FunctionName
+		if fnName == "" {
+			fnName = geminiCallName(m.ToolCallID)
+		}
 		parts = append(parts, map[string]any{
 			"functionResponse": map[string]any{
-				"name": m.ToolCallID,
+				"name": fnName,
 				"response": map[string]any{
 					"result": result,
 				},
@@ -816,4 +820,20 @@ func (g *Gemini) handleStream(ctx context.Context, stream io.ReadCloser) <-chan 
 	}()
 
 	return ch
+}
+
+// geminiCallName recovers the function name from a synthetic
+// "gemini-call-<idx>-<name>" tool-call ID (the format minted when adapting a
+// Gemini functionCall part above). Returns id unchanged when it is not in that
+// format. Fallback for a ToolResultMessage that carries no explicit FunctionName
+// (e.g. a manually-constructed multi-turn result echoing the synthesized ID).
+func geminiCallName(id string) string {
+	rest, ok := strings.CutPrefix(id, "gemini-call-")
+	if !ok {
+		return id
+	}
+	if _, name, found := strings.Cut(rest, "-"); found && name != "" {
+		return name
+	}
+	return id
 }
