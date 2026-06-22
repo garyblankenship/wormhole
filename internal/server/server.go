@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"crypto/subtle"
 	"log/slog"
 	"net/http"
 	"strings"
@@ -57,6 +58,10 @@ func New(cfg Config) *proxy {
 		Addr:              cfg.Addr,
 		Handler:           p.auth(mux),
 		ReadHeaderTimeout: 10 * time.Second,
+		ReadTimeout:       60 * time.Second,
+		IdleTimeout:       120 * time.Second,
+		// WriteTimeout is intentionally unset: the proxy serves long-lived SSE
+		// streams (streamChat) that a global write deadline would truncate.
 	}
 
 	return p
@@ -80,7 +85,7 @@ func (p *proxy) auth(next http.Handler) http.Handler {
 		if p.apiKey != "" && strings.HasPrefix(r.URL.Path, "/v1/") {
 			auth := r.Header.Get("Authorization")
 			token := strings.TrimPrefix(auth, "Bearer ")
-			if token == auth || token != p.apiKey {
+			if token == auth || subtle.ConstantTimeCompare([]byte(token), []byte(p.apiKey)) != 1 {
 				writeError(w, http.StatusUnauthorized, "invalid_api_key",
 					"Invalid or missing API key", "authentication_error")
 				return
