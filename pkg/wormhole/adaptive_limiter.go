@@ -54,6 +54,7 @@ type AdaptiveLimiter struct {
 
 	stopChan chan struct{}
 	stopOnce sync.Once
+	wg sync.WaitGroup
 }
 
 // NewAdaptiveLimiter creates a new adaptive limiter with the given configuration.
@@ -73,6 +74,7 @@ func NewAdaptiveLimiter(config AdaptiveConfig) *AdaptiveLimiter {
 	}
 
 	// Start adjustment goroutine
+	al.wg.Add(1)
 	go al.adjustmentLoop()
 
 	return al
@@ -137,6 +139,7 @@ func (al *AdaptiveLimiter) RecordLatency(latency time.Duration) {
 
 // adjustmentLoop periodically evaluates performance and adjusts capacity.
 func (al *AdaptiveLimiter) adjustmentLoop() {
+	defer al.wg.Done()
 	ticker := time.NewTicker(al.config.AdjustmentInterval)
 	defer ticker.Stop()
 
@@ -187,6 +190,7 @@ func (al *AdaptiveLimiter) Stop() {
 	al.stopOnce.Do(func() {
 		close(al.stopChan)
 	})
+	al.wg.Wait()
 }
 
 // helper functions (Go 1.21+ has these in cmp package)
