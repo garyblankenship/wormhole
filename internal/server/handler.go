@@ -124,6 +124,25 @@ func (p *proxy) handleChatCompletions(w http.ResponseWriter, r *http.Request) {
 	if tc := parseToolChoice(req.ToolChoice); tc != nil {
 		builder = builder.ToolChoice(tc)
 	}
+	if len(req.ResponseFormat) > 0 {
+		effProvider := provider
+		if effProvider == "" {
+			effProvider = p.defaultProvider
+		}
+		if responseFormatUnsupported(effProvider) {
+			writeError(w, http.StatusBadRequest, "unsupported_response_format",
+				fmt.Sprintf("response_format is not yet supported through the proxy for the %q provider; use the SDK's structured output instead", effProvider),
+				"invalid_request_error")
+			return
+		}
+		var rf map[string]any
+		if err := json.Unmarshal(req.ResponseFormat, &rf); err != nil {
+			writeError(w, http.StatusBadRequest, "invalid_request_error",
+				"invalid response_format: "+err.Error(), "invalid_request_error")
+			return
+		}
+		builder = builder.ResponseFormat(rf)
+	}
 
 	if req.Stream {
 		p.streamChat(w, r, builder, model)
@@ -374,6 +393,21 @@ func writeError(w http.ResponseWriter, status int, code, message, errType string
 			Code:    code,
 		},
 	})
+}
+
+// responseFormatUnsupported reports whether the proxy must reject response_format
+// for a provider rather than pass it through. Anthropic and Gemini never read
+// ResponseFormat on the text path (they drive structured output through separate
+// mechanisms), and native Ollama's text path only accepts a narrow shape — so a
+// raw passthrough would silently yield unstructured output. OpenAI and all
+// OpenAI-Chat-compatible providers handle it correctly.
+func responseFormatUnsupported(provider string) bool {
+	switch provider {
+	case "anthropic", "gemini", "ollama":
+		return true
+	default:
+		return false
+	}
 }
 
 // upstreamErrorStatus maps a provider error to an OpenAI-style HTTP status and

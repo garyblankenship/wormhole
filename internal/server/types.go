@@ -11,15 +11,16 @@ import (
 
 // ChatCompletionRequest is the OpenAI-compatible chat completion request.
 type ChatCompletionRequest struct {
-	Model       string                         `json:"model"`
-	Messages    []ChatCompletionRequestMessage `json:"messages"`
-	Temperature *float64                       `json:"temperature,omitempty"`
-	MaxTokens   *int                           `json:"max_tokens,omitempty"`
-	TopP        *float64                       `json:"top_p,omitempty"`
-	Stop        []string                       `json:"stop,omitempty"`
-	Stream      bool                           `json:"stream,omitempty"`
-	Tools       []ChatTool                     `json:"tools,omitempty"`
-	ToolChoice  json.RawMessage                `json:"tool_choice,omitempty"`
+	Model          string                         `json:"model"`
+	Messages       []ChatCompletionRequestMessage `json:"messages"`
+	Temperature    *float64                       `json:"temperature,omitempty"`
+	MaxTokens      *int                           `json:"max_tokens,omitempty"`
+	TopP           *float64                       `json:"top_p,omitempty"`
+	Stop           []string                       `json:"stop,omitempty"`
+	Stream         bool                           `json:"stream,omitempty"`
+	Tools          []ChatTool                     `json:"tools,omitempty"`
+	ToolChoice     json.RawMessage                `json:"tool_choice,omitempty"`
+	ResponseFormat json.RawMessage                `json:"response_format,omitempty"`
 }
 
 // ChatCompletionRequestMessage is a request-only chat message. OpenAI clients

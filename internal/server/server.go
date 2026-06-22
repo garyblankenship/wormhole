@@ -21,10 +21,11 @@ type Config struct {
 }
 
 type proxy struct {
-	wh     *wormhole.Wormhole
-	server *http.Server
-	logger *slog.Logger
-	apiKey string
+	wh              *wormhole.Wormhole
+	server          *http.Server
+	logger          *slog.Logger
+	apiKey          string
+	defaultProvider string
 }
 
 // New creates and wires a new proxy server from the given config.
@@ -43,9 +44,10 @@ func New(cfg Config) *proxy {
 	}
 
 	p := &proxy{
-		wh:     wormhole.New(opts...),
-		logger: cfg.Logger,
-		apiKey: cfg.ProxyAPIKey,
+		wh:              wormhole.New(opts...),
+		logger:          cfg.Logger,
+		apiKey:          cfg.ProxyAPIKey,
+		defaultProvider: cfg.DefaultProvider,
 	}
 
 	if p.apiKey == "" {
