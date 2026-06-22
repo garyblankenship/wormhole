@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## v1.19.0 (2026-06-22)
 
 ### Features
 - Proxy: OpenAI-compatible tool-call passthrough — accept `tools`/`tool_choice` on requests, return `tool_calls` on responses and as indexed `tool_call` deltas while streaming, and reconstruct inbound assistant tool calls for multi-turn conversations.
