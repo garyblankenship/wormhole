@@ -391,26 +391,6 @@ func TestRetryableHTTPClient_calculateDelay(t *testing.T) {
 	})
 }
 
-func TestParseRetryAfter(t *testing.T) {
-	testCases := []struct {
-		input    string
-		expected time.Duration
-	}{
-		{"", 0},
-		{"5", 5 * time.Second},
-		{"10", 10 * time.Second},
-		{"0", 0},
-		{"invalid", 0}, // Invalid format should return 0
-	}
-
-	for _, tc := range testCases {
-		t.Run(tc.input, func(t *testing.T) {
-			result := parseRetryAfter(tc.input)
-			assert.Equal(t, tc.expected, result)
-		})
-	}
-}
-
 func TestWithRetry_Success(t *testing.T) {
 	attempt := 0
 	fn := func() error {

@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/garyblankenship/wormhole/pkg/config"
+	"github.com/garyblankenship/wormhole/pkg/types"
 )
 
 // HTTPClient defines the interface for HTTP clients
@@ -145,7 +146,7 @@ func (r *RetryableHTTPClient) Do(req *http.Request) (*http.Response, error) {
 			}
 		} else {
 			// HTTP error response
-			retryAfter := parseRetryAfter(resp.Header.Get("Retry-After"))
+			retryAfter := types.ParseRetryAfterHeader(resp.Header, time.Now())
 			lastRetryErr = &RetryableError{
 				Err:         fmt.Errorf("HTTP %d", resp.StatusCode),
 				StatusCode:  resp.StatusCode,
@@ -214,23 +215,6 @@ func (r *RetryableHTTPClient) calculateDelay(attempt int, retryAfter time.Durati
 	}
 
 	return time.Duration(delay)
-}
-
-// parseRetryAfter parses the Retry-After header value
-func parseRetryAfter(retryAfter string) time.Duration {
-	if retryAfter == "" {
-		return 0
-	}
-
-	// Try parsing as seconds
-	if d, err := time.ParseDuration(retryAfter + "s"); err == nil {
-		return d
-	}
-
-	// Try parsing as HTTP date (not implemented for simplicity)
-	// This would require parsing RFC1123 format dates
-
-	return 0
 }
 
 // secureRandomFloat returns a cryptographically secure random float between -1 and 1
