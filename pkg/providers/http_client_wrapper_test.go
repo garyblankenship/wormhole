@@ -230,7 +230,7 @@ func TestBuildErrorResponseSurfacesProviderTypeCode(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			err := w.buildErrorResponse(tt.statusCode, "", "https://example.test", []byte(tt.body))
+			err := w.buildErrorResponse(tt.statusCode, "", "https://example.test", nil, []byte(tt.body))
 			wErr, ok := types.AsWormholeError(err)
 			if !ok {
 				t.Fatalf("expected *types.WormholeError, got %T", err)
@@ -250,7 +250,7 @@ func TestBuildErrorResponseClassifiesInsufficientQuotaAsQuota(t *testing.T) {
 	t.Parallel()
 	w := NewHTTPClientWrapper("test", types.ProviderConfig{}, nil, &NoAuthStrategy{}, nil)
 	body := `{"error":{"message":"You exceeded your quota","type":"insufficient_quota","code":"insufficient_quota"}}`
-	err := w.buildErrorResponse(429, "", "https://example.test", []byte(body))
+	err := w.buildErrorResponse(429, "", "https://example.test", nil, []byte(body))
 	if got := types.ClassifyError(err); got != types.ErrorClassQuota {
 		t.Fatalf("ClassifyError = %v, want %v", got, types.ErrorClassQuota)
 	}

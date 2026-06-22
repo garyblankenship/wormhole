@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -64,14 +65,15 @@ var (
 
 // WormholeError provides structured error information
 type WormholeError struct {
-	Code       ErrorCode `json:"code"`
-	Message    string    `json:"message"`
-	Retryable  bool      `json:"retryable"`
-	StatusCode int       `json:"status_code,omitempty"`
-	Provider   string    `json:"provider,omitempty"`
-	Model      string    `json:"model,omitempty"`
-	Details    string    `json:"details,omitempty"`
-	Cause      error     `json:"-"`
+	Code       ErrorCode     `json:"code"`
+	Message    string        `json:"message"`
+	Retryable  bool          `json:"retryable"`
+	StatusCode int           `json:"status_code,omitempty"`
+	Provider   string        `json:"provider,omitempty"`
+	Model      string        `json:"model,omitempty"`
+	Details    string        `json:"details,omitempty"`
+	Cause      error         `json:"-"`
+	RetryAfter time.Duration `json:"retry_after,omitempty"`
 }
 
 // Error implements the error interface
@@ -124,6 +126,13 @@ func (e *WormholeError) WithStatusCode(code int) *WormholeError {
 func (e *WormholeError) WithCause(cause error) *WormholeError {
 	newErr := *e
 	newErr.Cause = cause
+	return &newErr
+}
+
+// WithRetryAfter sets a normalized provider-supplied retry delay on the error.
+func (e *WormholeError) WithRetryAfter(d time.Duration) *WormholeError {
+	newErr := *e
+	newErr.RetryAfter = d
 	return &newErr
 }
 
@@ -264,6 +273,11 @@ func GetRetryAfter(err error) time.Duration {
 		return 0
 	}
 
+	// Prefer an explicit provider-supplied hint over code-based defaults.
+	if wormholeErr.RetryAfter > 0 {
+		return wormholeErr.RetryAfter
+	}
+
 	switch wormholeErr.Code {
 	case ErrorCodeRateLimit:
 		return 30 * time.Second
@@ -274,6 +288,49 @@ func GetRetryAfter(err error) time.Duration {
 	default:
 		return 1 * time.Second
 	}
+}
+
+// ParseRetryAfterHeader extracts a normalized retry delay from provider response
+// headers, returning 0 when no usable hint is present. It checks Retry-After first
+// (integer seconds or HTTP-date), then x-ratelimit-reset-requests (integer/float)
+// seconds or a Go-style duration such as "1m26.4s", "205ms", "2h". Header
+// lookups are case-insensitive via http.Header.Get canonicalization.
+func ParseRetryAfterHeader(headers http.Header, now time.Time) time.Duration {
+	if v := headers.Get("Retry-After"); v != "" {
+		if secs, err := strconv.Atoi(v); err == nil {
+			if secs > 0 {
+				return time.Duration(secs) * time.Second
+			}
+		} else if t, err := http.ParseTime(v); err == nil {
+			if d := t.Sub(now); d > 0 {
+				return d
+			}
+		}
+	}
+
+	if v := headers.Get("X-RateLimit-Reset-Requests"); v != "" {
+		if d := parseResetDuration(v); d > 0 {
+			return d
+		}
+	}
+
+	return 0
+}
+
+// parseResetDuration parses a rate-limit reset value expressed either as a
+// Go-style compact duration ("1m26.4s", "205ms", "2h") or as bare integer/float
+// seconds ("13.5"). Returns 0 when unparseable or non-positive.
+func parseResetDuration(v string) time.Duration {
+	if d, err := time.ParseDuration(v); err == nil {
+		if d > 0 {
+			return d
+		}
+		return 0
+	}
+	if f, err := strconv.ParseFloat(v, 64); err == nil && f > 0 {
+		return time.Duration(f * float64(time.Second))
+	}
+	return 0
 }
 
 // Errorf creates a wrapped error with formatted message

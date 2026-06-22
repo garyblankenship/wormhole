@@ -320,7 +320,7 @@ func (w *HTTPClientWrapper) DoRequest(ctx context.Context, method, url string, b
 	defer returnResponseBuf(respBody)
 
 	if resp.StatusCode >= 400 {
-		return w.buildErrorResponse(resp.StatusCode, resp.Status, url, respBody)
+		return w.buildErrorResponse(resp.StatusCode, resp.Status, url, resp.Header, respBody)
 	}
 
 	return w.parseResponse(respBody, result)
@@ -346,7 +346,7 @@ func (w *HTTPClientWrapper) StreamRequest(ctx context.Context, method, url strin
 			return nil, types.Errorf("read response body", err)
 		}
 		defer returnResponseBuf(respBody)
-		return nil, w.buildErrorResponse(resp.StatusCode, resp.Status, url, respBody)
+		return nil, w.buildErrorResponse(resp.StatusCode, resp.Status, url, resp.Header, respBody)
 	}
 
 	return resp.Body, nil
@@ -457,7 +457,7 @@ func (w *HTTPClientWrapper) handleRequestError(ctx context.Context, err error) e
 	return types.WrapProviderError(w.providerName, types.ErrorCodeNetwork, "request failed", err)
 }
 
-func (w *HTTPClientWrapper) buildErrorResponse(statusCode int, status, url string, respBody []byte) error {
+func (w *HTTPClientWrapper) buildErrorResponse(statusCode int, status, url string, header http.Header, respBody []byte) error {
 	errorCode := w.mapHTTPStatusToErrorCode(statusCode)
 	errorMessage := w.extractErrorMessage(statusCode, status, respBody)
 
@@ -474,6 +474,9 @@ func (w *HTTPClientWrapper) buildErrorResponse(statusCode int, status, url strin
 
 	wormholeErr.StatusCode = statusCode
 	wormholeErr.Provider = w.providerName
+	if d := types.ParseRetryAfterHeader(header, time.Now()); d > 0 {
+		wormholeErr = wormholeErr.WithRetryAfter(d)
+	}
 	return wormholeErr
 }
 
