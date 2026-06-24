@@ -204,19 +204,29 @@ func (p *proxy) streamChat(w http.ResponseWriter, r *http.Request, builder *worm
 		return
 	}
 
-	w.Header().Set("Content-Type", "text/event-stream")
-	w.Header().Set("Cache-Control", "no-cache")
-	w.Header().Set("Connection", "keep-alive")
-	w.WriteHeader(http.StatusOK)
-	flusher.Flush()
-
 	id := fmt.Sprintf("wh-%d", time.Now().UnixNano())
 	toolState := newStreamToolState()
+	committed := false
 
 	for chunk := range stream {
 		if chunk.Error != nil {
 			p.logger.Error("stream chunk error", "error", chunk.Error)
-			break
+			if !committed {
+				status, errType, clientMsg := upstreamErrorStatus(chunk.Error)
+				writeError(w, status, "upstream_error", clientMsg, errType)
+				return
+			}
+			writeStreamError(w, flusher, chunk.Error)
+			return
+		}
+
+		if !committed {
+			w.Header().Set("Content-Type", "text/event-stream")
+			w.Header().Set("Cache-Control", "no-cache")
+			w.Header().Set("Connection", "keep-alive")
+			w.WriteHeader(http.StatusOK)
+			flusher.Flush()
+			committed = true
 		}
 
 		delta := &ChatMessage{Role: "assistant", Content: chunk.Content()}
@@ -258,10 +268,35 @@ func (p *proxy) streamChat(w http.ResponseWriter, r *http.Request, builder *worm
 		flusher.Flush()
 	}
 
+	if !committed {
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.Header().Set("Cache-Control", "no-cache")
+		w.Header().Set("Connection", "keep-alive")
+		w.WriteHeader(http.StatusOK)
+		flusher.Flush()
+	}
+
 	if _, err := fmt.Fprint(w, "data: [DONE]\n\n"); err != nil {
 		p.logger.Error("failed to write stream terminator", "error", err)
 		return
 	}
+	flusher.Flush()
+}
+
+func writeStreamError(w http.ResponseWriter, flusher http.Flusher, err error) {
+	_, errType, clientMsg := upstreamErrorStatus(err)
+	payload := ErrorResponse{
+		Error: ErrorDetail{
+			Message: clientMsg,
+			Type:    errType,
+			Code:    "upstream_error",
+		},
+	}
+	data, marshalErr := json.Marshal(payload)
+	if marshalErr != nil {
+		return
+	}
+	_, _ = fmt.Fprintf(w, "data: %s\n\n", data)
 	flusher.Flush()
 }
 

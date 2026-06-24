@@ -419,6 +419,7 @@ func (b *TextRequestBuilder) streamWithFallback(ctx context.Context, provider ty
 	defer release()
 
 	var failures []string
+	var lastErr error
 	wormhole := b.getWormhole()
 	for attempt, model := range modelsToTry {
 		request := cloneTextRequest(baseRequest)
@@ -436,6 +437,7 @@ func (b *TextRequestBuilder) streamWithFallback(ctx context.Context, provider ty
 		attemptCtx, cancelAttempt := context.WithCancel(ctx)
 		stream, err := b.openStream(attemptCtx, provider, request)
 		if err != nil {
+			lastErr = err
 			cancelAttempt()
 			failures = append(failures, fmt.Sprintf("%s: %v", model, err))
 			wormhole.emitAttempt(ctx, AttemptEvent{
@@ -471,6 +473,7 @@ func (b *TextRequestBuilder) streamWithFallback(ctx context.Context, provider ty
 		emitted, retry, err := forwardStreamWithFirstChunkSafety(ctx, cancelAttempt, out, stream)
 		cancelAttempt()
 		if err != nil {
+			lastErr = err
 			failures = append(failures, fmt.Sprintf("%s: %v", model, err))
 			wormhole.emitAttempt(ctx, AttemptEvent{
 				Operation: "text.stream",
@@ -515,6 +518,14 @@ func (b *TextRequestBuilder) streamWithFallback(ctx context.Context, provider ty
 	}
 
 	if ctx.Err() != nil {
+		return
+	}
+	if len(modelsToTry) == 1 && lastErr != nil {
+		sendStreamChunk(ctx, out, types.StreamChunk{Error: lastErr})
+		wormhole.emitStreamEvent(ctx, StreamEvent{
+			Type:  StreamError,
+			Error: lastErr,
+		})
 		return
 	}
 	sendStreamChunk(ctx, out, types.StreamChunk{

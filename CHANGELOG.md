@@ -1,5 +1,18 @@
 # Changelog
 
+## v1.20.0 (2026-06-24)
+
+### Features
+- Embeddings: add `GenerateBatched(ctx, batchSize)` to split large embedding inputs into provider-sized batches, validate provider response indexes, merge usage, and return vectors in caller input order.
+- OpenAI-compatible smoke checks: add optional streaming and embeddings checks, provider-options passthrough, and per-check result details.
+
+### Fixes
+- Proxy: preserve upstream HTTP errors when a streaming chat request fails before SSE headers are committed; after commit, emit an SSE error payload instead of a misleading `[DONE]`.
+- Streaming: surface the original single-model stream error when first-chunk stream fallback has no alternate model to try.
+
+### Other
+- Add regression coverage for batched embeddings, extended OpenAI-compatible smoke checks, and proxy streaming error behavior.
+
 ## v1.19.0 (2026-06-22)
 
 ### Features

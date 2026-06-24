@@ -1,11 +1,18 @@
 package wormhole
 
 import (
+	"context"
 	"fmt"
+	"strconv"
+	"strings"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/garyblankenship/wormhole/pkg/types"
 )
 
 func TestEmbeddingsRequestBuilder(t *testing.T) {
@@ -238,6 +245,118 @@ func TestEmbeddingsRequestBuilder(t *testing.T) {
 		assert.Len(t, builder.request.Input, 4)
 		assert.Equal(t, []string{"input1", "input2", "input3", "input4"}, builder.request.Input)
 	})
+}
+
+func TestEmbeddingsRequestBuilderGenerateBatched(t *testing.T) {
+	t.Parallel()
+
+	t.Run("preserves caller order across sub-batches", func(t *testing.T) {
+		t.Parallel()
+		provider := &batchedEmbeddingProvider{}
+		client := New(
+			WithCustomProvider("batch", func(types.ProviderConfig) (types.Provider, error) {
+				return provider, nil
+			}),
+			WithDefaultProvider("batch"),
+		)
+
+		resp, err := client.Embeddings().
+			Model("embed-test").
+			Input("input-0", "input-1", "input-2", "input-3", "input-4").
+			GenerateBatched(context.Background(), 2)
+
+		require.NoError(t, err)
+		require.Len(t, resp.Embeddings, 5)
+		assert.Equal(t, [][]string{{"input-0", "input-1"}, {"input-2", "input-3"}, {"input-4"}}, provider.calls)
+		require.NotNil(t, resp.Usage)
+		assert.Equal(t, 5, resp.Usage.PromptTokens)
+		for i, embedding := range resp.Embeddings {
+			assert.Equal(t, i, embedding.Index)
+			require.Len(t, embedding.Embedding, 1)
+			assert.Equal(t, float64(i), embedding.Embedding[0])
+		}
+	})
+
+	t.Run("rejects duplicate provider indexes", func(t *testing.T) {
+		t.Parallel()
+		provider := &batchedEmbeddingProvider{duplicateIndex: true}
+		client := New(
+			WithCustomProvider("batch", func(types.ProviderConfig) (types.Provider, error) {
+				return provider, nil
+			}),
+			WithDefaultProvider("batch"),
+		)
+
+		_, err := client.Embeddings().
+			Model("embed-test").
+			Input("input-0", "input-1").
+			GenerateBatched(context.Background(), 2)
+
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "duplicate response index")
+	})
+
+	t.Run("rejects non-positive batch size", func(t *testing.T) {
+		t.Parallel()
+		client := New()
+
+		_, err := client.Embeddings().
+			Model("embed-test").
+			Input("input-0").
+			GenerateBatched(context.Background(), 0)
+
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "batch_size")
+	})
+}
+
+type batchedEmbeddingProvider struct {
+	*types.BaseProvider
+	mu             sync.Mutex
+	calls          [][]string
+	duplicateIndex bool
+}
+
+func (p *batchedEmbeddingProvider) Name() string {
+	return "batch"
+}
+
+func (p *batchedEmbeddingProvider) SupportedCapabilities() []types.ModelCapability {
+	return []types.ModelCapability{types.CapabilityEmbeddings}
+}
+
+func (p *batchedEmbeddingProvider) Embeddings(_ context.Context, request types.EmbeddingsRequest) (*types.EmbeddingsResponse, error) {
+	p.mu.Lock()
+	p.calls = append(p.calls, append([]string(nil), request.Input...))
+	p.mu.Unlock()
+
+	embeddings := make([]types.Embedding, 0, len(request.Input))
+	for i := len(request.Input) - 1; i >= 0; i-- {
+		index := i
+		if p.duplicateIndex {
+			index = 0
+		}
+		embeddings = append(embeddings, types.Embedding{
+			Index:     index,
+			Embedding: []float64{embeddingValue(request.Input[i])},
+		})
+	}
+	return &types.EmbeddingsResponse{
+		ID:         "batch-response",
+		Provider:   "batch",
+		Model:      request.Model,
+		Embeddings: embeddings,
+		Usage:      &types.Usage{PromptTokens: len(request.Input)},
+		Created:    time.Unix(1, 0),
+	}, nil
+}
+
+func embeddingValue(input string) float64 {
+	value, err := strconv.Atoi(strings.TrimPrefix(input, "input-"))
+	if err != nil {
+		return -1
+	}
+	return float64(value)
 }
 
 func TestEmbeddingsRequestBuilderConcurrency(t *testing.T) {

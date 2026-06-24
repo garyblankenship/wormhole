@@ -347,6 +347,57 @@ func TestProxyChatStreaming(t *testing.T) {
 	assert.Contains(t, body, "data: [DONE]")
 }
 
+func TestProxyChatStreamingErrorBeforeCommitReturnsHTTPError(t *testing.T) {
+	t.Parallel()
+
+	upstreamErr := types.NewWormholeError(types.ErrorCodeRateLimit, "rate limit exceeded", true).
+		WithStatusCode(http.StatusTooManyRequests)
+	mock := wmtest.NewMockProvider("openai").WithStreamChunks([]types.TextChunk{{Error: upstreamErr}})
+	p := newTestProxy(mock)
+
+	rec := performRequest(p, http.MethodPost, "/v1/chat/completions", `{
+		"model":"gpt-test",
+		"stream":true,
+		"messages":[{"role":"user","content":"hello"}]
+	}`)
+
+	require.Equal(t, http.StatusTooManyRequests, rec.Code)
+	assert.NotEqual(t, "text/event-stream", rec.Header().Get("Content-Type"))
+
+	var out ErrorResponse
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &out))
+	assert.Equal(t, "rate_limit_error", out.Error.Type)
+	assert.Equal(t, "upstream_error", out.Error.Code)
+	assert.Equal(t, "rate limit exceeded", out.Error.Message)
+}
+
+func TestProxyChatStreamingErrorAfterCommitEmitsSSEError(t *testing.T) {
+	t.Parallel()
+
+	upstreamErr := types.NewWormholeError(types.ErrorCodeRateLimit, "rate limit exceeded", true).
+		WithStatusCode(http.StatusTooManyRequests)
+	mock := wmtest.NewMockProvider("openai").WithStreamChunks([]types.TextChunk{
+		{Text: "partial"},
+		{Error: upstreamErr},
+	})
+	p := newTestProxy(mock)
+
+	rec := performRequest(p, http.MethodPost, "/v1/chat/completions", `{
+		"model":"gpt-test",
+		"stream":true,
+		"messages":[{"role":"user","content":"hello"}]
+	}`)
+
+	require.Equal(t, http.StatusOK, rec.Code)
+	assert.Equal(t, "text/event-stream", rec.Header().Get("Content-Type"))
+
+	body := rec.Body.String()
+	assert.Contains(t, body, "partial")
+	assert.Contains(t, body, `"type":"rate_limit_error"`)
+	assert.Contains(t, body, `"code":"upstream_error"`)
+	assert.NotContains(t, body, "data: [DONE]")
+}
+
 func TestProxyRejectsMultipleJSONValues(t *testing.T) {
 	t.Parallel()
 

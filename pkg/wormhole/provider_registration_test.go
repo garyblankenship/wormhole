@@ -290,6 +290,73 @@ func TestRunOpenAICompatibleSmoke(t *testing.T) {
 		require.NoError(t, err)
 		assert.Equal(t, "pong", result.Text)
 		assert.Equal(t, "local-model", result.Model)
+		require.Len(t, result.Checks, 1)
+		assert.Equal(t, OpenAICompatibleSmokeCheck{Name: "chat", Passed: true}, result.Checks[0])
+	})
+
+	t.Run("validates optional stream and embeddings checks", func(t *testing.T) {
+		var seen []string
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			seen = append(seen, r.URL.Path)
+
+			var body map[string]any
+			require.NoError(t, json.NewDecoder(r.Body).Decode(&body))
+
+			switch r.URL.Path {
+			case "/v1/chat/completions":
+				assert.Equal(t, "batch", body["service_tier"])
+				if stream, _ := body["stream"].(bool); stream {
+					w.Header().Set("Content-Type", "text/event-stream")
+					_, _ = fmt.Fprint(w, "data: {\"id\":\"chatcmpl-smoke\",\"model\":\"local-model\",\"choices\":[{\"delta\":{\"content\":\"pong\"}}]}\n\n")
+					_, _ = fmt.Fprint(w, "data: {\"id\":\"chatcmpl-smoke\",\"model\":\"local-model\",\"choices\":[{\"delta\":{},\"finish_reason\":\"stop\"}]}\n\n")
+					_, _ = fmt.Fprint(w, "data: [DONE]\n\n")
+					return
+				}
+				w.Header().Set("Content-Type", "application/json")
+				_, _ = fmt.Fprint(w, `{"id":"chatcmpl-smoke","created":100,"model":"local-model","choices":[{"index":0,"message":{"role":"assistant","content":"pong"},"finish_reason":"stop"}]}`)
+			case "/v1/embeddings":
+				w.Header().Set("Content-Type", "application/json")
+				_, _ = fmt.Fprint(w, `{"object":"list","model":"embed-model","data":[{"object":"embedding","index":0,"embedding":[0.1,0.2]}]}`)
+			default:
+				http.NotFound(w, r)
+			}
+		}))
+		t.Cleanup(server.Close)
+
+		result, err := RunOpenAICompatibleSmoke(context.Background(), OpenAICompatibleSmokeConfig{
+			BaseURL:         server.URL + "/v1",
+			Model:           "local-model",
+			EmbeddingsModel: "embed-model",
+			Prompt:          "ping",
+			ProviderOptions: map[string]any{"service_tier": "batch"},
+			CheckStreaming:  true,
+			CheckEmbeddings: true,
+		})
+		require.NoError(t, err)
+		assert.Equal(t, []string{"/v1/chat/completions", "/v1/chat/completions", "/v1/embeddings"}, seen)
+		require.Len(t, result.Checks, 3)
+		assert.Equal(t, OpenAICompatibleSmokeCheck{Name: "chat", Passed: true}, result.Checks[0])
+		assert.Equal(t, OpenAICompatibleSmokeCheck{Name: "stream", Passed: true}, result.Checks[1])
+		assert.Equal(t, OpenAICompatibleSmokeCheck{Name: "embeddings", Passed: true}, result.Checks[2])
+	})
+
+	t.Run("returns failed check details", func(t *testing.T) {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			http.Error(w, `{"error":{"message":"nope"}}`, http.StatusTooManyRequests)
+		}))
+		t.Cleanup(server.Close)
+
+		result, err := RunOpenAICompatibleSmoke(context.Background(), OpenAICompatibleSmokeConfig{
+			BaseURL: server.URL + "/v1",
+			Model:   "local-model",
+			Prompt:  "ping",
+		})
+		require.Error(t, err)
+		require.NotNil(t, result)
+		require.Len(t, result.Checks, 1)
+		assert.Equal(t, "chat", result.Checks[0].Name)
+		assert.False(t, result.Checks[0].Passed)
+		assert.NotEmpty(t, result.Checks[0].Error)
 	})
 
 	t.Run("validates required inputs", func(t *testing.T) {
