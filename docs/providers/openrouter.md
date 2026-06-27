@@ -137,7 +137,7 @@ client := wormhole.New(
 
 // Any model name works - no registration needed
 response, err := client.Text().
-    Model("deepseek/deepseek-chat").
+    Model("deepseek/deepseek-v4-flash").
     Prompt("Hello").
     Generate(ctx)
 ```

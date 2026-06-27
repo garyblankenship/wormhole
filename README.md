@@ -107,6 +107,7 @@ does not need a second garage.
 | Ollama | `WithOllama(config)` | text, streaming, structured output, embeddings, local model helpers |
 | Local OpenAI-compatible | `WithLocalOpenAI(baseURL)` or `QuickLocalOpenAI(baseURL)` | no-auth local text and streaming |
 | OpenRouter | `WithOpenAICompatible(...)` or `QuickOpenRouter()` | OpenAI-compatible text, streaming, structured output, tools, reranking where supported |
+| DeepSeek | `WithProfiledOpenAICompatible("deepseek", config)` | OpenAI-compatible text, streaming, structured output, tools, reasoning output |
 | Groq | `WithGroq(key)` | OpenAI-compatible text and streaming |
 | Mistral | `WithMistral(config)` | OpenAI-compatible text and streaming |
 | LM Studio | `WithLMStudio(config)` | OpenAI-compatible local text and streaming |
