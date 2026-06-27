@@ -304,6 +304,42 @@ for _, embedding := range response.Embeddings {
 }
 ```
 
+## Reranking
+
+Rerank documents by relevance to a query (OpenAI-compatible `/rerank`):
+
+```go
+response, err := client.Rerank().
+    Using("openrouter").
+    Model("cohere/rerank-v3.5").
+    Query("What is the capital of France?").
+    Documents(
+        "Paris is the capital of France.",
+        "Berlin is the capital of Germany.",
+        "The Eiffel Tower is in Paris.",
+    ).
+    TopN(2).
+    Generate(ctx)
+
+for _, result := range response.Results {
+    fmt.Printf("#%d (score %.3f): %s\n", result.Index, result.RelevanceScore, result.Document)
+}
+```
+
+Provider routing and other OpenRouter rerank fields pass through `ProviderOptions(...)`:
+
+```go
+response, err := client.Rerank().
+    Using("openrouter").
+    Model("cohere/rerank-v3.5").
+    Query("What is the capital of France?").
+    Documents("Paris is the capital of France.", "Berlin is the capital of Germany.").
+    ProviderOptions(map[string]any{
+        "provider": map[string]any{"sort": "price"},
+    }).
+    Generate(ctx)
+```
+
 ## Pricing and Rate Limits
 
 ### Pricing
@@ -474,6 +510,73 @@ providers := map[string][]string{
     "meta":       {"meta-llama/llama-3.1-70b-instruct"},
 }
 ```
+
+## Advanced OpenRouter Request Options
+
+OpenRouter accepts many request-body fields beyond the standard chat parameters — provider routing, model fallback, plugins, reasoning controls, and advanced sampling. Wormhole forwards these through `ProviderOptions(...)`: any keys you pass are merged into the outgoing JSON request body (last write wins, so they can also override standard fields).
+
+This is the passthrough escape hatch — Wormhole does not add typed builder methods for every OpenRouter field, but nothing is blocked.
+
+### Provider Routing and Model Fallback
+
+```go
+response, err := client.Text().
+    Using("openrouter").
+    Model("anthropic/claude-sonnet-4-5").
+    Prompt("Explain context windows").
+    ProviderOptions(map[string]any{
+        // Sort candidate providers by throughput (or "price", "latency").
+        "provider": map[string]any{"sort": "throughput"},
+        // Try these models in order; fall back on error.
+        "models": []string{"anthropic/claude-sonnet-4-5", "openai/gpt-5-mini"},
+        "route":  "fallback",
+    }).
+    Generate(ctx)
+```
+
+### Plugins, Reasoning, and Advanced Sampling
+
+```go
+response, err := client.Text().
+    Using("openrouter").
+    Model("anthropic/claude-sonnet-4-5").
+    Prompt("Summarize the latest Go release notes").
+    ProviderOptions(map[string]any{
+        // OpenRouter plugins (e.g. web search).
+        "plugins": []map[string]any{{"id": "web"}},
+        // Reasoning controls.
+        "reasoning":        map[string]any{"effort": "high"},
+        "reasoning_effort": "high",
+        // Advanced sampling fields OpenRouter supports.
+        "top_k":              40,
+        "min_p":              0.05,
+        "top_a":              0.8,
+        "repetition_penalty": 1.1,
+        "logit_bias":         map[string]any{"50256": -100},
+    }).
+    Generate(ctx)
+```
+
+Other passthrough fields OpenRouter accepts on the chat body include `cache_control`, `metadata`, `modalities`, `parallel_tool_calls`, `service_tier`, `stream_options`, `trace`, `user`, `logprobs`, and `top_logprobs`.
+
+### Images and Embeddings
+
+The same `ProviderOptions` passthrough applies to image generation and embeddings, so OpenRouter-specific fields reach those endpoints too:
+
+```go
+// Image generation: OpenRouter fields such as provider, aspect_ratio, seed, stream.
+img, err := client.Image().
+    Model("google/gemini-2.5-flash-image").
+    Prompt("a wormhole in deep space").
+    ProviderOptions(map[string]any{
+        "provider":     map[string]any{"sort": "price"},
+        "aspect_ratio": "16:9",
+        "seed":         42,
+    }).
+    Generate(ctx)
+```
+
+For embeddings, set `ProviderOptions` on the `types.EmbeddingsRequest` to forward routing fields like `provider` and `route`.
 
 ## Reference
 

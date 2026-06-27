@@ -16,15 +16,15 @@ Wormhole is a production-ready Go SDK providing a unified interface to multiple 
 
 ### Provider Capabilities
 
-| Provider | Text | Streaming | Structured | Embeddings | Notes |
-|----------|------|-----------|------------|------------|-------|
-| **OpenAI** | ✅ | ✅ | ✅ | ✅ | GPT-4, GPT-5, full feature set |
-| **Anthropic** | ✅ | ✅ | ✅ | ❌ | Claude 4.5 family |
-| **Gemini** | ✅ | ✅ | ✅ | ✅ | Google's AI models |
-| **OpenRouter** | ✅ | ✅ | ✅ | ✅ | 200+ models, unified access |
-| **Groq** | ✅ | ✅ | ✅ | ❌ | Fast inference, OpenAI-compatible |
-| **Mistral** | ✅ | ✅ | ✅ | ✅ | European AI, OpenAI-compatible |
-| **Ollama** | ✅ | ✅ | ✅ | ✅ | Local models, no API key needed |
+| Provider | Text | Streaming | Structured | Embeddings | Rerank | Notes |
+|----------|------|-----------|------------|------------|--------|-------|
+| **OpenAI** | ✅ | ✅ | ✅ | ✅ | ❌ | GPT-4, GPT-5, full feature set |
+| **Anthropic** | ✅ | ✅ | ✅ | ❌ | ❌ | Claude 4.5 family |
+| **Gemini** | ✅ | ✅ | ✅ | ✅ | ❌ | Google's AI models |
+| **OpenRouter** | ✅ | ✅ | ✅ | ✅ | ✅ | 200+ models, unified access |
+| **Groq** | ✅ | ✅ | ✅ | ❌ | ❌ | Fast inference, OpenAI-compatible |
+| **Mistral** | ✅ | ✅ | ✅ | ✅ | ❌ | European AI, OpenAI-compatible |
+| **Ollama** | ✅ | ✅ | ✅ | ✅ | ❌ | Local models, no API key needed |
 
 ### Provider-Specific Notes
 

@@ -11,6 +11,7 @@ Wormhole is a **provider bridge / gateway** — a unified façade over LLM provi
 - Structured JSON output
 - Tool calling
 - Embeddings
+- Reranking (OpenAI-compatible `/rerank`, e.g. OpenRouter `cohere/rerank-v3.5`)
 - The standalone OpenAI-compatible **proxy** form (`provider/model` prefix routing, e.g. `anthropic/claude-sonnet-4-5`)
 
 **Out of scope — platform administration** (point users to the official provider SDK/REST API; do NOT rebuild it here):
