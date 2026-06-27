@@ -39,10 +39,11 @@ type toolCall struct {
 }
 
 type usage struct {
-	PromptTokens        int                 `json:"prompt_tokens"`
-	CompletionTokens    int                 `json:"completion_tokens"`
-	TotalTokens         int                 `json:"total_tokens"`
-	PromptTokensDetails *promptTokensDetail `json:"prompt_tokens_details,omitempty"`
+	PromptTokens          int                 `json:"prompt_tokens"`
+	CompletionTokens      int                 `json:"completion_tokens"`
+	TotalTokens           int                 `json:"total_tokens"`
+	PromptCacheHitTokens  int                 `json:"prompt_cache_hit_tokens,omitempty"`
+	PromptTokensDetails   *promptTokensDetail `json:"prompt_tokens_details,omitempty"`
 }
 
 type promptTokensDetail struct {

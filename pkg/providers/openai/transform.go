@@ -442,6 +442,9 @@ func (p *Provider) convertUsage(u usage) *types.Usage {
 	if u.PromptTokensDetails != nil {
 		usage.CacheReadTokens = u.PromptTokensDetails.CachedTokens
 	}
+	if usage.CacheReadTokens == 0 && u.PromptCacheHitTokens > 0 {
+		usage.CacheReadTokens = u.PromptCacheHitTokens
+	}
 	return usage
 }
 
