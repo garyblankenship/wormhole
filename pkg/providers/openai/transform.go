@@ -264,7 +264,7 @@ func (p *Provider) transformTextResponse(response *chatCompletionResponse) *type
 	// safe for every provider/model and avoids brittle model-name sniffing.
 	content = cleanJSONResponse(content)
 
-	return &types.TextResponse{
+	resp := &types.TextResponse{
 		ID:           response.ID,
 		Model:        response.Model,
 		Text:         content,
@@ -273,6 +273,12 @@ func (p *Provider) transformTextResponse(response *chatCompletionResponse) *type
 		Usage:        p.convertUsage(response.Usage),
 		Created:      time.Unix(response.Created, 0),
 	}
+
+	if choice.Message.ReasoningContent != "" {
+		resp.Thinking = &types.Thinking{Content: choice.Message.ReasoningContent}
+	}
+
+	return resp
 }
 
 // transformEmbeddingsResponse converts OpenAI embeddings response
