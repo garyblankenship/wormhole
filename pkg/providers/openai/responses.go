@@ -414,13 +414,7 @@ func (p *Provider) parseResponsesStreamChunk(data []byte) (*types.TextChunk, err
 			return nil, nil
 		}
 		toolCall := responseFunctionCallToToolCall(*event.Item)
-		return &types.TextChunk{
-			ID:        event.ItemID,
-			Model:     event.responseModel(),
-			ToolCall:  &toolCall,
-			ToolCalls: []types.ToolCall{toolCall},
-			Delta:     &types.ChunkDelta{ToolCalls: []types.ToolCall{toolCall}},
-		}, nil
+		return responsesToolCallChunk(event.ItemID, event.responseModel(), toolCall), nil
 	case responsesEventFunctionArgsDelta:
 		toolCall := types.ToolCall{
 			ID:   event.ItemID,
@@ -429,13 +423,7 @@ func (p *Provider) parseResponsesStreamChunk(data []byte) (*types.TextChunk, err
 				Arguments: event.Delta,
 			},
 		}
-		return &types.TextChunk{
-			ID:        event.ItemID,
-			Model:     event.responseModel(),
-			ToolCall:  &toolCall,
-			ToolCalls: []types.ToolCall{toolCall},
-			Delta:     &types.ChunkDelta{ToolCalls: []types.ToolCall{toolCall}},
-		}, nil
+		return responsesToolCallChunk(event.ItemID, event.responseModel(), toolCall), nil
 	case responsesEventReasoningDelta:
 		thinking := &types.Thinking{Content: event.Delta}
 		return &types.TextChunk{
@@ -474,4 +462,14 @@ func (p *Provider) parseResponsesStreamChunk(data []byte) (*types.TextChunk, err
 	}
 
 	return nil, nil
+}
+
+func responsesToolCallChunk(itemID, model string, toolCall types.ToolCall) *types.TextChunk {
+	return &types.TextChunk{
+		ID:        itemID,
+		Model:     model,
+		ToolCall:  &toolCall,
+		ToolCalls: []types.ToolCall{toolCall},
+		Delta:     &types.ChunkDelta{ToolCalls: []types.ToolCall{toolCall}},
+	}
 }
