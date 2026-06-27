@@ -54,6 +54,10 @@ func (m *mockToolProvider) Embeddings(ctx context.Context, request types.Embeddi
 	return nil, fmt.Errorf("not implemented")
 }
 
+func (m *mockToolProvider) Rerank(ctx context.Context, request types.RerankRequest) (*types.RerankResponse, error) {
+	return nil, fmt.Errorf("not implemented")
+}
+
 func (m *mockToolProvider) Audio(ctx context.Context, request types.AudioRequest) (*types.AudioResponse, error) {
 	return nil, fmt.Errorf("not implemented")
 }

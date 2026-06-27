@@ -15,9 +15,15 @@ import (
 
 func newOpenAITestProvider(t *testing.T, handler http.HandlerFunc) (*Provider, *httptest.Server) {
 	t.Helper()
+	return newOpenAITestProviderWithConfig(t, types.ProviderConfig{APIKey: "test-key"}, handler)
+}
+
+func newOpenAITestProviderWithConfig(t *testing.T, config types.ProviderConfig, handler http.HandlerFunc) (*Provider, *httptest.Server) {
+	t.Helper()
 	server := httptest.NewServer(handler)
 	t.Cleanup(server.Close)
-	return New(types.ProviderConfig{APIKey: "test-key", BaseURL: server.URL}), server
+	config.BaseURL = server.URL
+	return New(config), server
 }
 
 func TestProviderTextAndEmptyResponse(t *testing.T) {
@@ -355,4 +361,106 @@ func TestProviderStream(t *testing.T) {
 	}
 	require.NotEmpty(t, chunks)
 	assert.Equal(t, "hi", chunks[0].Content())
+}
+
+func TestProviderImagesProviderOptionsPassthrough(t *testing.T) {
+	t.Parallel()
+	provider, _ := newOpenAITestProvider(t, func(w http.ResponseWriter, r *http.Request) {
+		var req map[string]any
+		require.NoError(t, json.NewDecoder(r.Body).Decode(&req))
+		assert.Equal(t, "gpt-image-1", req["model"])
+		assert.Equal(t, "draw", req["prompt"])
+		// OpenRouter-specific image fields forwarded via ProviderOptions.
+		assert.Equal(t, "openai", req["provider"])
+		assert.Equal(t, "16:9", req["aspect_ratio"])
+		assert.Equal(t, float64(42), req["seed"])
+		assert.Equal(t, true, req["stream"])
+		require.NoError(t, json.NewEncoder(w).Encode(imageResponse{
+			Created: 1,
+			Data: []struct {
+				URL     string `json:"url,omitempty"`
+				B64JSON string `json:"b64_json,omitempty"`
+			}{{URL: "https://example.test/image.png"}},
+		}))
+	})
+
+	_, err := provider.Images(context.Background(), types.ImagesRequest{
+		Model:  "gpt-image-1",
+		Prompt: "draw",
+		ProviderOptions: map[string]any{
+			"provider":     "openai",
+			"aspect_ratio": "16:9",
+			"seed":         42,
+			"stream":       true,
+		},
+	})
+	require.NoError(t, err)
+}
+
+func TestProviderEmbeddingsProviderOptionsPassthrough(t *testing.T) {
+	t.Parallel()
+	provider, _ := newOpenAITestProvider(t, func(w http.ResponseWriter, r *http.Request) {
+		var req map[string]any
+		require.NoError(t, json.NewDecoder(r.Body).Decode(&req))
+		assert.Equal(t, "text-embedding-3-small", req["model"])
+		// OpenRouter-specific embedding routing forwarded via ProviderOptions.
+		assert.Equal(t, "fallback", req["route"])
+		assert.Equal(t, map[string]any{"sort": "throughput"}, req["provider"])
+		require.NoError(t, json.NewEncoder(w).Encode(embeddingsResponse{
+			Object: "list",
+			Data: []struct {
+				Object    string    `json:"object"`
+				Index     int       `json:"index"`
+				Embedding []float32 `json:"embedding"`
+			}{{Object: "embedding", Index: 0, Embedding: []float32{0.1, 0.2}}},
+			Model: "text-embedding-3-small",
+			Usage: usage{PromptTokens: 1, TotalTokens: 1},
+		}))
+	})
+
+	_, err := provider.Embeddings(context.Background(), types.EmbeddingsRequest{
+		Model: "text-embedding-3-small",
+		Input: []string{"hello"},
+		ProviderOptions: map[string]any{
+			"route":    "fallback",
+			"provider": map[string]any{"sort": "throughput"},
+		},
+	})
+	require.NoError(t, err)
+}
+
+func TestProviderRerank(t *testing.T) {
+	t.Parallel()
+	provider, _ := newOpenAITestProvider(t, func(w http.ResponseWriter, r *http.Request) {
+		assert.Equal(t, "/rerank", r.URL.Path)
+		var req map[string]any
+		require.NoError(t, json.NewDecoder(r.Body).Decode(&req))
+		assert.Equal(t, "cohere/rerank-v3.5", req["model"])
+		assert.Equal(t, "capital of France", req["query"])
+		assert.Equal(t, []any{"Paris is the capital of France.", "Berlin is in Germany."}, req["documents"])
+		assert.Equal(t, float64(2), req["top_n"])
+		// ProviderOptions passthrough (OpenRouter provider routing).
+		assert.Equal(t, map[string]any{"sort": "price"}, req["provider"])
+		_, err := w.Write([]byte(`{"id":"gen-rerank-1","model":"cohere/rerank-v3.5","provider":"Cohere","results":[{"index":0,"relevance_score":0.98,"document":{"text":"Paris is the capital of France."}}],"usage":{"search_units":1,"total_tokens":150}}`))
+		require.NoError(t, err)
+	})
+
+	topN := 2
+	resp, err := provider.Rerank(context.Background(), types.RerankRequest{
+		Model:     "cohere/rerank-v3.5",
+		Query:     "capital of France",
+		Documents: []string{"Paris is the capital of France.", "Berlin is in Germany."},
+		TopN:      &topN,
+		ProviderOptions: map[string]any{
+			"provider": map[string]any{"sort": "price"},
+		},
+	})
+	require.NoError(t, err)
+	require.Len(t, resp.Results, 1)
+	assert.Equal(t, 0, resp.Results[0].Index)
+	assert.InDelta(t, 0.98, resp.Results[0].RelevanceScore, 0.001)
+	assert.Equal(t, "Paris is the capital of France.", resp.Results[0].Document)
+	assert.Equal(t, "openai", resp.Provider)
+	require.NotNil(t, resp.Usage)
+	assert.Equal(t, 150, resp.Usage.TotalTokens)
 }

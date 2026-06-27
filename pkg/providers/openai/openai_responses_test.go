@@ -72,6 +72,57 @@ func TestProviderResponsesAPIText(t *testing.T) {
 	assert.Equal(t, types.FinishReasonStop, resp.FinishReason)
 }
 
+func TestProviderResponsesAPISerializesUserMediaAsInputImageParts(t *testing.T) {
+	t.Parallel()
+	provider, _ := newOpenAITestProvider(t, func(w http.ResponseWriter, r *http.Request) {
+		var req map[string]any
+		require.NoError(t, json.NewDecoder(r.Body).Decode(&req))
+
+		input := req["input"].([]any)
+		require.Len(t, input, 1)
+		message := input[0].(map[string]any)
+		assert.Equal(t, "message", message["type"])
+		assert.Equal(t, "user", message["role"])
+		parts := message["content"].([]any)
+		require.Len(t, parts, 3)
+		assert.Equal(t, map[string]any{"type": "input_text", "text": "compare these"}, parts[0])
+		assert.Equal(t, map[string]any{"type": "input_image", "image_url": "data:image/png;base64,aW1hZ2U="}, parts[1])
+		assert.Equal(t, map[string]any{"type": "input_image", "image_url": "https://example.test/image.jpg"}, parts[2])
+
+		w.Header().Set("Content-Type", "application/json")
+		require.NoError(t, json.NewEncoder(w).Encode(responsesResponse{
+			ID:        "resp-media",
+			CreatedAt: 100,
+			Model:     "gpt-5",
+			Status:    "completed",
+			Output: []responsesOutputItem{{
+				Type:   responsesItemMessage,
+				Role:   "assistant",
+				Status: "completed",
+				Content: []responsesContentPart{{
+					Type: responsesContentOutputText,
+					Text: "ok",
+				}},
+			}},
+		}))
+	})
+	provider.Config.UseResponsesAPI = true
+
+	_, err := provider.Text(context.Background(), types.TextRequest{
+		BaseRequest: types.BaseRequest{Model: "gpt-5"},
+		Messages: []types.Message{
+			&types.UserMessage{
+				Content: "compare these",
+				Media: []types.Media{
+					&types.ImageMedia{MimeType: "image/png", Base64Data: "aW1hZ2U="},
+					&types.ImageMedia{URL: "https://example.test/image.jpg"},
+				},
+			},
+		},
+	})
+	require.NoError(t, err)
+}
+
 func TestProviderResponsesAPIToolCalling(t *testing.T) {
 	t.Parallel()
 	provider, _ := newOpenAITestProvider(t, func(w http.ResponseWriter, r *http.Request) {

@@ -17,6 +17,7 @@ func TestProviderProfilesExposeKnownProviders(t *testing.T) {
 		name    string
 		baseURL string
 	}{
+		{name: "deepseek", baseURL: "https://api.deepseek.com"},
 		{name: "groq", baseURL: "https://api.groq.com/openai/v1"},
 		{name: "synthetic", baseURL: "https://api.synthetic.new/v1"},
 		{name: "zai", baseURL: "https://api.z.ai/api/coding/paas/v4"},
@@ -48,6 +49,14 @@ func TestProviderProfilesExposeKnownProviders(t *testing.T) {
 	if len(openai.RequestPolicy.MaxTokensParamRules) != 1 {
 		t.Fatalf("openai max token rules = %#v", openai.RequestPolicy.MaxTokensParamRules)
 	}
+
+	openrouter, ok := ProviderProfileByName("openrouter")
+	if !ok {
+		t.Fatal("expected openrouter profile")
+	}
+	if openrouter.ImagePath != "/images" {
+		t.Fatalf("openrouter image path = %q", openrouter.ImagePath)
+	}
 }
 
 func TestProfiledOpenAICompatibleUsesProfileBaseURL(t *testing.T) {
@@ -57,6 +66,7 @@ func TestProfiledOpenAICompatibleUsesProfileBaseURL(t *testing.T) {
 		name    string
 		baseURL string
 	}{
+		{name: "deepseek", baseURL: "https://api.deepseek.com"},
 		{name: "groq", baseURL: "https://api.groq.com/openai/v1"},
 		{name: "synthetic", baseURL: "https://api.synthetic.new/v1"},
 		{name: "zai", baseURL: "https://api.z.ai/api/coding/paas/v4"},
@@ -77,11 +87,67 @@ func TestProfiledOpenAICompatibleUsesProfileBaseURL(t *testing.T) {
 	}
 }
 
+func TestDeepSeekProfileDisablesThinkingByDefault(t *testing.T) {
+	t.Parallel()
+
+	client := New(WithProfiledOpenAICompatible("deepseek", types.ProviderConfig{APIKey: "test-key"}), WithDiscovery(false))
+	cfg, ok := client.config.Providers["deepseek"]
+	if !ok {
+		t.Fatal("deepseek provider was not configured")
+	}
+	thinking, ok := cfg.DefaultProviderOptions["thinking"].(map[string]any)
+	if !ok {
+		t.Fatalf("deepseek thinking option = %#v, want object", cfg.DefaultProviderOptions["thinking"])
+	}
+	if thinking["type"] != "disabled" {
+		t.Fatalf("deepseek thinking.type = %#v, want disabled", thinking["type"])
+	}
+}
+
+func TestProfileDefaultProviderOptionsPreserveConfigOverride(t *testing.T) {
+	t.Parallel()
+
+	client := New(WithProfiledOpenAICompatible("deepseek", types.NewProviderConfig("test-key").
+		WithDefaultProviderOptions(map[string]any{
+			"thinking": map[string]any{"type": "enabled"},
+			"user_id":  "request-owner",
+		})), WithDiscovery(false))
+	cfg := client.config.Providers["deepseek"]
+	thinking := cfg.DefaultProviderOptions["thinking"].(map[string]any)
+	if thinking["type"] != "enabled" {
+		t.Fatalf("thinking.type = %#v, want explicit enabled", thinking["type"])
+	}
+	if cfg.DefaultProviderOptions["user_id"] != "request-owner" {
+		t.Fatalf("user_id = %#v, want explicit request-owner", cfg.DefaultProviderOptions["user_id"])
+	}
+}
+
 func TestProfiledOpenAICompatibleAllowsConfigOverride(t *testing.T) {
 	t.Parallel()
 	client := New(WithGroq("test-key", types.ProviderConfig{BaseURL: "http://localhost:9999/v1"}), WithDiscovery(false))
 	if got := client.config.Providers["groq"].BaseURL; got != "http://localhost:9999/v1" {
 		t.Fatalf("base URL override = %q", got)
+	}
+}
+
+func TestProfiledOpenAICompatibleUsesProfileImagePath(t *testing.T) {
+	t.Parallel()
+
+	client := New(WithProfiledOpenAICompatible("openrouter", types.ProviderConfig{APIKey: "test-key"}), WithDiscovery(false))
+	cfg, ok := client.config.Providers["openrouter"]
+	if !ok {
+		t.Fatal("openrouter provider was not configured")
+	}
+	if cfg.ImagePath != "/images" {
+		t.Fatalf("openrouter image path = %q", cfg.ImagePath)
+	}
+
+	override := New(WithProfiledOpenAICompatible("openrouter", types.ProviderConfig{
+		APIKey:    "test-key",
+		ImagePath: "/custom/images",
+	}), WithDiscovery(false))
+	if got := override.config.Providers["openrouter"].ImagePath; got != "/custom/images" {
+		t.Fatalf("openrouter image path override = %q", got)
 	}
 }
 
@@ -126,4 +192,32 @@ func TestWithProviderFromEnvUsesProfileEnvNames(t *testing.T) {
 			t.Fatalf("synthetic config = %#v", cfg)
 		}
 	})
+}
+
+func TestApplyProviderProfileResponsesTransport(t *testing.T) {
+	t.Parallel()
+
+	// Profile defaults propagate into an empty config.
+	cfg := types.ProviderConfig{}
+	applyProviderProfile(ProviderProfile{UseResponsesAPI: true, ResponsesPath: "/responses"}, &cfg)
+	if !cfg.UseResponsesAPI {
+		t.Fatalf("UseResponsesAPI = false, want true from profile")
+	}
+	if cfg.ResponsesPath != "/responses" {
+		t.Fatalf("ResponsesPath = %q, want %q from profile", cfg.ResponsesPath, "/responses")
+	}
+
+	// Caller-set ResponsesPath is not clobbered by the profile default.
+	override := types.ProviderConfig{ResponsesPath: "/custom/responses"}
+	applyProviderProfile(ProviderProfile{ResponsesPath: "/responses"}, &override)
+	if override.ResponsesPath != "/custom/responses" {
+		t.Fatalf("ResponsesPath override = %q, want %q", override.ResponsesPath, "/custom/responses")
+	}
+
+	// A profile that does not enable the Responses transport leaves config off.
+	off := types.ProviderConfig{}
+	applyProviderProfile(ProviderProfile{ResponsesPath: "/responses"}, &off)
+	if off.UseResponsesAPI {
+		t.Fatalf("UseResponsesAPI = true, want false when profile does not enable it")
+	}
 }

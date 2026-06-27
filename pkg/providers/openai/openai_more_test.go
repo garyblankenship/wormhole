@@ -44,28 +44,54 @@ func TestProviderSupportedCapabilities(t *testing.T) {
 func TestImageCapabilityHasGenerateImageImplementation(t *testing.T) {
 	t.Parallel()
 
-	provider, _ := newOpenAITestProvider(t, func(w http.ResponseWriter, r *http.Request) {
-		assert.Equal(t, http.MethodPost, r.Method)
-		assert.Equal(t, "/images/generations", r.URL.Path)
+	tests := []struct {
+		name     string
+		config   types.ProviderConfig
+		wantPath string
+	}{
+		{
+			name:     "default OpenAI path",
+			config:   types.ProviderConfig{APIKey: "test-key"},
+			wantPath: "/images/generations",
+		},
+		{
+			name: "configured image path",
+			config: types.ProviderConfig{
+				APIKey:    "test-key",
+				ImagePath: "/images",
+			},
+			wantPath: "/images",
+		},
+	}
 
-		w.Header().Set("Content-Type", "application/json")
-		require.NoError(t, json.NewEncoder(w).Encode(imageResponse{
-			Created: 100,
-			Data: []struct {
-				URL     string `json:"url,omitempty"`
-				B64JSON string `json:"b64_json,omitempty"`
-			}{{URL: "https://example.test/generated.png"}},
-		}))
-	})
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			provider, _ := newOpenAITestProviderWithConfig(t, tt.config, func(w http.ResponseWriter, r *http.Request) {
+				assert.Equal(t, http.MethodPost, r.Method)
+				assert.Equal(t, tt.wantPath, r.URL.Path)
 
-	require.Contains(t, provider.SupportedCapabilities(), types.CapabilityImages)
-	resp, err := provider.GenerateImage(context.Background(), types.ImageRequest{
-		Model:  "gpt-image-1",
-		Prompt: "draw",
-	})
-	require.NoError(t, err)
-	require.Len(t, resp.Images, 1)
-	assert.Equal(t, "https://example.test/generated.png", resp.Images[0].URL)
+				w.Header().Set("Content-Type", "application/json")
+				require.NoError(t, json.NewEncoder(w).Encode(imageResponse{
+					Created: 100,
+					Data: []struct {
+						URL     string `json:"url,omitempty"`
+						B64JSON string `json:"b64_json,omitempty"`
+					}{{URL: "https://example.test/generated.png"}},
+				}))
+			})
+
+			require.Contains(t, provider.SupportedCapabilities(), types.CapabilityImages)
+			resp, err := provider.GenerateImage(context.Background(), types.ImageRequest{
+				Model:  "gpt-image-1",
+				Prompt: "draw",
+			})
+			require.NoError(t, err)
+			require.Len(t, resp.Images, 1)
+			assert.Equal(t, "https://example.test/generated.png", resp.Images[0].URL)
+		})
+	}
 }
 
 func TestGetMaxTokensParam(t *testing.T) {
