@@ -69,6 +69,15 @@ type EmbeddingsRequest struct {
 	ProviderOptions map[string]any `json:"-"`
 }
 
+// RerankRequest reranks documents by relevance to a query.
+type RerankRequest struct {
+	Model           string         `json:"model"`
+	Query           string         `json:"query"`
+	Documents       []string       `json:"documents"`
+	TopN            *int           `json:"top_n,omitempty"`
+	ProviderOptions map[string]any `json:"-"`
+}
+
 // ImagesRequest represents an image generation request
 type ImagesRequest struct {
 	Model           string         `json:"model"`

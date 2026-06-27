@@ -192,6 +192,24 @@ type EmbeddingsResponse struct {
 	Metadata   map[string]any `json:"metadata,omitempty"`
 }
 
+// RerankResult is a single reranked document with its relevance score.
+type RerankResult struct {
+	Index          int     `json:"index"`
+	RelevanceScore float64 `json:"relevance_score"`
+	Document       string  `json:"document"`
+}
+
+// RerankResponse represents a rerank response; Results are sorted by relevance descending.
+type RerankResponse struct {
+	ID       string         `json:"id"`
+	Provider string         `json:"provider,omitempty"`
+	Model    string         `json:"model"`
+	Results  []RerankResult `json:"results"`
+	Usage    *Usage         `json:"usage,omitempty"`
+	Created  time.Time      `json:"created"`
+	Metadata map[string]any `json:"metadata,omitempty"`
+}
+
 // Content returns the first embedding vector, or nil if empty.
 // For multiple embeddings, use Embeddings directly.
 func (r *EmbeddingsResponse) Content() []float64 {

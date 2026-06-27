@@ -188,6 +188,31 @@ func applyProviderProfile(profile ProviderProfile, config *types.ProviderConfig)
 	if config.RequestPolicy.MaxTokensCap == 0 {
 		config.RequestPolicy.MaxTokensCap = profile.RequestPolicy.MaxTokensCap
 	}
+	if config.ImagePath == "" {
+		config.ImagePath = profile.ImagePath
+	}
+	if config.ResponsesPath == "" {
+		config.ResponsesPath = profile.ResponsesPath
+	}
+	// A profile may opt a provider into the Responses transport; a caller who already
+	// enabled it stays enabled. No bundled profile sets this on (OpenRouter /responses is beta).
+	if !config.UseResponsesAPI {
+		config.UseResponsesAPI = profile.UseResponsesAPI
+	}
+	if len(profile.DefaultProviderOptions) > 0 {
+		config.DefaultProviderOptions = mergeProfileProviderOptions(profile.DefaultProviderOptions, config.DefaultProviderOptions)
+	}
+}
+
+func mergeProfileProviderOptions(profileDefaults, configDefaults map[string]any) map[string]any {
+	merged := make(map[string]any, len(profileDefaults)+len(configDefaults))
+	for k, v := range profileDefaults {
+		merged[k] = v
+	}
+	for k, v := range configDefaults {
+		merged[k] = v
+	}
+	return merged
 }
 
 // WithCustomProvider registers a custom provider with its factory function.

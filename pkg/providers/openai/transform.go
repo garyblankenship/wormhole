@@ -182,20 +182,9 @@ func (p *Provider) transformUserMessageContent(msg *types.UserMessage) any {
 
 	for _, media := range msg.Media {
 		if image, ok := media.(*types.ImageMedia); ok {
-			url := image.URL
-			if url == "" {
-				data := image.Base64Data
-				if data == "" && len(image.Data) > 0 {
-					data = base64.StdEncoding.EncodeToString(image.Data)
-				}
-				if data == "" {
-					continue
-				}
-				mimeType := image.MimeType
-				if mimeType == "" {
-					mimeType = "image/png"
-				}
-				url = fmt.Sprintf("data:%s;base64,%s", mimeType, data)
+			url, ok := imageMediaURL(image)
+			if !ok {
+				continue
 			}
 			parts = append(parts, map[string]any{
 				"type": "image_url",
@@ -207,6 +196,24 @@ func (p *Provider) transformUserMessageContent(msg *types.UserMessage) any {
 	}
 
 	return parts
+}
+
+func imageMediaURL(image *types.ImageMedia) (string, bool) {
+	if image.URL != "" {
+		return image.URL, true
+	}
+	data := image.Base64Data
+	if data == "" && len(image.Data) > 0 {
+		data = base64.StdEncoding.EncodeToString(image.Data)
+	}
+	if data == "" {
+		return "", false
+	}
+	mimeType := image.MimeType
+	if mimeType == "" {
+		mimeType = "image/png"
+	}
+	return fmt.Sprintf("data:%s;base64,%s", mimeType, data), true
 }
 
 // transformTools converts internal tools to OpenAI format
@@ -294,6 +301,31 @@ func (p *Provider) transformEmbeddingsResponse(response *embeddingsResponse, req
 		Embeddings: embeddings,
 		Usage:      p.convertUsage(response.Usage),
 		Created:    time.Now(),
+	}
+}
+
+// transformRerankResponse converts an OpenAI-compatible rerank response.
+func (p *Provider) transformRerankResponse(response *rerankResponse, requestModel string) *types.RerankResponse {
+	results := make([]types.RerankResult, len(response.Results))
+	for i, r := range response.Results {
+		results[i] = types.RerankResult{
+			Index:          r.Index,
+			RelevanceScore: r.RelevanceScore,
+			Document:       r.Document.Text,
+		}
+	}
+
+	model := response.Model
+	if model == "" {
+		model = requestModel
+	}
+
+	return &types.RerankResponse{
+		ID:      response.ID,
+		Model:   model,
+		Results: results,
+		Usage:   &types.Usage{TotalTokens: response.Usage.TotalTokens},
+		Created: time.Now(),
 	}
 }
 

@@ -151,6 +151,25 @@ type embeddingsResponse struct {
 	Usage usage  `json:"usage"`
 }
 
+type rerankResponse struct {
+	ID       string `json:"id"`
+	Provider string `json:"provider,omitempty"`
+	Model    string `json:"model"`
+	Results  []struct {
+		Index          int     `json:"index"`
+		RelevanceScore float64 `json:"relevance_score"`
+		Document       struct {
+			Text  string `json:"text,omitempty"`
+			Image string `json:"image,omitempty"`
+		} `json:"document"`
+	} `json:"results"`
+	Usage struct {
+		SearchUnits int     `json:"search_units"`
+		TotalTokens int     `json:"total_tokens"`
+		Cost        float64 `json:"cost"`
+	} `json:"usage"`
+}
+
 type imageResponse struct {
 	Created int64 `json:"created"`
 	Data    []struct {

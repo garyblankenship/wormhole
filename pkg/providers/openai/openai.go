@@ -65,6 +65,16 @@ func (p *Provider) responsesURL() string {
 	return p.GetBaseURL() + path
 }
 
+// imagesURL returns the image-generation endpoint, honoring a configured
+// ImagePath override (empty = the OpenAI default).
+func (p *Provider) imagesURL() string {
+	path := p.Config.ImagePath
+	if path == "" {
+		path = "/images/generations"
+	}
+	return p.GetBaseURL() + path
+}
+
 // SupportedCapabilities returns the capabilities supported by OpenAI provider
 func (p *Provider) SupportedCapabilities() []types.ModelCapability {
 	return []types.ModelCapability{
@@ -243,6 +253,11 @@ func (p *Provider) Embeddings(ctx context.Context, request types.EmbeddingsReque
 		payload["dimensions"] = *request.Dimensions
 	}
 
+	// Merge provider-specific options (allows overriding any parameter)
+	for k, v := range p.Config.MergedProviderOptions(request.Model, request.ProviderOptions) {
+		payload[k] = v
+	}
+
 	url := p.GetBaseURL() + "/embeddings"
 
 	var response embeddingsResponse
@@ -252,6 +267,36 @@ func (p *Provider) Embeddings(ctx context.Context, request types.EmbeddingsReque
 	}
 
 	resp := p.transformEmbeddingsResponse(&response, request.Model)
+	resp.Provider = p.Name()
+	return resp, nil
+}
+
+// Rerank reranks documents by relevance to a query (OpenAI-compatible /rerank).
+func (p *Provider) Rerank(ctx context.Context, request types.RerankRequest) (*types.RerankResponse, error) {
+	payload := map[string]any{
+		"model":     request.Model,
+		"query":     request.Query,
+		"documents": request.Documents,
+	}
+
+	if request.TopN != nil {
+		payload["top_n"] = *request.TopN
+	}
+
+	// Merge provider-specific options (allows overriding any parameter)
+	for k, v := range p.Config.MergedProviderOptions(request.Model, request.ProviderOptions) {
+		payload[k] = v
+	}
+
+	url := p.GetBaseURL() + "/rerank"
+
+	var response rerankResponse
+	err := p.DoRequest(ctx, http.MethodPost, url, payload, &response)
+	if err != nil {
+		return nil, err
+	}
+
+	resp := p.transformRerankResponse(&response, request.Model)
 	resp.Provider = p.Name()
 	return resp, nil
 }
@@ -279,7 +324,12 @@ func (p *Provider) Images(ctx context.Context, request types.ImagesRequest) (*ty
 		payload["response_format"] = request.ResponseFormat
 	}
 
-	url := p.GetBaseURL() + "/images/generations"
+	// Merge provider-specific options (allows overriding any parameter)
+	for k, v := range p.Config.MergedProviderOptions(request.Model, request.ProviderOptions) {
+		payload[k] = v
+	}
+
+	url := p.imagesURL()
 
 	var response imageResponse
 	err := p.DoRequest(ctx, http.MethodPost, url, payload, &response)

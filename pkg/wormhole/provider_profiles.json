@@ -43,6 +43,7 @@
     "api_key_env": ["OPENROUTER_API_KEY"],
     "base_url_env": "OPENROUTER_BASE_URL",
     "discovery": "openrouter",
+    "image_path": "/images",
     "auto_env": true
   },
   {
@@ -63,6 +64,19 @@
     "api_key_env": ["ZAI_API_KEY"],
     "base_url_env": "ZAI_BASE_URL",
     "discovery": "openai-compatible",
+    "auto_env": true
+  },
+  {
+    "name": "deepseek",
+    "display_name": "DeepSeek",
+    "kind": "openai-compatible",
+    "default_base_url": "https://api.deepseek.com",
+    "api_key_env": ["DEEPSEEK_API_KEY"],
+    "base_url_env": "DEEPSEEK_BASE_URL",
+    "discovery": "openai-compatible",
+    "default_provider_options": {
+      "thinking": {"type": "disabled"}
+    },
     "auto_env": true
   },
   {

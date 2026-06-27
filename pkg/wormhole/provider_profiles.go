@@ -14,16 +14,20 @@ var providerProfilesJSON []byte
 
 // ProviderProfile describes the stable configuration shape for a known provider.
 type ProviderProfile struct {
-	Name           string                `json:"name"`
-	DisplayName    string                `json:"display_name,omitempty"`
-	Kind           string                `json:"kind"`
-	DefaultBaseURL string                `json:"default_base_url,omitempty"`
-	APIKeyEnv      []string              `json:"api_key_env,omitempty"`
-	BaseURLEnv     string                `json:"base_url_env,omitempty"`
-	Discovery      string                `json:"discovery,omitempty"`
-	RequestPolicy  ProviderRequestPolicy `json:"request_policy,omitempty"`
-	AutoEnv        bool                  `json:"auto_env,omitempty"`
-	Local          bool                  `json:"local,omitempty"`
+	Name                   string                `json:"name"`
+	DisplayName            string                `json:"display_name,omitempty"`
+	Kind                   string                `json:"kind"`
+	DefaultBaseURL         string                `json:"default_base_url,omitempty"`
+	APIKeyEnv              []string              `json:"api_key_env,omitempty"`
+	BaseURLEnv             string                `json:"base_url_env,omitempty"`
+	Discovery              string                `json:"discovery,omitempty"`
+	RequestPolicy          ProviderRequestPolicy `json:"request_policy,omitempty"`
+	ImagePath              string                `json:"image_path,omitempty"`
+	UseResponsesAPI        bool                  `json:"use_responses_api,omitempty"`
+	ResponsesPath          string                `json:"responses_path,omitempty"`
+	DefaultProviderOptions map[string]any        `json:"default_provider_options,omitempty"`
+	AutoEnv                bool                  `json:"auto_env,omitempty"`
+	Local                  bool                  `json:"local,omitempty"`
 }
 
 // ProviderRequestPolicy describes provider/model request serialization quirks

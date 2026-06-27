@@ -26,6 +26,9 @@ type Provider interface {
 	// Embeddings
 	Embeddings(ctx context.Context, request EmbeddingsRequest) (*EmbeddingsResponse, error)
 
+	// Rerank
+	Rerank(ctx context.Context, request RerankRequest) (*RerankResponse, error)
+
 	// Audio operations
 	Audio(ctx context.Context, request AudioRequest) (*AudioResponse, error)
 	SpeechToText(ctx context.Context, request SpeechToTextRequest) (*SpeechToTextResponse, error)
@@ -77,6 +80,10 @@ func (bp *BaseProvider) Structured(ctx context.Context, request StructuredReques
 
 func (bp *BaseProvider) Embeddings(ctx context.Context, request EmbeddingsRequest) (*EmbeddingsResponse, error) {
 	return nil, bp.NotImplementedError("Embeddings")
+}
+
+func (bp *BaseProvider) Rerank(ctx context.Context, request RerankRequest) (*RerankResponse, error) {
+	return nil, bp.NotImplementedError("Rerank")
 }
 
 func (bp *BaseProvider) Audio(ctx context.Context, request AudioRequest) (*AudioResponse, error) {
@@ -176,6 +183,10 @@ type ProviderConfig struct {
 	// ResponsesPath overrides the Responses API path appended to BaseURL.
 	// Empty means the provider's default ("/responses" for OpenAI).
 	ResponsesPath string `json:"responses_path,omitempty"`
+
+	// ImagePath overrides the image-generation path appended to BaseURL.
+	// Empty means the provider's default ("/images/generations" for OpenAI).
+	ImagePath string `json:"image_path,omitempty"`
 
 	// APIKeys, when it holds more than one entry, enables round-robin key
 	// rotation on HTTP 429 within the retry path. Requires MaxRetries > 0.

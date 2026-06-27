@@ -185,6 +185,14 @@ func (p *Wormhole) Embeddings() *EmbeddingsRequestBuilder {
 	}
 }
 
+// Rerank creates a new rerank request builder
+func (p *Wormhole) Rerank() *RerankRequestBuilder {
+	return &RerankRequestBuilder{
+		CommonBuilder: newCommonBuilder(p),
+		request:       &types.RerankRequest{},
+	}
+}
+
 // Image creates a new image generation request builder
 func (p *Wormhole) Image() *ImageRequestBuilder {
 	return &ImageRequestBuilder{

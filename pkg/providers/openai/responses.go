@@ -135,6 +135,12 @@ func (p *Provider) transformResponsesInput(messages []types.Message) []map[strin
 	items := make([]map[string]any, 0, len(messages))
 	for _, msg := range messages {
 		switch m := msg.(type) {
+		case *types.UserMessage:
+			if len(m.Media) > 0 {
+				items = append(items, responsesMessageItem(types.RoleUser, responsesUserMessageContent(m)))
+				continue
+			}
+			items = append(items, responsesMessageItem(types.RoleUser, m.Content))
 		case *types.AssistantMessage:
 			if len(m.ToolCalls) > 0 {
 				if m.Content != "" {
@@ -157,6 +163,23 @@ func (p *Provider) transformResponsesInput(messages []types.Message) []map[strin
 		}
 	}
 	return items
+}
+
+func responsesUserMessageContent(msg *types.UserMessage) []types.MessagePart {
+	parts := make([]types.MessagePart, 0, 1+len(msg.Media))
+	if msg.Content != "" {
+		parts = append(parts, types.TextPart(msg.Content))
+	}
+	for _, media := range msg.Media {
+		if image, ok := media.(*types.ImageMedia); ok {
+			url, ok := imageMediaURL(image)
+			if !ok {
+				continue
+			}
+			parts = append(parts, types.ImagePart(url))
+		}
+	}
+	return parts
 }
 
 func responsesMessageItem(role types.Role, content any) map[string]any {
