@@ -379,6 +379,12 @@ func (p *Provider) parseStreamChunk(data []byte) (*types.TextChunk, error) {
 		},
 	}
 
+	if choice.Delta.ReasoningContent != "" {
+		thinking := &types.Thinking{Content: choice.Delta.ReasoningContent}
+		chunk.Thinking = thinking
+		chunk.Delta.Thinking = thinking
+	}
+
 	if len(choice.Delta.ToolCalls) > 0 {
 		chunk.ToolCalls = p.convertToolCalls(choice.Delta.ToolCalls)
 	}
