@@ -213,24 +213,9 @@ func (p *Provider) Structured(ctx context.Context, request types.StructuredReque
 		return nil, err
 	}
 
-	// Extract structured data from response
-	var data any
-	if request.Mode == types.StructuredModeJSON || request.Mode == types.StructuredModeStrict {
-		err = json.Unmarshal([]byte(response.Text), &data)
-	} else if len(response.ToolCalls) > 0 {
-		argsBytes, marshalErr := pool.Marshal(response.ToolCalls[0].Arguments)
-		if marshalErr != nil {
-			err = marshalErr
-		} else {
-			defer pool.Return(argsBytes)
-			err = json.Unmarshal(argsBytes, &data)
-		}
-	} else {
-		err = p.ProviderError("no structured data in response")
-	}
-
+	data, err := p.extractStructuredData(request.Mode, response)
 	if err != nil {
-		return nil, p.RequestError("failed to parse structured response", err)
+		return nil, err
 	}
 
 	return &types.StructuredResponse{
@@ -240,6 +225,32 @@ func (p *Provider) Structured(ctx context.Context, request types.StructuredReque
 		Usage:   response.Usage,
 		Created: response.Created,
 	}, nil
+}
+
+// extractStructuredData decodes the model response into structured data per the
+// requested mode: JSON/strict modes unmarshal response text; otherwise the first
+// tool call's arguments. Returns an already-wrapped error on failure.
+func (p *Provider) extractStructuredData(mode types.StructuredMode, response *types.TextResponse) (any, error) {
+	var data any
+	var err error
+	switch {
+	case mode == types.StructuredModeJSON || mode == types.StructuredModeStrict:
+		err = json.Unmarshal([]byte(response.Text), &data)
+	case len(response.ToolCalls) > 0:
+		argsBytes, marshalErr := pool.Marshal(response.ToolCalls[0].Arguments)
+		if marshalErr != nil {
+			err = marshalErr
+		} else {
+			defer pool.Return(argsBytes)
+			err = json.Unmarshal(argsBytes, &data)
+		}
+	default:
+		err = p.ProviderError("no structured data in response")
+	}
+	if err != nil {
+		return nil, p.RequestError("failed to parse structured response", err)
+	}
+	return data, nil
 }
 
 // Embeddings generates embeddings
