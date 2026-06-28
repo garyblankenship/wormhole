@@ -11,10 +11,18 @@ func (p *Provider) transformTools(tools []types.Tool) []map[string]any {
 	result := make([]map[string]any, len(tools))
 
 	for i, tool := range tools {
-		parameters, _ := json.Marshal(tool.Function.Parameters)
+		name := tool.Name
+		description := tool.Description
+		var schema any = tool.InputSchema
+		if tool.Function != nil {
+			name = tool.Function.Name
+			description = tool.Function.Description
+			schema = tool.Function.Parameters
+		}
+		parameters, _ := json.Marshal(schema)
 		result[i] = map[string]any{
-			"name":         tool.Function.Name,
-			"description":  tool.Function.Description,
+			"name":         name,
+			"description":  description,
 			"input_schema": json.RawMessage(parameters),
 		}
 	}
