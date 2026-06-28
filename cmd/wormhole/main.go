@@ -107,7 +107,9 @@ func runServe(args []string, stdout, stderr io.Writer, getenv func(string) strin
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
 
+	shutdownDone := make(chan struct{})
 	go func() {
+		defer close(shutdownDone)
 		<-sigCh
 		logger.Info("shutting down")
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
@@ -121,5 +123,8 @@ func runServe(args []string, stdout, stderr io.Writer, getenv func(string) strin
 		logger.Error("server error", "error", err)
 		return 1
 	}
+	// ErrServerClosed means Shutdown was invoked; wait for the shutdown
+	// goroutine to finish wh.Shutdown before exiting.
+	<-shutdownDone
 	return 0
 }
