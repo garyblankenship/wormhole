@@ -1,5 +1,24 @@
 # Changelog
 
+## v1.21.0 (2026-06-27)
+
+### Features
+- OpenAI/DeepSeek: surface `reasoning_content` into `TextResponse.Thinking` on non-streaming responses and as `Thinking` deltas on streamed chunks, exposing DeepSeek-R1-style reasoning traces through the unified interface.
+- OpenAI/DeepSeek: decode `prompt_cache_hit_tokens` into `Usage.CacheReadTokens` so DeepSeek prompt-cache savings are reported.
+
+### Fixes
+- Anthropic: guard a nil `Tool.Function` in `transformTools` — proxy-routed tool requests (which populate the top-level `Tool` fields, not `Function`) no longer panic into an opaque HTTP 500.
+- Anthropic: emit the correct `tool_choice` wire format (`auto`/`any`/`none`/`{type:tool,name}`) instead of the generic internal shape, fixing structured-output and forced-tool requests that the real Anthropic API rejected.
+- Anthropic: set the top-level `ToolCall.Name` on non-streaming tool calls so the proxy emits a populated `function.name` (previously empty).
+- Streaming: guard the `StreamAndAccumulate` send against an abandoned consumer (context cancel / early return) and drain the source channel, preventing a goroutine leak.
+- Proxy: wait for graceful shutdown to complete before exiting, so the client-pool `Close()` and in-flight request drain actually run on SIGINT/SIGTERM.
+- Errors: include the wrapped cause in `RequestError.Details` so the root cause reaches logs and client responses.
+
+### Other
+- OpenAI: extract the Structured response decode into an `extractStructuredData` helper and collapse duplicated Responses tool-call stream-chunk construction.
+- Docs: add a DeepSeek provider page (V4 models, reasoning passthrough) and retire the stale `deepseek-chat` reference.
+- Tests: add `reasoning_content` surfacing and DeepSeek cache-hit usage coverage.
+
 ## v1.20.0 (2026-06-24)
 
 ### Features
