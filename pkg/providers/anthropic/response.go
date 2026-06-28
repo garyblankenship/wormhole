@@ -26,6 +26,7 @@ func (p *Provider) transformTextResponse(response *messageResponse) *types.TextR
 			toolCalls = append(toolCalls, types.ToolCall{
 				ID:   content.ID,
 				Type: "function",
+				Name: content.Name,
 				Function: &types.ToolCallFunction{
 					Name:      content.Name,
 					Arguments: string(args),
