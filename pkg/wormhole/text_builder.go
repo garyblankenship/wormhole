@@ -761,7 +761,15 @@ func (b *TextRequestBuilder) StreamAndAccumulate(ctx context.Context) (<-chan ty
 		defer close(accumulated)
 		for chunk := range stream {
 			builder.WriteString(chunk.Content())
-			accumulated <- chunk
+			select {
+			case accumulated <- chunk:
+			case <-ctx.Done():
+				// Consumer abandoned the stream; drain the source so the
+				// upstream provider goroutine can exit, then stop.
+				for range stream {
+				}
+				return
+			}
 		}
 	}()
 
