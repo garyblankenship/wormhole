@@ -87,6 +87,9 @@ func RequestError(providerName, message string, cause error) error {
 	err := NewWormholeError(ErrorCodeRequest, message, false)
 	err.Provider = providerName
 	err.Cause = cause
+	if cause != nil {
+		err.Details = cause.Error()
+	}
 	return err
 }
 
