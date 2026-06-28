@@ -61,7 +61,7 @@ func (p *Provider) buildMessagePayload(request *types.TextRequest) map[string]an
 	if len(request.Tools) > 0 {
 		payload["tools"] = p.transformTools(request.Tools)
 		if request.ToolChoice != nil {
-			payload["tool_choice"] = request.ToolChoice
+			payload["tool_choice"] = p.transformToolChoice(request.ToolChoice)
 		}
 	}
 
