@@ -57,6 +57,19 @@ func DefaultConfig() DiscoveryConfig {
 	}
 }
 
+// AccountScoped is optionally implemented by a ModelFetcher whose cached
+// results must be scoped per-credential rather than shared across every
+// fetcher registered under the same provider name. Without this, two
+// different API keys/accounts for the same provider (e.g. two OpenAI
+// orgs) would collide on one cache file and leak each other's model
+// lists, including private fine-tunes.
+type AccountScoped interface {
+	// AccountDiscriminator returns a short, stable, non-reversible token
+	// derived from the fetcher's credential. Empty string means "no
+	// discriminator" (falls back to provider-only cache scoping).
+	AccountDiscriminator() string
+}
+
 // CacheEntry represents a cached set of models with timestamp
 type CacheEntry struct {
 	SchemaVersion int                `json:"schema_version"`

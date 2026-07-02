@@ -26,6 +26,12 @@ func (f *AnthropicFetcher) Name() string {
 	return "anthropic"
 }
 
+// AccountDiscriminator scopes the model cache per API key so different
+// Anthropic accounts don't collide on the same cache file.
+func (f *AnthropicFetcher) AccountDiscriminator() string {
+	return accountKeyDiscriminator(f.apiKey)
+}
+
 // FetchModels retrieves all available models from Anthropic
 func (f *AnthropicFetcher) FetchModels(ctx context.Context) ([]*types.ModelInfo, error) {
 	if f.apiKey == "" {

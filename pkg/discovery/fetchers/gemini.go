@@ -33,6 +33,12 @@ func (f *GeminiFetcher) Name() string {
 	return "gemini"
 }
 
+// AccountDiscriminator scopes the model cache per API key so different
+// Gemini accounts don't collide on the same cache file.
+func (f *GeminiFetcher) AccountDiscriminator() string {
+	return accountKeyDiscriminator(f.apiKey)
+}
+
 // FetchModels retrieves all available Gemini models.
 func (f *GeminiFetcher) FetchModels(ctx context.Context) ([]*types.ModelInfo, error) {
 	if f.apiKey == "" {

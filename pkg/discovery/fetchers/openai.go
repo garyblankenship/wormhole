@@ -27,6 +27,12 @@ func (f *OpenAIFetcher) Name() string {
 	return "openai"
 }
 
+// AccountDiscriminator scopes the model cache per API key so different
+// OpenAI accounts don't collide on the same cache file.
+func (f *OpenAIFetcher) AccountDiscriminator() string {
+	return accountKeyDiscriminator(f.apiKey)
+}
+
 // FetchModels retrieves all available models from OpenAI
 func (f *OpenAIFetcher) FetchModels(ctx context.Context) ([]*types.ModelInfo, error) {
 	if f.apiKey == "" {

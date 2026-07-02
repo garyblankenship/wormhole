@@ -136,12 +136,38 @@ type ModelsResult struct {
 	Stale  bool // true when Models came from stale cache or hardcoded fallback, not a live fetch
 }
 
+// accountCacheKey returns the on-disk cache key for provider, incorporating
+// a credential discriminator when fetcher implements AccountScoped — this
+// prevents cache collisions between different API keys/accounts registered
+// under the same provider name.
+func accountCacheKey(provider string, fetcher ModelFetcher) string {
+	if as, ok := fetcher.(AccountScoped); ok {
+		if disc := as.AccountDiscriminator(); disc != "" {
+			return provider + "__" + disc
+		}
+	}
+	return provider
+}
+
+// cacheKey looks up the registered fetcher for provider and returns its
+// account-scoped cache key (see accountCacheKey). Falls back to provider
+// alone if no fetcher is registered.
+func (s *DiscoveryService) cacheKey(provider string) string {
+	s.mu.RLock()
+	fetcher, ok := s.fetchers[provider]
+	s.mu.RUnlock()
+	if !ok {
+		return provider
+	}
+	return accountCacheKey(provider, fetcher)
+}
+
 // GetModelsWithStatus returns models for a provider along with a Stale flag,
 // distinguishing a live fetch from stale-cache/fallback data — GetModels
 // cannot express this distinction since both cases return err == nil.
 func (s *DiscoveryService) GetModelsWithStatus(ctx context.Context, provider string) (*ModelsResult, error) {
 	// Check cache first
-	if models, fresh := s.cache.Get(provider); len(models) > 0 {
+	if models, fresh := s.cache.Get(s.cacheKey(provider)); len(models) > 0 {
 		if !fresh {
 			// Using fallback/stale cache, trigger background refresh
 			s.refreshProvider(provider)
@@ -275,16 +301,17 @@ func (s *DiscoveryService) fetchModels(ctx context.Context, provider string) ([]
 	defer cancel()
 
 	models, err := fetcher.FetchModels(fetchCtx)
+	key := accountCacheKey(provider, fetcher)
 	if err != nil {
 		// Return cached/fallback on error
-		if cached, _ := s.cache.Get(provider); len(cached) > 0 {
+		if cached, _ := s.cache.Get(key); len(cached) > 0 {
 			return cached, nil // Return stale cache
 		}
 		return nil, fmt.Errorf("failed to fetch models: %w", err)
 	}
 
 	// Update cache
-	s.cache.Set(provider, models)
+	s.cache.Set(key, models)
 
 	return models, nil
 }
