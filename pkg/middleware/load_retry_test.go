@@ -181,6 +181,72 @@ func TestRetryMiddleware(t *testing.T) {
 		require.Error(t, err)
 		assert.True(t, IsMiddlewareError(err))
 	})
+
+	t.Run("default classifies via WormholeError.Retryable", func(t *testing.T) {
+		t.Parallel()
+		attempts := 0
+		nonRetryable := types.NewWormholeError(types.ErrorCodeAuth, "unauthorized", false)
+		handler := RetryMiddleware(RetryConfig{
+			MaxRetries:      3,
+			InitialDelay:    time.Nanosecond,
+			MaxDelay:        time.Millisecond,
+			BackoffMultiple: 2,
+		})(func(ctx context.Context, req any) (any, error) {
+			attempts++
+			return nil, nonRetryable
+		})
+
+		_, err := handler(context.Background(), "request")
+		require.Error(t, err)
+		assert.Equal(t, 1, attempts)
+	})
+
+	t.Run("default retries WormholeError marked retryable", func(t *testing.T) {
+		t.Parallel()
+		attempts := 0
+		retryableErr := types.NewWormholeError(types.ErrorCodeRateLimit, "rate limited", true)
+		handler := RetryMiddleware(RetryConfig{
+			MaxRetries:      2,
+			InitialDelay:    time.Nanosecond,
+			MaxDelay:        time.Millisecond,
+			BackoffMultiple: 2,
+		})(func(ctx context.Context, req any) (any, error) {
+			attempts++
+			if attempts < 2 {
+				return nil, retryableErr
+			}
+			return "ok", nil
+		})
+
+		resp, err := handler(context.Background(), "request")
+		require.NoError(t, err)
+		assert.Equal(t, "ok", resp)
+		assert.Equal(t, 2, attempts)
+	})
+
+	t.Run("honors WormholeError RetryAfter over computed backoff", func(t *testing.T) {
+		t.Parallel()
+		attempts := 0
+		retryableErr := types.NewWormholeError(types.ErrorCodeRateLimit, "rate limited", true).WithRetryAfter(5 * time.Millisecond)
+		start := time.Now()
+		handler := RetryMiddleware(RetryConfig{
+			MaxRetries:      1,
+			InitialDelay:    time.Nanosecond,
+			MaxDelay:        time.Nanosecond,
+			BackoffMultiple: 1,
+		})(func(ctx context.Context, req any) (any, error) {
+			attempts++
+			if attempts < 2 {
+				return nil, retryableErr
+			}
+			return "ok", nil
+		})
+
+		resp, err := handler(context.Background(), "request")
+		require.NoError(t, err)
+		assert.Equal(t, "ok", resp)
+		assert.GreaterOrEqual(t, time.Since(start), 5*time.Millisecond)
+	})
 }
 
 func TestMiddlewareCoreHelpers(t *testing.T) {

@@ -5,6 +5,8 @@ import (
 	"math"
 	"math/rand"
 	"time"
+
+	"github.com/garyblankenship/wormhole/pkg/types"
 )
 
 // jitterRand returns a value in [0, 1) using math/rand's global locked source.
@@ -20,7 +22,7 @@ type RetryConfig struct {
 	MaxDelay        time.Duration    // Maximum delay between retries
 	BackoffMultiple float64          // Multiplier for exponential backoff
 	Jitter          bool             // Add random jitter to prevent thundering herd
-	RetryableFunc   func(error) bool // Custom function to determine if error is retryable
+	RetryableFunc   func(error) bool // Custom function to determine if error is retryable; nil falls back to DefaultRetryableFunc
 }
 
 // DefaultRetryConfig returns sensible defaults for retry configuration
@@ -31,11 +33,30 @@ func DefaultRetryConfig() RetryConfig {
 		MaxDelay:        30 * time.Second,
 		BackoffMultiple: 2.0,
 		Jitter:          true,
+		RetryableFunc:   DefaultRetryableFunc,
 	}
+}
+
+// DefaultRetryableFunc classifies err as retryable using WormholeError.Retryable
+// when err is a *types.WormholeError (e.g. an auth/400 error surfaced by the
+// HTTP client layer), so RetryMiddleware stops retrying errors the provider
+// has already told us are permanent instead of multiplying with the HTTP
+// layer's own retries. Errors of any other type remain retryable, preserving
+// the middleware's prior behavior for uncategorized errors.
+func DefaultRetryableFunc(err error) bool {
+	if werr, ok := err.(*types.WormholeError); ok {
+		return werr.IsRetryable()
+	}
+	return true
 }
 
 // RetryMiddleware creates a middleware that retries failed requests
 func RetryMiddleware(config RetryConfig) Middleware {
+	retryable := config.RetryableFunc
+	if retryable == nil {
+		retryable = DefaultRetryableFunc
+	}
+
 	return func(handler Handler) Handler {
 		return func(ctx context.Context, req any) (any, error) {
 			var lastErr error
@@ -48,8 +69,8 @@ func RetryMiddleware(config RetryConfig) Middleware {
 
 				lastErr = err
 
-				// Check if error is retryable using custom function
-				if config.RetryableFunc != nil && !config.RetryableFunc(err) {
+				// Check if error is retryable
+				if !retryable(err) {
 					return nil, wrapIfNotWormholeError("retry", err)
 				}
 
@@ -58,8 +79,13 @@ func RetryMiddleware(config RetryConfig) Middleware {
 					break
 				}
 
-				// Calculate delay with exponential backoff
+				// Calculate delay with exponential backoff, honoring a
+				// provider-supplied Retry-After when present since it is
+				// authoritative over our own backoff estimate.
 				delay := calculateRetryDelay(config, attempt)
+				if werr, ok := err.(*types.WormholeError); ok && werr.RetryAfter > 0 {
+					delay = werr.RetryAfter
+				}
 
 				// Wait before retry, respecting context cancellation.
 				// Use NewTimer + Stop() to avoid leaked timers on early cancel.
