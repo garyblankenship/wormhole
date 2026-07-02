@@ -19,6 +19,9 @@ func (p *Wormhole) Shutdown(ctx context.Context) error {
 	p.shutdownOnce.Do(func() {
 		p.signalShutdown()
 
+		// Wait for idempotency cache sweeper to exit
+		p.idempotencySweepWg.Wait()
+
 		done := make(chan struct{})
 		go func() {
 			p.activeRequests.Wait()

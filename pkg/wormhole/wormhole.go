@@ -35,8 +35,9 @@ type Wormhole struct {
 	shuttingDown   atomic.Bool    // Atomic flag for shutdown state
 
 	// Idempotency cache
-	idempotencyMu    sync.Mutex
-	idempotencyCache map[string]*idempotencyEntry
+	idempotencyMu       sync.Mutex
+	idempotencyCache    map[string]*idempotencyEntry
+	idempotencySweepWg  sync.WaitGroup
 }
 
 // IdempotencyConfig holds configuration for idempotent request handling
@@ -116,6 +117,9 @@ func New(opts ...Option) *Wormhole {
 		shutdownChan:      make(chan struct{}),
 		idempotencyCache:  make(map[string]*idempotencyEntry),
 	}
+
+	// Start background sweeper for idempotency cache entries
+	p.startIdempotencySweeper()
 
 	// Initialize model discovery service if enabled
 	if config.EnableDiscovery {

@@ -9,7 +9,10 @@ import (
 	"time"
 )
 
-const defaultIdempotencyTTL = 24 * time.Hour
+const (
+	defaultIdempotencyTTL    = 24 * time.Hour
+	idempotencySweepInterval = 5 * time.Minute
+)
 
 type idempotencyEntry struct {
 	ready     chan struct{}
@@ -48,7 +51,7 @@ func executeTrackedRequest[T any](ctx context.Context, p *Wormhole, operation st
 		return cachedIdempotentValue[T](entry)
 	}
 
-	result, err := fn(ctx)
+	result, err := fn(context.WithoutCancel(ctx))
 	entry.err = err
 	if err == nil {
 		entry.value = result
@@ -129,4 +132,35 @@ func (p *Wormhole) loadOrCreateIdempotencyEntry(cacheKey string, now time.Time, 
 	}
 	p.idempotencyCache[cacheKey] = entry
 	return entry, true
+}
+
+// startIdempotencySweeper starts a background goroutine that periodically
+// removes expired entries from the idempotency cache, bounding its growth.
+func (p *Wormhole) startIdempotencySweeper() {
+	p.idempotencySweepWg.Add(1)
+	go func() {
+		defer p.idempotencySweepWg.Done()
+		ticker := time.NewTicker(idempotencySweepInterval)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ticker.C:
+				p.sweepIdempotencyCache()
+			case <-p.shutdownChan:
+				return
+			}
+		}
+	}()
+}
+
+// sweepIdempotencyCache evicts idempotency entries whose TTL has expired.
+func (p *Wormhole) sweepIdempotencyCache() {
+	p.idempotencyMu.Lock()
+	defer p.idempotencyMu.Unlock()
+	now := time.Now()
+	for key, entry := range p.idempotencyCache {
+		if now.After(entry.expiresAt) {
+			delete(p.idempotencyCache, key)
+		}
+	}
 }
