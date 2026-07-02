@@ -821,6 +821,11 @@ func applyStreamIdleTimeout(ctx context.Context, src <-chan types.StreamChunk, t
 				}
 				timer.Reset(timeout)
 				select {
+				case <-ctx.Done():
+					return
+				default:
+				}
+				select {
 				case out <- chunk:
 				case <-ctx.Done():
 					return
@@ -829,6 +834,11 @@ func applyStreamIdleTimeout(ctx context.Context, src <-chan types.StreamChunk, t
 					return
 				}
 			case <-timer.C:
+				select {
+				case <-ctx.Done():
+					return
+				default:
+				}
 				select {
 				case out <- types.StreamChunk{
 					Error: fmt.Errorf("stream idle timeout: no chunk received within %s", timeout),
