@@ -83,7 +83,7 @@ func TestModelCacheLoadFromMonolithicFileMigrates(t *testing.T) {
 	require.True(t, ok)
 	require.Len(t, models, 1)
 
-	cache.migrateToSharded("legacy", entry)
+	cache.migrateToSharded("legacy", entry, 0)
 	assert.FileExists(t, cache.getProviderFilePath("legacy"))
 }
 

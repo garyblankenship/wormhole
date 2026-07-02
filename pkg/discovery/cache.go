@@ -34,8 +34,9 @@ type ModelCache struct {
 	stopCh   chan struct{}
 	wg       sync.WaitGroup
 	stopOnce sync.Once
-	muClosed sync.RWMutex // protects closed flag
-	closed   bool         // set when cache is closed or cleared; aborts in-flight migrations
+	muClosed sync.RWMutex // protects closed and clearGen
+	closed   bool         // set only by Close(); permanently aborts in-flight migrations
+	clearGen uint64       // incremented by Clear(); aborts migrations spawned before this generation
 }
 
 // NewModelCache creates a new model cache
@@ -105,7 +106,7 @@ func (c *ModelCache) getProviderFilePath(provider string) string {
 }
 
 // migrateToSharded migrates a cache entry from monolithic file to provider-specific file
-func (c *ModelCache) migrateToSharded(provider string, entry *CacheEntry) {
+func (c *ModelCache) migrateToSharded(provider string, entry *CacheEntry, gen uint64) {
 	// Use per-provider lock to prevent concurrent migration
 	lock := c.getProviderLock(provider)
 	lock.Lock()
@@ -129,13 +130,13 @@ func (c *ModelCache) migrateToSharded(provider string, entry *CacheEntry) {
 		return // Can't create directory, skip
 	}
 
-	// Abort if cache has been closed or cleared since this goroutine was spawned
+	// Abort if cache has been closed, or cleared since this goroutine was spawned
 	c.muClosed.RLock()
-	if c.closed {
-		c.muClosed.RUnlock()
+	abort := c.closed || c.clearGen != gen
+	c.muClosed.RUnlock()
+	if abort {
 		return
 	}
-	c.muClosed.RUnlock()
 
 	// Write atomically
 	tempPath := providerPath + ".tmp"
@@ -249,10 +250,13 @@ func (c *ModelCache) loadFromFile(provider string) ([]*types.ModelInfo, bool) {
 	}
 
 	// Migrate to provider-specific file for future reads
+	c.muClosed.RLock()
+	gen := c.clearGen
+	c.muClosed.RUnlock()
 	c.wg.Add(1)
 	go func() {
 		defer c.wg.Done()
-		c.migrateToSharded(provider, entry)
+		c.migrateToSharded(provider, entry, gen)
 	}()
 
 	return entry.Models, true
@@ -365,7 +369,7 @@ func computeChecksum(models []*types.ModelInfo) string {
 // Clear removes all cached entries
 func (c *ModelCache) Clear() {
 	c.muClosed.Lock()
-	c.closed = true
+	c.clearGen++
 	c.muClosed.Unlock()
 
 	c.memoryMu.Lock()
