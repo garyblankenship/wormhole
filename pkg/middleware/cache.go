@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"reflect"
 	"sync"
 	"time"
@@ -211,7 +212,13 @@ func CacheMiddleware(config CacheConfig) Middleware {
 
 			// Check cache
 			if cached, found := config.Cache.Get(key); found {
-				return cached, nil
+				cloned, err := cloneValue(cached)
+				if err != nil {
+					// If clone fails, return the original rather than error —
+					// the cache hit is still valid, just without isolation.
+					return cached, nil
+				}
+				return cloned, nil
 			}
 
 			// Execute request
@@ -382,6 +389,64 @@ func (mc *MemoryCache) Close() error {
 
 // Close implements Cache interface for TTLCache (inherited from MemoryCache)
 // TTLCache.Close() calls the embedded MemoryCache.Close()
+
+// cloneValue returns an independent copy of src so that callers cannot
+// mutate the cached value. map[string]any gets a recursive copy to preserve
+// numeric types (JSON round-trip would convert int→float64). All other types
+// round-trip through JSON, which is correct for typed structs.
+func cloneValue(src any) (any, error) {
+	if src == nil {
+		return nil, nil
+	}
+	if m, ok := src.(map[string]any); ok {
+		return deepCopyMap(m), nil
+	}
+	data, err := json.Marshal(src)
+	if err != nil {
+		return nil, fmt.Errorf("cache clone marshal: %w", err)
+	}
+	srcType := reflect.TypeOf(src)
+	var dst any
+	if srcType.Kind() == reflect.Ptr {
+		dst = reflect.New(srcType.Elem()).Interface()
+	} else {
+		dst = reflect.New(srcType).Interface()
+	}
+	if err := json.Unmarshal(data, dst); err != nil {
+		return nil, fmt.Errorf("cache clone unmarshal: %w", err)
+	}
+	if srcType.Kind() != reflect.Ptr {
+		dst = reflect.ValueOf(dst).Elem().Interface()
+	}
+	return dst, nil
+}
+
+func deepCopyMap(src map[string]any) map[string]any {
+	dst := make(map[string]any, len(src))
+	for k, v := range src {
+		dst[k] = deepCopyValue(v)
+	}
+	return dst
+}
+
+func deepCopyValue(v any) any {
+	switch val := v.(type) {
+	case map[string]any:
+		return deepCopyMap(val)
+	case []any:
+		cpy := make([]any, len(val))
+		for i, item := range val {
+			cpy[i] = deepCopyValue(item)
+		}
+		return cpy
+	default:
+		// Basic types (int, string, bool, float64, etc.) are value types;
+		// maps and slices of other concrete types (e.g. map[string]string)
+		// are also value types in Go — the copy shares no mutable state
+		// with the original.
+		return v
+	}
+}
 
 // Close implements Cache interface for LRUCache
 func (lru *LRUCache) Close() error {

@@ -256,11 +256,17 @@ func TestCacheMiddleware(t *testing.T) {
 		t.Errorf("Expected handler to still be called once (cached), got %d", callCount)
 	}
 
-	// Responses should be identical
+	// Responses should have identical content but be independent copies.
 	resp1Map := resp1.(map[string]any)
 	resp2Map := resp2.(map[string]any)
 	if resp1Map["count"] != resp2Map["count"] {
 		t.Errorf("Expected cached response, got different counts: %v vs %v", resp1Map["count"], resp2Map["count"])
+	}
+
+	// Mutating the cached response must not affect the original (clone isolation).
+	resp2Map["count"] = 999
+	if resp1Map["count"].(int) != 1 {
+		t.Errorf("Expected original response unmodified after mutating clone, got %v", resp1Map["count"])
 	}
 
 	// Different request should call handler again
