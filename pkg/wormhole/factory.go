@@ -142,7 +142,10 @@ func (f *SimpleFactory) WithCache(ttl time.Duration) Option {
 		Cache: cache,
 		TTL:   ttl,
 	}
-	return WithMiddleware(middleware.CacheMiddleware(config))
+	return func(c *Config) {
+		c.Closers = append(c.Closers, cache)
+		WithMiddleware(middleware.CacheMiddleware(config))(c)
+	}
 }
 
 // WithTimeout returns an option to add timeout middleware

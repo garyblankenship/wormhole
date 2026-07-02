@@ -27,6 +27,7 @@ type MemoryCache struct {
 	maxSize int
 	stopCh  chan struct{}
 	wg      sync.WaitGroup
+	closeOnce sync.Once
 }
 
 type cacheEntry struct {
@@ -382,8 +383,10 @@ func (lru *LRUCache) evictLRU() {
 
 // Close stops the cleanup goroutine and waits for it to finish
 func (mc *MemoryCache) Close() error {
-	close(mc.stopCh)
-	mc.wg.Wait()
+	mc.closeOnce.Do(func() {
+		close(mc.stopCh)
+		mc.wg.Wait()
+	})
 	return nil
 }
 

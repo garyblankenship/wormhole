@@ -55,6 +55,12 @@ func (p *Wormhole) Shutdown(ctx context.Context) error {
 			p.adaptiveLimiter.Stop()
 		}
 
+		for _, c := range p.closers {
+			if err := c.Close(); err != nil {
+				errs = append(errs, err)
+			}
+		}
+
 		if len(errs) > 0 {
 			shutdownErr = fmt.Errorf("errors during shutdown cleanup: %v", errs)
 		}

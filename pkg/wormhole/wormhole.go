@@ -1,6 +1,7 @@
 package wormhole
 
 import (
+	"io"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -38,6 +39,9 @@ type Wormhole struct {
 	idempotencyMu       sync.Mutex
 	idempotencyCache    map[string]*idempotencyEntry
 	idempotencySweepWg  sync.WaitGroup
+
+	// Closers registered by options, closed in Shutdown
+	closers []io.Closer
 }
 
 // IdempotencyConfig holds configuration for idempotent request handling
@@ -68,6 +72,7 @@ type Config struct {
 	AttemptTrace        AttemptTraceFunc          // Optional per-attempt tracing callback
 	StreamIdleTimeout   time.Duration             // Per-chunk idle timeout for streaming (0 = disabled)
 	StreamTrace         StreamTraceFunc           // Optional stream lifecycle tracing callback
+	Closers             []io.Closer               // Closers to invoke during Shutdown
 }
 
 // New creates a new Wormhole instance using functional options.
@@ -116,6 +121,7 @@ func New(opts ...Option) *Wormhole {
 		toolRegistry:      NewToolRegistry(),
 		shutdownChan:      make(chan struct{}),
 		idempotencyCache:  make(map[string]*idempotencyEntry),
+		closers:           config.Closers,
 	}
 
 	// Start background sweeper for idempotency cache entries
