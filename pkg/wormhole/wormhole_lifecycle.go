@@ -51,8 +51,8 @@ func (p *Wormhole) Shutdown(ctx context.Context) error {
 			}
 		}
 
-		if p.adaptiveLimiter != nil {
-			p.adaptiveLimiter.Stop()
+		if limiter := p.adaptiveLimiter.Load(); limiter != nil {
+			limiter.Stop()
 		}
 
 		for _, c := range p.closers {
@@ -201,22 +201,22 @@ func (p *Wormhole) EnableAdaptiveConcurrency(config *EnhancedAdaptiveConfig) {
 		normalized = normalizeEnhancedAdaptiveConfig(*config)
 	}
 
-	if p.adaptiveLimiter != nil {
-		p.adaptiveLimiter.Stop()
+	newLimiter := NewEnhancedAdaptiveLimiter(normalized)
+	if old := p.adaptiveLimiter.Swap(newLimiter); old != nil {
+		old.Stop()
 	}
-
-	p.adaptiveLimiter = NewEnhancedAdaptiveLimiter(normalized)
 }
 
 // GetAdaptiveLimiter returns the adaptive limiter if enabled, or nil.
 func (p *Wormhole) GetAdaptiveLimiter() *EnhancedAdaptiveLimiter {
-	return p.adaptiveLimiter
+	return p.adaptiveLimiter.Load()
 }
 
 // GetAdaptiveConcurrencyStats returns statistics from the adaptive limiter if enabled.
 func (p *Wormhole) GetAdaptiveConcurrencyStats() map[string]interface{} {
-	if p.adaptiveLimiter == nil {
+	limiter := p.adaptiveLimiter.Load()
+	if limiter == nil {
 		return nil
 	}
-	return p.adaptiveLimiter.GetStats()
+	return limiter.GetStats()
 }

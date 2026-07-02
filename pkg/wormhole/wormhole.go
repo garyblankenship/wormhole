@@ -26,8 +26,10 @@ type Wormhole struct {
 	cacheMisses    atomic.Int64
 	cacheEvictions atomic.Int64
 
-	// Adaptive concurrency control
-	adaptiveLimiter *EnhancedAdaptiveLimiter
+	// Adaptive concurrency control. atomic.Pointer guards concurrent access:
+	// EnableAdaptiveConcurrency writes it while batch workers read it via
+	// GetAdaptiveLimiter() from other goroutines.
+	adaptiveLimiter atomic.Pointer[EnhancedAdaptiveLimiter]
 
 	// Shutdown management
 	shutdownOnce   sync.Once
