@@ -139,14 +139,25 @@ func (mc *MemoryCache) cleanup() {
 type CacheKeyGenerator func(req any) (string, error)
 
 // DefaultCacheKeyGenerator creates a cache key by hashing the JSON representation
+// plus ProviderOptions, which carries json:"-" (so it is invisible to Marshal)
+// yet changes the upstream call — requests differing only in ProviderOptions must
+// not collide.
 func DefaultCacheKeyGenerator(req any) (string, error) {
 	data, err := json.Marshal(req)
 	if err != nil {
 		return "", err
 	}
 
-	hash := sha256.Sum256(data)
-	return hex.EncodeToString(hash[:]), nil
+	h := sha256.New()
+	h.Write(data)
+	if po, ok := req.(interface{ GetProviderOptions() map[string]any }); ok {
+		if opts := po.GetProviderOptions(); len(opts) > 0 {
+			if ob, err := json.Marshal(opts); err == nil {
+				h.Write(ob)
+			}
+		}
+	}
+	return hex.EncodeToString(h.Sum(nil)), nil
 }
 
 // CacheConfig holds cache middleware configuration
@@ -191,6 +202,11 @@ func CacheMiddleware(config CacheConfig) Middleware {
 				// If we can't generate a key, just proceed without caching
 				resp, err := next(ctx, req)
 				return resp, wrapIfNotWormholeError("cache", err)
+			}
+			// Namespace the key by provider so the same model string on two
+			// providers (or a cache shared across providers) cannot collide.
+			if p, ok := ctx.Value(CtxKeyProvider).(string); ok && p != "" {
+				key = p + ":" + key
 			}
 
 			// Check cache
