@@ -227,9 +227,15 @@ func (t *StreamingTransformer) ParseChunk(data []byte) (*types.TextChunk, error)
 		}
 	}
 
-	// Extract usage
-	if t.config.UsagePath != "" {
-		if val := t.getFieldByPath(response, t.config.UsagePath); val != nil {
+	// Extract usage. An empty UsagePath means "use the root object" (e.g. Ollama).
+	if t.config.UsagePath != "" || (t.config.UsagePath == "" && t.config.UsageAdapter != nil) {
+		var val any
+		if t.config.UsagePath == "" {
+			val = response
+		} else {
+			val = t.getFieldByPath(response, t.config.UsagePath)
+		}
+		if val != nil {
 			if t.config.UsageAdapter != nil {
 				usage, err := t.config.UsageAdapter(val)
 				if err != nil {

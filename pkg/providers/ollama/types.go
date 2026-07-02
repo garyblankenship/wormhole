@@ -39,6 +39,7 @@ type chatResponse struct {
 	CreatedAt          time.Time `json:"created_at"`
 	Message            message   `json:"message"`
 	Done               bool      `json:"done"`
+	DoneReason         string    `json:"done_reason,omitempty"`
 	TotalDuration      int64     `json:"total_duration,omitempty"`
 	LoadDuration       int64     `json:"load_duration,omitempty"`
 	PromptEvalCount    int       `json:"prompt_eval_count,omitempty"`
@@ -53,6 +54,7 @@ type streamResponse struct {
 	CreatedAt          time.Time `json:"created_at"`
 	Message            message   `json:"message"`
 	Done               bool      `json:"done"`
+	DoneReason         string    `json:"done_reason,omitempty"`
 	TotalDuration      int64     `json:"total_duration,omitempty"`
 	LoadDuration       int64     `json:"load_duration,omitempty"`
 	PromptEvalCount    int       `json:"prompt_eval_count,omitempty"`

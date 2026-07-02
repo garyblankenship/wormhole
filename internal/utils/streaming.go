@@ -359,6 +359,59 @@ func ProcessStreamWithIdleTimeout(
 	return out
 }
 
+// ProcessNDJSONStream processes an NDJSON (newline-delimited JSON) stream.
+// Each line is a complete JSON object with no SSE framing (used by Ollama).
+// ctx cancellation unblocks the producer goroutine's sends and lets the body close.
+func ProcessNDJSONStream(
+	ctx context.Context,
+	body io.ReadCloser,
+	transformer func([]byte) (*types.TextChunk, error),
+	bufferSize int,
+) <-chan types.TextChunk {
+	chunks := make(chan types.TextChunk, bufferSize)
+	go func() {
+		defer func() {
+			_ = body.Close()
+		}()
+		scanner := bufio.NewScanner(body)
+		// Ollama can return large final chunks with usage data.
+		scanner.Buffer(make([]byte, 0, 64*1024), 1<<20)
+		for scanner.Scan() {
+			line := scanner.Bytes()
+			if len(line) == 0 {
+				continue
+			}
+			chunk, err := transformer(line)
+			if err != nil {
+				select {
+				case chunks <- types.TextChunk{Error: fmt.Errorf("failed to parse NDJSON chunk: %w", err)}:
+				case <-ctx.Done():
+					return
+				}
+				return
+			}
+			if chunk == nil {
+				continue
+			}
+			select {
+			case chunks <- *chunk:
+			case <-ctx.Done():
+				return
+			}
+			if chunk.IsDone() {
+				return
+			}
+		}
+		if err := scanner.Err(); err != nil {
+			select {
+			case chunks <- types.TextChunk{Error: fmt.Errorf("NDJSON scan error: %w", err)}:
+			case <-ctx.Done():
+			}
+		}
+	}()
+	return chunks
+}
+
 // drainChannel discards remaining items from a channel until it closes.
 func drainChannel(ch <-chan types.TextChunk) {
 	for range ch {

@@ -237,7 +237,7 @@ func (p *Provider) transformTextResponse(response *chatResponse) *types.TextResp
 		ID:           id,
 		Model:        response.Model,
 		Text:         content,
-		FinishReason: p.mapFinishReason(response.Done),
+		FinishReason: p.mapFinishReason(response.DoneReason),
 		Usage:        p.convertUsage(response),
 		Created:      response.CreatedAt,
 	}
@@ -276,7 +276,7 @@ func (p *Provider) parseStreamChunk(data []byte) (*types.TextChunk, error) {
 	}
 
 	if response.Done {
-		reason := p.mapFinishReason(response.Done)
+		reason := p.mapFinishReason(response.DoneReason)
 		chunk.FinishReason = &reason
 	}
 
@@ -298,10 +298,20 @@ func (p *Provider) parseStreamChunk(data []byte) (*types.TextChunk, error) {
 
 // Helper functions
 
-// mapFinishReason maps Ollama's done status to finish reason
-// Note: Ollama currently only reports "stop" finish reason
-func (p *Provider) mapFinishReason(_ bool) types.FinishReason {
-	return types.FinishReasonStop
+// mapFinishReason maps Ollama's done_reason to finish reason.
+// Ollama returns done_reason values: "stop", "length", "load", "unload".
+func (p *Provider) mapFinishReason(doneReason string) types.FinishReason {
+	switch doneReason {
+	case "stop":
+		return types.FinishReasonStop
+	case "length":
+		return types.FinishReasonLength
+	case "load", "unload":
+		// Model load/unload — not a normal generation stop.
+		return types.FinishReasonOther
+	default:
+		return types.FinishReasonStop
+	}
 }
 
 // convertUsage converts Ollama response to usage info
