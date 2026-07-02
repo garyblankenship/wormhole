@@ -102,6 +102,11 @@ func returnResponseBuf(buf []byte) {
 }
 
 // keyPool provides thread-safe stateful selection over a set of API keys.
+// maxKeyCooldown caps how long a key rotation cooldown can be, regardless of
+// what a provider's Retry-After header requests. Without a cap, a bogus or
+// malicious large header value (e.g. 10h) would bench a key for that long.
+const maxKeyCooldown = 5 * time.Minute
+
 type keyPool struct {
 	mu       sync.Mutex
 	keys     []string
@@ -148,6 +153,9 @@ func (kp *keyPool) rotateAfterRateLimit(failedKey string, retryAfter time.Durati
 		cooldown := kp.cooldown
 		if retryAfter > 0 {
 			cooldown = retryAfter
+		}
+		if cooldown > maxKeyCooldown {
+			cooldown = maxKeyCooldown
 		}
 		kp.limited[failedIdx] = now.Add(cooldown)
 	}

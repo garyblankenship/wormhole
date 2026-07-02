@@ -216,6 +216,25 @@ func TestKeyPoolCooldownMakesLimitedKeyAvailableAgain(t *testing.T) {
 	assert.Equal(t, "key-A", pool.rotateAfterRateLimit("key-B", time.Millisecond, now.Add(2*time.Millisecond)))
 }
 
+// Regression: a provider-supplied Retry-After far larger than any sane cooldown
+// (e.g. 10h) must be capped at maxKeyCooldown, not honored verbatim — otherwise a
+// bogus or malicious header value benches a key for the full uncapped duration.
+func TestKeyPoolCooldownCapsUnboundedRetryAfter(t *testing.T) {
+	t.Parallel()
+
+	pool := newKeyPool([]string{"key-A", "key-B"}, time.Minute)
+	now := time.Now()
+	pool.rotateAfterRateLimit("key-A", 10*time.Hour, now)
+
+	pool.mu.Lock()
+	limitedUntil := pool.limited[0]
+	pool.mu.Unlock()
+
+	if got := limitedUntil.Sub(now); got != maxKeyCooldown {
+		t.Fatalf("cooldown = %v, want capped at %v", got, maxKeyCooldown)
+	}
+}
+
 // Regression: header-auth providers (Anthropic uses x-api-key) must rotate keys on
 // a 429. Before AuthStrategy.ExtractKey, the pool identified the failed key only from
 // an Authorization: Bearer header, so x-api-key rotation was a silent no-op.
