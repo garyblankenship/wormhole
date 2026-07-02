@@ -42,12 +42,21 @@ type CircuitBreaker struct {
 
 // NewCircuitBreaker creates a new circuit breaker
 func NewCircuitBreaker(failureThreshold int, timeout time.Duration) *CircuitBreaker {
+	// maxHalfOpen is the probe budget admitted per half-open cycle. successThreshold
+	// must never exceed it: if it does, the breaker can admit fewer probes than it
+	// needs to close, so once the provider recovers all probes succeed but the count
+	// never reaches successThreshold and the breaker wedges half-open forever.
+	const maxHalfOpen = 3
+	successThreshold := failureThreshold / 2
+	if successThreshold > maxHalfOpen {
+		successThreshold = maxHalfOpen
+	}
 	return &CircuitBreaker{
 		state:            StateClosed,
 		failureThreshold: failureThreshold,
-		successThreshold: failureThreshold / 2, // Need half successful calls to close
+		successThreshold: successThreshold,
 		timeout:          timeout,
-		maxHalfOpenCalls: 3, // Allow 3 test calls in half-open state
+		maxHalfOpenCalls: maxHalfOpen,
 	}
 }
 
