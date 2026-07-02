@@ -506,7 +506,9 @@ export ANTHROPIC_API_KEY=sk-ant-...
 export GEMINI_API_KEY=...
 export OLLAMA_BASE_URL=http://localhost:11434
 
-./wormhole serve --addr :8080 --default-provider openai
+# Binds 127.0.0.1:8080 by default. To expose on another interface, add
+# --addr :8080 AND set WORMHOLE_API_KEY (an unauthenticated non-loopback bind is refused).
+./wormhole serve --default-provider openai
 ```
 
 Model prefixes select a provider:
@@ -527,13 +529,14 @@ Supported proxy endpoints:
 | `GET` | `/v1/models` |
 | `GET` | `/health` |
 
-Set `WORMHOLE_API_KEY` to require `Authorization: Bearer <token>` on proxy
-requests. Do that before exposing the portal outside localhost unless your
-incident-review strategy is "pretend the timeline never happened." When the key
-is unset the proxy logs a startup warning and serves `/v1/` endpoints without
-authentication. The token is compared in constant time, and upstream provider
-error details are redacted from client responses — the full error still reaches
-the server logs.
+The proxy binds `127.0.0.1:8080` by default. To expose it on another interface
+(e.g. `--addr :8080`) you MUST set `WORMHOLE_API_KEY` — an unauthenticated
+non-loopback bind is refused at startup. Setting the key requires
+`Authorization: Bearer <token>` on `/v1/` requests. When the key is unset on a
+loopback bind the proxy logs a startup warning and serves `/v1/` endpoints
+without authentication. The token is compared in constant time. Upstream
+provider error messages are surfaced to clients, while the raw response body and
+request URL are kept in the server logs only.
 
 The proxy accepts OpenAI-style image chat content parts. Data URLs are converted
 to inline media before routing, so Gemini models can receive image-aware chat
@@ -683,7 +686,7 @@ go test -bench=. -benchmem ./pkg/wormhole
 - Do not log raw request headers or API keys.
 - Use HTTPS for remote provider endpoints.
 - Set context deadlines or client timeouts for production requests.
-- Use `WORMHOLE_API_KEY` before exposing the proxy outside localhost.
+- The proxy binds loopback by default and refuses an unauthenticated non-loopback bind; set `WORMHOLE_API_KEY` to expose it beyond localhost.
 - Treat logs like hazardous waste: useful, but not where secrets belong.
 
 ## License
