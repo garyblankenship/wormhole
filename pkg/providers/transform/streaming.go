@@ -106,6 +106,20 @@ func (t *StreamingTransformer) ParseChunk(data []byte) (*types.TextChunk, error)
 		return nil, fmt.Errorf("failed to unmarshal JSON: %w", err)
 	}
 
+	// In-band provider error frame (common on OpenAI-compatible gateways like
+	// OpenRouter/LiteLLM: `data: {"error":{...}}`). Surface it as a hard error so a
+	// mid-stream failure isn't silently returned as an empty chunk / clean completion.
+	if errVal, ok := response["error"]; ok && errVal != nil {
+		if errObj, ok := errVal.(map[string]any); ok {
+			msg, _ := errObj["message"].(string)
+			typ, _ := errObj["type"].(string)
+			if msg != "" || typ != "" {
+				return nil, fmt.Errorf("provider stream error (%s): %s", typ, msg)
+			}
+		}
+		return nil, fmt.Errorf("provider stream error: %s", string(data))
+	}
+
 	chunk := &types.TextChunk{}
 
 	// Extract ID if path is configured
