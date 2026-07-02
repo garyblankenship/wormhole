@@ -2,6 +2,7 @@ package middleware
 
 import (
 	"context"
+	"errors"
 	"math/rand"
 	"sync"
 	"sync/atomic"
@@ -14,6 +15,19 @@ import (
 var (
 	// ErrNoHealthyProviders is returned when no healthy providers are available
 	ErrNoHealthyProviders = types.NewWormholeError(types.ErrorCodeMiddleware, "no healthy providers available", false)
+
+	// errHealthCheckTimeout marks a provider health check that exceeded healthCheckTimeout
+	errHealthCheckTimeout = errors.New("load balancer: health check timed out")
+)
+
+const (
+	// healthCheckTimeout bounds a single provider health check so a hung
+	// checkFunc cannot block performHealthChecks/StopHealthChecks forever.
+	healthCheckTimeout = 5 * time.Second
+	// healthCheckHysteresis is the number of consecutive same-direction
+	// results required before flipping ProviderHandler.Healthy, preventing
+	// single-sample flapping under intermittent connectivity.
+	healthCheckHysteresis = 2
 )
 
 // LoadBalanceStrategy defines how to select providers
@@ -36,16 +50,18 @@ const (
 
 // ProviderHandler represents a provider with its handler
 type ProviderHandler struct {
-	Name              string
-	Handler           Handler
-	Weight            int
-	ActiveConnections int32
-	TotalRequests     int64
-	TotalErrors       int64
-	AverageLatency    time.Duration
-	LastHealthCheck   time.Time
-	Healthy           bool
-	mu                sync.RWMutex
+	Name                 string
+	Handler              Handler
+	Weight               int
+	ActiveConnections    int32
+	TotalRequests        int64
+	TotalErrors          int64
+	AverageLatency       time.Duration
+	LastHealthCheck      time.Time
+	Healthy              bool
+	consecutiveFails     int
+	consecutiveSuccesses int
+	mu                   sync.RWMutex
 }
 
 // LoadBalancer distributes requests across multiple providers
@@ -213,7 +229,7 @@ func (lb *LoadBalancer) selectAdaptive(providers []*ProviderHandler) *ProviderHa
 		// - Error rate (lower is better)
 		// - Response time (lower is better)
 
-		connectionScore := 1.0 / (float64(p.ActiveConnections) + 1.0)
+		connectionScore := 1.0 / (float64(atomic.LoadInt32(&p.ActiveConnections)) + 1.0)
 
 		errorRate := 0.0
 		if p.TotalRequests > 0 {
@@ -356,10 +372,32 @@ func (lb *LoadBalancer) performHealthChecks() {
 		go func(p *ProviderHandler) {
 			defer wg.Done()
 
-			err := checkFunc(p.Handler)
+			errCh := make(chan error, 1)
+			go func() {
+				errCh <- checkFunc(p.Handler)
+			}()
+
+			var err error
+			select {
+			case err = <-errCh:
+			case <-time.After(healthCheckTimeout):
+				err = errHealthCheckTimeout
+			}
 
 			p.mu.Lock()
-			p.Healthy = err == nil
+			if err == nil {
+				p.consecutiveSuccesses++
+				p.consecutiveFails = 0
+				if p.consecutiveSuccesses >= healthCheckHysteresis {
+					p.Healthy = true
+				}
+			} else {
+				p.consecutiveFails++
+				p.consecutiveSuccesses = 0
+				if p.consecutiveFails >= healthCheckHysteresis {
+					p.Healthy = false
+				}
+			}
 			p.LastHealthCheck = time.Now()
 			p.mu.Unlock()
 		}(provider)

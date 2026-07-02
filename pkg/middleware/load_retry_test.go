@@ -94,6 +94,7 @@ func TestLoadBalancerNoHealthyProvidersAndHealthChecks(t *testing.T) {
 	lb.StartHealthChecks(func(Handler) error { return errors.New("unhealthy") })
 	time.Sleep(2 * time.Millisecond)
 	lb.performHealthChecks()
+	lb.performHealthChecks() // hysteresis requires 2 consecutive failures to flip Healthy
 	lb.StopHealthChecks()
 
 	p.mu.RLock()
