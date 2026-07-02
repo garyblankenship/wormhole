@@ -238,6 +238,24 @@ func TestStructuredRequestBuilderGenerateValidation(t *testing.T) {
 	}
 }
 
+// Regression: an unmarshalable Schema() argument must surface the actual marshal
+// error from Generate, not be misattributed as "no schema provided" (which is
+// reserved for the case where Schema was never called at all).
+func TestStructuredRequestBuilderGenerateReturnsSchemaMarshalError(t *testing.T) {
+	t.Parallel()
+
+	client := New(WithDefaultProvider("openai"), WithOpenAI("test-key"), WithModelValidation(false), WithDiscovery(false))
+	ctx := context.Background()
+
+	_, err := client.Structured().Model("gpt-5").Prompt("hello").Schema(make(chan int)).Generate(ctx)
+	if err == nil {
+		t.Fatal("Generate with unmarshalable schema returned nil error")
+	}
+	if strings.Contains(err.Error(), "no schema provided") {
+		t.Fatalf("Generate misattributed a schema marshal error as a missing schema: %v", err)
+	}
+}
+
 func assertPanics(t *testing.T, fn func()) {
 	t.Helper()
 	defer func() {

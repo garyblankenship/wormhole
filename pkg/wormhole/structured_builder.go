@@ -12,7 +12,8 @@ import (
 // StructuredRequestBuilder builds structured output requests
 type StructuredRequestBuilder struct {
 	CommonBuilder
-	request *types.StructuredRequest
+	request   *types.StructuredRequest
+	schemaErr error
 }
 
 // Using sets the provider to use
@@ -63,7 +64,7 @@ func (b *StructuredRequestBuilder) SystemPrompt(prompt string) *StructuredReques
 func (b *StructuredRequestBuilder) Schema(schema any) *StructuredRequestBuilder {
 	schemaBytes, err := pool.Marshal(schema)
 	if err != nil {
-		// Store error to return during Generate
+		b.schemaErr = fmt.Errorf("failed to marshal schema: %w", err)
 		b.request.Schema = nil
 	} else {
 		// Note: We need to copy the data since pool.Marshal returns a pooled buffer
@@ -103,6 +104,10 @@ func (b *StructuredRequestBuilder) MaxTokens(tokens int) *StructuredRequestBuild
 
 // Generate executes the request and returns a structured response
 func (b *StructuredRequestBuilder) Generate(ctx context.Context) (*types.StructuredResponse, error) {
+	if b.schemaErr != nil {
+		return nil, b.schemaErr
+	}
+
 	request := cloneStructuredRequest(b.request)
 	prepareStructuredExecutionRequest(request)
 
