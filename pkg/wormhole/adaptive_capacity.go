@@ -20,7 +20,12 @@ type capacityManager struct {
 func (c *capacityManager) Start(stopChan <-chan struct{}, wg *sync.WaitGroup) {
 	defer wg.Done()
 
-	ticker := time.NewTicker(c.config.AdjustmentInterval)
+	interval := c.config.AdjustmentInterval
+	if interval <= 0 {
+		interval = DefaultAdaptiveConfig().AdjustmentInterval
+	}
+
+	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
 
 	for {

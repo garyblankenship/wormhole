@@ -194,16 +194,18 @@ func (p *Wormhole) GetCacheMetrics() CacheMetrics {
 
 // EnableAdaptiveConcurrency enables adaptive concurrency control with the given configuration.
 func (p *Wormhole) EnableAdaptiveConcurrency(config *EnhancedAdaptiveConfig) {
+	var normalized EnhancedAdaptiveConfig
 	if config == nil {
-		defaultConfig := DefaultEnhancedAdaptiveConfig()
-		config = &defaultConfig
+		normalized = DefaultEnhancedAdaptiveConfig()
+	} else {
+		normalized = normalizeEnhancedAdaptiveConfig(*config)
 	}
 
 	if p.adaptiveLimiter != nil {
 		p.adaptiveLimiter.Stop()
 	}
 
-	p.adaptiveLimiter = NewEnhancedAdaptiveLimiter(*config)
+	p.adaptiveLimiter = NewEnhancedAdaptiveLimiter(normalized)
 }
 
 // GetAdaptiveLimiter returns the adaptive limiter if enabled, or nil.

@@ -23,8 +23,11 @@ type PIDConfig struct {
 // DefaultPIDConfig returns sensible defaults for concurrency control
 func DefaultPIDConfig() PIDConfig {
 	return PIDConfig{
-		Kp: 0.5,  // Moderate proportional response
-		Ki: 0.1,  // Slow integral correction
+		Kp: 0.5, // Moderate proportional response
+		// Ki scaled so Ki*MaxIntegral stays within MaxOutput (0.05*10.0=0.5);
+		// the previous 0.1 let the integral term alone saturate output,
+		// causing bang-bang (always +/-50%) instead of a graduated response.
+		Ki: 0.05,
 		Kd: 0.05, // Dampen oscillations
 
 		MaxIntegral: 10.0,

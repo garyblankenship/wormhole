@@ -58,3 +58,34 @@ func DefaultEnhancedAdaptiveConfig() EnhancedAdaptiveConfig {
 		MaxModelStates:     1024,
 	}
 }
+
+// normalizeEnhancedAdaptiveConfig fills zero-valued tuning fields with safe
+// defaults. A caller who partially populates EnhancedAdaptiveConfig (leaving
+// AdjustmentInterval unset, for example) would otherwise panic in
+// capacityManager.Start's time.NewTicker, or silently fall back to
+// ConcurrencyLimiter's 1024-permit unlimited default via a zero capacity.
+func normalizeEnhancedAdaptiveConfig(config EnhancedAdaptiveConfig) EnhancedAdaptiveConfig {
+	defaults := DefaultEnhancedAdaptiveConfig()
+	if config.TargetLatency == 0 {
+		config.TargetLatency = defaults.TargetLatency
+	}
+	if config.MinCapacity == 0 {
+		config.MinCapacity = defaults.MinCapacity
+	}
+	if config.MaxCapacity == 0 {
+		config.MaxCapacity = defaults.MaxCapacity
+	}
+	if config.InitialCapacity == 0 {
+		config.InitialCapacity = defaults.InitialCapacity
+	}
+	if config.AdjustmentInterval == 0 {
+		config.AdjustmentInterval = defaults.AdjustmentInterval
+	}
+	if config.LatencyWindowSize == 0 {
+		config.LatencyWindowSize = defaults.LatencyWindowSize
+	}
+	if config.PIDConfig == (PIDConfig{}) {
+		config.PIDConfig = defaults.PIDConfig
+	}
+	return config
+}
