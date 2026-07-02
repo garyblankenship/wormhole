@@ -24,6 +24,9 @@ type DiscoveryService struct {
 	stopCh    chan struct{}
 	muStop    sync.RWMutex // serializes wg.Add (refreshProvider) against wg.Wait (Stop)
 	stopped   bool         // set under muStop write lock before Stop's wg.Wait
+
+	refreshMu       sync.Mutex          // protects refreshInFlight
+	refreshInFlight map[string]struct{} // providers with a background refresh already running (dedup)
 }
 
 // NewDiscoveryService creates a new model discovery service
@@ -32,12 +35,13 @@ func NewDiscoveryService(config DiscoveryConfig, fetchers ...ModelFetcher) *Disc
 
 	ctx, cancel := context.WithCancel(context.Background())
 	s := &DiscoveryService{
-		cache:    NewModelCache(config),
-		fetchers: make(map[string]ModelFetcher),
-		config:   config,
-		ctx:      ctx,
-		cancel:   cancel,
-		stopCh:   make(chan struct{}),
+		cache:           NewModelCache(config),
+		fetchers:        make(map[string]ModelFetcher),
+		config:          config,
+		ctx:             ctx,
+		cancel:          cancel,
+		stopCh:          make(chan struct{}),
+		refreshInFlight: make(map[string]struct{}),
 	}
 
 	// Register fetchers
@@ -126,15 +130,23 @@ func (s *DiscoveryService) RegisterFetcher(fetcher ModelFetcher) {
 	s.fetchers[fetcher.Name()] = fetcher
 }
 
-// GetModels returns models for a provider (from cache or fetch)
-func (s *DiscoveryService) GetModels(ctx context.Context, provider string) ([]*types.ModelInfo, error) {
+// ModelsResult wraps discovered models together with a freshness indicator.
+type ModelsResult struct {
+	Models []*types.ModelInfo
+	Stale  bool // true when Models came from stale cache or hardcoded fallback, not a live fetch
+}
+
+// GetModelsWithStatus returns models for a provider along with a Stale flag,
+// distinguishing a live fetch from stale-cache/fallback data — GetModels
+// cannot express this distinction since both cases return err == nil.
+func (s *DiscoveryService) GetModelsWithStatus(ctx context.Context, provider string) (*ModelsResult, error) {
 	// Check cache first
 	if models, fresh := s.cache.Get(provider); len(models) > 0 {
 		if !fresh {
 			// Using fallback/stale cache, trigger background refresh
 			s.refreshProvider(provider)
 		}
-		return models, nil
+		return &ModelsResult{Models: models, Stale: !fresh}, nil
 	}
 
 	// Cache miss, fetch now (blocking)
@@ -142,7 +154,22 @@ func (s *DiscoveryService) GetModels(ctx context.Context, provider string) ([]*t
 		return nil, fmt.Errorf("no cached models for provider %s and offline mode enabled", provider)
 	}
 
-	return s.fetchModels(ctx, provider)
+	models, err := s.fetchModels(ctx, provider)
+	if err != nil {
+		return nil, err
+	}
+	return &ModelsResult{Models: models, Stale: false}, nil
+}
+
+// GetModels returns models for a provider (from cache or fetch).
+// Staleness information is discarded; use GetModelsWithStatus to distinguish
+// a live fetch from stale/fallback data.
+func (s *DiscoveryService) GetModels(ctx context.Context, provider string) ([]*types.ModelInfo, error) {
+	result, err := s.GetModelsWithStatus(ctx, provider)
+	if err != nil {
+		return nil, err
+	}
+	return result.Models, nil
 }
 
 // RefreshModels manually triggers model discovery for all providers
@@ -262,7 +289,9 @@ func (s *DiscoveryService) fetchModels(ctx context.Context, provider string) ([]
 	return models, nil
 }
 
-// refreshProvider refreshes a single provider in background
+// refreshProvider refreshes a single provider in background. If a refresh
+// for this provider is already in flight, this call is a no-op (dedup
+// prevents a thundering herd of redundant refreshes against a down provider).
 func (s *DiscoveryService) refreshProvider(provider string) {
 	s.muStop.RLock()
 	defer s.muStop.RUnlock()
@@ -270,9 +299,22 @@ func (s *DiscoveryService) refreshProvider(provider string) {
 		return
 	}
 
+	s.refreshMu.Lock()
+	if _, inFlight := s.refreshInFlight[provider]; inFlight {
+		s.refreshMu.Unlock()
+		return
+	}
+	s.refreshInFlight[provider] = struct{}{}
+	s.refreshMu.Unlock()
+
 	s.wg.Add(1)
 	go func() {
 		defer s.wg.Done()
+		defer func() {
+			s.refreshMu.Lock()
+			delete(s.refreshInFlight, provider)
+			s.refreshMu.Unlock()
+		}()
 		// Use service context with timeout for proper cancellation
 		refreshCtx, cancel := context.WithTimeout(s.ctx, 30*time.Second)
 		defer cancel()
