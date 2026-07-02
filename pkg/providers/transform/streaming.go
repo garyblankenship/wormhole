@@ -17,6 +17,7 @@ type StreamingConfig struct {
 	UsagePath         string // e.g., "usage", "usageMetadata"
 	IDPath            string // e.g., "id"
 	ModelPath         string // e.g., "model"
+	ThinkingPath      string // e.g., "choices.0.delta.reasoning_content"
 
 	// Field adapters for provider-specific formats
 	TextAdapter         func(any) (string, error)
@@ -181,6 +182,19 @@ func (t *StreamingTransformer) ParseChunk(data []byte) (*types.TextChunk, error)
 					if len(toolCalls) == 1 {
 						chunk.ToolCall = &toolCalls[0]
 					}
+				}
+			}
+		}
+	}
+
+	// Extract thinking / reasoning content
+	if t.config.ThinkingPath != "" {
+		if val := t.getFieldByPath(response, t.config.ThinkingPath); val != nil {
+			if str, ok := val.(string); ok && str != "" {
+				thinking := &types.Thinking{Content: str}
+				chunk.Thinking = thinking
+				if chunk.Delta != nil {
+					chunk.Delta.Thinking = thinking
 				}
 			}
 		}
@@ -401,6 +415,7 @@ func NewOpenAIStreamingTransformer() *StreamingTransformer {
 		UsagePath:           "usage",
 		IDPath:              "id",
 		ModelPath:           "model",
+		ThinkingPath:        "choices.0.delta.reasoning_content",
 		FinishReasonAdapter: MapFinishReason,
 		UsageAdapter:        openAIStreamUsage,
 		ReturnsBatch:        false,
