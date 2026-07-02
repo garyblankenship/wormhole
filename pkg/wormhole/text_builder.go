@@ -736,7 +736,8 @@ func (b *TextRequestBuilder) MustValidate() *TextRequestBuilder {
 
 // StreamAndAccumulate is a convenience method that streams the response while
 // accumulating the full text. It returns both the channel for real-time processing
-// and a function to get the complete response after streaming finishes.
+// and a function to get the complete response and any stream-level error after
+// streaming finishes.
 //
 // Example:
 //
@@ -747,8 +748,11 @@ func (b *TextRequestBuilder) MustValidate() *TextRequestBuilder {
 //	for chunk := range chunks {
 //	    fmt.Print(chunk.Content())  // Print in real-time
 //	}
-//	fullText := getResult()  // Get complete accumulated text
-func (b *TextRequestBuilder) StreamAndAccumulate(ctx context.Context) (<-chan types.StreamChunk, func() string, error) {
+//	fullText, streamErr := getResult()
+//	if streamErr != nil {
+//	    // stream ended with an error; fullText is a prefix
+//	}
+func (b *TextRequestBuilder) StreamAndAccumulate(ctx context.Context) (<-chan types.StreamChunk, func() (string, error), error) {
 	stream, err := b.Stream(ctx)
 	if err != nil {
 		return nil, nil, err
@@ -756,10 +760,14 @@ func (b *TextRequestBuilder) StreamAndAccumulate(ctx context.Context) (<-chan ty
 
 	accumulated := make(chan types.StreamChunk)
 	var builder strings.Builder
+	var streamErr error
 
 	go func() {
 		defer close(accumulated)
 		for chunk := range stream {
+			if chunk.Error != nil && streamErr == nil {
+				streamErr = chunk.Error
+			}
 			builder.WriteString(chunk.Content())
 			select {
 			case accumulated <- chunk:
@@ -773,7 +781,9 @@ func (b *TextRequestBuilder) StreamAndAccumulate(ctx context.Context) (<-chan ty
 		}
 	}()
 
-	return accumulated, func() string { return builder.String() }, nil
+	return accumulated, func() (string, error) {
+		return builder.String(), streamErr
+	}, nil
 }
 
 // applyStreamIdleTimeout wraps a provider stream with a per-chunk idle watchdog.
