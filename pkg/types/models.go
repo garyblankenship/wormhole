@@ -3,6 +3,7 @@ package types
 import (
 	"fmt"
 	"strings"
+	"sync"
 )
 
 // ModelInfo contains metadata about a model
@@ -43,8 +44,11 @@ const (
 	CapabilityStream     ModelCapability = "stream"
 )
 
-// ModelRegistry manages available models across providers
+// ModelRegistry manages available models across providers.
+// It is safe for concurrent use: the global DefaultModelRegistry is mutated at
+// wormhole.New(WithModels(...)) time and read by validation helpers.
 type ModelRegistry struct {
+	mu         sync.RWMutex
 	models     map[string]*ModelInfo
 	byProvider map[string][]*ModelInfo
 }
@@ -57,25 +61,47 @@ func NewModelRegistry() *ModelRegistry {
 	}
 }
 
-// Register adds a model to the registry
+// Register adds a model to the registry (or updates an existing one by ID).
 func (r *ModelRegistry) Register(model *ModelInfo) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
 	r.models[model.ID] = model
-	r.byProvider[model.Provider] = append(r.byProvider[model.Provider], model)
+
+	// Replace an existing entry for this ID in the provider's slice, else append —
+	// so repeated registration of the same model list does not accumulate duplicates.
+	list := r.byProvider[model.Provider]
+	for i, m := range list {
+		if m.ID == model.ID {
+			list[i] = model
+			return
+		}
+	}
+	r.byProvider[model.Provider] = append(list, model)
 }
 
 // Get retrieves a model by ID
 func (r *ModelRegistry) Get(modelID string) (*ModelInfo, bool) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
 	model, exists := r.models[modelID]
 	return model, exists
 }
 
-// GetByProvider returns all models for a provider
+// GetByProvider returns all models for a provider (a copy, safe to retain).
 func (r *ModelRegistry) GetByProvider(provider string) []*ModelInfo {
-	return r.byProvider[provider]
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	list := r.byProvider[provider]
+	out := make([]*ModelInfo, len(list))
+	copy(out, list)
+	return out
 }
 
 // GetByCapability returns all models with a specific capability
 func (r *ModelRegistry) GetByCapability(capability ModelCapability) []*ModelInfo {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
 	var results []*ModelInfo
 	for _, model := range r.models {
 		for _, cap := range model.Capabilities {
@@ -90,6 +116,8 @@ func (r *ModelRegistry) GetByCapability(capability ModelCapability) []*ModelInfo
 
 // List returns all registered models
 func (r *ModelRegistry) List() []*ModelInfo {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
 	models := make([]*ModelInfo, 0, len(r.models))
 	for _, model := range r.models {
 		models = append(models, model)
@@ -99,6 +127,8 @@ func (r *ModelRegistry) List() []*ModelInfo {
 
 // Search finds models matching a query
 func (r *ModelRegistry) Search(query string) []*ModelInfo {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
 	query = strings.ToLower(query)
 	var results []*ModelInfo
 
