@@ -16,6 +16,44 @@ import (
 	"github.com/garyblankenship/wormhole/pkg/types"
 )
 
+// cacheSchemaVersion is stamped into every persisted CacheEntry shard. Bump
+// this when the on-disk CacheEntry shape changes so old shards are treated
+// as a cache miss instead of being blindly unmarshaled into a new shape.
+const cacheSchemaVersion = 1
+
+// writeShardAtomic writes data to path atomically: a unique per-call temp
+// file (avoiding the collision a fixed shared ".tmp" name would hit across
+// concurrent processes/goroutines writing the same path), fsync'd before
+// the rename so a crash can't leave a truncated shard on disk.
+func writeShardAtomic(path string, data []byte) error {
+	dir := filepath.Dir(path)
+	tmp, err := os.CreateTemp(dir, filepath.Base(path)+".tmp-*")
+	if err != nil {
+		return err
+	}
+	tempPath := tmp.Name()
+	defer func() {
+		_ = os.Remove(tempPath) // #nosec G304 - path validated via ValidatePath -- no-op once renamed
+	}()
+
+	if err := tmp.Chmod(0600); err != nil { // #nosec G304 - path validated via ValidatePath
+		_ = tmp.Close()
+		return err
+	}
+	if _, err := tmp.Write(data); err != nil {
+		_ = tmp.Close()
+		return err
+	}
+	if err := tmp.Sync(); err != nil {
+		_ = tmp.Close()
+		return err
+	}
+	if err := tmp.Close(); err != nil {
+		return err
+	}
+	return os.Rename(tempPath, path) // #nosec G304 - path validated via ValidatePath
+}
+
 // ModelCache implements 3-tier caching: memory -> file -> fallback
 type ModelCache struct {
 	memory              map[string]*CacheEntry // provider -> *CacheEntry
@@ -118,6 +156,9 @@ func (c *ModelCache) migrateToSharded(provider string, entry *CacheEntry, gen ui
 		return // Already migrated
 	}
 
+	// Stamp current schema version (legacy monolithic entries predate this field)
+	entry.SchemaVersion = cacheSchemaVersion
+
 	// Marshal entry to JSON
 	data, err := json.MarshalIndent(entry, "", "  ")
 	if err != nil {
@@ -138,13 +179,9 @@ func (c *ModelCache) migrateToSharded(provider string, entry *CacheEntry, gen ui
 		return
 	}
 
-	// Write atomically
-	tempPath := providerPath + ".tmp"
-	if err := os.WriteFile(tempPath, data, 0600); err != nil { // #nosec G304 - path validated via ValidatePath
+	// Write atomically (unique temp path + fsync before rename)
+	if err := writeShardAtomic(providerPath, data); err != nil {
 		return // Can't write, skip
-	}
-	if err := os.Rename(tempPath, providerPath); err != nil { // #nosec G304 - path validated via ValidatePath
-		_ = os.Remove(tempPath) // #nosec G304 - path validated via ValidatePath
 	}
 }
 
@@ -219,6 +256,11 @@ func (c *ModelCache) loadFromFile(provider string) ([]*types.ModelInfo, bool) {
 		if err := json.Unmarshal(data, &entry); err != nil {
 			return nil, false // Invalid JSON
 		}
+		// Reject shards from an incompatible schema version instead of
+		// trusting a shape that may have since changed
+		if entry.SchemaVersion != cacheSchemaVersion {
+			return nil, false // Schema mismatch, treat as cache miss
+		}
 		// Check TTL
 		if time.Since(entry.Timestamp) > c.fileTTL {
 			return nil, false // Expired
@@ -276,9 +318,10 @@ func (c *ModelCache) saveToFile(provider string, models []*types.ModelInfo) {
 
 	// Create entry
 	entry := &CacheEntry{
-		Models:    models,
-		Timestamp: time.Now(),
-		Provider:  provider,
+		SchemaVersion: cacheSchemaVersion,
+		Models:        models,
+		Timestamp:     time.Now(),
+		Provider:      provider,
 	}
 
 	// Marshal to JSON
@@ -295,15 +338,9 @@ func (c *ModelCache) saveToFile(provider string, models []*types.ModelInfo) {
 		return // Can't create directory, skip save
 	}
 
-	// Write atomically (write to temp, then rename)
-	// Use 0600 for security (cache may contain API-related metadata)
-	tempPath := providerPath + ".tmp"
-	if err := os.WriteFile(tempPath, data, 0600); err != nil { // #nosec G304 - path validated via ValidatePath
+	// Write atomically (unique temp path + fsync before rename)
+	if err := writeShardAtomic(providerPath, data); err != nil {
 		return // Can't write, skip
-	}
-	if err := os.Rename(tempPath, providerPath); err != nil { // #nosec G304 - path validated via ValidatePath
-		// Cleanup temp file on rename failure
-		_ = os.Remove(tempPath) // #nosec G304 - path validated via ValidatePath
 	}
 }
 
