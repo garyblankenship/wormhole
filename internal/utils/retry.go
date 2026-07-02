@@ -3,6 +3,7 @@ package utils
 import (
 	"context"
 	"fmt"
+	"io"
 	"log"
 	"math"
 	"net/http"
@@ -37,12 +38,17 @@ func DefaultRetryConfig() RetryConfig {
 	}
 }
 
+// maxErrorBodyBytes bounds how much of a provider error body we retain for
+// downstream classification (error bodies are small; this is a safety cap).
+const maxErrorBodyBytes = 64 << 10
+
 // RetryableError represents an error that can be retried
 type RetryableError struct {
 	Err         error
 	StatusCode  int
 	ShouldRetry bool
 	RetryAfter  time.Duration // From Retry-After header
+	Body        []byte        // Bounded copy of the error response body, for downstream classification
 }
 
 func (e *RetryableError) Error() string {
@@ -147,11 +153,16 @@ func (r *RetryableHTTPClient) Do(req *http.Request) (*http.Response, error) {
 		} else {
 			// HTTP error response
 			retryAfter := types.ParseRetryAfterHeader(resp.Header, time.Now())
+			// Capture a bounded copy of the error body before closing it, so the
+			// provider's structured error (e.g. insufficient_quota) survives to the
+			// final surfaced error even after retries are exhausted.
+			body, _ := io.ReadAll(io.LimitReader(resp.Body, maxErrorBodyBytes))
 			lastRetryErr = &RetryableError{
 				Err:         fmt.Errorf("HTTP %d", resp.StatusCode),
 				StatusCode:  resp.StatusCode,
 				ShouldRetry: IsRetryableStatusCode(resp.StatusCode),
 				RetryAfter:  retryAfter,
+				Body:        body,
 			}
 			if err := resp.Body.Close(); err != nil {
 				log.Printf("warning: failed to close response body: %v", err)
