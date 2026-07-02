@@ -440,11 +440,22 @@ func (w *HTTPClientWrapper) handleRequestError(ctx context.Context, err error) e
 
 	var retryErr *utils.RetryableError
 	if errors.As(err, &retryErr) && retryErr.StatusCode > 0 {
+		details := err.Error()
+		// If the retry layer preserved the provider error body, fold its structured
+		// type/code and raw payload into Details so ClassifyError can distinguish
+		// e.g. insufficient_quota / RESOURCE_EXHAUSTED from a generic rate limit
+		// even after retries are exhausted (the body is dropped otherwise).
+		if len(retryErr.Body) > 0 {
+			if typeCode := extractErrorTypeCode(retryErr.Body); typeCode != "" {
+				details = typeCode + "\n" + details
+			}
+			details = details + "\nResponse: " + string(retryErr.Body)
+		}
 		wormholeErr := types.NewWormholeError(
 			w.mapHTTPStatusToErrorCode(retryErr.StatusCode),
 			fmt.Sprintf("HTTP %d after retries", retryErr.StatusCode),
 			retryErr.ShouldRetry,
-		).WithDetails(err.Error())
+		).WithDetails(details)
 		wormholeErr.StatusCode = retryErr.StatusCode
 		wormholeErr.Provider = w.providerName
 		if retryErr.RetryAfter > 0 {
