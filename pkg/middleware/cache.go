@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"reflect"
 	"sync"
 	"time"
 )
@@ -201,6 +202,13 @@ func CacheMiddleware(config CacheConfig) Middleware {
 			resp, err := next(ctx, req)
 			if err != nil {
 				return nil, wrapIfNotWormholeError("cache", err)
+			}
+
+			// Never cache streaming responses: the value is a live channel that a
+			// second caller would receive already-drained, and one surfaced to a
+			// non-stream call type-panics in the adapter. Streams always run fresh.
+			if resp != nil && reflect.TypeOf(resp).Kind() == reflect.Chan {
+				return resp, nil
 			}
 
 			// Cache successful response
