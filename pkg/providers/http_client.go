@@ -447,6 +447,9 @@ func (w *HTTPClientWrapper) handleRequestError(ctx context.Context, err error) e
 		).WithDetails(err.Error())
 		wormholeErr.StatusCode = retryErr.StatusCode
 		wormholeErr.Provider = w.providerName
+		if retryErr.RetryAfter > 0 {
+			wormholeErr = wormholeErr.WithRetryAfter(retryErr.RetryAfter)
+		}
 		return wormholeErr
 	}
 
