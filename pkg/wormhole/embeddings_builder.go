@@ -128,8 +128,14 @@ func (b *EmbeddingsRequestBuilder) MustValidate() *EmbeddingsRequestBuilder {
 
 // Generate executes the request and returns embeddings
 func (b *EmbeddingsRequestBuilder) Generate(ctx context.Context) (*types.EmbeddingsResponse, error) {
+	if b.request == nil {
+		return nil, types.NewValidationError("request", "already_used", nil, "builder already used; create a new builder for each request")
+	}
 	// CRITICAL: Return request to pool to prevent memory leak
-	defer putEmbeddingsRequest(b.request)
+	defer func() {
+		putEmbeddingsRequest(b.request)
+		b.request = nil
+	}()
 
 	request := cloneEmbeddingsRequest(b.request)
 
@@ -151,8 +157,14 @@ func (b *EmbeddingsRequestBuilder) Generate(ctx context.Context) (*types.Embeddi
 // response must contain exactly one embedding per input and every embedding
 // Index must refer to an item in that sub-batch.
 func (b *EmbeddingsRequestBuilder) GenerateBatched(ctx context.Context, batchSize int) (*types.EmbeddingsResponse, error) {
+	if b.request == nil {
+		return nil, types.NewValidationError("request", "already_used", nil, "builder already used; create a new builder for each request")
+	}
 	// CRITICAL: Return request to pool to prevent memory leak
-	defer putEmbeddingsRequest(b.request)
+	defer func() {
+		putEmbeddingsRequest(b.request)
+		b.request = nil
+	}()
 
 	request := cloneEmbeddingsRequest(b.request)
 	if len(request.Input) == 0 {
