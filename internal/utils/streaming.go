@@ -223,10 +223,19 @@ func NewStreamProcessor(r io.Reader, transformer func([]byte) (*types.TextChunk,
 func (p *StreamProcessor) Process(ctx context.Context, chunks chan<- types.TextChunk) {
 	defer close(chunks)
 
+	var finished bool
+
 	for {
 		event, err := p.parser.Parse()
 		if err != nil {
-			if err != io.EOF {
+			if err == io.EOF {
+				if !finished {
+					select {
+					case chunks <- types.TextChunk{Error: fmt.Errorf("stream ended prematurely: no terminal finish event received")}:
+					case <-ctx.Done():
+					}
+				}
+			} else {
 				select {
 				case chunks <- types.TextChunk{Error: err}:
 				case <-ctx.Done():
@@ -242,6 +251,7 @@ func (p *StreamProcessor) Process(ctx context.Context, chunks chan<- types.TextC
 
 		// Handle [DONE] marker
 		if event.Data == streamDoneMarker {
+			finished = true
 			return
 		}
 
@@ -256,6 +266,9 @@ func (p *StreamProcessor) Process(ctx context.Context, chunks chan<- types.TextC
 		}
 
 		if chunk != nil {
+			if chunk.IsDone() {
+				finished = true
+			}
 			select {
 			case chunks <- *chunk:
 			case <-ctx.Done():

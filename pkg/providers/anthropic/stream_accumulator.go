@@ -100,7 +100,10 @@ func (p *Provider) accumulatingStream(ctx context.Context, in <-chan types.Strea
 				acc.add(chunk.ToolCalls)
 				chunk.ToolCalls = nil
 			}
-			if chunk.IsDone() {
+			// On the terminal chunk, attach assembled tool calls. Also flush on
+			// an error chunk so buffered fragments are not silently dropped when
+			// a stream ends prematurely.
+			if chunk.IsDone() || chunk.Error != nil {
 				if calls := acc.finish(); len(calls) > 0 {
 					chunk.ToolCalls = calls
 				}

@@ -42,7 +42,9 @@ func (p *Provider) accumulatingStream(ctx context.Context, in <-chan types.TextC
 			// separate tool calls instead of the one accumulated call.
 			chunk.ToolCall = nil
 			// On the terminal chunk, attach the assembled, parsed tool calls.
-			if chunk.IsDone() {
+			// Also flush on an error chunk so buffered fragments are not silently
+			// dropped when a stream ends prematurely.
+			if chunk.IsDone() || chunk.Error != nil {
 				if calls := acc.finish(); len(calls) > 0 {
 					chunk.ToolCalls = calls
 				}

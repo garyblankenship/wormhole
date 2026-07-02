@@ -323,6 +323,8 @@ event: heartbeat
 
 data: {"text": "World"}
 
+data: [DONE]
+
 `
 
 		transformer := func(data []byte) (*types.TextChunk, error) {
@@ -673,6 +675,8 @@ func TestStreamProcessor_EdgeCases(t *testing.T) {
 
 data: {"text": "process-this"}
 
+data: [DONE]
+
 `
 
 		transformer := func(data []byte) (*types.TextChunk, error) {
@@ -733,7 +737,7 @@ func TestProcessStreamWithIdleTimeout_Disabled(t *testing.T) {
 	t.Parallel()
 
 	// Zero timeout should fall through to plain ProcessStream
-	body := io.NopCloser(strings.NewReader("data: \"hello\"\n\n"))
+	body := io.NopCloser(strings.NewReader("data: \"hello\"\n\ndata: [DONE]\n\n"))
 	transformer := func(data []byte) (*types.TextChunk, error) {
 		return &types.TextChunk{Text: string(data)}, nil
 	}
