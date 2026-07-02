@@ -14,6 +14,13 @@ type BaseRequest struct {
 	Reasoning        *Reasoning     `json:"reasoning,omitempty"`
 }
 
+// GetProviderOptions returns the provider-specific options. It exists so cache
+// and idempotency key generators can fold ProviderOptions into the key even
+// though the field carries json:"-" and never appears in the marshaled request.
+func (b BaseRequest) GetProviderOptions() map[string]any {
+	return b.ProviderOptions
+}
+
 // Reasoning describes provider-neutral reasoning controls for models that
 // expose thinking, effort, or token-budget controls.
 type Reasoning struct {
