@@ -2,6 +2,7 @@ package anthropic
 
 import (
 	"encoding/json"
+	"fmt"
 
 	"github.com/garyblankenship/wormhole/pkg/types"
 )
@@ -97,6 +98,21 @@ func (p *Provider) parseStreamChunk(data []byte) (*types.StreamChunk, error) {
 	case "message_stop":
 		// End of stream
 		return nil, nil
+
+	case "error":
+		// In-band provider error (e.g. overloaded_error) mid-stream. Surface it as a
+		// hard error so the consumer sees a failure instead of a silent truncation
+		// reported as clean completion.
+		var event struct {
+			Error struct {
+				Type    string `json:"type"`
+				Message string `json:"message"`
+			} `json:"error"`
+		}
+		if err := json.Unmarshal(data, &event); err != nil {
+			return nil, fmt.Errorf("anthropic stream error: %s", string(data))
+		}
+		return nil, fmt.Errorf("anthropic stream error (%s): %s", event.Error.Type, event.Error.Message)
 	}
 
 	return chunk, nil
