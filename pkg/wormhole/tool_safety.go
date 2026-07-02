@@ -2,6 +2,8 @@ package wormhole
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"sync"
 	"time"
 )
@@ -160,9 +162,27 @@ func (cb *SimpleCircuitBreaker) IsTripped() bool {
 	return cb.state == stateOpen
 }
 
+// ErrToolNonRetryable marks an error as having occurred after a real side
+// effect (e.g. an email was sent, a charge was made) -- RetryExecutor will
+// not retry an error wrapping this sentinel, even when retries remain,
+// because re-invoking the handler would duplicate that side effect. Wrap
+// such errors with NonRetryableToolError.
+var ErrToolNonRetryable = errors.New("tool error occurred after a side effect and must not be retried")
+
+// NonRetryableToolError wraps err so RetryExecutor's default retryability
+// check refuses to retry it. Use this from a tool handler when a failure
+// happens after the handler has already produced a real side effect.
+func NonRetryableToolError(err error) error {
+	if err == nil {
+		return nil
+	}
+	return fmt.Errorf("%w: %w", ErrToolNonRetryable, err)
+}
+
 // RetryExecutor handles retry logic for tool execution
 type RetryExecutor struct {
-	maxRetries int
+	maxRetries    int
+	retryableFunc func(error) bool
 }
 
 // NewRetryExecutor creates a new retry executor
@@ -175,6 +195,22 @@ func NewRetryExecutor(maxRetries int) *RetryExecutor {
 	}
 }
 
+// WithRetryableFunc overrides how ExecuteWithRetry decides whether an error
+// is worth retrying. fn is called with the error returned by the wrapped
+// function; a false result stops the retry loop immediately. If never set,
+// ExecuteWithRetry retries every error except one wrapping ErrToolNonRetryable.
+func (r *RetryExecutor) WithRetryableFunc(fn func(error) bool) *RetryExecutor {
+	r.retryableFunc = fn
+	return r
+}
+
+func (r *RetryExecutor) isRetryable(err error) bool {
+	if r.retryableFunc != nil {
+		return r.retryableFunc(err)
+	}
+	return !errors.Is(err, ErrToolNonRetryable)
+}
+
 // ExecuteWithRetry executes a function with retry logic
 func (r *RetryExecutor) ExecuteWithRetry(ctx context.Context, fn func(ctx context.Context) error) error {
 	var lastErr error
@@ -184,7 +220,7 @@ func (r *RetryExecutor) ExecuteWithRetry(ctx context.Context, fn func(ctx contex
 			lastErr = err
 
 			// Check if we should retry
-			if attempt == r.maxRetries {
+			if attempt == r.maxRetries || !r.isRetryable(err) {
 				return lastErr
 			}
 

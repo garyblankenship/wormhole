@@ -203,3 +203,47 @@ func TestRetryExecutor(t *testing.T) {
 		t.Fatalf("ExecuteWithRetry error = %v, want %v", err, wantErr)
 	}
 }
+
+func TestRetryExecutorDoesNotRetryNonRetryableError(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	executor := NewRetryExecutor(5)
+	calls := 0
+	sideEffectErr := errors.New("email already sent")
+
+	err := executor.ExecuteWithRetry(ctx, func(ctx context.Context) error {
+		calls++
+		return NonRetryableToolError(sideEffectErr)
+	})
+
+	if !errors.Is(err, sideEffectErr) {
+		t.Fatalf("ExecuteWithRetry error = %v, want wrapped %v", err, sideEffectErr)
+	}
+	if calls != 1 {
+		t.Fatalf("calls = %d, want 1: a non-retryable error must not be retried", calls)
+	}
+}
+
+func TestRetryExecutorCustomRetryableFunc(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	executor := NewRetryExecutor(5).WithRetryableFunc(func(err error) bool {
+		return false // never retry, regardless of error type
+	})
+	calls := 0
+	wantErr := errors.New("plain error")
+
+	err := executor.ExecuteWithRetry(ctx, func(ctx context.Context) error {
+		calls++
+		return wantErr
+	})
+
+	if !errors.Is(err, wantErr) {
+		t.Fatalf("ExecuteWithRetry error = %v, want %v", err, wantErr)
+	}
+	if calls != 1 {
+		t.Fatalf("calls = %d, want 1: custom RetryableFunc returning false must stop retries", calls)
+	}
+}
