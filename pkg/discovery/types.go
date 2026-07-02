@@ -59,9 +59,10 @@ func DefaultConfig() DiscoveryConfig {
 
 // CacheEntry represents a cached set of models with timestamp
 type CacheEntry struct {
-	Models    []*types.ModelInfo `json:"models"`
-	Timestamp time.Time          `json:"timestamp"`
-	Provider  string             `json:"provider"`
+	SchemaVersion int                `json:"schema_version"`
+	Models        []*types.ModelInfo `json:"models"`
+	Timestamp     time.Time          `json:"timestamp"`
+	Provider      string             `json:"provider"`
 }
 
 // FileCache represents the structure of the persisted cache file
