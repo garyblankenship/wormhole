@@ -17,7 +17,7 @@ var (
 // RateLimiter implements token bucket rate limiting.
 type RateLimiter struct {
 	mu           sync.Mutex
-	rate         int
+	rate         atomic.Int64 // requests/sec; read (Wait, refill) and written (AdaptiveRateLimiter.adjustRate) from different locks, so kept lock-free
 	capacity     int
 	tokens       float64
 	lastRefill   time.Time
@@ -29,13 +29,14 @@ type RateLimiter struct {
 func NewRateLimiter(requestsPerSecond int) *RateLimiter {
 	capacity := requestsPerSecond * 2
 
-	return &RateLimiter{
-		rate:         requestsPerSecond,
+	rl := &RateLimiter{
 		capacity:     capacity,
 		tokens:       float64(capacity),
 		lastRefill:   time.Now(),
 		requestQueue: make(chan struct{}, capacity),
 	}
+	rl.rate.Store(int64(requestsPerSecond))
+	return rl
 }
 
 // Wait blocks until a token is available or context is canceled.
@@ -56,7 +57,7 @@ func (rl *RateLimiter) Wait(ctx context.Context) error {
 		return ErrRateLimitExceeded
 	}
 
-	ticker := time.NewTicker(time.Second / time.Duration(rl.rate))
+	ticker := time.NewTicker(time.Second / time.Duration(rl.rate.Load()))
 	defer ticker.Stop()
 
 	for {
@@ -93,7 +94,7 @@ func (rl *RateLimiter) TryAcquire() error {
 func (rl *RateLimiter) refill() {
 	now := time.Now()
 	elapsed := now.Sub(rl.lastRefill)
-	tokensToAdd := elapsed.Seconds() * float64(rl.rate)
+	tokensToAdd := elapsed.Seconds() * float64(rl.rate.Load())
 
 	rl.tokens += tokensToAdd
 	if rl.tokens > float64(rl.capacity) {

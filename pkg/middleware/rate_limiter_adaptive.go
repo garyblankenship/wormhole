@@ -62,6 +62,9 @@ func NewHealthAwareAdaptiveRateLimiter(initialRate, minRate, maxRate int, target
 }
 
 func newAdaptiveRateLimiter(config adaptiveLimiterConfig) *AdaptiveRateLimiter {
+	if config.minRate < 1 {
+		config.minRate = 1 // guard: a 0 rate would divide-by-zero in Wait's ticker interval
+	}
 	limiter := &AdaptiveRateLimiter{
 		RateLimiter:    NewRateLimiter(config.initialRate),
 		minRate:        config.minRate,
@@ -126,14 +129,14 @@ func (arl *AdaptiveRateLimiter) adjustRate(avgLatency time.Duration) {
 		adjustmentFactor *= arl.calculateHealthAdjustment()
 	}
 
-	newRate := int(float64(arl.rate) * adjustmentFactor)
+	newRate := int(float64(arl.rate.Load()) * adjustmentFactor)
 	if newRate < arl.minRate {
 		newRate = arl.minRate
 	} else if newRate > arl.maxRate {
 		newRate = arl.maxRate
 	}
 
-	arl.rate = newRate
+	arl.rate.Store(int64(newRate))
 }
 
 func (arl *AdaptiveRateLimiter) calculateHealthAdjustment() float64 {

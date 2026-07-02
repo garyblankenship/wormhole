@@ -274,8 +274,8 @@ func TestAdaptiveRateLimiterHealthAdjustment(t *testing.T) {
 	}
 
 	limiter.adjustRate(200 * time.Millisecond)
-	if limiter.rate != 4 {
-		t.Fatalf("adjusted rate = %d, want 4", limiter.rate)
+	if limiter.rate.Load() != 4 {
+		t.Fatalf("adjusted rate = %d, want 4", limiter.rate.Load())
 	}
 
 	limiter.healthMetrics = nil
