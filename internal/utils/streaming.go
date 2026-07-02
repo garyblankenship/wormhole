@@ -31,10 +31,16 @@ type SSEParser struct {
 	reader *bufio.Reader
 }
 
+// sseReaderBufferSize sizes the SSE line buffer. Large single frames are routine
+// (OpenAI Responses `response.completed` objects, big tool-call argument deltas,
+// gateway-batched deltas), so the default 4KB bufio buffer would otherwise force
+// the ErrBufferFull path on real traffic.
+const sseReaderBufferSize = 1 << 20 // 1 MiB
+
 // NewSSEParser creates a new SSE parser
 func NewSSEParser(r io.Reader) *SSEParser {
 	return &SSEParser{
-		reader: bufio.NewReader(r),
+		reader: bufio.NewReaderSize(r, sseReaderBufferSize),
 	}
 }
 
@@ -118,18 +124,20 @@ func (p *SSEParser) readLine() ([]byte, bool, error) {
 		return nil, false, err
 	}
 
-	// If buffer was full, slice contains partial line
-	// Need to read more (rare case for SSE)
+	// Line exceeds the (already large) bufio buffer. slice holds the consumed
+	// prefix and is valid only until the next read, so copy it, then read the
+	// remainder and concatenate. The previous code discarded the prefix, silently
+	// dropping the first buffer-size bytes — and thus the whole frame's `data:` field.
 	if err == bufio.ErrBufferFull {
-		// For SSE, lines should be short. This is unexpected.
-		// Fall back to ReadString for simplicity
-		lineStr, err2 := p.reader.ReadString('\n')
-		if err2 != nil {
+		prefix := append([]byte(nil), slice...)
+		rest, err2 := p.reader.ReadString('\n')
+		if err2 != nil && err2 != io.EOF {
 			return nil, false, err2
 		}
-		trimmed := trimNewline([]byte(lineStr))
+		full := append(prefix, rest...)
+		trimmed := trimNewline(full)
 		line := p.copyToPooledBuffer(trimmed)
-		return line, false, nil
+		return line, err2 == io.EOF, nil
 	}
 
 	// Normal case: successful read
