@@ -32,6 +32,13 @@ func New(apiKey string, config types.ProviderConfig) *Gemini {
 		config.BaseURL = defaultBaseURL
 	}
 
+	// Gemini authenticates via a URL query param, not the Authorization header, so
+	// the HTTP wrapper's APIKeys[0] seeding (which targets header auth) never reaches
+	// g.apiKey. Seed it here so a config with only APIKeys (no APIKey) still authenticates.
+	if apiKey == "" && len(config.APIKeys) > 0 {
+		apiKey = config.APIKeys[0]
+	}
+
 	// Gemini uses API key in URL query param, not Authorization header
 	// Use NoAuthStrategy to prevent Bearer header from being added
 	return &Gemini{
