@@ -146,17 +146,41 @@ func (e *ToolExecutor) Execute(ctx context.Context, toolCall types.ToolCall) typ
 		return definition.Handler(ctx, args)
 	}
 
-	if e.retryExecutor != nil {
-		err = e.retryExecutor.ExecuteWithRetry(ctx, func(ctx context.Context) error {
-			r, e := callHandler(ctx)
-			if e != nil {
-				return e
-			}
-			result = r
-			return nil
-		})
-	} else {
-		result, err = callHandler(ctx)
+	execute := func() (any, error) {
+		if e.retryExecutor != nil {
+			var r any
+			rerr := e.retryExecutor.ExecuteWithRetry(ctx, func(ctx context.Context) error {
+				res, herr := callHandler(ctx)
+				if herr != nil {
+					return herr
+				}
+				r = res
+				return nil
+			})
+			return r, rerr
+		}
+		return callHandler(ctx)
+	}
+
+	// Race the handler against ctx.Done so a handler that ignores
+	// cancellation can't hang Execute (and ExecuteAll/the proxy handler)
+	// forever. If ctx fires first, the handler goroutine is left running
+	// and its result is discarded via the buffered channel -- a leaked
+	// goroutine is the lesser evil compared to an unkillable hang.
+	type outcome struct {
+		result any
+		err    error
+	}
+	done := make(chan outcome, 1)
+	go func() {
+		r, e := execute()
+		done <- outcome{result: r, err: e}
+	}()
+	select {
+	case o := <-done:
+		result, err = o.result, o.err
+	case <-ctx.Done():
+		err = fmt.Errorf("tool %q timed out or was canceled: %w", toolCall.Name, ctx.Err())
 	}
 
 	if err != nil {
