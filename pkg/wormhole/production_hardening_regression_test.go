@@ -173,6 +173,36 @@ func TestIdempotencyDeduplicatesRepeatedRequests(t *testing.T) {
 	assert.Equal(t, int32(3), provider.callCount.Load())
 }
 
+// Regression: two requests identical except for ProviderOptions must NOT collide on
+// the same idempotency key. Before folding GetProviderOptions() into the hash, the
+// key derived only from json.Marshal(request), and ProviderOptions carries json:"-"
+// so it was silently excluded — the second call below would have been wrongly
+// deduplicated against the first (callCount would stay at 1).
+func TestIdempotencyDistinguishesProviderOptions(t *testing.T) {
+	t.Parallel()
+	provider := newCountingTextProvider("counting")
+	client := wormhole.New(
+		wormhole.WithDefaultProvider("counting"),
+		wormhole.WithCustomProvider("counting", func(cfg types.ProviderConfig) (types.Provider, error) {
+			return provider, nil
+		}),
+		wormhole.WithProviderConfig("counting", types.ProviderConfig{}),
+		wormhole.WithIdempotencyKey("same-request", time.Minute),
+	)
+
+	ctx := context.Background()
+
+	_, err := client.Text().Model("test-model").Prompt("repeat me").
+		ProviderOptions(map[string]any{"temperature": 0.1}).Generate(ctx)
+	require.NoError(t, err)
+	assert.Equal(t, int32(1), provider.callCount.Load())
+
+	_, err = client.Text().Model("test-model").Prompt("repeat me").
+		ProviderOptions(map[string]any{"temperature": 0.9}).Generate(ctx)
+	require.NoError(t, err)
+	assert.Equal(t, int32(2), provider.callCount.Load())
+}
+
 func TestIdempotencyDuplicateWaitHonorsCallerContext(t *testing.T) {
 	t.Parallel()
 	provider := newBlockingTextProvider("blocking")

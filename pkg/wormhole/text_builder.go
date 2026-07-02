@@ -10,6 +10,18 @@ import (
 	"github.com/garyblankenship/wormhole/pkg/types"
 )
 
+// textIdempotencyRequest wraps a TextRequest with fallback models for
+// idempotency key derivation, and delegates GetProviderOptions() so the
+// idempotency cache key can fold provider-specific options into the hash.
+type textIdempotencyRequest struct {
+	Request        *types.TextRequest `json:"request"`
+	FallbackModels []string           `json:"fallback_models,omitempty"`
+}
+
+func (r textIdempotencyRequest) GetProviderOptions() map[string]any {
+	return r.Request.GetProviderOptions()
+}
+
 // TextRequestBuilder builds text generation requests
 type TextRequestBuilder struct {
 	CommonBuilder
@@ -282,10 +294,7 @@ func (b *TextRequestBuilder) Generate(ctx context.Context) (*types.TextResponse,
 	modelsToTry := make([]string, 0, 1+len(b.fallbackModels))
 	modelsToTry = append(modelsToTry, baseRequest.Model)
 	modelsToTry = append(modelsToTry, b.fallbackModels...)
-	idempotencyRequest := struct {
-		Request        *types.TextRequest `json:"request"`
-		FallbackModels []string           `json:"fallback_models,omitempty"`
-	}{
+	idempotencyRequest := textIdempotencyRequest{
 		Request:        baseRequest,
 		FallbackModels: append([]string(nil), b.fallbackModels...),
 	}

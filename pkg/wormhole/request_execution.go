@@ -111,8 +111,20 @@ func (p *Wormhole) idempotencyCacheKey(operation string, request any) (string, b
 	if err != nil {
 		return "", false
 	}
-	hash := sha256.Sum256(payload)
-	return p.config.Idempotency.Key + ":" + operation + ":" + hex.EncodeToString(hash[:]), true
+	h := sha256.New()
+	h.Write(payload)
+	// ProviderOptions carries json:"-" so json.Marshal(request) above excludes it;
+	// fold it in separately so requests differing only in provider-specific options
+	// don't collide on the same idempotency key. Mirrors DefaultCacheKeyGenerator
+	// (pkg/middleware/cache.go).
+	if po, ok := request.(interface{ GetProviderOptions() map[string]any }); ok {
+		if opts := po.GetProviderOptions(); len(opts) > 0 {
+			if ob, err := json.Marshal(opts); err == nil {
+				h.Write(ob)
+			}
+		}
+	}
+	return p.config.Idempotency.Key + ":" + operation + ":" + hex.EncodeToString(h.Sum(nil)), true
 }
 
 func (p *Wormhole) loadOrCreateIdempotencyEntry(cacheKey string, now time.Time, ttl time.Duration) (*idempotencyEntry, bool) {
