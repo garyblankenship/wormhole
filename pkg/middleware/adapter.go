@@ -28,7 +28,14 @@ func applyLegacy[Req any, Resp any](mw Middleware, ctx context.Context, req Req,
 		var zero Resp
 		return zero, err
 	}
-	return resp.(Resp), nil
+	// A middleware (e.g. the cache) may return a value from a different operation
+	// that shares this request's key — a Text response surfaced to a Stream call.
+	// Bypass and execute directly rather than panicking on the type assertion.
+	typed, ok := resp.(Resp)
+	if !ok {
+		return next(ctx, req)
+	}
+	return typed, nil
 }
 
 // ApplyText wraps text generation calls using the legacy middleware
