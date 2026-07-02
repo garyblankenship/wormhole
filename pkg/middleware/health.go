@@ -24,10 +24,16 @@ type HealthChecker struct {
 	checkInterval time.Duration
 	checkFunc     func(ctx context.Context, provider string) error
 	stopChan      chan struct{}
+	stopOnce      sync.Once
 }
 
-// NewHealthChecker creates a new health checker
+// NewHealthChecker creates a new health checker. interval must be positive;
+// a non-positive value falls back to a safe default to avoid a
+// time.NewTicker panic in runHealthChecks.
 func NewHealthChecker(interval time.Duration) *HealthChecker {
+	if interval <= 0 {
+		interval = 30 * time.Second
+	}
 	return &HealthChecker{
 		statuses:      make(map[string]*HealthStatus),
 		checkInterval: interval,
@@ -60,9 +66,11 @@ func (hc *HealthChecker) Start(providers []string) {
 	go hc.runHealthChecks(providers)
 }
 
-// Stop stops health checking
+// Stop stops health checking. Safe to call more than once.
 func (hc *HealthChecker) Stop() {
-	close(hc.stopChan)
+	hc.stopOnce.Do(func() {
+		close(hc.stopChan)
+	})
 }
 
 // GetStatus returns the health status for a provider
@@ -88,10 +96,16 @@ func (hc *HealthChecker) GetStatus(provider string) *HealthStatus {
 	}
 }
 
-// IsHealthy returns whether a provider is healthy
+// IsHealthy returns whether a provider is healthy. A provider marked
+// unhealthy is allowed through again (half-open probe) once checkInterval
+// has elapsed since its last check, so a stale failure doesn't replay
+// forever when no background checker is running to clear it.
 func (hc *HealthChecker) IsHealthy(provider string) bool {
 	status := hc.GetStatus(provider)
-	return status.Healthy
+	if status.Healthy {
+		return true
+	}
+	return time.Since(status.LastCheck) >= hc.checkInterval
 }
 
 // GetHealthyProviders returns a list of healthy providers
