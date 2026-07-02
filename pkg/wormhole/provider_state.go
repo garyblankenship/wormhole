@@ -109,7 +109,10 @@ func (s *ProviderAdaptiveState) RecordLatency(latency time.Duration, err error) 
 		s.latencies = append(s.latencies, latency)
 	}
 
-	// Update error ring buffer
+	// Update error ring buffer. totalSamples/totalErrors are windowed to
+	// match errorRates' capacity: each new sample evicts the oldest one
+	// from the window, so the error rate reflects recent behavior instead
+	// of decaying toward 0 as totalSamples grows unbounded over uptime.
 	isError := err != nil
 	s.totalSamples++
 	if isError {
@@ -117,6 +120,7 @@ func (s *ProviderAdaptiveState) RecordLatency(latency time.Duration, err error) 
 	}
 
 	if old := s.errorRates.Value; old != nil {
+		s.totalSamples--
 		if old.(bool) {
 			s.totalErrors--
 		}
