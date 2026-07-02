@@ -22,6 +22,8 @@ type DiscoveryService struct {
 	startOnce sync.Once
 	stopOnce  sync.Once
 	stopCh    chan struct{}
+	muStop    sync.RWMutex // serializes wg.Add (refreshProvider) against wg.Wait (Stop)
+	stopped   bool         // set under muStop write lock before Stop's wg.Wait
 }
 
 // NewDiscoveryService creates a new model discovery service
@@ -217,7 +219,14 @@ func (s *DiscoveryService) Stop() error {
 	s.stopOnce.Do(func() {
 		s.cancel()      // Cancel context
 		close(s.stopCh) // Close stop channel
-		s.wg.Wait()     // Wait for all goroutines
+
+		// Block new refreshProvider goroutines before waiting, so wg.Add
+		// can never race wg.Wait (sync: WaitGroup misuse panic).
+		s.muStop.Lock()
+		s.stopped = true
+		s.muStop.Unlock()
+
+		s.wg.Wait() // Wait for all goroutines
 		// Close the model cache
 		err = s.cache.Close()
 	})
@@ -255,6 +264,12 @@ func (s *DiscoveryService) fetchModels(ctx context.Context, provider string) ([]
 
 // refreshProvider refreshes a single provider in background
 func (s *DiscoveryService) refreshProvider(provider string) {
+	s.muStop.RLock()
+	defer s.muStop.RUnlock()
+	if s.stopped {
+		return
+	}
+
 	s.wg.Add(1)
 	go func() {
 		defer s.wg.Done()
