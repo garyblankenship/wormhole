@@ -3,7 +3,9 @@ package server
 import (
 	"context"
 	"crypto/subtle"
+	"fmt"
 	"log/slog"
+	"net"
 	"net/http"
 	"strings"
 	"time"
@@ -34,7 +36,9 @@ func New(cfg Config) *proxy {
 		cfg.Logger = slog.Default()
 	}
 	if cfg.Addr == "" {
-		cfg.Addr = ":8080"
+		// Default to loopback: an unauthenticated proxy bound to all interfaces
+		// would let anyone on the network spend the operator's provider credits.
+		cfg.Addr = "127.0.0.1:8080"
 	}
 
 	opts := make([]wormhole.Option, len(cfg.WormholeOpts))
@@ -75,8 +79,30 @@ func New(cfg Config) *proxy {
 
 // Start begins listening and serving. Blocks until error or shutdown.
 func (p *proxy) Start() error {
+	// Fail closed: never expose an unauthenticated proxy on a non-loopback
+	// interface. Anyone who could reach it would spend the operator's credits.
+	if p.apiKey == "" && !isLoopbackAddr(p.server.Addr) {
+		return fmt.Errorf("refusing to bind %q without authentication: set WORMHOLE_API_KEY, or bind to localhost", p.server.Addr)
+	}
 	p.logger.Info("starting wormhole proxy", "addr", p.server.Addr)
 	return p.server.ListenAndServe()
+}
+
+// isLoopbackAddr reports whether addr binds only the loopback interface.
+// An empty host (e.g. ":8080") binds all interfaces and is NOT loopback.
+func isLoopbackAddr(addr string) bool {
+	host, _, err := net.SplitHostPort(addr)
+	if err != nil {
+		host = addr
+	}
+	if host == "" {
+		return false
+	}
+	if host == "localhost" {
+		return true
+	}
+	ip := net.ParseIP(host)
+	return ip != nil && ip.IsLoopback()
 }
 
 // Shutdown gracefully stops the HTTP server and the wormhole client.
