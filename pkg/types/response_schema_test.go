@@ -243,6 +243,38 @@ func (m *countingMiddleware) ApplyEmbeddings(next EmbeddingsHandler) EmbeddingsH
 		return next(ctx, request)
 	}
 }
+
+func (m *countingMiddleware) ApplyRerank(next RerankHandler) RerankHandler {
+	return func(ctx context.Context, request RerankRequest) (*RerankResponse, error) {
+		m.count++
+		return next(ctx, request)
+	}
+}
+
+// TestProviderMiddlewareChainApplyRerank proves ApplyRerank routes through
+// the middleware chain like every other handler type (regression for AFK
+// task 90b8580d: Rerank used to bypass the chain entirely).
+func TestProviderMiddlewareChainApplyRerank(t *testing.T) {
+	t.Parallel()
+
+	mw := &countingMiddleware{}
+	chain := NewProviderChain(mw)
+
+	handler := chain.ApplyRerank(func(ctx context.Context, request RerankRequest) (*RerankResponse, error) {
+		return &RerankResponse{Model: request.Model}, nil
+	})
+
+	resp, err := handler(context.Background(), RerankRequest{Model: "rerank-1", Query: "q", Documents: []string{"a", "b"}})
+	if err != nil {
+		t.Fatalf("ApplyRerank handler returned error: %v", err)
+	}
+	if resp.Model != "rerank-1" {
+		t.Fatalf("resp.Model = %q, want %q", resp.Model, "rerank-1")
+	}
+	if mw.count != 1 {
+		t.Fatalf("mw.count = %d, want 1: ApplyRerank must route through the middleware chain", mw.count)
+	}
+}
 func (m *countingMiddleware) ApplyAudio(next AudioHandler) AudioHandler {
 	return func(ctx context.Context, request AudioRequest) (*AudioResponse, error) {
 		m.count++

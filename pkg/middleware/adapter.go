@@ -79,3 +79,10 @@ func (a *LegacyAdapter) ApplyImage(next types.ImageHandler) types.ImageHandler {
 		return applyLegacy(a.mw, ctx, req, next)
 	}
 }
+
+// ApplyRerank wraps rerank calls using the legacy middleware
+func (a *LegacyAdapter) ApplyRerank(next types.RerankHandler) types.RerankHandler {
+	return func(ctx context.Context, req types.RerankRequest) (*types.RerankResponse, error) {
+		return applyLegacy(a.mw, ctx, req, next)
+	}
+}

@@ -44,6 +44,11 @@ type TypedMetrics struct {
 	imageRequests int64
 	imageErrors   int64
 	imageDuration int64 // nanoseconds
+
+	// Rerank metrics
+	rerankRequests int64
+	rerankErrors   int64
+	rerankDuration int64 // nanoseconds
 }
 
 // NewTypedMetricsMiddleware creates a new type-safe metrics middleware
@@ -94,6 +99,14 @@ func (m *TypedMetricsMiddleware) ApplyEmbeddings(next types.EmbeddingsHandler) t
 	}
 }
 
+func (m *TypedMetricsMiddleware) ApplyRerank(next types.RerankHandler) types.RerankHandler {
+	return func(ctx context.Context, request types.RerankRequest) (*types.RerankResponse, error) {
+		return withMeasuredRequest(ctx, request, next, func(_ *types.RerankResponse, err error, duration time.Duration) {
+			m.recordRerankRequest(duration, err)
+		})
+	}
+}
+
 // ApplyAudio wraps audio calls with metrics collection
 func (m *TypedMetricsMiddleware) ApplyAudio(next types.AudioHandler) types.AudioHandler {
 	return func(ctx context.Context, request types.AudioRequest) (*types.AudioResponse, error) {
@@ -137,6 +150,10 @@ func (m *TypedMetricsMiddleware) recordStructuredRequest(duration time.Duration,
 
 func (m *TypedMetricsMiddleware) recordEmbeddingsRequest(duration time.Duration, err error) {
 	recordRequest(&m.metrics.embeddingsRequests, &m.metrics.embeddingsErrors, &m.metrics.embeddingsDuration, duration, err)
+}
+
+func (m *TypedMetricsMiddleware) recordRerankRequest(duration time.Duration, err error) {
+	recordRequest(&m.metrics.rerankRequests, &m.metrics.rerankErrors, &m.metrics.rerankDuration, duration, err)
 }
 
 func (m *TypedMetricsMiddleware) recordAudioRequest(duration time.Duration, err error) {

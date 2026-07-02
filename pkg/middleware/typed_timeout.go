@@ -132,6 +132,12 @@ func (m *TypedTimeoutMiddleware) ApplyEmbeddings(next types.EmbeddingsHandler) t
 	}
 }
 
+func (m *TypedTimeoutMiddleware) ApplyRerank(next types.RerankHandler) types.RerankHandler {
+	return func(ctx context.Context, request types.RerankRequest) (*types.RerankResponse, error) {
+		return withTimeout(ctx, m.timeout, request, next)
+	}
+}
+
 // ApplyAudio wraps audio calls with timeout enforcement
 func (m *TypedTimeoutMiddleware) ApplyAudio(next types.AudioHandler) types.AudioHandler {
 	return func(ctx context.Context, request types.AudioRequest) (*types.AudioResponse, error) {

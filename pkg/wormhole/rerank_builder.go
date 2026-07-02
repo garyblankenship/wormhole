@@ -81,17 +81,34 @@ func (b *RerankRequestBuilder) Validate() error {
 	return errs.Error()
 }
 
-// Generate executes the request and returns reranked results.
+// Generate executes the request and returns reranked results. Routes through
+// the provider middleware chain and in-flight request tracking (trackRequest/
+// Shutdown, idempotency) exactly like Text/Embeddings, so Shutdown can no
+// longer tear down connections out from under an in-flight rerank call.
 func (b *RerankRequestBuilder) Generate(ctx context.Context) (*types.RerankResponse, error) {
 	if err := b.Validate(); err != nil {
 		return nil, err
 	}
 
+	request := b.request
+	return executeTrackedRequest(ctx, b.getWormhole(), b.idempotencyScope("rerank.generate"), request, func(ctx context.Context) (*types.RerankResponse, error) {
+		return b.executeRerank(ctx, request)
+	})
+}
+
+// executeRerank resolves the provider and routes the call through the
+// middleware chain, mirroring EmbeddingsRequestBuilder.executeEmbeddings.
+func (b *RerankRequestBuilder) executeRerank(ctx context.Context, request *types.RerankRequest) (*types.RerankResponse, error) {
 	provider, release, err := b.getProviderWithBaseURL()
 	if err != nil {
 		return nil, err
 	}
 	defer release()
 
-	return provider.Rerank(ctx, *b.request)
+	if b.getWormhole().providerMiddleware != nil {
+		handler := b.getWormhole().providerMiddleware.ApplyRerank(provider.Rerank)
+		return handler(ctx, *request)
+	}
+
+	return provider.Rerank(ctx, *request)
 }

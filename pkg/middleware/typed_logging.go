@@ -188,6 +188,16 @@ func (m *TypedLoggingMiddleware) ApplyEmbeddings(next types.EmbeddingsHandler) t
 	}
 }
 
+func (m *TypedLoggingMiddleware) ApplyRerank(next types.RerankHandler) types.RerankHandler {
+	return func(ctx context.Context, request types.RerankRequest) (*types.RerankResponse, error) {
+		return withLogging(ctx, m.config, "Rerank", request,
+			func(req types.RerankRequest) { logRequestDetails(m.config, req) },
+			func(resp *types.RerankResponse, d time.Duration) { logResponseDetails(m.config, resp, d) },
+			next,
+		)
+	}
+}
+
 // ApplyAudio wraps audio calls with logging
 func (m *TypedLoggingMiddleware) ApplyAudio(next types.AudioHandler) types.AudioHandler {
 	return func(ctx context.Context, request types.AudioRequest) (*types.AudioResponse, error) {

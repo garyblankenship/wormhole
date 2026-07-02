@@ -64,6 +64,10 @@ func (m *JSONCleaningMiddleware) ApplyEmbeddings(next types.EmbeddingsHandler) t
 	return next // Embeddings don't need JSON cleaning
 }
 
+func (m *JSONCleaningMiddleware) ApplyRerank(next types.RerankHandler) types.RerankHandler {
+	return next // Rerank doesn't need JSON cleaning
+}
+
 func (m *JSONCleaningMiddleware) ApplyAudio(next types.AudioHandler) types.AudioHandler {
 	return next // Audio responses don't need JSON cleaning
 }
@@ -88,6 +92,7 @@ type ProviderMetrics struct {
 	ImageRequests      int64
 	TotalErrors        int64
 	TotalLatencyMs     int64
+	RerankRequests     int64
 }
 
 // NewProviderMetricsMiddleware creates middleware for provider metrics
@@ -139,6 +144,14 @@ func (m *ProviderMetricsMiddleware) ApplyEmbeddings(next types.EmbeddingsHandler
 	return func(ctx context.Context, request types.EmbeddingsRequest) (*types.EmbeddingsResponse, error) {
 		return withMeasuredRequest(ctx, request, next, func(_ *types.EmbeddingsResponse, err error, d time.Duration) {
 			m.recordRequest(&m.metrics.EmbeddingsRequests, d, err)
+		})
+	}
+}
+
+func (m *ProviderMetricsMiddleware) ApplyRerank(next types.RerankHandler) types.RerankHandler {
+	return func(ctx context.Context, request types.RerankRequest) (*types.RerankResponse, error) {
+		return withMeasuredRequest(ctx, request, next, func(_ *types.RerankResponse, err error, d time.Duration) {
+			m.recordRequest(&m.metrics.RerankRequests, d, err)
 		})
 	}
 }
@@ -244,6 +257,18 @@ func (m *ProviderLoggingMiddleware) ApplyEmbeddings(next types.EmbeddingsHandler
 			fmt.Sprintf("model=%s, inputs=%d", request.Model, len(request.Input)),
 			func(resp *types.EmbeddingsResponse) string {
 				return fmt.Sprintf("%d embeddings", len(resp.Embeddings))
+			},
+			next, request,
+		)
+	}
+}
+
+func (m *ProviderLoggingMiddleware) ApplyRerank(next types.RerankHandler) types.RerankHandler {
+	return func(ctx context.Context, request types.RerankRequest) (*types.RerankResponse, error) {
+		return withProviderLogging(ctx, m.logger, m.providerName, "Rerank",
+			fmt.Sprintf("model=%s, documents=%d", request.Model, len(request.Documents)),
+			func(resp *types.RerankResponse) string {
+				return fmt.Sprintf("%d results", len(resp.Results))
 			},
 			next, request,
 		)

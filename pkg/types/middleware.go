@@ -18,6 +18,8 @@ type ProviderMiddleware interface {
 	ApplyAudio(next AudioHandler) AudioHandler
 	// ApplyImage wraps image generation calls
 	ApplyImage(next ImageHandler) ImageHandler
+	// ApplyRerank wraps rerank calls
+	ApplyRerank(next RerankHandler) RerankHandler
 }
 
 // Handler function types for different capabilities
@@ -27,6 +29,7 @@ type StructuredHandler func(ctx context.Context, request StructuredRequest) (*St
 type EmbeddingsHandler func(ctx context.Context, request EmbeddingsRequest) (*EmbeddingsResponse, error)
 type AudioHandler func(ctx context.Context, request AudioRequest) (*AudioResponse, error)
 type ImageHandler func(ctx context.Context, request ImageRequest) (*ImageResponse, error)
+type RerankHandler func(ctx context.Context, request RerankRequest) (*RerankResponse, error)
 
 // ProviderMiddlewareChain manages provider-level middleware
 type ProviderMiddlewareChain struct {
@@ -82,4 +85,9 @@ func (c *ProviderMiddlewareChain) ApplyAudio(handler AudioHandler) AudioHandler 
 // ApplyImage applies the middleware chain to an image handler.
 func (c *ProviderMiddlewareChain) ApplyImage(handler ImageHandler) ImageHandler {
 	return applyChain(c.middlewares, handler, func(mw ProviderMiddleware, h ImageHandler) ImageHandler { return mw.ApplyImage(h) })
+}
+
+// ApplyRerank applies the middleware chain to a rerank handler.
+func (c *ProviderMiddlewareChain) ApplyRerank(handler RerankHandler) RerankHandler {
+	return applyChain(c.middlewares, handler, func(mw ProviderMiddleware, h RerankHandler) RerankHandler { return mw.ApplyRerank(h) })
 }

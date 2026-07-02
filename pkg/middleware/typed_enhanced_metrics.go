@@ -96,6 +96,25 @@ func (m *TypedEnhancedMetricsMiddleware) ApplyEmbeddings(next types.EmbeddingsHa
 	}
 }
 
+func (m *TypedEnhancedMetricsMiddleware) ApplyRerank(next types.RerankHandler) types.RerankHandler {
+	return func(ctx context.Context, request types.RerankRequest) (*types.RerankResponse, error) {
+		inputTokens := estimateTextTokens(request.Query)
+		for _, doc := range request.Documents {
+			inputTokens += estimateTextTokens(doc)
+		}
+		return withMeasuredRequest(ctx, request, next, func(_ *types.RerankResponse, err error, duration time.Duration) {
+			m.collector.RecordRequest(
+				requestLabelsFromContext(ctx, "rerank", request.Model),
+				duration,
+				err,
+				0,
+				inputTokens,
+				0,
+			)
+		})
+	}
+}
+
 // ApplyAudio wraps audio calls with enhanced metrics collection
 func (m *TypedEnhancedMetricsMiddleware) ApplyAudio(next types.AudioHandler) types.AudioHandler {
 	return func(ctx context.Context, request types.AudioRequest) (*types.AudioResponse, error) {
