@@ -37,11 +37,12 @@ func ProviderAwareConcurrencyLimitMiddlewareWithConfig(config ProviderAwareConcu
 				return nil, wrapMiddlewareError("provider_aware_concurrency_limit", "acquire", ctx.Err())
 			}
 
+			defer release()
+
 			resp, err := next(ctx, req)
 			latency := time.Since(start)
 
 			recordConcurrencyLatency(limiter, latency, provider, model, err, enableProviderAware)
-			release()
 
 			return resp, wrapIfNotWormholeError("provider_aware_concurrency_limit", err)
 		}
