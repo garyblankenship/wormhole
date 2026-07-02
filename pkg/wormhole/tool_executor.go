@@ -130,13 +130,25 @@ func (e *ToolExecutor) Execute(ctx context.Context, toolCall types.ToolCall) typ
 		defer cancel()
 	}
 
-	// Execute the tool handler with retry logic if configured
+	// Execute the tool handler with retry logic if configured. callHandler wraps the
+	// user handler so a panic (e.g. nil-map deref on unexpected LLM args) becomes an
+	// error instead of crashing the per-tool goroutine — nothing recovers above it,
+	// so an unrecovered panic here would take down the whole process (and the proxy).
 	var result any
 	var err error
 
+	callHandler := func(ctx context.Context) (res any, rerr error) {
+		defer func() {
+			if r := recover(); r != nil {
+				rerr = fmt.Errorf("tool handler panicked: %v", r)
+			}
+		}()
+		return definition.Handler(ctx, args)
+	}
+
 	if e.retryExecutor != nil {
 		err = e.retryExecutor.ExecuteWithRetry(ctx, func(ctx context.Context) error {
-			r, e := definition.Handler(ctx, args)
+			r, e := callHandler(ctx)
 			if e != nil {
 				return e
 			}
@@ -144,7 +156,7 @@ func (e *ToolExecutor) Execute(ctx context.Context, toolCall types.ToolCall) typ
 			return nil
 		})
 	} else {
-		result, err = definition.Handler(ctx, args)
+		result, err = callHandler(ctx)
 	}
 
 	if err != nil {
