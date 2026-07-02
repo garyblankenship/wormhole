@@ -436,7 +436,7 @@ func WithProviderFromEnv(provider string) Option {
 		case "ollama":
 			WithOllama(cfg)(c)
 		case "openrouter":
-			WithOpenAICompatible("openrouter", cfg.BaseURL, cfg)(c)
+			WithProfiledOpenAICompatible("openrouter", cfg)(c)
 		default:
 			if profile.Kind == providerKindOpenAICompatible && cfg.BaseURL != "" {
 				WithOpenAICompatible(provider, cfg.BaseURL, cfg)(c)
