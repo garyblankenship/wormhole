@@ -47,8 +47,8 @@ func TestTextRequestBuilderConfiguration(t *testing.T) {
 	if len(builder.request.Tools) != 1 || builder.request.ToolChoice.Type != types.ToolChoiceTypeAuto {
 		t.Fatalf("tool config = %#v", builder.request)
 	}
-	if !builder.enableToolExecution || builder.maxToolIterations != 3 || builder.fallbackModels[0] != "gpt-5-mini" {
-		t.Fatalf("execution config = enabled:%v max:%d fallback:%#v", builder.enableToolExecution, builder.maxToolIterations, builder.fallbackModels)
+	if builder.toolExecutionOverride == nil || !*builder.toolExecutionOverride || builder.maxToolIterations != 3 || builder.fallbackModels[0] != "gpt-5-mini" {
+		t.Fatalf("execution config = override:%v max:%d fallback:%#v", builder.toolExecutionOverride, builder.maxToolIterations, builder.fallbackModels)
 	}
 	if !builder.shouldAutoExecuteTools(client) {
 		t.Fatal("shouldAutoExecuteTools = false, want true for explicit enable")
@@ -56,6 +56,33 @@ func TestTextRequestBuilderConfiguration(t *testing.T) {
 	builder.WithToolsDisabled()
 	if builder.shouldAutoExecuteTools(client) {
 		t.Fatal("shouldAutoExecuteTools = true, want false after explicit disable")
+	}
+}
+
+// TestWithToolsDisabledIsNotNoOp reproduces a bug where WithToolsDisabled()
+// alone (without WithMaxToolIterations) was indistinguishable from the
+// zero-value "unset" state, so tools registered on the client would still
+// auto-execute despite the explicit opt-out.
+func TestWithToolsDisabledIsNotNoOp(t *testing.T) {
+	t.Parallel()
+
+	client := New(WithDefaultProvider("openai"), WithOpenAI("test-key"), WithModelValidation(false), WithDiscovery(false))
+	client.toolRegistry.Register("lookup", &types.ToolDefinition{
+		Tool: types.Tool{
+			Type:        "function",
+			Name:        "lookup",
+			Description: "Lookup data",
+			InputSchema: map[string]any{"type": "object"},
+		},
+		Handler: func(ctx context.Context, args map[string]any) (any, error) {
+			return "ok", nil
+		},
+	})
+
+	builder := client.Text().Model("gpt-5").Messages(types.NewUserMessage("hello")).WithToolsDisabled()
+
+	if builder.shouldAutoExecuteTools(client) {
+		t.Fatal("shouldAutoExecuteTools = true, want false: WithToolsDisabled() alone must not be a no-op")
 	}
 }
 

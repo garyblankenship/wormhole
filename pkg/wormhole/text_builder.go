@@ -13,10 +13,10 @@ import (
 // TextRequestBuilder builds text generation requests
 type TextRequestBuilder struct {
 	CommonBuilder
-	request             *types.TextRequest
-	enableToolExecution bool     // Whether to automatically execute tools
-	maxToolIterations   int      // Maximum number of tool execution rounds (default: 10)
-	fallbackModels      []string // Models to try in order if primary fails
+	request               *types.TextRequest
+	toolExecutionOverride *bool    // Explicit WithToolsEnabled/WithToolsDisabled choice; nil = unset, use auto-detect default
+	maxToolIterations     int      // Maximum number of tool execution rounds (default: 10)
+	fallbackModels        []string // Models to try in order if primary fails
 }
 
 // Using sets the provider to use
@@ -110,16 +110,22 @@ func (b *TextRequestBuilder) Clone() *TextRequestBuilder {
 		copy(clonedFallbacks, b.fallbackModels)
 	}
 
+	var clonedOverride *bool
+	if b.toolExecutionOverride != nil {
+		v := *b.toolExecutionOverride
+		clonedOverride = &v
+	}
+
 	return &TextRequestBuilder{
 		CommonBuilder: CommonBuilder{
 			wormhole: b.wormhole,
 			provider: b.provider,
 			baseURL:  b.baseURL,
 		},
-		request:             clonedRequest,
-		enableToolExecution: b.enableToolExecution,
-		maxToolIterations:   b.maxToolIterations,
-		fallbackModels:      clonedFallbacks,
+		request:               clonedRequest,
+		toolExecutionOverride: clonedOverride,
+		maxToolIterations:     b.maxToolIterations,
+		fallbackModels:        clonedFallbacks,
 	}
 }
 
@@ -222,7 +228,8 @@ func (b *TextRequestBuilder) ProviderOptions(options map[string]any) *TextReques
 //
 // This is the default behavior when tools are registered on the client.
 func (b *TextRequestBuilder) WithToolsEnabled() *TextRequestBuilder {
-	b.enableToolExecution = true
+	enabled := true
+	b.toolExecutionOverride = &enabled
 	return b
 }
 
@@ -230,7 +237,8 @@ func (b *TextRequestBuilder) WithToolsEnabled() *TextRequestBuilder {
 // When disabled, tool calls will be returned in the response and the caller
 // must manually execute them and send results back.
 func (b *TextRequestBuilder) WithToolsDisabled() *TextRequestBuilder {
-	b.enableToolExecution = false
+	disabled := false
+	b.toolExecutionOverride = &disabled
 	return b
 }
 
@@ -364,20 +372,17 @@ func (b *TextRequestBuilder) executeGenerate(ctx context.Context, provider types
 
 // shouldAutoExecuteTools determines if automatic tool execution should be enabled
 func (b *TextRequestBuilder) shouldAutoExecuteTools(wormhole *Wormhole) bool {
-	// Explicit disable takes precedence
-	if !b.enableToolExecution && b.maxToolIterations == 0 {
-		// User hasn't explicitly configured, check defaults
-		// Auto-enable if:
-		// 1. Tools are registered on the client AND
-		// 2. No tools explicitly set on request (use registry tools)
-		if wormhole.toolRegistry.Count() > 0 && len(b.request.Tools) == 0 {
-			return true
-		}
-		return false
+	// Explicit WithToolsEnabled/WithToolsDisabled call always wins.
+	if b.toolExecutionOverride != nil {
+		return *b.toolExecutionOverride
 	}
 
-	// User explicitly enabled
-	return b.enableToolExecution
+	// Unset: auto-enable if tools are registered on the client AND no tools
+	// were explicitly set on the request (use registry tools).
+	if wormhole.toolRegistry.Count() > 0 && len(b.request.Tools) == 0 {
+		return true
+	}
+	return false
 }
 
 // Stream executes the request and returns a streaming response
