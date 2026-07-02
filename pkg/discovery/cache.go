@@ -34,6 +34,8 @@ type ModelCache struct {
 	stopCh   chan struct{}
 	wg       sync.WaitGroup
 	stopOnce sync.Once
+	muClosed sync.RWMutex // protects closed flag
+	closed   bool         // set when cache is closed or cleared; aborts in-flight migrations
 }
 
 // NewModelCache creates a new model cache
@@ -126,6 +128,14 @@ func (c *ModelCache) migrateToSharded(provider string, entry *CacheEntry) {
 	if err := os.MkdirAll(dir, 0750); err != nil {
 		return // Can't create directory, skip
 	}
+
+	// Abort if cache has been closed or cleared since this goroutine was spawned
+	c.muClosed.RLock()
+	if c.closed {
+		c.muClosed.RUnlock()
+		return
+	}
+	c.muClosed.RUnlock()
 
 	// Write atomically
 	tempPath := providerPath + ".tmp"
@@ -239,7 +249,11 @@ func (c *ModelCache) loadFromFile(provider string) ([]*types.ModelInfo, bool) {
 	}
 
 	// Migrate to provider-specific file for future reads
-	go c.migrateToSharded(provider, entry)
+	c.wg.Add(1)
+	go func() {
+		defer c.wg.Done()
+		c.migrateToSharded(provider, entry)
+	}()
 
 	return entry.Models, true
 }
@@ -350,6 +364,10 @@ func computeChecksum(models []*types.ModelInfo) string {
 
 // Clear removes all cached entries
 func (c *ModelCache) Clear() {
+	c.muClosed.Lock()
+	c.closed = true
+	c.muClosed.Unlock()
+
 	c.memoryMu.Lock()
 	for k := range c.memory {
 		delete(c.memory, k)
@@ -414,6 +432,10 @@ func (c *ModelCache) StartCleanup(interval time.Duration) {
 
 // Close stops the cleanup goroutine and waits for it to finish
 func (c *ModelCache) Close() error {
+	c.muClosed.Lock()
+	c.closed = true
+	c.muClosed.Unlock()
+
 	c.stopOnce.Do(func() {
 		close(c.stopCh)
 		c.wg.Wait()
