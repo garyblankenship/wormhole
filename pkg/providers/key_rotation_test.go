@@ -215,3 +215,92 @@ func TestKeyPoolCooldownMakesLimitedKeyAvailableAgain(t *testing.T) {
 	assert.Equal(t, "key-B", pool.rotateAfterRateLimit("key-A", time.Millisecond, now))
 	assert.Equal(t, "key-A", pool.rotateAfterRateLimit("key-B", time.Millisecond, now.Add(2*time.Millisecond)))
 }
+
+// Regression: header-auth providers (Anthropic uses x-api-key) must rotate keys on
+// a 429. Before AuthStrategy.ExtractKey, the pool identified the failed key only from
+// an Authorization: Bearer header, so x-api-key rotation was a silent no-op.
+func TestKeyRotationFiresOnRetryWithHeaderAuth(t *testing.T) {
+	t.Parallel()
+
+	var attempt int64
+	var mu sync.Mutex
+	var seen []string
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		n := atomic.AddInt64(&attempt, 1) - 1
+		mu.Lock()
+		seen = append(seen, r.Header.Get("x-api-key"))
+		mu.Unlock()
+		if n == 0 {
+			w.WriteHeader(http.StatusTooManyRequests)
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{}`))
+	}))
+	t.Cleanup(server.Close)
+
+	maxRetries := 2
+	retryDelay := time.Millisecond
+	config := types.ProviderConfig{
+		BaseURL:    server.URL,
+		APIKeys:    []string{"key-A", "key-B"},
+		MaxRetries: &maxRetries,
+		RetryDelay: &retryDelay,
+	}
+
+	wrapper := NewHTTPClientWrapper("test", config, nil, NewHeaderAuthStrategy("x-api-key"), server.Client())
+
+	var out map[string]any
+	err := wrapper.DoRequest(context.Background(), http.MethodPost, server.URL, nil, &out)
+	require.NoError(t, err)
+
+	mu.Lock()
+	defer mu.Unlock()
+	assert.Equal(t, []string{"key-A", "key-B"}, seen)
+}
+
+// Regression: query-param providers (Gemini uses ?key=) must rotate keys on a 429,
+// and the retried request must carry the NEW key in the query string. Before the fix
+// Gemini baked the key into the URL once and used NoAuthStrategy, so rotation could
+// neither identify the failed key nor re-derive the URL for the next attempt.
+func TestKeyRotationFiresOnRetryWithQueryParamAuth(t *testing.T) {
+	t.Parallel()
+
+	var attempt int64
+	var mu sync.Mutex
+	var seen []string
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		n := atomic.AddInt64(&attempt, 1) - 1
+		mu.Lock()
+		seen = append(seen, r.URL.Query().Get("key"))
+		mu.Unlock()
+		if n == 0 {
+			w.WriteHeader(http.StatusTooManyRequests)
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{}`))
+	}))
+	t.Cleanup(server.Close)
+
+	maxRetries := 2
+	retryDelay := time.Millisecond
+	config := types.ProviderConfig{
+		BaseURL:    server.URL,
+		APIKeys:    []string{"key-A", "key-B"},
+		MaxRetries: &maxRetries,
+		RetryDelay: &retryDelay,
+	}
+
+	wrapper := NewHTTPClientWrapper("test", config, nil, NewQueryParamAuthStrategy("key"), server.Client())
+
+	var out map[string]any
+	err := wrapper.DoRequest(context.Background(), http.MethodPost, server.URL, nil, &out)
+	require.NoError(t, err)
+
+	mu.Lock()
+	defer mu.Unlock()
+	assert.Equal(t, []string{"key-A", "key-B"}, seen)
+}

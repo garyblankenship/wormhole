@@ -270,7 +270,7 @@ func NewHTTPClientWrapper(name string, providerConfig types.ProviderConfig, tlsC
 			cfg := baseCfg
 			now := time.Now()
 			if retryErr != nil && retryErr.StatusCode == http.StatusTooManyRequests {
-				cfg.APIKey = pool.rotateAfterRateLimit(bearerToken(previousRequest), retryErr.RetryAfter, now)
+				cfg.APIKey = pool.rotateAfterRateLimit(auth.ExtractKey(previousRequest), retryErr.RetryAfter, now)
 			} else {
 				cfg.APIKey = pool.currentKey(now)
 			}
@@ -419,18 +419,6 @@ func (w *HTTPClientWrapper) authConfig() types.ProviderConfig {
 		cfg.APIKey = w.keyPool.currentKey(time.Now())
 	}
 	return cfg
-}
-
-func bearerToken(req *http.Request) string {
-	if req == nil {
-		return ""
-	}
-	value := req.Header.Get("Authorization")
-	token, ok := strings.CutPrefix(value, "Bearer ")
-	if !ok {
-		return ""
-	}
-	return token
 }
 
 func (w *HTTPClientWrapper) handleRequestError(ctx context.Context, err error) error {

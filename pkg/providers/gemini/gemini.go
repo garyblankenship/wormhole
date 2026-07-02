@@ -18,7 +18,6 @@ const (
 // Gemini provider implementation
 type Gemini struct {
 	*providers.BaseProvider
-	apiKey               string
 	requestBuilder       *providers.RequestBuilder
 	responseTransform    *transform.ResponseTransform
 	streamingTransformer *transform.StreamingTransformer
@@ -32,18 +31,22 @@ func New(apiKey string, config types.ProviderConfig) *Gemini {
 		config.BaseURL = defaultBaseURL
 	}
 
-	// Gemini authenticates via a URL query param, not the Authorization header, so
-	// the HTTP wrapper's APIKeys[0] seeding (which targets header auth) never reaches
-	// g.apiKey. Seed it here so a config with only APIKeys (no APIKey) still authenticates.
+	// Gemini authenticates via a ?key= URL query param. Resolve the key (APIKeys[0]
+	// when only APIKeys is set) and route it through config.APIKey +
+	// QueryParamAuthStrategy so the HTTP wrapper applies ?key= on every attempt AND
+	// re-derives it after a 429: the wrapper extracts the failed key from the query
+	// param, advances the keyPool, and re-applies the new ?key= on the retry. Baking
+	// the key into the URL string (the old approach) made mid-flight key rotation a
+	// no-op because the retried request reused the original key.
 	if apiKey == "" && len(config.APIKeys) > 0 {
 		apiKey = config.APIKeys[0]
 	}
+	if apiKey != "" {
+		config.APIKey = apiKey
+	}
 
-	// Gemini uses API key in URL query param, not Authorization header
-	// Use NoAuthStrategy to prevent Bearer header from being added
 	return &Gemini{
-		BaseProvider:         providers.NewBaseProviderWithAuth("gemini", config, nil, &providers.NoAuthStrategy{}, nil),
-		apiKey:               apiKey,
+		BaseProvider:         providers.NewBaseProviderWithAuth("gemini", config, nil, providers.NewQueryParamAuthStrategy("key"), nil),
 		requestBuilder:       providers.NewRequestBuilder(),
 		responseTransform:    transform.NewResponseTransform(),
 		streamingTransformer: nil,
@@ -76,10 +79,9 @@ func (g *Gemini) Text(ctx context.Context, request types.TextRequest) (*types.Te
 	}
 
 	modelName := normalizeModelResource(request.Model)
-	endpoint := fmt.Sprintf("%s/models/%s:generateContent?key=%s",
+	endpoint := fmt.Sprintf("%s/models/%s:generateContent",
 		g.GetBaseURL(),
 		modelName,
-		g.apiKey,
 	)
 
 	var response geminiTextResponse
@@ -126,10 +128,9 @@ func (g *Gemini) Stream(ctx context.Context, request types.TextRequest) (<-chan 
 	// alt=sse is REQUIRED: streamGenerateContent defaults to a JSON-array stream,
 	// but handleStream parses with an SSE scanner. Without it the live endpoint
 	// returns an unparseable array. (Streaming endpoint only — not generateContent.)
-	endpoint := fmt.Sprintf("%s/models/%s:streamGenerateContent?alt=sse&key=%s",
+	endpoint := fmt.Sprintf("%s/models/%s:streamGenerateContent?alt=sse",
 		g.GetBaseURL(),
 		modelName,
-		g.apiKey,
 	)
 
 	stream, err := g.StreamRequest(ctx, "POST", endpoint, payload)
@@ -148,10 +149,9 @@ func (g *Gemini) Structured(ctx context.Context, request types.StructuredRequest
 	}
 
 	modelName := normalizeModelResource(request.Model)
-	endpoint := fmt.Sprintf("%s/models/%s:generateContent?key=%s",
+	endpoint := fmt.Sprintf("%s/models/%s:generateContent",
 		g.GetBaseURL(),
 		modelName,
-		g.apiKey,
 	)
 
 	var response geminiTextResponse
@@ -175,10 +175,9 @@ func (g *Gemini) Images(ctx context.Context, request types.ImagesRequest) (*type
 	}
 
 	modelName := normalizeModelResource(request.Model)
-	endpoint := fmt.Sprintf("%s/models/%s:generateContent?key=%s",
+	endpoint := fmt.Sprintf("%s/models/%s:generateContent",
 		g.GetBaseURL(),
 		modelName,
-		g.apiKey,
 	)
 
 	var response geminiTextResponse

@@ -124,8 +124,9 @@ func TestGeminiProvider_New(t *testing.T) {
 			assert.Equal(t, "gemini", provider.Name())
 			assert.Equal(t, tc.expectedURL, provider.GetBaseURL())
 
-			// Verify that API key is not set in headers (Gemini uses it in URL)
-			assert.Empty(t, provider.Config.APIKey)
+			// Gemini now routes the key through config.APIKey -> QueryParamAuthStrategy,
+			// which applies it as the ?key= URL query param on every request.
+			assert.Equal(t, tc.apiKey, provider.Config.APIKey)
 		})
 	}
 }

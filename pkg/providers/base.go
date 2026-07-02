@@ -11,6 +11,11 @@ import (
 type AuthStrategy interface {
 	// Apply adds authentication to the request
 	Apply(req *http.Request, config types.ProviderConfig) error
+	// ExtractKey returns the API key currently carried by req for this strategy
+	// (Bearer token, custom header value, or query-param value), or "" if none is
+	// present. The key-rotation pool uses this to identify which key a
+	// rate-limited request used so it can mark that key cooled-down and advance.
+	ExtractKey(req *http.Request) string
 	// Name returns the name of the authentication strategy
 	Name() string
 }

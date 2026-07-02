@@ -25,10 +25,9 @@ func (g *Gemini) Embeddings(ctx context.Context, request types.EmbeddingsRequest
 	payload := g.buildEmbeddingsPayload(request)
 	modelName := normalizeModelResource(request.Model)
 
-	endpoint := fmt.Sprintf("%s/models/%s:batchEmbedContents?key=%s",
+	endpoint := fmt.Sprintf("%s/models/%s:batchEmbedContents",
 		g.GetBaseURL(),
 		modelName,
-		g.apiKey,
 	)
 
 	var response geminiEmbeddingsResponse
