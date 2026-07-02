@@ -70,7 +70,7 @@ Run "wormhole serve --help" for serve options.`)
 func runServe(args []string, stdout, stderr io.Writer, getenv func(string) string) int {
 	fs := flag.NewFlagSet("serve", flag.ContinueOnError)
 	fs.SetOutput(stderr)
-	addr := fs.String("addr", ":8080", "Listen address")
+	addr := fs.String("addr", "127.0.0.1:8080", "Listen address (use \":8080\" to bind all interfaces; requires WORMHOLE_API_KEY)")
 	defaultProvider := fs.String("default-provider", "", "Default provider when model has no prefix")
 	if err := fs.Parse(args); err != nil {
 		if err == flag.ErrHelp {
