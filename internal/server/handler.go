@@ -40,7 +40,7 @@ func (p *proxy) handleChatCompletions(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	provider, model := parseModelRoute(req.Model)
+	provider, model := parseModelRoute(req.Model, p.defaultProvider)
 
 	msgs := make([]types.Message, 0, len(req.Messages))
 	for _, m := range req.Messages {
@@ -319,7 +319,7 @@ func (p *proxy) handleEmbeddings(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	provider, model := parseModelRoute(req.Model)
+	provider, model := parseModelRoute(req.Model, p.defaultProvider)
 
 	builder := p.wh.Embeddings().Model(model).Input([]string(req.Input)...)
 	if provider != "" {
