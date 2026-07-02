@@ -67,16 +67,18 @@ func (p *Provider) accumulatingStream(ctx context.Context, in <-chan types.TextC
 // streamFragmentAccumulator stitches []types.ToolCall fragments (as emitted by
 // convertToolCalls) into complete tool calls. OpenAI opens each tool call with a
 // fragment carrying id+name (and index 0,1,2...); subsequent fragments for that
-// call carry empty id and only an argument substring on Function.Arguments. We
-// resolve which in-flight call a fragment belongs to: a fragment WITH a
-// non-empty ID opens/advances to a new slot; a fragment with empty ID appends
-// its raw args to the most-recently-opened slot.
+// call carry empty id and only an argument substring on Function.Arguments.
+// Fragments are merged by their stream index so interleaved tool-call deltas
+// route to the correct call.
 type streamFragmentAccumulator struct {
-	calls []*accumulatedToolCall
+	calls map[int]*accumulatedToolCall // keyed by stream index
+	order []int                        // first-seen index ordering
 }
 
 func newStreamFragmentAccumulator() *streamFragmentAccumulator {
-	return &streamFragmentAccumulator{}
+	return &streamFragmentAccumulator{
+		calls: make(map[int]*accumulatedToolCall),
+	}
 }
 
 func (s *streamFragmentAccumulator) add(frags []types.ToolCall) {
@@ -85,42 +87,35 @@ func (s *streamFragmentAccumulator) add(frags []types.ToolCall) {
 		if f.Function != nil {
 			raw = f.Function.Arguments
 		}
+		acc, ok := s.calls[f.Index]
+		if !ok {
+			acc = &accumulatedToolCall{}
+			s.calls[f.Index] = acc
+			s.order = append(s.order, f.Index)
+		}
 		if f.ID != "" {
-			// New tool call opens.
-			s.calls = append(s.calls, &accumulatedToolCall{
-				id:   f.ID,
-				typ:  f.Type,
-				name: f.Name,
-				args: append([]byte(nil), raw...),
-			})
-			continue
+			acc.id = f.ID
 		}
-		// Continuation fragment: append to the last open call.
-		if len(s.calls) == 0 {
-			// Defensive: a continuation with no opener; start a new slot.
-			s.calls = append(s.calls, &accumulatedToolCall{
-				typ:  f.Type,
-				name: f.Name,
-				args: append([]byte(nil), raw...),
-			})
-			continue
+		if f.Type != "" {
+			acc.typ = f.Type
 		}
-		last := s.calls[len(s.calls)-1]
-		if f.Name != "" && last.name == "" {
-			last.name = f.Name
+		if f.Name != "" {
+			acc.name = f.Name
 		}
-		last.args = append(last.args, raw...)
+		acc.args = append(acc.args, raw...)
 	}
 }
 
 func (s *streamFragmentAccumulator) finish() []types.ToolCall {
-	if len(s.calls) == 0 {
+	if len(s.order) == 0 {
 		return nil
 	}
-	out := make([]types.ToolCall, 0, len(s.calls))
-	for _, acc := range s.calls {
+	out := make([]types.ToolCall, 0, len(s.order))
+	for _, idx := range s.order {
+		acc := s.calls[idx]
 		argsMap, parseErrMsg := types.ParseToolArgs(string(acc.args), map[string]any{})
 		toolCall := types.ToolCall{
+			Index:     idx,
 			ID:        acc.id,
 			Type:      acc.typ,
 			Name:      acc.name,

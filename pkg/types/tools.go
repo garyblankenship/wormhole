@@ -53,6 +53,7 @@ type ToolFunction struct {
 
 // ToolCall represents a tool call made by the model
 type ToolCall struct {
+	Index     int               // OpenAI stream index (internal; not serialized)
 	Type      string            `json:"type,omitempty"` // For OpenAI compatibility ("function")
 	ID        string            `json:"id"`
 	Name      string            `json:"name"`

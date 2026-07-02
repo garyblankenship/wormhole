@@ -317,6 +317,9 @@ func (t *StreamingTransformer) parseDefaultToolCalls(data any) []types.ToolCall 
 func (t *StreamingTransformer) parseToolCallFromMap(m map[string]any) *types.ToolCall {
 	tc := &types.ToolCall{}
 
+	if idx, ok := m["index"].(float64); ok {
+		tc.Index = int(idx)
+	}
 	if id, ok := m["id"].(string); ok {
 		tc.ID = id
 	}
