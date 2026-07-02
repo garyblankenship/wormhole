@@ -1,6 +1,7 @@
 package gemini
 
 import (
+	"net/url"
 	"testing"
 
 	"github.com/garyblankenship/wormhole/pkg/types"
@@ -246,6 +247,8 @@ func TestNormalizeModelResource(t *testing.T) {
 		"models/gemini-2.5-flash":      "gemini-2.5-flash",
 		"gemini-2.5-flash":             "gemini-2.5-flash",
 		"google/models/gemini-2.5-pro": "gemini-2.5-pro",
+		"models/foo?bar#baz":           url.PathEscape("foo?bar#baz"),
+		"google/../../etc/passwd":      url.PathEscape("../../etc/passwd"),
 	}
 	for in, want := range cases {
 		if got := normalizeModelResource(in); got != want {

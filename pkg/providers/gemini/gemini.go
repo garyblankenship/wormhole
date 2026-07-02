@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/base64"
 	"fmt"
+	"net/url"
 	"strings"
 
 	"github.com/garyblankenship/wormhole/pkg/providers"
@@ -414,5 +415,10 @@ func (g *Gemini) buildStructuredPayload(request types.StructuredRequest) (map[st
 
 func normalizeModelResource(model string) string {
 	model = strings.TrimPrefix(model, "google/")
-	return strings.TrimPrefix(model, "models/")
+	model = strings.TrimPrefix(model, "models/")
+	// The result is interpolated directly into a URL path segment
+	// (see Text/Structured/Images/StreamText endpoint construction), so
+	// metacharacters (/, ?, #, ..) must be percent-escaped here — the
+	// single call site that all 4 endpoint builders route through.
+	return url.PathEscape(model)
 }
