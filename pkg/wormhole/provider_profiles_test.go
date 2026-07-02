@@ -164,6 +164,20 @@ func TestWithProviderFromEnvOpenRouterAppliesProfile(t *testing.T) {
 	}
 }
 
+func TestWithProviderFromEnvDefaultBranchAppliesProfile(t *testing.T) {
+	t.Setenv("DEEPSEEK_API_KEY", "test-key")
+
+	client := New(WithProviderFromEnv("deepseek"), WithDiscovery(false))
+	cfg, ok := client.config.Providers["deepseek"]
+	if !ok {
+		t.Fatal("deepseek provider was not configured")
+	}
+	thinking, ok := cfg.DefaultProviderOptions["thinking"].(map[string]any)
+	if !ok || thinking["type"] != "disabled" {
+		t.Fatalf("deepseek thinking.type = %#v, want disabled (WithProviderFromEnv default branch did not apply the provider profile)", cfg.DefaultProviderOptions["thinking"])
+	}
+}
+
 func TestProviderProfileRequestPolicyFlowsIntoConfig(t *testing.T) {
 	t.Parallel()
 	client := New(WithOpenAI("test-key"), WithDiscovery(false))

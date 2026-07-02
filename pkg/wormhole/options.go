@@ -439,7 +439,7 @@ func WithProviderFromEnv(provider string) Option {
 			WithProfiledOpenAICompatible("openrouter", cfg)(c)
 		default:
 			if profile.Kind == providerKindOpenAICompatible && cfg.BaseURL != "" {
-				WithOpenAICompatible(provider, cfg.BaseURL, cfg)(c)
+				WithProfiledOpenAICompatible(provider, cfg)(c)
 			}
 		}
 	}
