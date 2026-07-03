@@ -163,6 +163,14 @@ func TestHTTPTransportConfigHelpers(t *testing.T) {
 	if key := transport.CacheKey("%"); key == "" {
 		t.Fatal("CacheKey invalid base URL returned empty key")
 	}
+
+	proxyA := func(*http.Request) (*url.URL, error) { return proxyURL, nil }
+	proxyB := func(*http.Request) (*url.URL, error) { return proxyURL, nil }
+	fingerprintA := DefaultHTTPTransportConfig().WithProxy(proxyA).Fingerprint()
+	fingerprintB := DefaultHTTPTransportConfig().WithProxy(proxyB).Fingerprint()
+	if fingerprintA == fingerprintB {
+		t.Fatal("transport fingerprints should distinguish different proxy functions")
+	}
 }
 
 func TestHTTPTransportConfigValidateFailures(t *testing.T) {

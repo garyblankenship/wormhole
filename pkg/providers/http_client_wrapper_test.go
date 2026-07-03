@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	whconfig "github.com/garyblankenship/wormhole/pkg/config"
 	"github.com/garyblankenship/wormhole/pkg/types"
 )
 
@@ -22,27 +23,29 @@ func (timeoutErr) Temporary() bool { return true }
 var _ net.Error = timeoutErr{}
 
 func TestHTTPClientWrapperTimeoutsAndClientFallback(t *testing.T) {
-	t.Parallel()
+	t.Setenv("WORMHOLE_DEFAULT_TIMEOUT", "")
 
 	tests := []struct {
-		name    string
-		timeout int
-		want    time.Duration
+		name   string
+		config types.ProviderConfig
+		want   time.Duration
 	}{
-		{name: "zero means unlimited", timeout: 0, want: 0},
-		{name: "positive seconds", timeout: 7, want: 7 * time.Second},
+		{name: "unset uses configured fallback", config: types.ProviderConfig{}, want: whconfig.FallbackHTTPTimeout},
+		{name: "legacy positive seconds", config: types.ProviderConfig{Timeout: 7}, want: 7 * time.Second},
+		{name: "precise duration", config: types.ProviderConfig{}.WithHTTPTimeout(500 * time.Millisecond), want: 500 * time.Millisecond},
+		{name: "explicit precise zero means unlimited", config: types.ProviderConfig{}.WithHTTPTimeout(0), want: 0},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-
-			wrapper := NewHTTPClientWrapper("test", types.ProviderConfig{Timeout: tt.timeout}, nil, &NoAuthStrategy{}, nil)
+			wrapper := NewHTTPClientWrapper("test", tt.config, nil, &NoAuthStrategy{}, nil)
 			if got := wrapper.GetHTTPTimeout(); got != tt.want {
 				t.Fatalf("GetHTTPTimeout() = %v, want %v", got, tt.want)
 			}
 			if got := wrapper.GetHTTPClient(); got == nil {
 				t.Fatal("GetHTTPClient() returned nil")
+			} else if got.Timeout != 0 {
+				t.Fatalf("wrapper http.Client.Timeout = %v, want 0; request deadlines are context-scoped", got.Timeout)
 			}
 		})
 	}

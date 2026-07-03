@@ -133,10 +133,23 @@ func TestTLSConfigFingerprint(t *testing.T) {
 		WithMinVersion(tls.VersionTLS12).
 		WithServerName("api.example.test")
 	different := base.WithInsecureSkipVerify(true)
-	withRoots := base.WithRootCAs(x509.NewCertPool())
+	withRoots := base.WithRootCAs(certPoolWithSubjects("root-a"))
+	withOtherRoots := base.WithRootCAs(certPoolWithSubjects("root-b"))
+	withSameRootsDifferentOrder := base.WithRootCAs(certPoolWithSubjects("root-b", "root-a"))
+	withSameRoots := base.WithRootCAs(certPoolWithSubjects("root-a", "root-b"))
 
 	assert.Equal(t, base.Fingerprint(), same.Fingerprint())
 	assert.NotEqual(t, base.Fingerprint(), different.Fingerprint())
 	assert.NotEqual(t, base.Fingerprint(), withRoots.Fingerprint())
+	assert.NotEqual(t, withRoots.Fingerprint(), withOtherRoots.Fingerprint())
+	assert.Equal(t, withSameRoots.Fingerprint(), withSameRootsDifferentOrder.Fingerprint())
 	assert.Contains(t, base.Fingerprint(), "api.example.test")
+}
+
+func certPoolWithSubjects(subjects ...string) *x509.CertPool {
+	pool := x509.NewCertPool()
+	for _, subject := range subjects {
+		pool.AddCert(&x509.Certificate{Raw: []byte(subject), RawSubject: []byte(subject)})
+	}
+	return pool
 }

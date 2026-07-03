@@ -94,6 +94,9 @@ func TestExtractTLSConfigFromProviderConfig(t *testing.T) {
 	if !tlsConfig2.InsecureSkipVerify {
 		t.Error("Expected InsecureSkipVerify true")
 	}
+	if tlsConfig2.AllowInsecure {
+		t.Error("Raw TLS params should not implicitly allow insecure TLS")
+	}
 
 	// Test 3: ProviderConfig with complex TLS config
 	config3 := types.NewProviderConfig("test-key").
@@ -179,6 +182,9 @@ func TestProviderConfigTLSBuilderMethods(t *testing.T) {
 	if !tlsConfig.InsecureSkipVerify {
 		t.Error("Expected InsecureSkipVerify true for insecure config")
 	}
+	if !tlsConfig.AllowInsecure {
+		t.Error("Expected AllowInsecure true for WithInsecureTLS")
+	}
 }
 
 func TestTLSConfigSecurity(t *testing.T) {
@@ -215,6 +221,75 @@ func TestTLSConfigSecurity(t *testing.T) {
 		WithInsecureSkipVerify(true)
 	if customInsecureTLS.IsSecure() {
 		t.Error("Custom TLS config with TLS 1.0 and skip verify should not be secure")
+	}
+}
+
+func TestNewSecureHTTPClientFloorsUnapprovedInsecureTLS(t *testing.T) {
+	t.Parallel()
+
+	tlsConfig := config.DefaultTLSConfig().
+		WithMinVersion(tls.VersionTLS10).
+		WithInsecureSkipVerify(true)
+	client := NewSecureHTTPClient(30*time.Second, &tlsConfig, nil, "")
+
+	transport, ok := client.Transport.(*http.Transport)
+	if !ok {
+		t.Fatal("Expected *http.Transport")
+	}
+	if transport.TLSClientConfig.InsecureSkipVerify {
+		t.Fatal("unapproved insecure TLS disabled certificate verification")
+	}
+	if transport.TLSClientConfig.MinVersion != tls.VersionTLS13 {
+		t.Fatalf("unapproved insecure TLS was not floored to default MinVersion: %d", transport.TLSClientConfig.MinVersion)
+	}
+}
+
+func TestNewSecureHTTPClientPreservesExplicitlyAllowedInsecureTLS(t *testing.T) {
+	t.Parallel()
+
+	tlsConfig := config.DefaultTLSConfig().
+		WithMinVersion(tls.VersionTLS10).
+		WithInsecureSkipVerify(true).
+		WithAllowInsecure(true)
+	client := NewSecureHTTPClient(30*time.Second, &tlsConfig, nil, "")
+
+	transport, ok := client.Transport.(*http.Transport)
+	if !ok {
+		t.Fatal("Expected *http.Transport")
+	}
+	if !transport.TLSClientConfig.InsecureSkipVerify {
+		t.Fatal("explicitly allowed insecure TLS did not preserve InsecureSkipVerify")
+	}
+	if transport.TLSClientConfig.MinVersion != tls.VersionTLS10 {
+		t.Fatalf("explicitly allowed insecure TLS did not preserve MinVersion: %d", transport.TLSClientConfig.MinVersion)
+	}
+}
+
+func TestProviderConfigRawInsecureTLSIsFlooredUnlessAllowed(t *testing.T) {
+	t.Parallel()
+
+	rawInsecure := types.NewProviderConfig("test-key").
+		WithTLSConfigParam("min_version", uint16(tls.VersionTLS10)).
+		WithTLSConfigParam("insecure_skip_verify", true)
+	rawProvider := NewBaseProvider("test-provider", rawInsecure)
+	rawTransport, ok := rawProvider.GetHTTPClient().Transport.(*http.Transport)
+	if !ok {
+		t.Fatal("Expected *http.Transport")
+	}
+	if rawTransport.TLSClientConfig.InsecureSkipVerify || rawTransport.TLSClientConfig.MinVersion != tls.VersionTLS13 {
+		t.Fatalf("raw insecure provider TLS was not floored: min=%d skip=%v",
+			rawTransport.TLSClientConfig.MinVersion, rawTransport.TLSClientConfig.InsecureSkipVerify)
+	}
+
+	allowed := types.NewProviderConfig("test-key").WithInsecureTLS(true)
+	allowedProvider := NewBaseProvider("test-provider", allowed)
+	allowedTransport, ok := allowedProvider.GetHTTPClient().Transport.(*http.Transport)
+	if !ok {
+		t.Fatal("Expected *http.Transport")
+	}
+	if !allowedTransport.TLSClientConfig.InsecureSkipVerify || allowedTransport.TLSClientConfig.MinVersion != tls.VersionTLS10 {
+		t.Fatalf("explicit insecure provider TLS was not preserved: min=%d skip=%v",
+			allowedTransport.TLSClientConfig.MinVersion, allowedTransport.TLSClientConfig.InsecureSkipVerify)
 	}
 }
 
