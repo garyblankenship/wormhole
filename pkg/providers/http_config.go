@@ -10,6 +10,8 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"reflect"
+	"runtime"
 	"strings"
 	"time"
 
@@ -73,8 +75,20 @@ func (c HTTPTransportConfig) Fingerprint() string {
 		c.MaxIdleConns, c.MaxIdleConnsPerHost, c.MaxConnsPerHost,
 		c.IdleConnTimeout, c.DialTimeout, c.DialKeepAlive,
 		c.TLSHandshakeTimeout, c.ExpectContinueTimeout, c.ResponseHeaderTimeout)
-	// Proxy is a function pointer, cannot fingerprint; assume default proxy
+	fmt.Fprintf(&b, "|proxy:%s", proxyFingerprint(c.Proxy))
 	return b.String()
+}
+
+func proxyFingerprint(proxy func(*http.Request) (*url.URL, error)) string {
+	if proxy == nil {
+		return "nil"
+	}
+	pc := reflect.ValueOf(proxy).Pointer()
+	name := ""
+	if fn := runtime.FuncForPC(pc); fn != nil {
+		name = fn.Name()
+	}
+	return fmt.Sprintf("%s@%x", name, pc)
 }
 
 // CacheKey returns a cache key that includes both base URL and transport configuration fingerprint.
@@ -123,12 +137,16 @@ func buildSecureHTTPClient(timeout time.Duration, tlsConfig *config.TLSConfig, t
 		defaultTLS := config.DefaultTLSConfig()
 		tlsConfig = &defaultTLS
 	}
+	tlsConfig = approvedTLSConfig(tlsConfig)
 
 	// Use default transport config if not provided
 	if transportConfig == nil {
 		defaultTransport := DefaultHTTPTransportConfig()
 		transportConfig = &defaultTransport
 	}
+	transportCopy := *transportConfig
+	transportCopy.TLSConfig = tlsConfig
+	transportConfig = &transportCopy
 
 	// Create TLS config
 	var tlsClientConfig *tls.Config
@@ -150,6 +168,14 @@ func buildSecureHTTPClient(timeout time.Duration, tlsConfig *config.TLSConfig, t
 
 	transport := newTransportFromConfig(transportConfig, tlsClientConfig)
 	return &http.Client{Transport: transport, Timeout: timeout}
+}
+
+func approvedTLSConfig(tlsConfig *config.TLSConfig) *config.TLSConfig {
+	if tlsConfig == nil || tlsConfig.IsSecure() || tlsConfig.AllowInsecure {
+		return tlsConfig
+	}
+	defaultTLS := config.DefaultTLSConfig()
+	return &defaultTLS
 }
 
 // newTransportFromConfig constructs an *http.Transport from the given config.
@@ -189,6 +215,7 @@ func NewInsecureHTTPClient(timeout time.Duration, skipVerify bool) *http.Client 
 	if skipVerify {
 		tlsConfig = tlsConfig.WithInsecureSkipVerify(true)
 	}
+	tlsConfig = tlsConfig.WithAllowInsecure(true)
 
 	transportConfig := DefaultHTTPTransportConfig()
 	transportConfig.TLSConfig = &tlsConfig
@@ -263,9 +290,9 @@ func validateNonNegativeDuration(name string, val time.Duration) error {
 // Validate checks if the HTTP transport configuration is valid.
 // Returns an error if any setting is invalid.
 func (c HTTPTransportConfig) Validate() error {
-	if c.TLSConfig != nil && !c.TLSConfig.IsSecure() {
+	if c.TLSConfig != nil && !c.TLSConfig.IsSecure() && !c.TLSConfig.AllowInsecure {
 		err := types.NewWormholeError(types.ErrorCodeValidation, "TLS configuration is not secure", false)
-		err.Details = fmt.Sprintf("MinVersion=%d, InsecureSkipVerify=%v", c.TLSConfig.MinVersion, c.TLSConfig.InsecureSkipVerify)
+		err.Details = fmt.Sprintf("MinVersion=%d, InsecureSkipVerify=%v, AllowInsecure=%v", c.TLSConfig.MinVersion, c.TLSConfig.InsecureSkipVerify, c.TLSConfig.AllowInsecure)
 		return err
 	}
 

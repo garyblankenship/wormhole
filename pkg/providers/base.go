@@ -68,6 +68,7 @@ func NewInsecureBaseProvider(name string, providerConfig types.ProviderConfig, s
 	if skipVerify {
 		insecureTLS = insecureTLS.WithInsecureSkipVerify(true)
 	}
+	insecureTLS = insecureTLS.WithAllowInsecure(true)
 
 	return NewBaseProviderWithAuth(name, providerConfig, &insecureTLS, nil, nil)
 }

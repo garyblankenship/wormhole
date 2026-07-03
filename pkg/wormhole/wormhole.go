@@ -38,9 +38,9 @@ type Wormhole struct {
 	shuttingDown   atomic.Bool    // Atomic flag for shutdown state
 
 	// Idempotency cache
-	idempotencyMu       sync.Mutex
-	idempotencyCache    map[string]*idempotencyEntry
-	idempotencySweepWg  sync.WaitGroup
+	idempotencyMu      sync.Mutex
+	idempotencyCache   map[string]*idempotencyEntry
+	idempotencySweepWg sync.WaitGroup
 
 	// Closers registered by options, closed in Shutdown
 	closers []io.Closer
@@ -56,25 +56,28 @@ type IdempotencyConfig struct {
 
 // Config holds the configuration for Wormhole
 type Config struct {
-	DefaultProvider     string
-	Providers           map[string]types.ProviderConfig
-	CustomFactories     map[string]types.ProviderFactory
-	ProviderMiddlewares []types.ProviderMiddleware // Type-safe middleware
-	Middleware          []middleware.Middleware    // DEPRECATED: use ProviderMiddlewares instead
-	DebugLogging        bool
-	Logger              types.Logger
-	DefaultTimeout      time.Duration
-	DefaultRetries      int
-	DefaultRetryDelay   time.Duration
-	ModelValidation     bool                      // Whether to validate models against registry (default: true)
-	DiscoveryConfig     discovery.DiscoveryConfig // Dynamic model discovery configuration
-	EnableDiscovery     bool                      // Whether to enable dynamic model discovery (default: true)
-	Idempotency         *IdempotencyConfig        // Idempotency configuration for duplicate prevention
-	Models              []*types.ModelInfo        // Models to load into the registry (opt-in; see WithModels)
-	AttemptTrace        AttemptTraceFunc          // Optional per-attempt tracing callback
-	StreamIdleTimeout   time.Duration             // Per-chunk idle timeout for streaming (0 = disabled)
-	StreamTrace         StreamTraceFunc           // Optional stream lifecycle tracing callback
-	Closers             []io.Closer               // Closers to invoke during Shutdown
+	DefaultProvider      string
+	Providers            map[string]types.ProviderConfig
+	CustomFactories      map[string]types.ProviderFactory
+	ProviderMiddlewares  []types.ProviderMiddleware // Type-safe middleware
+	Middleware           []middleware.Middleware    // DEPRECATED: use ProviderMiddlewares instead
+	DebugLogging         bool
+	Logger               types.Logger
+	DefaultTimeout       time.Duration
+	DefaultTimeoutSet    bool
+	DefaultRetries       int
+	DefaultRetriesSet    bool
+	DefaultRetryDelay    time.Duration
+	DefaultRetryDelaySet bool
+	ModelValidation      bool                      // Whether to validate models against registry (default: true)
+	DiscoveryConfig      discovery.DiscoveryConfig // Dynamic model discovery configuration
+	EnableDiscovery      bool                      // Whether to enable dynamic model discovery (default: true)
+	Idempotency          *IdempotencyConfig        // Idempotency configuration for duplicate prevention
+	Models               []*types.ModelInfo        // Models to load into the registry (opt-in; see WithModels)
+	AttemptTrace         AttemptTraceFunc          // Optional per-attempt tracing callback
+	StreamIdleTimeout    time.Duration             // Per-chunk idle timeout for streaming (0 = disabled)
+	StreamTrace          StreamTraceFunc           // Optional stream lifecycle tracing callback
+	Closers              []io.Closer               // Closers to invoke during Shutdown
 }
 
 // New creates a new Wormhole instance using functional options.

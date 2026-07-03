@@ -242,10 +242,10 @@ func NewHTTPClientWrapper(name string, providerConfig types.ProviderConfig, tlsC
 			w.httpClient = hc
 		} else {
 			// For non-standard HTTPClient implementations, create a concrete client for GetHTTPClient()
-			w.httpClient = w.transportCache.newSecureHTTPClient(w.GetHTTPTimeout(), tlsConfig, nil, providerConfig.BaseURL)
+			w.httpClient = w.transportCache.newSecureHTTPClient(0, tlsConfig, nil, providerConfig.BaseURL)
 		}
 	} else {
-		w.httpClient = w.transportCache.newSecureHTTPClient(w.GetHTTPTimeout(), tlsConfig, nil, providerConfig.BaseURL)
+		w.httpClient = w.transportCache.newSecureHTTPClient(0, tlsConfig, nil, providerConfig.BaseURL)
 	}
 
 	retryConfig := utils.DefaultRetryConfig()
@@ -292,9 +292,10 @@ func NewHTTPClientWrapper(name string, providerConfig types.ProviderConfig, tlsC
 }
 
 func (w *HTTPClientWrapper) GetHTTPTimeout() time.Duration {
-	if w.Config.Timeout == 0 {
-		return 0 // Unlimited timeout
-	} else if w.Config.Timeout > 0 {
+	if w.Config.HTTPTimeout != nil {
+		return *w.Config.HTTPTimeout
+	}
+	if w.Config.Timeout > 0 {
 		return time.Duration(w.Config.Timeout) * time.Second
 	}
 	return config.GetDefaultHTTPTimeout()
@@ -304,11 +305,14 @@ func (w *HTTPClientWrapper) GetHTTPClient() *http.Client {
 	if w.httpClient != nil {
 		return w.httpClient
 	}
-	return w.transportCache.newSecureHTTPClient(w.GetHTTPTimeout(), w.tlsConfig, nil, "")
+	return w.transportCache.newSecureHTTPClient(0, w.tlsConfig, nil, "")
 }
 
 func (w *HTTPClientWrapper) DoRequest(ctx context.Context, method, url string, body any, result any) error {
-	req, err := w.buildRequest(ctx, method, url, body)
+	reqCtx, cancel := w.requestContext(ctx)
+	defer cancel()
+
+	req, err := w.buildRequest(reqCtx, method, url, body)
 	if err != nil {
 		return err
 	}
@@ -334,6 +338,14 @@ func (w *HTTPClientWrapper) DoRequest(ctx context.Context, method, url string, b
 	}
 
 	return w.parseResponse(respBody, result)
+}
+
+func (w *HTTPClientWrapper) requestContext(ctx context.Context) (context.Context, context.CancelFunc) {
+	timeout := w.GetHTTPTimeout()
+	if timeout <= 0 {
+		return ctx, func() {}
+	}
+	return context.WithTimeout(ctx, timeout)
 }
 
 func (w *HTTPClientWrapper) StreamRequest(ctx context.Context, method, url string, body any) (io.ReadCloser, error) {

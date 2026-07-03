@@ -273,6 +273,7 @@ func WithProviderMiddleware(mw ...types.ProviderMiddleware) Option {
 func WithTimeout(timeout time.Duration) Option {
 	return func(c *Config) {
 		c.DefaultTimeout = timeout
+		c.DefaultTimeoutSet = true
 	}
 }
 
@@ -281,6 +282,19 @@ func WithTimeout(timeout time.Duration) Option {
 func WithUnlimitedTimeout() Option {
 	return func(c *Config) {
 		c.DefaultTimeout = 0 // 0 = unlimited timeout
+		c.DefaultTimeoutSet = true
+	}
+}
+
+// WithRetries sets default HTTP retry behavior for providers that do not set
+// ProviderConfig.MaxRetries or RetryDelay. maxRetries may be zero to disable
+// retries by default.
+func WithRetries(maxRetries int, delay time.Duration) Option {
+	return func(c *Config) {
+		c.DefaultRetries = maxRetries
+		c.DefaultRetriesSet = true
+		c.DefaultRetryDelay = delay
+		c.DefaultRetryDelaySet = true
 	}
 }
 

@@ -164,6 +164,7 @@ type ProviderConfig struct {
 	Headers       map[string]string `json:"headers,omitempty"`
 	NoAuth        bool              `json:"no_auth,omitempty"`
 	Timeout       int               `json:"timeout,omitempty"`
+	HTTPTimeout   *time.Duration    `json:"-"`                        // precise transport request timeout; nil means use defaults
 	DynamicModels bool              `json:"dynamic_models,omitempty"` // Skip local registry validation for providers with dynamic model catalogs
 	Params        map[string]any    `json:"params,omitempty"`         // Provider-specific parameters for customization
 
@@ -274,6 +275,7 @@ func (c ProviderConfig) WithTimeout(seconds int) ProviderConfig {
 // WithTimeoutDuration sets the request timeout using a time.Duration.
 func (c ProviderConfig) WithTimeoutDuration(d time.Duration) ProviderConfig {
 	c.Timeout = int(d.Seconds())
+	c.HTTPTimeout = &d
 	return c
 }
 
@@ -302,6 +304,13 @@ func (c ProviderConfig) WithNoRetries() ProviderConfig {
 // This caps exponential backoff to prevent excessive wait times.
 func (c ProviderConfig) WithMaxRetryDelay(maxDelay time.Duration) ProviderConfig {
 	c.RetryMaxDelay = &maxDelay
+	return c
+}
+
+// WithHTTPTimeout sets the precise per-request HTTP timeout. A zero duration
+// explicitly disables request timeout enforcement.
+func (c ProviderConfig) WithHTTPTimeout(timeout time.Duration) ProviderConfig {
+	c.HTTPTimeout = &timeout
 	return c
 }
 
@@ -444,7 +453,8 @@ func (c ProviderConfig) WithTLSConfigParam(key string, value any) ProviderConfig
 // The configuration will allow TLS 1.0 and disable certificate verification.
 func (c ProviderConfig) WithInsecureTLS(skipVerify bool) ProviderConfig {
 	return c.WithTLSConfigParam("min_version", uint16(0x0301)). // TLS 1.0
-									WithTLSConfigParam("insecure_skip_verify", skipVerify)
+									WithTLSConfigParam("insecure_skip_verify", skipVerify).
+									WithTLSConfigParam("allow_insecure", true)
 }
 
 // HasTLSConfig returns true if the provider config contains TLS configuration.

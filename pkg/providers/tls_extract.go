@@ -56,6 +56,10 @@ func ExtractTLSConfigFromProviderConfig(providerConfig types.ProviderConfig) *co
 			if v, ok := value.(bool); ok {
 				tlsConfig.InsecureSkipVerify = v
 			}
+		case "allow_insecure":
+			if v, ok := value.(bool); ok {
+				tlsConfig.AllowInsecure = v
+			}
 		case "server_name":
 			if v, ok := value.(string); ok {
 				tlsConfig.ServerName = v

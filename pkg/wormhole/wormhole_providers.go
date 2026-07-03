@@ -9,6 +9,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	whconfig "github.com/garyblankenship/wormhole/pkg/config"
 	"github.com/garyblankenship/wormhole/pkg/providers/anthropic"
 	"github.com/garyblankenship/wormhole/pkg/providers/gemini"
 	"github.com/garyblankenship/wormhole/pkg/providers/ollama"
@@ -249,12 +250,36 @@ func cloneProviderConfig(config types.ProviderConfig) types.ProviderConfig {
 		retryMaxDelay := *config.RetryMaxDelay
 		cloned.RetryMaxDelay = &retryMaxDelay
 	}
+	if config.HTTPTimeout != nil {
+		httpTimeout := *config.HTTPTimeout
+		cloned.HTTPTimeout = &httpTimeout
+	}
 	return cloned
 }
 
 func (p *Wormhole) applyDefaultTimeout(config types.ProviderConfig) types.ProviderConfig {
-	if config.Timeout == 0 && p.config.DefaultTimeout != 0 {
-		config.Timeout = int(p.config.DefaultTimeout.Seconds())
+	if config.HTTPTimeout != nil || config.Timeout != 0 {
+		return config
+	}
+	timeout := whconfig.GetDefaultHTTPTimeout()
+	if p.config.DefaultTimeoutSet {
+		timeout = p.config.DefaultTimeout
+	}
+	config.HTTPTimeout = &timeout
+	if timeout > 0 && timeout%time.Second == 0 {
+		config.Timeout = int(timeout.Seconds())
+	}
+	return config
+}
+
+func (p *Wormhole) applyDefaultRetries(config types.ProviderConfig) types.ProviderConfig {
+	if config.MaxRetries == nil && p.config.DefaultRetriesSet {
+		maxRetries := p.config.DefaultRetries
+		config.MaxRetries = &maxRetries
+	}
+	if config.RetryDelay == nil && p.config.DefaultRetryDelaySet {
+		retryDelay := p.config.DefaultRetryDelay
+		config.RetryDelay = &retryDelay
 	}
 	return config
 }
@@ -271,7 +296,9 @@ func (p *Wormhole) createProviderWithConfig(name string, config types.ProviderCo
 		}
 	}
 
-	provider, err := factory(p.applyDefaultTimeout(config))
+	config = p.applyDefaultTimeout(config)
+	config = p.applyDefaultRetries(config)
+	provider, err := factory(config)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create provider %s: %w", name, err)
 	}

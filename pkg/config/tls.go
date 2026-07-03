@@ -4,10 +4,14 @@
 package config
 
 import (
+	"bytes"
+	"crypto/sha256"
 	"crypto/tls"
 	"crypto/x509"
+	"encoding/hex"
 	"fmt"
 	"os"
+	"sort"
 	"strings"
 	"time"
 )
@@ -44,6 +48,11 @@ type TLSConfig struct {
 
 	// Timeouts for TLS handshake
 	HandshakeTimeout time.Duration
+
+	// AllowInsecure permits intentionally insecure TLS settings such as
+	// InsecureSkipVerify or TLS versions below 1.2. Keep false for provider
+	// config loaded from generic parameters unless the caller explicitly opted in.
+	AllowInsecure bool
 }
 
 // DefaultTLSConfig returns a secure TLS configuration with modern defaults:
@@ -260,6 +269,13 @@ func (c TLSConfig) WithInsecureSkipVerify(skip bool) TLSConfig {
 	return c
 }
 
+// WithAllowInsecure returns a copy of the TLSConfig with insecure TLS settings
+// explicitly allowed. This is intended for local development and legacy systems.
+func (c TLSConfig) WithAllowInsecure(allow bool) TLSConfig {
+	c.AllowInsecure = allow
+	return c
+}
+
 // WithRootCAs returns a copy of the TLSConfig with custom root CAs.
 func (c TLSConfig) WithRootCAs(rootCAs *x509.CertPool) TLSConfig {
 	c.RootCAs = rootCAs
@@ -282,9 +298,31 @@ func (c TLSConfig) WithHandshakeTimeout(timeout time.Duration) TLSConfig {
 // Used for caching transports based on TLS settings.
 func (c TLSConfig) Fingerprint() string {
 	var b strings.Builder
-	fmt.Fprintf(&b, "%d|%d|%v|%v|%s|", c.MinVersion, c.MaxVersion, c.InsecureSkipVerify, c.RootCAs != nil, c.ServerName)
+	fmt.Fprintf(&b, "%d|%d|%v|%v|rootca:%s|%s|",
+		c.MinVersion, c.MaxVersion, c.InsecureSkipVerify, c.AllowInsecure, rootCAPoolFingerprint(c.RootCAs), c.ServerName)
 	for _, cs := range c.CipherSuites {
 		fmt.Fprintf(&b, "%d,", cs)
 	}
 	return b.String()
+}
+
+func rootCAPoolFingerprint(pool *x509.CertPool) string {
+	if pool == nil {
+		return "system"
+	}
+	subjects := pool.Subjects()
+	if len(subjects) == 0 {
+		return "empty"
+	}
+	// x509.CertPool does not expose certificate bytes after insertion. The
+	// subject DER set is the stable public identity available for cache keys.
+	sort.Slice(subjects, func(i, j int) bool {
+		return bytes.Compare(subjects[i], subjects[j]) < 0
+	})
+	h := sha256.New()
+	for _, subject := range subjects {
+		fmt.Fprintf(h, "%d:", len(subject))
+		_, _ = h.Write(subject)
+	}
+	return hex.EncodeToString(h.Sum(nil))
 }
