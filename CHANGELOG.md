@@ -1,5 +1,31 @@
 # Changelog
 
+## v1.22.0 (2026-07-03)
+
+### Compatibility Notes
+- `ProviderMiddleware` implementations must now provide `ApplyRerank`.
+- Provider `AuthStrategy` implementations must now provide `ExtractKey`.
+- `StreamAndAccumulate` now returns `func() (string, error)` so callers can observe stream-level accumulation errors.
+
+### Features
+- Add retryability-aware tool execution so retry loops can avoid duplicating non-retryable tool side effects.
+- Add profile-aware OpenAI-compatible provider registration, including OpenRouter image-path defaults.
+
+### Fixes
+- Streaming: close Ollama NDJSON streams, report premature EOF, preserve default request deadlines for streaming and audio requests, and make `StreamAndAccumulate` safe for abandoned consumers and concurrent result reads.
+- OpenAI: preserve streamed tool-call indexes so parallel tool calls are accumulated independently instead of being merged into one corrupted call.
+- Gemini: report prematurely truncated streams, restore keyless custom-gateway operation, and preserve API-key rotation behavior for query-param auth.
+- Proxy: resolve OpenRouter `provider/model` routing against the effective default provider and return actionable `400 invalid_request_error` responses for client-side validation failures.
+- Middleware: unwrap `WormholeError` through composed middleware, cap provider `Retry-After`, namespace cache entries by provider, isolate cached values from caller mutation, and bound load-balancer health-check goroutines.
+- Discovery: preserve account-scoped fallback and migration behavior, prevent migration writes after `Clear`/`Close`, and keep stale shards from reappearing.
+- Adaptive concurrency: default partial PID configs instead of freezing capacity with zero output bounds.
+- TLS: preserve custom `RootCAs`, `ServerName`, and `CipherSuites` while flooring insecure TLS settings.
+- Structured output: clear stale schema marshal errors after a later valid `Schema()` call.
+- Idempotency: honor owner request cancellation/deadlines and avoid starting the sweeper when idempotency is disabled.
+
+### Other
+- Expand regression coverage across streaming, proxy routing, middleware caching/retry behavior, discovery cache lifecycle, adaptive config defaults, TLS config preservation, and provider profile registration.
+
 ## v1.21.0 (2026-06-27)
 
 ### Features
