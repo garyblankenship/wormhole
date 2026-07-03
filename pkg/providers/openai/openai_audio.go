@@ -90,7 +90,10 @@ func (p *Provider) handleSpeechToText(ctx context.Context, request types.AudioRe
 
 	// Make request to OpenAI Whisper API
 	url := fmt.Sprintf("%s/audio/transcriptions", p.Config.BaseURL)
-	req, err := http.NewRequestWithContext(ctx, "POST", url, reader)
+	reqCtx, cancel := p.RequestContext(ctx)
+	defer cancel()
+
+	req, err := http.NewRequestWithContext(reqCtx, "POST", url, reader)
 	if err != nil {
 		return nil, p.RequestError("failed to create request", err)
 	}

@@ -31,6 +31,7 @@ func registerOpenAICompatible(c *Config, name string, cfg types.ProviderConfig) 
 	if c.CustomFactories == nil {
 		c.CustomFactories = make(map[string]types.ProviderFactory)
 	}
+	applyProviderProfileConfig(name, &cfg)
 	c.Providers[name] = cfg
 	c.CustomFactories[name] = namedOpenAICompatibleFactory(name)
 }

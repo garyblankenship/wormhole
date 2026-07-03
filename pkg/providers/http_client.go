@@ -295,6 +295,9 @@ func (w *HTTPClientWrapper) GetHTTPTimeout() time.Duration {
 	if w.Config.HTTPTimeout != nil {
 		return *w.Config.HTTPTimeout
 	}
+	if w.Config.Timeout == 0 {
+		return 0
+	}
 	if w.Config.Timeout > 0 {
 		return time.Duration(w.Config.Timeout) * time.Second
 	}
@@ -348,9 +351,18 @@ func (w *HTTPClientWrapper) requestContext(ctx context.Context) (context.Context
 	return context.WithTimeout(ctx, timeout)
 }
 
+// RequestContext applies the wrapper's configured per-request timeout to ctx.
+// The returned cancel function must be called when the request body is fully
+// consumed or the request fails.
+func (w *HTTPClientWrapper) RequestContext(ctx context.Context) (context.Context, context.CancelFunc) {
+	return w.requestContext(ctx)
+}
+
 func (w *HTTPClientWrapper) StreamRequest(ctx context.Context, method, url string, body any) (io.ReadCloser, error) {
-	req, err := w.buildRequest(ctx, method, url, body)
+	reqCtx, cancel := w.requestContext(ctx)
+	req, err := w.buildRequest(reqCtx, method, url, body)
 	if err != nil {
+		cancel()
 		return nil, err
 	}
 	req.Header.Set(types.HeaderAccept, types.ContentTypeEventStream)
@@ -358,10 +370,12 @@ func (w *HTTPClientWrapper) StreamRequest(ctx context.Context, method, url strin
 
 	resp, err := w.retryClient.Do(req)
 	if err != nil {
+		cancel()
 		return nil, w.handleRequestError(ctx, err)
 	}
 
 	if resp.StatusCode >= 400 {
+		defer cancel()
 		defer func() { _ = resp.Body.Close() }()
 		respBody, err := readResponseBodyLimited(resp.Body)
 		if err != nil {
@@ -371,7 +385,18 @@ func (w *HTTPClientWrapper) StreamRequest(ctx context.Context, method, url strin
 		return nil, w.buildErrorResponse(resp.StatusCode, resp.Status, url, resp.Header, respBody)
 	}
 
-	return resp.Body, nil
+	return &cancelOnCloseReadCloser{ReadCloser: resp.Body, cancel: cancel}, nil
+}
+
+type cancelOnCloseReadCloser struct {
+	io.ReadCloser
+	cancel context.CancelFunc
+}
+
+func (r *cancelOnCloseReadCloser) Close() error {
+	err := r.ReadCloser.Close()
+	r.cancel()
+	return err
 }
 
 func (w *HTTPClientWrapper) buildRequest(ctx context.Context, method, url string, body any) (*http.Request, error) {

@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/garyblankenship/wormhole/pkg/middleware"
 	"github.com/garyblankenship/wormhole/pkg/types"
 	"github.com/garyblankenship/wormhole/pkg/wormhole"
 	"github.com/stretchr/testify/assert"
@@ -66,7 +67,7 @@ func (p *countingTextProvider) SupportedCapabilities() []types.ModelCapability {
 func (p *countingTextProvider) Text(ctx context.Context, request types.TextRequest) (*types.TextResponse, error) {
 	call := p.callCount.Add(1)
 	return &types.TextResponse{
-		ID:           "counting",
+		ID:           p.Name(),
 		Model:        request.Model,
 		Text:         "response-" + request.Messages[0].GetContent().(string),
 		FinishReason: types.FinishReasonStop,
@@ -235,6 +236,59 @@ func TestIdempotencyDuplicateWaitHonorsCallerContext(t *testing.T) {
 
 	close(provider.unblock)
 	require.NoError(t, <-firstDone)
+}
+
+func TestIdempotencyOwnerHonorsCallerContext(t *testing.T) {
+	t.Parallel()
+	provider := newBlockingTextProvider("blocking")
+	client := wormhole.New(
+		wormhole.WithDefaultProvider("blocking"),
+		wormhole.WithCustomProvider("blocking", func(cfg types.ProviderConfig) (types.Provider, error) {
+			return provider, nil
+		}),
+		wormhole.WithProviderConfig("blocking", types.ProviderConfig{}),
+		wormhole.WithIdempotencyKey("same-request", time.Minute),
+	)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 25*time.Millisecond)
+	defer cancel()
+
+	_, err := client.Text().Model("test-model").Prompt("repeat me").Generate(ctx)
+	require.ErrorIs(t, err, context.DeadlineExceeded)
+	assert.Equal(t, int32(1), provider.callCount.Load())
+}
+
+func TestLegacyCacheMiddlewareNamespacesByProvider(t *testing.T) {
+	t.Parallel()
+	providerA := newCountingTextProvider("provider-a")
+	providerB := newCountingTextProvider("provider-b")
+	cache := middleware.NewTTLCache(10, time.Minute)
+	client := wormhole.New(
+		wormhole.WithDefaultProvider("provider-a"),
+		wormhole.WithCustomProvider("provider-a", func(cfg types.ProviderConfig) (types.Provider, error) {
+			return providerA, nil
+		}),
+		wormhole.WithCustomProvider("provider-b", func(cfg types.ProviderConfig) (types.Provider, error) {
+			return providerB, nil
+		}),
+		wormhole.WithProviderConfig("provider-a", types.ProviderConfig{}),
+		wormhole.WithProviderConfig("provider-b", types.ProviderConfig{}),
+		wormhole.WithMiddleware(middleware.CacheMiddleware(middleware.CacheConfig{
+			Cache: cache,
+			TTL:   time.Minute,
+		})),
+	)
+
+	ctx := context.Background()
+	first, err := client.Text().Using("provider-a").Model("same-model").Prompt("same prompt").Generate(ctx)
+	require.NoError(t, err)
+	second, err := client.Text().Using("provider-b").Model("same-model").Prompt("same prompt").Generate(ctx)
+	require.NoError(t, err)
+
+	assert.Equal(t, "provider-a", first.ID)
+	assert.Equal(t, "provider-b", second.ID)
+	assert.Equal(t, int32(1), providerA.callCount.Load())
+	assert.Equal(t, int32(1), providerB.callCount.Load())
 }
 
 func TestBaseURLOverridePreservesProviderConfigAndFactory(t *testing.T) {

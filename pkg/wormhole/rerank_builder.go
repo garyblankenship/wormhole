@@ -105,6 +105,7 @@ func (b *RerankRequestBuilder) executeRerank(ctx context.Context, request *types
 	}
 	defer release()
 
+	ctx = contextWithProvider(ctx, provider)
 	if b.getWormhole().providerMiddleware != nil {
 		handler := b.getWormhole().providerMiddleware.ApplyRerank(provider.Rerank)
 		return handler(ctx, *request)

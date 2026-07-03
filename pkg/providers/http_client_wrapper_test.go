@@ -10,7 +10,6 @@ import (
 	"testing"
 	"time"
 
-	whconfig "github.com/garyblankenship/wormhole/pkg/config"
 	"github.com/garyblankenship/wormhole/pkg/types"
 )
 
@@ -30,7 +29,7 @@ func TestHTTPClientWrapperTimeoutsAndClientFallback(t *testing.T) {
 		config types.ProviderConfig
 		want   time.Duration
 	}{
-		{name: "unset uses configured fallback", config: types.ProviderConfig{}, want: whconfig.FallbackHTTPTimeout},
+		{name: "legacy zero seconds means unlimited", config: types.ProviderConfig{}, want: 0},
 		{name: "legacy positive seconds", config: types.ProviderConfig{Timeout: 7}, want: 7 * time.Second},
 		{name: "precise duration", config: types.ProviderConfig{}.WithHTTPTimeout(500 * time.Millisecond), want: 500 * time.Millisecond},
 		{name: "explicit precise zero means unlimited", config: types.ProviderConfig{}.WithHTTPTimeout(0), want: 0},
@@ -48,6 +47,36 @@ func TestHTTPClientWrapperTimeoutsAndClientFallback(t *testing.T) {
 				t.Fatalf("wrapper http.Client.Timeout = %v, want 0; request deadlines are context-scoped", got.Timeout)
 			}
 		})
+	}
+}
+
+func TestHTTPClientWrapperStreamRequestUsesRequestTimeout(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		time.Sleep(200 * time.Millisecond)
+		_, _ = w.Write([]byte("data: late\n\n"))
+	}))
+	t.Cleanup(server.Close)
+
+	wrapper := NewHTTPClientWrapper(
+		"test",
+		types.ProviderConfig{}.WithHTTPTimeout(25*time.Millisecond),
+		nil,
+		&NoAuthStrategy{},
+		nil,
+	)
+
+	start := time.Now()
+	body, err := wrapper.StreamRequest(context.Background(), http.MethodGet, server.URL, nil)
+	if body != nil {
+		_ = body.Close()
+	}
+	if err == nil {
+		t.Fatal("StreamRequest returned nil error")
+	}
+	if elapsed := time.Since(start); elapsed > 150*time.Millisecond {
+		t.Fatalf("StreamRequest timeout took %s, want request deadline before server response", elapsed)
 	}
 }
 

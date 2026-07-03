@@ -2,6 +2,7 @@ package middleware
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"testing"
 	"time"
@@ -277,6 +278,142 @@ func TestCacheMiddleware(t *testing.T) {
 	}
 	if callCount != 2 {
 		t.Errorf("Expected handler to be called twice for different request, got %d", callCount)
+	}
+}
+
+func TestCacheMiddlewareMissStoresIndependentClone(t *testing.T) {
+	t.Parallel()
+	cache := NewMemoryCache(10)
+	config := CacheConfig{
+		Cache: cache,
+		TTL:   time.Hour,
+	}
+
+	type response struct {
+		Count  int               `json:"count"`
+		Labels []string          `json:"labels"`
+		Meta   map[string]string `json:"meta"`
+	}
+
+	callCount := 0
+	wrappedHandler := CacheMiddleware(config)(func(ctx context.Context, req any) (any, error) {
+		callCount++
+		return &response{
+			Count:  1,
+			Labels: []string{"alpha", "beta"},
+			Meta:   map[string]string{"status": "fresh"},
+		}, nil
+	})
+
+	ctx := context.Background()
+	req := map[string]string{"test": "request"}
+
+	resp1, err := wrappedHandler(ctx, req)
+	if err != nil {
+		t.Fatalf("Expected no error, got %v", err)
+	}
+	first := resp1.(*response)
+	first.Count = 99
+	first.Labels[0] = "mutated"
+	first.Meta["status"] = "stale"
+
+	resp2, err := wrappedHandler(ctx, req)
+	if err != nil {
+		t.Fatalf("Expected no error, got %v", err)
+	}
+	second := resp2.(*response)
+
+	if callCount != 1 {
+		t.Fatalf("Expected handler to be called once, got %d", callCount)
+	}
+	if first == second {
+		t.Fatal("Expected cached response to be a distinct pointer")
+	}
+	if second.Count != 1 {
+		t.Fatalf("Expected cached count to remain 1, got %d", second.Count)
+	}
+	if second.Labels[0] != "alpha" {
+		t.Fatalf("Expected cached labels to remain unchanged, got %v", second.Labels)
+	}
+	if second.Meta["status"] != "fresh" {
+		t.Fatalf("Expected cached metadata to remain unchanged, got %v", second.Meta)
+	}
+}
+
+func TestCacheMiddlewareHitClonesNestedMutableMapValues(t *testing.T) {
+	t.Parallel()
+	cache := NewMemoryCache(10)
+	config := CacheConfig{
+		Cache: cache,
+		TTL:   time.Hour,
+	}
+
+	callCount := 0
+	wrappedHandler := CacheMiddleware(config)(func(ctx context.Context, req any) (any, error) {
+		callCount++
+		return map[string]any{
+			"strings": []string{"alpha", "beta"},
+			"bytes":   []byte("blob"),
+			"raw":     json.RawMessage(`{"ok":true}`),
+			"meta":    map[string]string{"status": "fresh"},
+		}, nil
+	})
+
+	ctx := context.Background()
+	req := map[string]string{"test": "request"}
+
+	resp1, err := wrappedHandler(ctx, req)
+	if err != nil {
+		t.Fatalf("Expected no error, got %v", err)
+	}
+	first := resp1.(map[string]any)
+	first["strings"].([]string)[0] = "mutated-on-miss"
+	first["bytes"].([]byte)[0] = 'X'
+	first["raw"].(json.RawMessage)[0] = '['
+	first["meta"].(map[string]string)["status"] = "stale-on-miss"
+
+	resp2, err := wrappedHandler(ctx, req)
+	if err != nil {
+		t.Fatalf("Expected no error, got %v", err)
+	}
+	second := resp2.(map[string]any)
+	if callCount != 1 {
+		t.Fatalf("Expected handler to be called once, got %d", callCount)
+	}
+	if got := second["strings"].([]string); got[0] != "alpha" {
+		t.Fatalf("Expected cached []string to remain unchanged after miss mutation, got %v", got)
+	}
+	if got := string(second["bytes"].([]byte)); got != "blob" {
+		t.Fatalf("Expected cached []byte to remain unchanged after miss mutation, got %q", got)
+	}
+	if got := string(second["raw"].(json.RawMessage)); got != `{"ok":true}` {
+		t.Fatalf("Expected cached RawMessage to remain unchanged after miss mutation, got %s", got)
+	}
+	if got := second["meta"].(map[string]string)["status"]; got != "fresh" {
+		t.Fatalf("Expected cached map[string]string to remain unchanged after miss mutation, got %q", got)
+	}
+
+	second["strings"].([]string)[1] = "mutated-on-hit"
+	second["bytes"].([]byte)[1] = 'Y'
+	second["raw"].(json.RawMessage)[1] = 'X'
+	second["meta"].(map[string]string)["status"] = "stale-on-hit"
+
+	resp3, err := wrappedHandler(ctx, req)
+	if err != nil {
+		t.Fatalf("Expected no error, got %v", err)
+	}
+	third := resp3.(map[string]any)
+	if got := third["strings"].([]string); got[1] != "beta" {
+		t.Fatalf("Expected cache hit clone for []string, got %v", got)
+	}
+	if got := string(third["bytes"].([]byte)); got != "blob" {
+		t.Fatalf("Expected cache hit clone for []byte, got %q", got)
+	}
+	if got := string(third["raw"].(json.RawMessage)); got != `{"ok":true}` {
+		t.Fatalf("Expected cache hit clone for RawMessage, got %s", got)
+	}
+	if got := third["meta"].(map[string]string)["status"]; got != "fresh" {
+		t.Fatalf("Expected cache hit clone for map[string]string, got %q", got)
 	}
 }
 

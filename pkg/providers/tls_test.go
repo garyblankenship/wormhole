@@ -2,6 +2,7 @@ package providers
 
 import (
 	"crypto/tls"
+	"crypto/x509"
 	"net/http"
 	"testing"
 	"time"
@@ -227,8 +228,12 @@ func TestTLSConfigSecurity(t *testing.T) {
 func TestNewSecureHTTPClientFloorsUnapprovedInsecureTLS(t *testing.T) {
 	t.Parallel()
 
+	rootCAs := x509.NewCertPool()
 	tlsConfig := config.DefaultTLSConfig().
 		WithMinVersion(tls.VersionTLS10).
+		WithCipherSuites([]uint16{tls.TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256}).
+		WithRootCAs(rootCAs).
+		WithServerName("api.example.test").
 		WithInsecureSkipVerify(true)
 	client := NewSecureHTTPClient(30*time.Second, &tlsConfig, nil, "")
 
@@ -241,6 +246,15 @@ func TestNewSecureHTTPClientFloorsUnapprovedInsecureTLS(t *testing.T) {
 	}
 	if transport.TLSClientConfig.MinVersion != tls.VersionTLS13 {
 		t.Fatalf("unapproved insecure TLS was not floored to default MinVersion: %d", transport.TLSClientConfig.MinVersion)
+	}
+	if transport.TLSClientConfig.RootCAs != rootCAs {
+		t.Fatal("unapproved insecure TLS lost custom RootCAs")
+	}
+	if transport.TLSClientConfig.ServerName != "api.example.test" {
+		t.Fatalf("unapproved insecure TLS lost ServerName: %q", transport.TLSClientConfig.ServerName)
+	}
+	if got := transport.TLSClientConfig.CipherSuites; len(got) != 1 || got[0] != tls.TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256 {
+		t.Fatalf("unapproved insecure TLS lost custom CipherSuites: %v", got)
 	}
 }
 

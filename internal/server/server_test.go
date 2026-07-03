@@ -96,6 +96,7 @@ func TestParseModelRoute(t *testing.T) {
 		name            string
 		model           string
 		defaultProvider string
+		configured      []string
 		wantProvider    string
 		wantModel       string
 	}{
@@ -105,15 +106,17 @@ func TestParseModelRoute(t *testing.T) {
 		{name: "ollama-openai profile prefix routes", model: "ollama-openai/llama3", wantProvider: "ollama-openai", wantModel: "llama3"},
 		{name: "groq profile prefix routes", model: "groq/llama3", wantProvider: "groq", wantModel: "llama3"},
 		{name: "openrouter profile prefix routes", model: "openrouter/anthropic/claude-sonnet-4-5", wantProvider: "openrouter", wantModel: "anthropic/claude-sonnet-4-5"},
-		{name: "openrouter default does not hijack org-prefixed model", model: "openai/gpt-4o", defaultProvider: "openrouter", wantModel: "openai/gpt-4o"},
+		{name: "openrouter default does not hijack unregistered org-prefixed model", model: "openai/gpt-4o", defaultProvider: "openrouter", configured: []string{"openrouter"}, wantModel: "openai/gpt-4o"},
 		{name: "openrouter default does not hijack anthropic org-prefixed model", model: "anthropic/claude-3.5-sonnet", defaultProvider: "openrouter", wantModel: "anthropic/claude-3.5-sonnet"},
+		{name: "openrouter default still routes configured local provider", model: "openai/gpt-4o", defaultProvider: "openrouter", configured: []string{"openrouter", "openai"}, wantProvider: "openai", wantModel: "gpt-4o"},
 		{name: "explicit openrouter prefix still routes when already default", model: "openrouter/anthropic/claude-sonnet-4-5", defaultProvider: "openrouter", wantProvider: "openrouter", wantModel: "anthropic/claude-sonnet-4-5"},
+		{name: "effective openrouter default from sole configured provider does not hijack org-prefixed model", model: "openai/gpt-4o", defaultProvider: effectiveDefaultProvider("", []string{"openrouter"}), configured: []string{"openrouter"}, wantModel: "openai/gpt-4o"},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			gotProvider, gotModel := parseModelRoute(tt.model, tt.defaultProvider)
+			gotProvider, gotModel := parseModelRoute(tt.model, tt.defaultProvider, tt.configured)
 			assert.Equal(t, tt.wantProvider, gotProvider)
 			assert.Equal(t, tt.wantModel, gotModel)
 		})
@@ -128,15 +131,72 @@ func TestKnownProviderSetMatchesProfiles(t *testing.T) {
 
 	// Every profile name must be routable
 	for _, name := range names {
-		provider, model := parseModelRoute(name+"/test-model", "")
+		provider, model := parseModelRoute(name+"/test-model", "", nil)
 		assert.Equal(t, name, provider, "profile %q should be a routable prefix", name)
 		assert.Equal(t, "test-model", model, "model should be %q for prefix %q", "test-model", name)
 	}
 
 	// Unknown prefixes must not route
-	provider, model := parseModelRoute("notaprovider/foo", "")
+	provider, model := parseModelRoute("notaprovider/foo", "", nil)
 	assert.Empty(t, provider, "unknown prefix should not route")
 	assert.Equal(t, "notaprovider/foo", model, "unknown prefix should passthrough as full model")
+}
+
+func TestProxyOpenRouterRoutingPrefersConfiguredLocalProviders(t *testing.T) {
+	t.Parallel()
+
+	openRouterProvider := newCapturingTextProvider("openrouter")
+	openAIProvider := newCapturingTextProvider("openai")
+	p := New(Config{
+		DefaultProvider: "openrouter",
+		WormholeOpts: []wormhole.Option{
+			wormhole.WithCustomProvider("openrouter", func(types.ProviderConfig) (types.Provider, error) {
+				return openRouterProvider, nil
+			}),
+			wormhole.WithProviderConfig("openrouter", types.ProviderConfig{}),
+			wormhole.WithCustomProvider("openai", func(types.ProviderConfig) (types.Provider, error) {
+				return openAIProvider, nil
+			}),
+			wormhole.WithProviderConfig("openai", types.ProviderConfig{}),
+			wormhole.WithDiscovery(false),
+		},
+		Logger: slog.New(slog.NewTextHandler(io.Discard, nil)),
+	})
+
+	rec := performRequest(p, http.MethodPost, "/v1/chat/completions", `{
+		"model":"openai/gpt-test",
+		"messages":[{"role":"user","content":"hi"}]
+	}`)
+
+	require.Equal(t, http.StatusOK, rec.Code)
+	require.Equal(t, 1, len(openAIProvider.requests))
+	assert.Empty(t, openRouterProvider.requests)
+	assert.Equal(t, "gpt-test", openAIProvider.lastRequest().Model)
+}
+
+func TestProxyOpenRouterRoutingUsesSoleConfiguredProviderAsEffectiveDefault(t *testing.T) {
+	t.Parallel()
+
+	openRouterProvider := newCapturingTextProvider("openrouter")
+	p := New(Config{
+		WormholeOpts: []wormhole.Option{
+			wormhole.WithCustomProvider("openrouter", func(types.ProviderConfig) (types.Provider, error) {
+				return openRouterProvider, nil
+			}),
+			wormhole.WithProviderConfig("openrouter", types.ProviderConfig{}),
+			wormhole.WithDiscovery(false),
+		},
+		Logger: slog.New(slog.NewTextHandler(io.Discard, nil)),
+	})
+
+	rec := performRequest(p, http.MethodPost, "/v1/chat/completions", `{
+		"model":"openai/gpt-4o",
+		"messages":[{"role":"user","content":"hi"}]
+	}`)
+
+	require.Equal(t, http.StatusOK, rec.Code)
+	require.Equal(t, 1, len(openRouterProvider.requests))
+	assert.Equal(t, "openai/gpt-4o", openRouterProvider.lastRequest().Model)
 }
 
 func TestProxyHealthAndAuth(t *testing.T) {

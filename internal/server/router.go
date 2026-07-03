@@ -27,11 +27,11 @@ const openRouterProviderName = "openrouter"
 
 // parseModelRoute splits a model string like "anthropic/claude-sonnet-4-5"
 // into (provider, model). If no known provider prefix, returns ("", fullModel).
-// When defaultProvider is openrouter, only an explicit "openrouter/" prefix is
-// stripped -- every other known-provider prefix is OpenRouter's own org/model
-// naming convention and must reach OpenRouter intact instead of being hijacked
-// into direct routing to that provider.
-func parseModelRoute(model, defaultProvider string) (provider, resolved string) {
+// When the effective default provider is openrouter, only explicit prefixes for
+// locally configured providers are stripped; every other known-provider prefix
+// is treated as OpenRouter's own org/model naming convention and passed
+// through intact.
+func parseModelRoute(model, defaultProvider string, configuredProviders []string) (provider, resolved string) {
 	idx := strings.IndexByte(model, '/')
 	if idx < 0 {
 		return "", model
@@ -40,8 +40,29 @@ func parseModelRoute(model, defaultProvider string) (provider, resolved string) 
 	if !knownProviderSet[prefix] {
 		return "", model
 	}
-	if defaultProvider == openRouterProviderName && prefix != openRouterProviderName {
+	if defaultProvider == openRouterProviderName &&
+		prefix != openRouterProviderName &&
+		!providerConfigured(prefix, configuredProviders) {
 		return "", model
 	}
 	return prefix, model[idx+1:]
+}
+
+func effectiveDefaultProvider(defaultProvider string, configuredProviders []string) string {
+	if defaultProvider != "" {
+		return defaultProvider
+	}
+	if len(configuredProviders) == 1 {
+		return configuredProviders[0]
+	}
+	return ""
+}
+
+func providerConfigured(provider string, configuredProviders []string) bool {
+	for _, configured := range configuredProviders {
+		if configured == provider {
+			return true
+		}
+	}
+	return false
 }

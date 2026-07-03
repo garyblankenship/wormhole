@@ -51,7 +51,7 @@ func executeTrackedRequest[T any](ctx context.Context, p *Wormhole, operation st
 		return cachedIdempotentValue[T](entry)
 	}
 
-	result, err := fn(context.WithoutCancel(ctx))
+	result, err := fn(ctx)
 	entry.err = err
 	if err == nil {
 		entry.value = result

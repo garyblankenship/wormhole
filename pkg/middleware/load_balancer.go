@@ -61,6 +61,7 @@ type ProviderHandler struct {
 	Healthy              bool
 	consecutiveFails     int
 	consecutiveSuccesses int
+	healthChecking       int32
 	mu                   sync.RWMutex
 }
 
@@ -372,8 +373,14 @@ func (lb *LoadBalancer) performHealthChecks() {
 		go func(p *ProviderHandler) {
 			defer wg.Done()
 
+			if !atomic.CompareAndSwapInt32(&p.healthChecking, 0, 1) {
+				p.recordHealthCheck(errHealthCheckTimeout)
+				return
+			}
+
 			errCh := make(chan error, 1)
 			go func() {
+				defer atomic.StoreInt32(&p.healthChecking, 0)
 				errCh <- checkFunc(p.Handler)
 			}()
 
@@ -384,26 +391,31 @@ func (lb *LoadBalancer) performHealthChecks() {
 				err = errHealthCheckTimeout
 			}
 
-			p.mu.Lock()
-			if err == nil {
-				p.consecutiveSuccesses++
-				p.consecutiveFails = 0
-				if p.consecutiveSuccesses >= healthCheckHysteresis {
-					p.Healthy = true
-				}
-			} else {
-				p.consecutiveFails++
-				p.consecutiveSuccesses = 0
-				if p.consecutiveFails >= healthCheckHysteresis {
-					p.Healthy = false
-				}
-			}
-			p.LastHealthCheck = time.Now()
-			p.mu.Unlock()
+			p.recordHealthCheck(err)
 		}(provider)
 	}
 
 	wg.Wait()
+}
+
+func (p *ProviderHandler) recordHealthCheck(err error) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
+	if err == nil {
+		p.consecutiveSuccesses++
+		p.consecutiveFails = 0
+		if p.consecutiveSuccesses >= healthCheckHysteresis {
+			p.Healthy = true
+		}
+	} else {
+		p.consecutiveFails++
+		p.consecutiveSuccesses = 0
+		if p.consecutiveFails >= healthCheckHysteresis {
+			p.Healthy = false
+		}
+	}
+	p.LastHealthCheck = time.Now()
 }
 
 // GetProviderStats returns statistics for all providers

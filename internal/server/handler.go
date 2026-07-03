@@ -40,7 +40,9 @@ func (p *proxy) handleChatCompletions(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	provider, model := parseModelRoute(req.Model, p.defaultProvider)
+	configuredProviders := p.wh.ConfiguredProviders()
+	effDefaultProvider := effectiveDefaultProvider(p.defaultProvider, configuredProviders)
+	provider, model := parseModelRoute(req.Model, effDefaultProvider, configuredProviders)
 
 	msgs := make([]types.Message, 0, len(req.Messages))
 	for _, m := range req.Messages {
@@ -127,7 +129,7 @@ func (p *proxy) handleChatCompletions(w http.ResponseWriter, r *http.Request) {
 	if len(req.ResponseFormat) > 0 {
 		effProvider := provider
 		if effProvider == "" {
-			effProvider = p.defaultProvider
+			effProvider = effDefaultProvider
 		}
 		if responseFormatUnsupported(effProvider) {
 			writeError(w, http.StatusBadRequest, "unsupported_response_format",
@@ -319,7 +321,9 @@ func (p *proxy) handleEmbeddings(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	provider, model := parseModelRoute(req.Model, p.defaultProvider)
+	configuredProviders := p.wh.ConfiguredProviders()
+	effDefaultProvider := effectiveDefaultProvider(p.defaultProvider, configuredProviders)
+	provider, model := parseModelRoute(req.Model, effDefaultProvider, configuredProviders)
 
 	builder := p.wh.Embeddings().Model(model).Input([]string(req.Input)...)
 	if provider != "" {
@@ -457,12 +461,13 @@ func upstreamErrorStatus(err error) (int, string, string) {
 	}
 
 	errType := wormholeErrorType(whErr.Code)
-	msg := upstreamClientMessage(errType)
-	status := http.StatusBadGateway
 	if whErr.StatusCode != 0 {
-		status = whErr.StatusCode
+		return whErr.StatusCode, errType, upstreamClientMessage(errType)
 	}
-	return status, errType, msg
+	if errType == "invalid_request_error" {
+		return http.StatusBadRequest, errType, actionableInvalidRequestMessage(whErr)
+	}
+	return http.StatusBadGateway, errType, upstreamClientMessage(errType)
 }
 
 func upstreamClientMessage(errType string) string {
@@ -489,5 +494,21 @@ func wormholeErrorType(code types.ErrorCode) string {
 		return "invalid_request_error"
 	default:
 		return "api_error"
+	}
+}
+
+func actionableInvalidRequestMessage(err *types.WormholeError) string {
+	if err == nil {
+		return "upstream request rejected"
+	}
+	switch {
+	case err.Message == "" && err.Details == "":
+		return "upstream request rejected"
+	case err.Message == "":
+		return err.Details
+	case err.Details == "":
+		return err.Message
+	default:
+		return err.Message + ": " + err.Details
 	}
 }

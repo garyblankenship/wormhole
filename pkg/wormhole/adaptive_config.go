@@ -84,8 +84,38 @@ func normalizeEnhancedAdaptiveConfig(config EnhancedAdaptiveConfig) EnhancedAdap
 	if config.LatencyWindowSize == 0 {
 		config.LatencyWindowSize = defaults.LatencyWindowSize
 	}
-	if config.PIDConfig == (PIDConfig{}) {
-		config.PIDConfig = defaults.PIDConfig
+	config.PIDConfig = mergePIDConfig(defaults.PIDConfig, config.PIDConfig)
+	for provider, setting := range config.ProviderSettings {
+		if setting.PIDConfig != nil {
+			merged := mergePIDConfig(config.PIDConfig, *setting.PIDConfig)
+			setting.PIDConfig = &merged
+			config.ProviderSettings[provider] = setting
+		}
 	}
 	return config
+}
+
+func mergePIDConfig(base, override PIDConfig) PIDConfig {
+	if override.Kp != 0 {
+		base.Kp = override.Kp
+	}
+	if override.Ki != 0 {
+		base.Ki = override.Ki
+	}
+	if override.Kd != 0 {
+		base.Kd = override.Kd
+	}
+	if override.MaxIntegral != 0 {
+		base.MaxIntegral = override.MaxIntegral
+	}
+	if override.MinIntegral != 0 {
+		base.MinIntegral = override.MinIntegral
+	}
+	if override.MaxOutput != 0 {
+		base.MaxOutput = override.MaxOutput
+	}
+	if override.MinOutput != 0 {
+		base.MinOutput = override.MinOutput
+	}
+	return base
 }

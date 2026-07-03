@@ -44,7 +44,7 @@ func DefaultRetryConfig() RetryConfig {
 // layer's own retries. Errors of any other type remain retryable, preserving
 // the middleware's prior behavior for uncategorized errors.
 func DefaultRetryableFunc(err error) bool {
-	if werr, ok := err.(*types.WormholeError); ok {
+	if werr, ok := types.AsWormholeError(err); ok {
 		return werr.IsRetryable()
 	}
 	return true
@@ -83,8 +83,8 @@ func RetryMiddleware(config RetryConfig) Middleware {
 				// provider-supplied Retry-After when present since it is
 				// authoritative over our own backoff estimate.
 				delay := calculateRetryDelay(config, attempt)
-				if werr, ok := err.(*types.WormholeError); ok && werr.RetryAfter > 0 {
-					delay = werr.RetryAfter
+				if werr, ok := types.AsWormholeError(err); ok && werr.RetryAfter > 0 {
+					delay = capRetryDelay(werr.RetryAfter, config.MaxDelay)
 				}
 
 				// Wait before retry, respecting context cancellation.
@@ -102,6 +102,13 @@ func RetryMiddleware(config RetryConfig) Middleware {
 			return nil, wrapIfNotWormholeError("retry", lastErr)
 		}
 	}
+}
+
+func capRetryDelay(delay, maxDelay time.Duration) time.Duration {
+	if maxDelay > 0 && delay > maxDelay {
+		return maxDelay
+	}
+	return delay
 }
 
 // calculateRetryDelay computes the delay before the next retry attempt

@@ -790,6 +790,8 @@ func (g *Gemini) handleStream(ctx context.Context, stream io.ReadCloser) <-chan 
 		}()
 
 		scanner := utils.NewSSEScanner(stream)
+		terminal := false
+		sawEvent := false
 		for scanner.Scan() {
 			chunks, done, err := g.parseStreamEvent(scanner.Event().Data)
 			if err != nil {
@@ -800,9 +802,14 @@ func (g *Gemini) handleStream(ctx context.Context, stream io.ReadCloser) <-chan 
 				return
 			}
 			if done {
+				terminal = true
 				return
 			}
 			for _, chunk := range chunks {
+				sawEvent = true
+				if chunk.FinishReason != nil {
+					terminal = true
+				}
 				select {
 				case ch <- chunk:
 				case <-ctx.Done():
@@ -814,6 +821,13 @@ func (g *Gemini) handleStream(ctx context.Context, stream io.ReadCloser) <-chan 
 		if err := scanner.Err(); err != nil {
 			select {
 			case ch <- types.TextChunk{Error: err}:
+			case <-ctx.Done():
+			}
+			return
+		}
+		if sawEvent && !terminal {
+			select {
+			case ch <- types.TextChunk{Error: fmt.Errorf("Gemini stream ended before terminal event")}:
 			case <-ctx.Done():
 			}
 		}

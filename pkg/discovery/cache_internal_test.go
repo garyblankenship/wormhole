@@ -87,6 +87,38 @@ func TestModelCacheLoadFromMonolithicFileMigrates(t *testing.T) {
 	assert.FileExists(t, cache.getProviderFilePath("legacy"))
 }
 
+func TestModelCacheScopedKeyFallsBackToBaseEntryAndMigrates(t *testing.T) {
+	t.Parallel()
+
+	cache := newFileBackedCache(t)
+	entry := &CacheEntry{
+		Models:    testModels("openai"),
+		Timestamp: time.Now(),
+		Provider:  "openai",
+	}
+	fileCache := FileCache{
+		Version: "1",
+		Updated: time.Now(),
+		Entries: map[string]*CacheEntry{
+			"openai": entry,
+		},
+	}
+	data, err := json.Marshal(fileCache)
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(cache.filePath, data, 0o600))
+
+	models, fresh := cache.Get("openai__acct1234")
+	require.True(t, fresh)
+	require.Len(t, models, 1)
+	assert.Equal(t, "openai-model", models[0].ID)
+
+	scopedPath := cache.getProviderFilePath("openai__acct1234")
+	require.Eventually(t, func() bool {
+		_, err := os.Stat(scopedPath)
+		return err == nil
+	}, time.Second, 10*time.Millisecond)
+}
+
 func TestModelCacheExpiredInvalidAndFallbackPaths(t *testing.T) {
 	t.Parallel()
 	cache := newFileBackedCache(t)
@@ -159,4 +191,63 @@ func TestModelCacheStartCleanupCloseAndExpandPath(t *testing.T) {
 	homePath, err := expandPath("~/.wormhole/test-models.json")
 	require.NoError(t, err)
 	assert.NotContains(t, homePath, "~")
+}
+
+func TestModelCacheLoadFromFileDoesNotMigrateAfterClose(t *testing.T) {
+	t.Parallel()
+
+	cache := newFileBackedCache(t)
+	entry := &CacheEntry{
+		Models:    testModels("legacy"),
+		Timestamp: time.Now(),
+		Provider:  "legacy",
+	}
+	fileCache := FileCache{
+		Version: "1",
+		Updated: time.Now(),
+		Entries: map[string]*CacheEntry{
+			"legacy": entry,
+		},
+	}
+	data, err := json.Marshal(fileCache)
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(cache.filePath, data, 0o600))
+
+	require.NoError(t, cache.Close())
+
+	models, ok := cache.loadFromFile("legacy")
+	require.True(t, ok)
+	require.Len(t, models, 1)
+	assert.NoFileExists(t, cache.getProviderFilePath("legacy"))
+}
+
+func TestModelCacheClearDoesNotResurrectMigratedShards(t *testing.T) {
+	t.Parallel()
+
+	cache := newFileBackedCache(t)
+	entry := &CacheEntry{
+		Models:    testModels("legacy"),
+		Timestamp: time.Now(),
+		Provider:  "legacy",
+	}
+	fileCache := FileCache{
+		Version: "1",
+		Updated: time.Now(),
+		Entries: map[string]*CacheEntry{
+			"legacy": entry,
+		},
+	}
+	data, err := json.Marshal(fileCache)
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(cache.filePath, data, 0o600))
+
+	models, ok := cache.loadFromFile("legacy")
+	require.True(t, ok)
+	require.Len(t, models, 1)
+
+	cache.Clear()
+	require.NoError(t, cache.Close())
+
+	assert.NoFileExists(t, cache.filePath)
+	assert.NoFileExists(t, cache.getProviderFilePath("legacy"))
 }

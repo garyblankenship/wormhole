@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/garyblankenship/wormhole/pkg/types"
@@ -370,6 +371,7 @@ func (b *TextRequestBuilder) executeGenerate(ctx context.Context, provider types
 	// Standard execution without automatic tool handling
 
 	// Apply type-safe middleware chain if configured
+	ctx = contextWithProvider(ctx, provider)
 	if wormhole.providerMiddleware != nil {
 		handler := wormhole.providerMiddleware.ApplyText(provider.Text)
 		return handler(ctx, *request)
@@ -555,6 +557,7 @@ func (b *TextRequestBuilder) openStream(ctx context.Context, provider types.Prov
 	var stream <-chan types.StreamChunk
 	var err error
 
+	ctx = contextWithProvider(ctx, provider)
 	if b.getWormhole().providerMiddleware != nil {
 		handler := b.getWormhole().providerMiddleware.ApplyStream(provider.Stream)
 		stream, err = handler(ctx, *request)
@@ -775,14 +778,17 @@ func (b *TextRequestBuilder) StreamAndAccumulate(ctx context.Context) (<-chan ty
 	accumulated := make(chan types.StreamChunk)
 	var builder strings.Builder
 	var streamErr error
+	var mu sync.Mutex
 
 	go func() {
 		defer close(accumulated)
 		for chunk := range stream {
+			mu.Lock()
 			if chunk.Error != nil && streamErr == nil {
 				streamErr = chunk.Error
 			}
 			builder.WriteString(chunk.Content())
+			mu.Unlock()
 			select {
 			case accumulated <- chunk:
 			case <-ctx.Done():
@@ -796,6 +802,8 @@ func (b *TextRequestBuilder) StreamAndAccumulate(ctx context.Context) (<-chan ty
 	}()
 
 	return accumulated, func() (string, error) {
+		mu.Lock()
+		defer mu.Unlock()
 		return builder.String(), streamErr
 	}, nil
 }
@@ -817,9 +825,11 @@ func applyStreamIdleTimeout(ctx context.Context, src <-chan types.StreamChunk, t
 					return
 				}
 				if !timer.Stop() {
-					<-timer.C
+					select {
+					case <-timer.C:
+					default:
+					}
 				}
-				timer.Reset(timeout)
 				select {
 				case <-ctx.Done():
 					return
@@ -830,6 +840,7 @@ func applyStreamIdleTimeout(ctx context.Context, src <-chan types.StreamChunk, t
 				case <-ctx.Done():
 					return
 				}
+				timer.Reset(timeout)
 				if chunk.Error != nil {
 					return
 				}

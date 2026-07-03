@@ -164,6 +164,21 @@ func TestWithProviderFromEnvOpenRouterAppliesProfile(t *testing.T) {
 	}
 }
 
+func TestWithOpenAICompatibleOpenRouterAppliesProfile(t *testing.T) {
+	t.Parallel()
+
+	client := New(WithOpenAICompatible("openrouter", "https://openrouter.ai/api/v1", types.ProviderConfig{
+		APIKey: "test-key",
+	}), WithDiscovery(false))
+	cfg, ok := client.config.Providers["openrouter"]
+	if !ok {
+		t.Fatal("openrouter provider was not configured")
+	}
+	if cfg.ImagePath != "/images" {
+		t.Fatalf("openrouter image path = %q, want /images", cfg.ImagePath)
+	}
+}
+
 func TestWithProviderFromEnvDefaultBranchAppliesProfile(t *testing.T) {
 	t.Setenv("DEEPSEEK_API_KEY", "test-key")
 

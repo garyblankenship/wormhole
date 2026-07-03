@@ -139,3 +139,47 @@ func TestOpenAIStreamToolCallAccumulationDefaultTransformer(t *testing.T) {
 	assert.Equal(t, "Paris", merged.ToolCalls[0].Arguments["location"])
 	assert.Equal(t, "celsius", merged.ToolCalls[0].Arguments["unit"])
 }
+
+func TestOpenAIStreamParallelToolCallsUseWireIndex(t *testing.T) {
+	t.Parallel()
+
+	provider, _ := newOpenAITestProvider(t, func(w http.ResponseWriter, r *http.Request) {
+		var req map[string]any
+		require.NoError(t, json.NewDecoder(r.Body).Decode(&req))
+		assert.Equal(t, true, req["stream"])
+
+		w.Header().Set("Content-Type", "text/event-stream")
+		chunks := []string{
+			`data: {"id":"c1","model":"gpt-4o-mini","choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"id":"call_a","type":"function","function":{"name":"first","arguments":""}},{"index":1,"id":"call_b","type":"function","function":{"name":"second","arguments":""}}]}}]}` + "\n\n",
+			`data: {"id":"c1","model":"gpt-4o-mini","choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"function":{"arguments":"{\"x\":1}"}},{"index":1,"function":{"arguments":"{\"y\":2}"}}]}}]}` + "\n\n",
+			`data: {"id":"c1","model":"gpt-4o-mini","choices":[{"index":0,"delta":{},"finish_reason":"tool_calls"}]}` + "\n\n",
+			`data: [DONE]` + "\n\n",
+		}
+		for _, chunk := range chunks {
+			_, _ = io.WriteString(w, chunk)
+		}
+	})
+
+	request := types.TextRequest{
+		BaseRequest: types.BaseRequest{Model: "gpt-4o-mini"},
+		Messages:    []types.Message{types.NewUserMessage("hi")},
+	}
+
+	stream, err := provider.Stream(context.Background(), request)
+	require.NoError(t, err)
+
+	var chunks []types.TextChunk
+	for chunk := range stream {
+		require.NoError(t, chunk.Error)
+		chunks = append(chunks, chunk)
+	}
+
+	merged := utils.MergeTextChunks(chunks)
+	require.Len(t, merged.ToolCalls, 2)
+	assert.Equal(t, "call_a", merged.ToolCalls[0].ID)
+	assert.Equal(t, "first", merged.ToolCalls[0].Name)
+	assert.Equal(t, float64(1), merged.ToolCalls[0].Arguments["x"])
+	assert.Equal(t, "call_b", merged.ToolCalls[1].ID)
+	assert.Equal(t, "second", merged.ToolCalls[1].Name)
+	assert.Equal(t, float64(2), merged.ToolCalls[1].Arguments["y"])
+}

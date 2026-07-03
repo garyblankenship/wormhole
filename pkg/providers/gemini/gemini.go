@@ -42,12 +42,14 @@ func New(apiKey string, config types.ProviderConfig) *Gemini {
 	if apiKey == "" && len(config.APIKeys) > 0 {
 		apiKey = config.APIKeys[0]
 	}
+	authStrategy := providers.AuthStrategy(&providers.NoAuthStrategy{})
 	if apiKey != "" {
 		config.APIKey = apiKey
+		authStrategy = providers.NewQueryParamAuthStrategy("key")
 	}
 
 	return &Gemini{
-		BaseProvider:         providers.NewBaseProviderWithAuth("gemini", config, nil, providers.NewQueryParamAuthStrategy("key"), nil),
+		BaseProvider:         providers.NewBaseProviderWithAuth("gemini", config, nil, authStrategy, nil),
 		requestBuilder:       providers.NewRequestBuilder(),
 		responseTransform:    transform.NewResponseTransform(),
 		streamingTransformer: nil,

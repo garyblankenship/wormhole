@@ -256,6 +256,26 @@ func TestStructuredRequestBuilderGenerateReturnsSchemaMarshalError(t *testing.T)
 	}
 }
 
+func TestStructuredRequestBuilderSchemaSuccessClearsPriorSchemaError(t *testing.T) {
+	t.Parallel()
+
+	client := New(WithDefaultProvider("openai"), WithOpenAI("test-key"), WithModelValidation(false), WithDiscovery(false))
+	builder := client.Structured()
+
+	builder.Schema(make(chan int))
+	if builder.schemaErr == nil {
+		t.Fatal("expected invalid schema to set schemaErr")
+	}
+
+	builder.Schema(map[string]any{"type": "object"})
+	if builder.schemaErr != nil {
+		t.Fatalf("expected valid schema to clear schemaErr, got %v", builder.schemaErr)
+	}
+	if builder.request.Schema == nil {
+		t.Fatal("expected valid schema bytes to be stored")
+	}
+}
+
 func assertPanics(t *testing.T, fn func()) {
 	t.Helper()
 	defer func() {

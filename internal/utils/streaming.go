@@ -338,16 +338,27 @@ func ProcessStreamWithIdleTimeout(
 					return
 				}
 				if !timer.Stop() {
-					<-timer.C
+					select {
+					case <-timer.C:
+					default:
+					}
+				}
+				select {
+				case out <- chunk:
+				case <-ctx.Done():
+					return
 				}
 				timer.Reset(timeout)
-				out <- chunk
 				if chunk.Error != nil {
 					return
 				}
 			case <-timer.C:
-				out <- types.TextChunk{
+				select {
+				case out <- types.TextChunk{
 					Error: &StreamIdleTimeoutError{Timeout: timeout},
+				}:
+				case <-ctx.Done():
+					return
 				}
 				// Drain source so the body-closing goroutine can exit.
 				go drainChannel(src)
@@ -371,11 +382,13 @@ func ProcessNDJSONStream(
 	chunks := make(chan types.TextChunk, bufferSize)
 	go func() {
 		defer func() {
+			close(chunks)
 			_ = body.Close()
 		}()
 		scanner := bufio.NewScanner(body)
 		// Ollama can return large final chunks with usage data.
 		scanner.Buffer(make([]byte, 0, 64*1024), 1<<20)
+		done := false
 		for scanner.Scan() {
 			line := scanner.Bytes()
 			if len(line) == 0 {
@@ -399,12 +412,20 @@ func ProcessNDJSONStream(
 				return
 			}
 			if chunk.IsDone() {
+				done = true
 				return
 			}
 		}
 		if err := scanner.Err(); err != nil {
 			select {
 			case chunks <- types.TextChunk{Error: fmt.Errorf("NDJSON scan error: %w", err)}:
+			case <-ctx.Done():
+			}
+			return
+		}
+		if !done {
+			select {
+			case chunks <- types.TextChunk{Error: fmt.Errorf("NDJSON stream ended before terminal chunk")}:
 			case <-ctx.Done():
 			}
 		}

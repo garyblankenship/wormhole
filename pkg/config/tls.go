@@ -314,8 +314,10 @@ func rootCAPoolFingerprint(pool *x509.CertPool) string {
 	if len(subjects) == 0 {
 		return "empty"
 	}
-	// x509.CertPool does not expose certificate bytes after insertion. The
-	// subject DER set is the stable public identity available for cache keys.
+	// x509.CertPool exposes Clone and Equal in current Go, but still does not
+	// expose a stable iterable view of the inserted certificates beyond Subjects.
+	// Without reflection into unexported fields, the subject DER set remains the
+	// only public, deterministic identity surface available for cache keys.
 	sort.Slice(subjects, func(i, j int) bool {
 		return bytes.Compare(subjects[i], subjects[j]) < 0
 	})

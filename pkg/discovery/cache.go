@@ -54,6 +54,22 @@ func writeShardAtomic(path string, data []byte) error {
 	return os.Rename(tempPath, path) // #nosec G304 - path validated via ValidatePath
 }
 
+func baseProviderKey(provider string) string {
+	base, _, found := strings.Cut(provider, "__")
+	if found && base != "" {
+		return base
+	}
+	return provider
+}
+
+func cacheLookupKeys(provider string) []string {
+	base := baseProviderKey(provider)
+	if base == provider {
+		return []string{provider}
+	}
+	return []string{provider, base}
+}
+
 // ModelCache implements 3-tier caching: memory -> file -> fallback
 type ModelCache struct {
 	memory              map[string]*CacheEntry // provider -> *CacheEntry
@@ -171,13 +187,15 @@ func (c *ModelCache) migrateToSharded(provider string, entry *CacheEntry, gen ui
 		return // Can't create directory, skip
 	}
 
-	// Abort if cache has been closed, or cleared since this goroutine was spawned
+	// Serialize writes against Clear/Close so they cannot resurrect shards after
+	// deletion or race WaitGroup shutdown.
 	c.muClosed.RLock()
 	abort := c.closed || c.clearGen != gen
-	c.muClosed.RUnlock()
 	if abort {
+		c.muClosed.RUnlock()
 		return
 	}
+	defer c.muClosed.RUnlock()
 
 	// Write atomically (unique temp path + fsync before rename)
 	if err := writeShardAtomic(providerPath, data); err != nil {
@@ -188,11 +206,23 @@ func (c *ModelCache) migrateToSharded(provider string, entry *CacheEntry, gen ui
 // Get retrieves models from cache (L1 -> L2 -> L3)
 func (c *ModelCache) Get(provider string) ([]*types.ModelInfo, bool) {
 	// L1: Check memory cache
-	c.memoryMu.RLock()
-	entry, ok := c.memory[provider]
-	c.memoryMu.RUnlock()
-	if ok && time.Since(entry.Timestamp) < c.memoryTTL {
-		return entry.Models, true
+	for _, lookup := range cacheLookupKeys(provider) {
+		c.memoryMu.RLock()
+		entry, ok := c.memory[lookup]
+		c.memoryMu.RUnlock()
+		if ok && time.Since(entry.Timestamp) < c.memoryTTL {
+			if lookup != provider {
+				c.memoryMu.Lock()
+				c.memory[provider] = &CacheEntry{
+					SchemaVersion: entry.SchemaVersion,
+					Models:        entry.Models,
+					Timestamp:     entry.Timestamp,
+					Provider:      provider,
+				}
+				c.memoryMu.Unlock()
+			}
+			return entry.Models, true
+		}
 	}
 
 	// L2: Check file cache (if enabled)
@@ -214,8 +244,10 @@ func (c *ModelCache) Get(provider string) ([]*types.ModelInfo, bool) {
 	// L3: Return fallback (indicates stale/offline)
 	c.mu.RLock()
 	defer c.mu.RUnlock()
-	if models, ok := c.fallback[provider]; ok {
-		return models, false // false = using fallback
+	for _, lookup := range cacheLookupKeys(provider) {
+		if models, ok := c.fallback[lookup]; ok {
+			return models, false // false = using fallback
+		}
 	}
 
 	return nil, false
@@ -242,34 +274,39 @@ func (c *ModelCache) Set(provider string, models []*types.ModelInfo) {
 
 // loadFromFile loads models from persistent file cache
 func (c *ModelCache) loadFromFile(provider string) ([]*types.ModelInfo, bool) {
-	// Use per-provider read lock for consistency
-	lock := c.getProviderLock(provider)
-	lock.RLock()
-	defer lock.RUnlock()
+	for _, lookup := range cacheLookupKeys(provider) {
+		// Use per-provider read lock for consistency
+		lock := c.getProviderLock(lookup)
+		lock.RLock()
 
-	// Try provider-specific file first
-	providerPath := c.getProviderFilePath(provider)
-	data, err := os.ReadFile(providerPath) // #nosec G304 - path validated via ValidatePath
-	if err == nil {
-		// Parse provider-specific JSON (single CacheEntry)
-		var entry CacheEntry
-		if err := json.Unmarshal(data, &entry); err != nil {
-			return nil, false // Invalid JSON
+		// Try provider-specific file first
+		providerPath := c.getProviderFilePath(lookup)
+		data, err := os.ReadFile(providerPath) // #nosec G304 - path validated via ValidatePath
+		lock.RUnlock()
+		if err == nil {
+			// Parse provider-specific JSON (single CacheEntry)
+			var entry CacheEntry
+			if err := json.Unmarshal(data, &entry); err != nil {
+				return nil, false // Invalid JSON
+			}
+			// Reject shards from an incompatible schema version instead of
+			// trusting a shape that may have since changed
+			if entry.SchemaVersion != cacheSchemaVersion {
+				return nil, false // Schema mismatch, treat as cache miss
+			}
+			// Check TTL
+			if time.Since(entry.Timestamp) > c.fileTTL {
+				continue
+			}
+			if lookup != provider {
+				c.scheduleMigration(provider, &entry)
+			}
+			return entry.Models, true
 		}
-		// Reject shards from an incompatible schema version instead of
-		// trusting a shape that may have since changed
-		if entry.SchemaVersion != cacheSchemaVersion {
-			return nil, false // Schema mismatch, treat as cache miss
-		}
-		// Check TTL
-		if time.Since(entry.Timestamp) > c.fileTTL {
-			return nil, false // Expired
-		}
-		return entry.Models, true
 	}
 
 	// Fallback to monolithic file for backward compatibility
-	data, err = os.ReadFile(c.filePath) // #nosec G304 - path validated via ValidatePath
+	data, err := os.ReadFile(c.filePath) // #nosec G304 - path validated via ValidatePath
 	if err != nil {
 		return nil, false // File doesn't exist or can't be read
 	}
@@ -280,28 +317,42 @@ func (c *ModelCache) loadFromFile(provider string) ([]*types.ModelInfo, bool) {
 		return nil, false // Invalid JSON
 	}
 
-	// Get entry for provider
-	entry, ok := fileCache.Entries[provider]
-	if !ok {
-		return nil, false // Provider not in cache
+	for _, lookup := range cacheLookupKeys(provider) {
+		entry, ok := fileCache.Entries[lookup]
+		if !ok {
+			continue
+		}
+
+		// Check TTL
+		if time.Since(entry.Timestamp) > c.fileTTL {
+			continue
+		}
+
+		// Migrate to provider-specific file for future reads
+		c.scheduleMigration(provider, entry)
+		return entry.Models, true
 	}
 
-	// Check TTL
-	if time.Since(entry.Timestamp) > c.fileTTL {
-		return nil, false // Expired
-	}
+	return nil, false
+}
 
-	// Migrate to provider-specific file for future reads
+func (c *ModelCache) scheduleMigration(provider string, entry *CacheEntry) {
 	c.muClosed.RLock()
+	if c.closed {
+		c.muClosed.RUnlock()
+		return
+	}
 	gen := c.clearGen
-	c.muClosed.RUnlock()
 	c.wg.Add(1)
+	c.muClosed.RUnlock()
+
 	go func() {
 		defer c.wg.Done()
-		c.migrateToSharded(provider, entry, gen)
-	}()
 
-	return entry.Models, true
+		entryCopy := *entry
+		entryCopy.Provider = provider
+		c.migrateToSharded(provider, &entryCopy, gen)
+	}()
 }
 
 // saveToFile persists models to file cache

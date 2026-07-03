@@ -22,11 +22,11 @@ type Cache interface {
 
 // MemoryCache implements an in-memory cache
 type MemoryCache struct {
-	mu      sync.RWMutex
-	entries map[string]*cacheEntry
-	maxSize int
-	stopCh  chan struct{}
-	wg      sync.WaitGroup
+	mu        sync.RWMutex
+	entries   map[string]*cacheEntry
+	maxSize   int
+	stopCh    chan struct{}
+	wg        sync.WaitGroup
 	closeOnce sync.Once
 }
 
@@ -235,8 +235,12 @@ func CacheMiddleware(config CacheConfig) Middleware {
 				return resp, nil
 			}
 
-			// Cache successful response
-			config.Cache.Set(key, resp, config.TTL)
+			// Cache an isolated copy so a caller cannot mutate the stored value
+			// through the same pointer/reference returned on the miss path.
+			cachedResp, cloneErr := cloneValue(resp)
+			if cloneErr == nil {
+				config.Cache.Set(key, cachedResp, config.TTL)
+			}
 
 			return resp, nil
 		}
@@ -436,17 +440,26 @@ func deepCopyValue(v any) any {
 	switch val := v.(type) {
 	case map[string]any:
 		return deepCopyMap(val)
+	case map[string]string:
+		cpy := make(map[string]string, len(val))
+		for k, item := range val {
+			cpy[k] = item
+		}
+		return cpy
 	case []any:
 		cpy := make([]any, len(val))
 		for i, item := range val {
 			cpy[i] = deepCopyValue(item)
 		}
 		return cpy
+	case []string:
+		return append([]string(nil), val...)
+	case json.RawMessage:
+		return append(json.RawMessage(nil), val...)
+	case []byte:
+		return append([]byte(nil), val...)
 	default:
-		// Basic types (int, string, bool, float64, etc.) are value types;
-		// maps and slices of other concrete types (e.g. map[string]string)
-		// are also value types in Go — the copy shares no mutable state
-		// with the original.
+		// Basic types (int, string, bool, float64, etc.) are already safe to share.
 		return v
 	}
 }

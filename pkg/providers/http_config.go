@@ -174,8 +174,24 @@ func approvedTLSConfig(tlsConfig *config.TLSConfig) *config.TLSConfig {
 	if tlsConfig == nil || tlsConfig.IsSecure() || tlsConfig.AllowInsecure {
 		return tlsConfig
 	}
+	floored := *tlsConfig
 	defaultTLS := config.DefaultTLSConfig()
-	return &defaultTLS
+
+	if floored.MinVersion < defaultTLS.MinVersion {
+		floored.MinVersion = defaultTLS.MinVersion
+	}
+	if floored.MaxVersion != 0 && floored.MaxVersion < floored.MinVersion {
+		floored.MaxVersion = floored.MinVersion
+	}
+	floored.InsecureSkipVerify = false
+	if len(floored.CipherSuites) == 0 {
+		floored.CipherSuites = defaultTLS.CipherSuites
+	}
+	if floored.HandshakeTimeout == 0 {
+		floored.HandshakeTimeout = defaultTLS.HandshakeTimeout
+	}
+
+	return &floored
 }
 
 // newTransportFromConfig constructs an *http.Transport from the given config.

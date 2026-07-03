@@ -67,6 +67,7 @@ func (b *StructuredRequestBuilder) Schema(schema any) *StructuredRequestBuilder 
 		b.schemaErr = fmt.Errorf("failed to marshal schema: %w", err)
 		b.request.Schema = nil
 	} else {
+		b.schemaErr = nil
 		// Note: We need to copy the data since pool.Marshal returns a pooled buffer
 		// that must be returned to the pool. The StructuredRequest stores the schema
 		// for later use, so we need to make a copy.
@@ -128,6 +129,7 @@ func (b *StructuredRequestBuilder) Generate(ctx context.Context) (*types.Structu
 		}
 		defer release()
 
+		ctx = contextWithProvider(ctx, provider)
 		if b.getWormhole().providerMiddleware != nil {
 			handler := b.getWormhole().providerMiddleware.ApplyStructured(provider.Structured)
 			return handler(ctx, *request)

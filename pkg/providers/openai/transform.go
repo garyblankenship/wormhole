@@ -417,6 +417,7 @@ func (p *Provider) convertToolCalls(toolCalls []toolCall) []types.ToolCall {
 		argsMap, parseErrMsg := types.ParseToolArgs(tc.Function.Arguments, nil)
 
 		toolCall := types.ToolCall{
+			Index:     i,
 			ID:        tc.ID,
 			Type:      tc.Type,
 			Name:      tc.Function.Name,
@@ -425,6 +426,9 @@ func (p *Provider) convertToolCalls(toolCalls []toolCall) []types.ToolCall {
 				Name:      tc.Function.Name,
 				Arguments: tc.Function.Arguments,
 			},
+		}
+		if tc.Index != nil {
+			toolCall.Index = *tc.Index
 		}
 		toolCall.MarkArgsError(parseErrMsg)
 		result[i] = toolCall

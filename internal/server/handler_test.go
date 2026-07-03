@@ -71,6 +71,14 @@ func TestProxyMapsUpstreamErrorStatus(t *testing.T) {
 			notMsg:     "sk-test",
 		},
 		{
+			name:       "local invalid request maps to 400 with actionable message",
+			err:        types.NewWormholeError(types.ErrorCodeValidation, "model name is required", false),
+			wantStatus: http.StatusBadRequest,
+			wantType:   "invalid_request_error",
+			wantMsg:    "model name is required",
+			notMsg:     "upstream request rejected",
+		},
+		{
 			name:       "plain error falls back to 502",
 			err:        errors.New("boom"),
 			wantStatus: http.StatusBadGateway,

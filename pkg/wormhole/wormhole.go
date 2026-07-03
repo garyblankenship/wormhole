@@ -129,8 +129,10 @@ func New(opts ...Option) *Wormhole {
 		closers:           config.Closers,
 	}
 
-	// Start background sweeper for idempotency cache entries
-	p.startIdempotencySweeper()
+	// Start the sweeper only when idempotency can actually retain entries.
+	if p.hasIdempotency() {
+		p.startIdempotencySweeper()
+	}
 
 	// Initialize model discovery service if enabled
 	if config.EnableDiscovery {

@@ -3,6 +3,7 @@ package discovery
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/garyblankenship/wormhole/pkg/types"
 )
@@ -52,5 +53,26 @@ func TestAccountCacheKeyFallsBackWithoutDiscriminator(t *testing.T) {
 	emptyDiscriminator := &stubAccountFetcher{stubFetcher: stubFetcher{name: "openrouter"}, discriminator: ""}
 	if key := accountCacheKey("openrouter", emptyDiscriminator); key != "openrouter" {
 		t.Fatalf("expected plain provider name for empty discriminator, got %q", key)
+	}
+}
+
+func TestDiscoveryServiceOfflineScopedProviderUsesBaseFallback(t *testing.T) {
+	t.Parallel()
+
+	service := NewDiscoveryService(DiscoveryConfig{
+		CacheTTL:        time.Hour,
+		EnableFileCache: false,
+		OfflineMode:     true,
+	}, &stubAccountFetcher{
+		stubFetcher:   stubFetcher{name: "openai"},
+		discriminator: "acct1234",
+	})
+
+	models, err := service.GetModels(context.Background(), "openai")
+	if err != nil {
+		t.Fatalf("expected fallback models for account-scoped provider, got %v", err)
+	}
+	if len(models) == 0 {
+		t.Fatal("expected fallback models for account-scoped provider")
 	}
 }

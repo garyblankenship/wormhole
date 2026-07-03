@@ -1,6 +1,11 @@
 package gemini
 
-import "testing"
+import (
+	"context"
+	"io"
+	"strings"
+	"testing"
+)
 
 // usageMetadata is top-level on a Gemini stream response; the stream parser
 // must surface it as chunk Usage (the non-streaming path already does).
@@ -66,5 +71,30 @@ func TestTransformEmbeddingsResponseUsesRequestModel(t *testing.T) {
 	result := g.transformEmbeddingsResponse(response, "req-z")
 	if result.Model != "req-z" {
 		t.Fatalf("Model = %q, want %q", result.Model, "req-z")
+	}
+}
+
+func TestHandleStreamReportsPrematureEOF(t *testing.T) {
+	t.Parallel()
+	g := &Gemini{}
+
+	stream := io.NopCloser(strings.NewReader(`data: {"candidates":[{"content":{"parts":[{"text":"partial"}],"role":"model"},"finishReason":""}]}` + "\n\n"))
+
+	var chunks []string
+	var gotErr error
+	for chunk := range g.handleStream(context.Background(), stream) {
+		if chunk.Error != nil {
+			gotErr = chunk.Error
+			continue
+		}
+		if chunk.Text != "" {
+			chunks = append(chunks, chunk.Text)
+		}
+	}
+	if len(chunks) != 1 || chunks[0] != "partial" {
+		t.Fatalf("chunks = %#v, want partial text before error", chunks)
+	}
+	if gotErr == nil || !strings.Contains(gotErr.Error(), "ended before terminal event") {
+		t.Fatalf("error = %v, want premature EOF error", gotErr)
 	}
 }

@@ -865,6 +865,57 @@ func TestProcessStream_ConsumerStopsReading_GoroutineExits(t *testing.T) {
 	_ = chunks
 }
 
+func TestProcessNDJSONStreamClosesAfterTerminalChunk(t *testing.T) {
+	t.Parallel()
+
+	stop := types.FinishReasonStop
+	body := io.NopCloser(strings.NewReader(`{"text":"hello"}` + "\n" + `{"done":true}` + "\n"))
+	transformer := func(data []byte) (*types.TextChunk, error) {
+		var raw struct {
+			Text string `json:"text"`
+			Done bool   `json:"done"`
+		}
+		require.NoError(t, json.Unmarshal(data, &raw))
+		chunk := &types.TextChunk{Text: raw.Text}
+		if raw.Done {
+			chunk.FinishReason = &stop
+		}
+		return chunk, nil
+	}
+
+	var chunks []types.TextChunk
+	for chunk := range ProcessNDJSONStream(context.Background(), body, transformer, 1) {
+		chunks = append(chunks, chunk)
+	}
+	require.Len(t, chunks, 2)
+	assert.Equal(t, "hello", chunks[0].Text)
+	assert.NoError(t, chunks[0].Error)
+	assert.True(t, chunks[1].IsDone())
+	assert.NoError(t, chunks[1].Error)
+}
+
+func TestProcessNDJSONStreamReportsPrematureEOF(t *testing.T) {
+	t.Parallel()
+
+	body := io.NopCloser(strings.NewReader(`{"text":"partial"}` + "\n"))
+	transformer := func(data []byte) (*types.TextChunk, error) {
+		var raw struct {
+			Text string `json:"text"`
+		}
+		require.NoError(t, json.Unmarshal(data, &raw))
+		return &types.TextChunk{Text: raw.Text}, nil
+	}
+
+	var chunks []types.TextChunk
+	for chunk := range ProcessNDJSONStream(context.Background(), body, transformer, 1) {
+		chunks = append(chunks, chunk)
+	}
+	require.Len(t, chunks, 2)
+	assert.Equal(t, "partial", chunks[0].Text)
+	require.Error(t, chunks[1].Error)
+	assert.Contains(t, chunks[1].Error.Error(), "ended before terminal chunk")
+}
+
 // trackingCloser signals on close so a test can assert the producer goroutine exited.
 type trackingCloser struct {
 	io.Reader
