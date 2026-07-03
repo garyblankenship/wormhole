@@ -354,7 +354,7 @@ func TestProxyChatStreaming(t *testing.T) {
 func TestProxyChatStreamingErrorBeforeCommitReturnsHTTPError(t *testing.T) {
 	t.Parallel()
 
-	upstreamErr := types.NewWormholeError(types.ErrorCodeRateLimit, "rate limit exceeded", true).
+	upstreamErr := types.NewWormholeError(types.ErrorCodeRateLimit, "quota bucket team-alpha exhausted", true).
 		WithStatusCode(http.StatusTooManyRequests)
 	mock := wmtest.NewMockProvider("openai").WithStreamChunks([]types.TextChunk{{Error: upstreamErr}})
 	p := newTestProxy(mock)
@@ -372,13 +372,14 @@ func TestProxyChatStreamingErrorBeforeCommitReturnsHTTPError(t *testing.T) {
 	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &out))
 	assert.Equal(t, "rate_limit_error", out.Error.Type)
 	assert.Equal(t, "upstream_error", out.Error.Code)
-	assert.Equal(t, "rate limit exceeded", out.Error.Message)
+	assert.Equal(t, "upstream rate limit exceeded", out.Error.Message)
+	assert.NotContains(t, out.Error.Message, "team-alpha")
 }
 
 func TestProxyChatStreamingErrorAfterCommitEmitsSSEError(t *testing.T) {
 	t.Parallel()
 
-	upstreamErr := types.NewWormholeError(types.ErrorCodeRateLimit, "rate limit exceeded", true).
+	upstreamErr := types.NewWormholeError(types.ErrorCodeRateLimit, "quota bucket team-alpha exhausted", true).
 		WithStatusCode(http.StatusTooManyRequests)
 	mock := wmtest.NewMockProvider("openai").WithStreamChunks([]types.TextChunk{
 		{Text: "partial"},
@@ -399,6 +400,8 @@ func TestProxyChatStreamingErrorAfterCommitEmitsSSEError(t *testing.T) {
 	assert.Contains(t, body, "partial")
 	assert.Contains(t, body, `"type":"rate_limit_error"`)
 	assert.Contains(t, body, `"code":"upstream_error"`)
+	assert.Contains(t, body, `"message":"upstream rate limit exceeded"`)
+	assert.NotContains(t, body, "team-alpha")
 	assert.NotContains(t, body, "data: [DONE]")
 }
 

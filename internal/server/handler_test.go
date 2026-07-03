@@ -51,24 +51,32 @@ func TestProxyMapsUpstreamErrorStatus(t *testing.T) {
 		err        error
 		wantStatus int
 		wantType   string
+		wantMsg    string
+		notMsg     string
 	}{
 		{
 			name:       "rate limit maps to 429",
-			err:        types.NewWormholeError(types.ErrorCodeRateLimit, "rate limit exceeded", true).WithStatusCode(http.StatusTooManyRequests),
+			err:        types.NewWormholeError(types.ErrorCodeRateLimit, "quota bucket team-alpha exhausted", true).WithStatusCode(http.StatusTooManyRequests),
 			wantStatus: http.StatusTooManyRequests,
 			wantType:   "rate_limit_error",
+			wantMsg:    "upstream rate limit exceeded",
+			notMsg:     "team-alpha",
 		},
 		{
 			name:       "auth maps to 401",
-			err:        types.NewWormholeError(types.ErrorCodeAuth, "invalid API key", false).WithStatusCode(http.StatusUnauthorized),
+			err:        types.NewWormholeError(types.ErrorCodeAuth, "invalid API key sk-test...abcd", false).WithStatusCode(http.StatusUnauthorized),
 			wantStatus: http.StatusUnauthorized,
 			wantType:   "authentication_error",
+			wantMsg:    "upstream authentication failed",
+			notMsg:     "sk-test",
 		},
 		{
 			name:       "plain error falls back to 502",
 			err:        errors.New("boom"),
 			wantStatus: http.StatusBadGateway,
 			wantType:   "api_error",
+			wantMsg:    "upstream provider error",
+			notMsg:     "boom",
 		},
 	}
 
@@ -84,6 +92,8 @@ func TestProxyMapsUpstreamErrorStatus(t *testing.T) {
 			var body ErrorResponse
 			require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &body))
 			assert.Equal(t, tt.wantType, body.Error.Type)
+			assert.Equal(t, tt.wantMsg, body.Error.Message)
+			assert.NotContains(t, body.Error.Message, tt.notMsg)
 		})
 	}
 }

@@ -457,15 +457,25 @@ func upstreamErrorStatus(err error) (int, string, string) {
 	}
 
 	errType := wormholeErrorType(whErr.Code)
-	msg := whErr.Message
-	if msg == "" {
-		msg = "upstream provider error"
-	}
+	msg := upstreamClientMessage(errType)
 	status := http.StatusBadGateway
 	if whErr.StatusCode != 0 {
 		status = whErr.StatusCode
 	}
 	return status, errType, msg
+}
+
+func upstreamClientMessage(errType string) string {
+	switch errType {
+	case "authentication_error":
+		return "upstream authentication failed"
+	case "rate_limit_error":
+		return "upstream rate limit exceeded"
+	case "invalid_request_error":
+		return "upstream request rejected"
+	default:
+		return "upstream provider error"
+	}
 }
 
 // wormholeErrorType maps a WormholeError code to an OpenAI-style error type string.

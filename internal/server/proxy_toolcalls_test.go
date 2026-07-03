@@ -79,7 +79,7 @@ func TestProxyToolChoiceAndToolsAccepted(t *testing.T) {
 func TestProxyRedactsUpstreamErrorDetails(t *testing.T) {
 	t.Parallel()
 
-	leakErr := types.NewWormholeError(types.ErrorCodeRateLimit, "rate limit exceeded", true).
+	leakErr := types.NewWormholeError(types.ErrorCodeRateLimit, "quota bucket team-alpha exhausted", true).
 		WithStatusCode(http.StatusTooManyRequests).
 		WithDetails(`URL: https://api.example.com/v1?api_key=sk-SECRET-12345\nResponse: {"error":"key sk-SECRET-12345 invalid"}`)
 	p := newErroringProxy(leakErr)
@@ -87,7 +87,8 @@ func TestProxyRedactsUpstreamErrorDetails(t *testing.T) {
 	rec := performRequest(p, http.MethodPost, "/v1/chat/completions", `{"model":"gpt-test","messages":[{"role":"user","content":"hi"}]}`)
 
 	require.Equal(t, http.StatusTooManyRequests, rec.Code)
-	assert.Contains(t, rec.Body.String(), "rate limit exceeded")
+	assert.Contains(t, rec.Body.String(), "upstream rate limit exceeded")
+	assert.NotContains(t, rec.Body.String(), "team-alpha")
 	assert.NotContains(t, rec.Body.String(), "sk-SECRET-12345")
 	assert.NotContains(t, rec.Body.String(), "URL:")
 	assert.NotContains(t, rec.Body.String(), "api.example.com")

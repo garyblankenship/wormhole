@@ -21,6 +21,15 @@ import (
 
 var version = "dev"
 
+type proxyServer interface {
+	Start() error
+	Shutdown(context.Context) error
+}
+
+var newProxyServer = func(cfg server.Config) proxyServer {
+	return server.New(cfg)
+}
+
 func main() {
 	os.Exit(run(os.Args[1:], os.Stdout, os.Stderr, os.Getenv))
 }
@@ -102,7 +111,7 @@ func runServe(args []string, stdout, stderr io.Writer, getenv func(string) strin
 		Logger:          logger,
 	}
 
-	srv := server.New(cfg)
+	srv := newProxyServer(cfg)
 
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
