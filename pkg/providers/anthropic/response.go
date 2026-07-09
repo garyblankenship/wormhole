@@ -24,9 +24,10 @@ func (p *Provider) transformTextResponse(response *messageResponse) *types.TextR
 		case contentTypeToolUse:
 			args, _ := json.Marshal(content.Input)
 			toolCalls = append(toolCalls, types.ToolCall{
-				ID:   content.ID,
-				Type: "function",
-				Name: content.Name,
+				ID:        content.ID,
+				Type:      "function",
+				Name:      content.Name,
+				Arguments: content.Input,
 				Function: &types.ToolCallFunction{
 					Name:      content.Name,
 					Arguments: string(args),
