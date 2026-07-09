@@ -99,6 +99,42 @@ func TestBuildContent_ToolResult(t *testing.T) {
 	assert.False(t, hasText, "tool_result block must not carry a text field")
 }
 
+// Test that ToolMessage with a non-empty Error field emits is_error: true
+// on the tool_result block; a success result (Error == "") must not include
+// the key at all.
+func TestBuildContent_ToolResult_IsError(t *testing.T) {
+	t.Parallel()
+	p := &Provider{}
+
+	// Error path: tool execution failed.
+	errMsg := &types.ToolMessage{
+		Content:    "connection refused",
+		ToolCallID: "call_err",
+		Error:      "connection refused",
+	}
+	errParts := p.buildContent(errMsg)
+	require.Len(t, errParts, 1)
+	errBlock := errParts[0]
+	assert.Equal(t, "tool_result", errBlock["type"])
+	assert.Equal(t, "call_err", errBlock["tool_use_id"])
+	isErr, hasKey := errBlock["is_error"]
+	require.True(t, hasKey, "is_error must be present when Error is non-empty")
+	assert.Equal(t, true, isErr)
+
+	// Success path: no error.
+	okMsg := &types.ToolMessage{
+		Content:    "72F and sunny",
+		ToolCallID: "call_ok",
+	}
+	okParts := p.buildContent(okMsg)
+	require.Len(t, okParts, 1)
+	okBlock := okParts[0]
+	assert.Equal(t, "tool_result", okBlock["type"])
+	assert.Equal(t, "call_ok", okBlock["tool_use_id"])
+	_, hasIsErr := okBlock["is_error"]
+	assert.False(t, hasIsErr, "is_error must NOT be present when Error is empty")
+}
+
 // FIX (coalesce): consecutive messages mapping to the same Anthropic role must
 // merge into ONE role-turn carrying both content blocks. A tool-result message
 // (RoleTool -> "user") followed by a real user message must NOT produce two
