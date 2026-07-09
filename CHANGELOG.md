@@ -1,5 +1,23 @@
 # Changelog
 
+## v1.23.0 (2026-07-09)
+
+### Features
+- Types: add `ToolResultMessage.Error` and `WithError` so tool execution failures can be represented explicitly.
+
+### Fixes
+- Gemini: account for hidden thinking tokens by mapping `thoughtsTokenCount` into completion usage and `ReasoningTokens`.
+- Gemini: exclude thought parts from structured-output JSON parsing and emit `functionResponse.error` on failed tool results.
+- OpenAI: surface `reasoning_tokens` and refusals.
+- Server: forward `max_completion_tokens` and embedding dimensions, omit empty tool-call names, and map SDK-internal auth/rate/timeout errors to the correct HTTP status.
+- Providers: preserve native generation/finish reasons and serialize tool-call names correctly.
+- Anthropic: populate non-streaming tool-use arguments and emit `is_error` on failed tool results.
+- Ollama: stop marking intermediate streaming chunks as terminal.
+- Adaptive concurrency: default zero `AdjustmentInterval` safely.
+
+### Other
+- Restore Gemini transform tests and add Ollama wire-conformance streaming coverage.
+
 ## v1.22.0 (2026-07-03)
 
 ### Compatibility Notes
