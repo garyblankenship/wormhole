@@ -42,7 +42,7 @@ type Usage struct {
 // OpenAI-compatible proxies emit on a trailing stream chunk.
 func (u Usage) IsZero() bool {
 	return u.PromptTokens == 0 && u.CompletionTokens == 0 && u.TotalTokens == 0 &&
-		u.CacheReadTokens == 0 && u.CacheWriteTokens == 0
+		u.CacheReadTokens == 0 && u.CacheWriteTokens == 0 && u.ReasoningTokens == 0
 }
 
 // TextResponse represents a text generation response

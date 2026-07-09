@@ -14,7 +14,7 @@ func TestParseStreamEventSurfacesTopLevelUsage(t *testing.T) {
 	t.Parallel()
 	g := &Gemini{}
 
-	data := `{"candidates":[{"content":{"parts":[{"text":"hi"}],"role":"model"},"finishReason":"STOP"}],"usageMetadata":{"promptTokenCount":12,"candidatesTokenCount":3,"totalTokenCount":15}}`
+	data := `{"candidates":[{"content":{"parts":[{"text":"hi"}],"role":"model"},"finishReason":"STOP"}],"usageMetadata":{"promptTokenCount":12,"candidatesTokenCount":3,"thoughtsTokenCount":4,"totalTokenCount":19}}`
 
 	chunks, done, err := g.parseStreamEvent(data)
 	if err != nil {
@@ -31,11 +31,14 @@ func TestParseStreamEventSurfacesTopLevelUsage(t *testing.T) {
 			if c.Usage.PromptTokens != 12 {
 				t.Fatalf("PromptTokens = %d, want 12", c.Usage.PromptTokens)
 			}
-			if c.Usage.CompletionTokens != 3 {
-				t.Fatalf("CompletionTokens = %d, want 3", c.Usage.CompletionTokens)
+			if c.Usage.CompletionTokens != 7 {
+				t.Fatalf("CompletionTokens = %d, want 7", c.Usage.CompletionTokens)
 			}
-			if c.Usage.TotalTokens != 15 {
-				t.Fatalf("TotalTokens = %d, want 15", c.Usage.TotalTokens)
+			if c.Usage.TotalTokens != 19 {
+				t.Fatalf("TotalTokens = %d, want 19", c.Usage.TotalTokens)
+			}
+			if c.Usage.ReasoningTokens != 4 {
+				t.Fatalf("ReasoningTokens = %d, want 4", c.Usage.ReasoningTokens)
 			}
 		}
 	}
@@ -51,6 +54,7 @@ func TestConvertUsageCacheReadTokens(t *testing.T) {
 		CandidatesTokenCount:    20,
 		TotalTokenCount:         120,
 		CachedContentTokenCount: 75,
+		ThoughtsTokenCount:      11,
 	})
 	if u == nil {
 		t.Fatal("expected non-nil usage")
@@ -58,7 +62,10 @@ func TestConvertUsageCacheReadTokens(t *testing.T) {
 	if u.CacheReadTokens != 75 {
 		t.Fatalf("CacheReadTokens = %d, want 75", u.CacheReadTokens)
 	}
-	if u.PromptTokens != 100 || u.CompletionTokens != 20 || u.TotalTokens != 120 {
+	if u.ReasoningTokens != 11 {
+		t.Fatalf("ReasoningTokens = %d, want 11", u.ReasoningTokens)
+	}
+	if u.PromptTokens != 100 || u.CompletionTokens != 31 || u.TotalTokens != 120 {
 		t.Fatalf("token counts wrong: %+v", u)
 	}
 }

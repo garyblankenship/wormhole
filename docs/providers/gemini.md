@@ -438,6 +438,17 @@ response, err := client.Text().
     Generate(ctx)
 ```
 
+### Thinking Tokens
+
+Gemini responses may report hidden thinking as `usageMetadata.thoughtsTokenCount`.
+Wormhole includes those tokens in `response.Usage.CompletionTokens` and also
+breaks them out as `response.Usage.ReasoningTokens`. These tokens are part of the
+model's output budget even when `response.Text` is empty; a `length` finish reason
+can therefore mean the request spent its output budget on thinking before
+assistant-visible text was produced. Use a larger `MaxTokens` budget or Gemini
+`generationConfig.thinkingConfig.thinkingBudget` when a task needs both thinking
+room and structured visible output.
+
 ## Reference
 
 - [Google Gemini API](https://ai.google.dev/gemini-api/docs)
