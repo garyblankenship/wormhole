@@ -11,16 +11,17 @@ import (
 
 // ChatCompletionRequest is the OpenAI-compatible chat completion request.
 type ChatCompletionRequest struct {
-	Model          string                         `json:"model"`
-	Messages       []ChatCompletionRequestMessage `json:"messages"`
-	Temperature    *float64                       `json:"temperature,omitempty"`
-	MaxTokens      *int                           `json:"max_tokens,omitempty"`
-	TopP           *float64                       `json:"top_p,omitempty"`
-	Stop           []string                       `json:"stop,omitempty"`
-	Stream         bool                           `json:"stream,omitempty"`
-	Tools          []ChatTool                     `json:"tools,omitempty"`
-	ToolChoice     json.RawMessage                `json:"tool_choice,omitempty"`
-	ResponseFormat json.RawMessage                `json:"response_format,omitempty"`
+	Model               string                         `json:"model"`
+	Messages            []ChatCompletionRequestMessage `json:"messages"`
+	Temperature         *float64                       `json:"temperature,omitempty"`
+	MaxTokens           *int                           `json:"max_tokens,omitempty"`
+	MaxCompletionTokens *int                           `json:"max_completion_tokens,omitempty"`
+	TopP                *float64                       `json:"top_p,omitempty"`
+	Stop                []string                       `json:"stop,omitempty"`
+	Stream              bool                           `json:"stream,omitempty"`
+	Tools               []ChatTool                     `json:"tools,omitempty"`
+	ToolChoice          json.RawMessage                `json:"tool_choice,omitempty"`
+	ResponseFormat      json.RawMessage                `json:"response_format,omitempty"`
 }
 
 // ChatCompletionRequestMessage is a request-only chat message. OpenAI clients
@@ -137,8 +138,8 @@ type ChatToolCall struct {
 
 // ChatToolCallFunction holds the called function name and raw JSON arguments.
 type ChatToolCallFunction struct {
-	Name      string `json:"name"`
-	Arguments string `json:"arguments"`
+	Name      string `json:"name,omitempty"`
+	Arguments string `json:"arguments,omitempty"`
 }
 
 // ChatCompletionResponse is the OpenAI-compatible chat completion response.
@@ -168,8 +169,9 @@ type ChatUsage struct {
 
 // EmbeddingRequest is the OpenAI-compatible embeddings request.
 type EmbeddingRequest struct {
-	Model string         `json:"model"`
-	Input EmbeddingInput `json:"input"`
+	Model      string         `json:"model"`
+	Input      EmbeddingInput `json:"input"`
+	Dimensions *int           `json:"dimensions,omitempty"`
 }
 
 // EmbeddingInput accepts the OpenAI-compatible string-or-array input shape.

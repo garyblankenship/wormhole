@@ -111,7 +111,9 @@ func (p *proxy) handleChatCompletions(w http.ResponseWriter, r *http.Request) {
 	if req.Temperature != nil {
 		builder = builder.Temperature(float32(*req.Temperature))
 	}
-	if req.MaxTokens != nil {
+	if req.MaxCompletionTokens != nil {
+		builder = builder.MaxTokens(*req.MaxCompletionTokens)
+	} else if req.MaxTokens != nil {
 		builder = builder.MaxTokens(*req.MaxTokens)
 	}
 	if req.TopP != nil {
@@ -328,6 +330,9 @@ func (p *proxy) handleEmbeddings(w http.ResponseWriter, r *http.Request) {
 	builder := p.wh.Embeddings().Model(model).Input([]string(req.Input)...)
 	if provider != "" {
 		builder = builder.Using(provider)
+	}
+	if req.Dimensions != nil {
+		builder = builder.Dimensions(*req.Dimensions)
 	}
 
 	resp, err := builder.Generate(r.Context())
