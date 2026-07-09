@@ -2,6 +2,8 @@ package wormhole_test
 
 import (
 	"context"
+	"errors"
+	"io"
 	"testing"
 	"time"
 
@@ -9,6 +11,12 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+type errorCloser struct {
+	err error
+}
+
+func (c errorCloser) Close() error { return c.err }
 
 // TestGracefulShutdownBasic tests basic graceful shutdown functionality
 func TestGracefulShutdownBasic(t *testing.T) {
@@ -25,6 +33,21 @@ func TestGracefulShutdownBasic(t *testing.T) {
 	// Shutdown should be idempotent
 	err = client.Shutdown(ctx)
 	require.NoError(t, err, "Multiple shutdown calls should be idempotent")
+}
+
+func TestShutdownPersistsCleanupError(t *testing.T) {
+	t.Parallel()
+
+	wantErr := errors.New("close failed")
+	client := wormhole.New(func(cfg *wormhole.Config) {
+		cfg.Closers = append(cfg.Closers, io.Closer(errorCloser{err: wantErr}))
+	})
+
+	firstErr := client.Shutdown(context.Background())
+	require.ErrorIs(t, firstErr, wantErr)
+
+	secondErr := client.Shutdown(context.Background())
+	require.ErrorIs(t, secondErr, wantErr)
 }
 
 // TestIdempotencyKeyBasic tests basic idempotency key functionality

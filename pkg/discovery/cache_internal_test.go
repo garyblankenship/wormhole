@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"sync"
 	"testing"
 	"time"
 
@@ -152,7 +153,8 @@ func TestModelCacheExpiredInvalidAndFallbackPaths(t *testing.T) {
 func TestModelCacheProviderPathsJournalAndCleanup(t *testing.T) {
 	t.Parallel()
 	cache := newFileBackedCache(t)
-	assert.Contains(t, cache.getProviderFilePath("openrouter/../model"), "openrouter___model")
+	assert.Contains(t, cache.getProviderFilePath("openrouter/../model"), "openrouter____model-")
+	assert.NotEqual(t, cache.getProviderFilePath("a/b"), cache.getProviderFilePath("a_b"))
 	assert.Same(t, cache.getProviderLock("openai"), cache.getProviderLock("openai"))
 
 	models := testModels("journal")
@@ -167,6 +169,150 @@ func TestModelCacheProviderPathsJournalAndCleanup(t *testing.T) {
 	cache.cleanupExpired()
 	assert.Contains(t, cache.memory, "fresh")
 	assert.NotContains(t, cache.memory, "expired")
+}
+
+func TestModelCacheRejectsShardForDifferentProvider(t *testing.T) {
+	t.Parallel()
+	cache := newFileBackedCache(t)
+	entry := CacheEntry{
+		SchemaVersion: cacheSchemaVersion,
+		Models:        testModels("a_b"),
+		Timestamp:     time.Now(),
+		Provider:      "a_b",
+	}
+	data, err := json.Marshal(entry)
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(cache.getProviderFilePath("a/b"), data, 0o600))
+
+	models, ok := cache.loadFromFile("a/b")
+	assert.False(t, ok)
+	assert.Nil(t, models)
+}
+
+func TestModelCacheLoadsAndMigratesLegacyProviderShard(t *testing.T) {
+	t.Parallel()
+	cache := newFileBackedCache(t)
+	entry := CacheEntry{
+		SchemaVersion: cacheSchemaVersion,
+		Models:        testModels("legacy/provider"),
+		Timestamp:     time.Now(),
+		Provider:      "legacy/provider",
+	}
+	data, err := json.Marshal(entry)
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(cache.getLegacyProviderFilePath("legacy/provider"), data, 0o600))
+
+	models, ok := cache.loadFromFile("legacy/provider")
+	require.True(t, ok)
+	require.Len(t, models, 1)
+	assert.Equal(t, "legacy/provider-model", models[0].ID)
+	require.Eventually(t, func() bool {
+		_, err := os.Stat(cache.getProviderFilePath("legacy/provider"))
+		return err == nil
+	}, time.Second, 10*time.Millisecond)
+}
+
+func TestModelCacheRejectsCollidingLegacyProviderShard(t *testing.T) {
+	t.Parallel()
+	cache := newFileBackedCache(t)
+	require.Equal(t, cache.getLegacyProviderFilePath("a/b"), cache.getLegacyProviderFilePath("a_b"))
+	entry := CacheEntry{
+		SchemaVersion: cacheSchemaVersion,
+		Models:        testModels("a_b"),
+		Timestamp:     time.Now(),
+		Provider:      "a_b",
+	}
+	data, err := json.Marshal(entry)
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(cache.getLegacyProviderFilePath("a/b"), data, 0o600))
+
+	models, ok := cache.loadFromFile("a/b")
+	assert.False(t, ok)
+	assert.Nil(t, models)
+	assert.NoFileExists(t, cache.getProviderFilePath("a/b"))
+}
+
+func TestModelCacheCollidingLegacyNamesUseIndependentShards(t *testing.T) {
+	t.Parallel()
+	cache := newFileBackedCache(t)
+	providers := []string{"a/b", "a_b"}
+
+	var wg sync.WaitGroup
+	for _, provider := range providers {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			cache.Set(provider, testModels(provider))
+		}()
+	}
+	wg.Wait()
+
+	cache.memoryMu.Lock()
+	cache.memory = make(map[string]*CacheEntry)
+	cache.memoryMu.Unlock()
+	for _, provider := range providers {
+		models, fresh := cache.Get(provider)
+		require.True(t, fresh)
+		require.Len(t, models, 1)
+		assert.Equal(t, provider+"-model", models[0].ID)
+	}
+}
+
+func TestModelCacheClonesInputsOutputsAndFallbacks(t *testing.T) {
+	t.Parallel()
+	cache := NewModelCache(DiscoveryConfig{
+		CacheTTL:        time.Hour,
+		FileCacheTTL:    time.Hour,
+		FileCachePath:   filepath.Join(t.TempDir(), "models.json"),
+		EnableFileCache: false,
+	})
+	models := []*types.ModelInfo{{
+		ID:           "original",
+		Provider:     "test",
+		Cost:         &types.ModelCost{Currency: "USD", InputTokens: 1},
+		Capabilities: []types.ModelCapability{types.CapabilityText},
+		Constraints: map[string]any{
+			"nested": map[string]any{"values": []any{"original"}},
+		},
+	}}
+
+	cache.Set("test", models)
+	models[0].ID = "mutated-input"
+	models[0].Cost.Currency = "EUR"
+	models[0].Capabilities[0] = types.CapabilityAudio
+	models[0].Constraints["nested"].(map[string]any)["values"].([]any)[0] = "mutated-input"
+
+	first, fresh := cache.Get("test")
+	require.True(t, fresh)
+	require.Len(t, first, 1)
+	assert.Equal(t, "original", first[0].ID)
+	assert.Equal(t, "USD", first[0].Cost.Currency)
+	assert.Equal(t, types.CapabilityText, first[0].Capabilities[0])
+	assert.Equal(t, "original", first[0].Constraints["nested"].(map[string]any)["values"].([]any)[0])
+
+	first[0].ID = "mutated-output"
+	first[0].Cost.Currency = "GBP"
+	first[0].Capabilities[0] = types.CapabilityVision
+	first[0].Constraints["nested"].(map[string]any)["values"].([]any)[0] = "mutated-output"
+
+	second, fresh := cache.Get("test")
+	require.True(t, fresh)
+	assert.Equal(t, "original", second[0].ID)
+	assert.Equal(t, "USD", second[0].Cost.Currency)
+	assert.Equal(t, types.CapabilityText, second[0].Capabilities[0])
+	assert.Equal(t, "original", second[0].Constraints["nested"].(map[string]any)["values"].([]any)[0])
+
+	fallback, fresh := cache.Get("openai")
+	require.False(t, fresh)
+	require.NotEmpty(t, fallback)
+	fallback[0].ID = "mutated-fallback"
+	fallback[0].Capabilities[0] = types.CapabilityAudio
+
+	fallbackAgain, fresh := cache.Get("openai")
+	require.False(t, fresh)
+	require.NotEmpty(t, fallbackAgain)
+	assert.NotEqual(t, "mutated-fallback", fallbackAgain[0].ID)
+	assert.NotEqual(t, types.CapabilityAudio, fallbackAgain[0].Capabilities[0])
 }
 
 func TestModelCacheStartCleanupCloseAndExpandPath(t *testing.T) {
