@@ -213,6 +213,37 @@ func TestTransformTextResponse_ThoughtPartsRouteToThinking(t *testing.T) {
 	}
 }
 
+func TestTransformTextResponse_PreservesReasoningOnlyUsage(t *testing.T) {
+	t.Parallel()
+
+	provider := New("test-key", types.ProviderConfig{})
+	resp := &geminiTextResponse{
+		Candidates: []candidate{
+			{
+				Content:      content{Parts: []part{}},
+				FinishReason: "MAX_TOKENS",
+			},
+		},
+		UsageMetadata: &usageMetadata{
+			PromptTokenCount:     187,
+			ThoughtsTokenCount:   2045,
+			CandidatesTokenCount: 0,
+			TotalTokenCount:      2232,
+		},
+	}
+
+	result, err := provider.transformTextResponse(resp)
+	assert.NoError(t, err)
+	assert.Empty(t, result.Text)
+	assert.Equal(t, types.FinishReasonLength, result.FinishReason)
+	if assert.NotNil(t, result.Usage) {
+		assert.Equal(t, 187, result.Usage.PromptTokens)
+		assert.Equal(t, 2045, result.Usage.CompletionTokens)
+		assert.Equal(t, 2045, result.Usage.ReasoningTokens)
+		assert.Equal(t, 2232, result.Usage.TotalTokens)
+	}
+}
+
 func TestParseStreamEvent_ThoughtPartsRouteToThinkingChunks(t *testing.T) {
 	t.Parallel()
 
@@ -280,4 +311,38 @@ func TestTransformMessages_CoalescesConsecutiveSameRole(t *testing.T) {
 	require.Len(t, mergedParts, 2, "both user text parts must be present in the single merged turn")
 	assert.Equal(t, "first user message", mergedParts[0]["text"])
 	assert.Equal(t, "second user message", mergedParts[1]["text"])
+}
+
+func TestTransformStructuredResponse_ThoughtPartsExcludedFromJSON(t *testing.T) {
+	t.Parallel()
+
+	provider := New("test-key", types.ProviderConfig{})
+
+	// Simulate a Gemini thinking-model structured-output response:
+	// a thought part (prose) followed by a JSON-answer part.
+	resp := &geminiTextResponse{
+		Candidates: []candidate{
+			{
+				Content: content{
+					Parts: []part{
+						{Text: "Let me think about the structure needed...", Thought: true},
+						{Text: `{"name":"Alice","age":30}`},
+					},
+				},
+			},
+		},
+	}
+
+	result, err := provider.transformStructuredResponse(resp, nil)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	// The parsed data must match the JSON part only (thought prose excluded).
+	data, ok := result.Data.(map[string]any)
+	require.True(t, ok, "parsed data must be a map")
+	assert.Equal(t, "Alice", data["name"])
+	assert.Equal(t, float64(30), data["age"])
+
+	// Raw must contain only the JSON part (no thought prose).
+	assert.Equal(t, `{"name":"Alice","age":30}`, result.Raw)
 }

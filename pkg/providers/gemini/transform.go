@@ -35,9 +35,10 @@ func convertUsage(meta *usageMetadata) *types.Usage {
 	}
 	return &types.Usage{
 		PromptTokens:     meta.PromptTokenCount,
-		CompletionTokens: meta.CandidatesTokenCount,
+		CompletionTokens: meta.CandidatesTokenCount + meta.ThoughtsTokenCount,
 		TotalTokens:      meta.TotalTokenCount,
 		CacheReadTokens:  meta.CachedContentTokenCount,
+		ReasoningTokens:  meta.ThoughtsTokenCount,
 	}
 }
 
@@ -602,10 +603,12 @@ func (g *Gemini) transformStructuredResponse(response *geminiTextResponse, schem
 
 	candidate := response.Candidates[0]
 
-	// Extract text (should be JSON)
+	// Extract text (should be JSON) — skip thought parts (thinking models
+	// emit a thought prose part before the JSON-answer part; concatenating
+	// both corrupts the JSON).
 	var text string
 	for _, part := range candidate.Content.Parts {
-		if part.Text != "" {
+		if part.Text != "" && !part.Thought {
 			text += part.Text
 		}
 	}
