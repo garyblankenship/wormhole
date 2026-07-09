@@ -268,6 +268,7 @@ func (p *Provider) transformTextResponse(response *chatCompletionResponse) *type
 		ID:           response.ID,
 		Model:        response.Model,
 		Text:         content,
+		Refusal:      choice.Message.Refusal,
 		ToolCalls:    p.convertToolCalls(choice.Message.ToolCalls),
 		FinishReason: p.mapFinishReason(choice.FinishReason),
 		Usage:        p.convertUsage(response.Usage),
@@ -379,6 +380,11 @@ func (p *Provider) parseStreamChunk(data []byte) (*types.TextChunk, error) {
 		},
 	}
 
+	if choice.Delta.Refusal != "" {
+		chunk.Text = choice.Delta.Refusal
+		chunk.Delta.Content = choice.Delta.Refusal
+	}
+
 	if choice.Delta.ReasoningContent != "" {
 		thinking := &types.Thinking{Content: choice.Delta.ReasoningContent}
 		chunk.Thinking = thinking
@@ -448,6 +454,9 @@ func (p *Provider) convertUsage(u usage) *types.Usage {
 	}
 	if usage.CacheReadTokens == 0 && u.PromptCacheHitTokens > 0 {
 		usage.CacheReadTokens = u.PromptCacheHitTokens
+	}
+	if u.CompletionTokensDetails != nil {
+		usage.ReasoningTokens = u.CompletionTokensDetails.ReasoningTokens
 	}
 	return usage
 }

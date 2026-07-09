@@ -31,6 +31,10 @@ type Usage struct {
 	// cache (Anthropic cache_creation_input_tokens). Zero for providers that do
 	// not report cache writes.
 	CacheWriteTokens int `json:"cache_write_tokens,omitempty"`
+	// ReasoningTokens is the number of completion tokens spent on chain-of-thought
+	// reasoning (OpenAI o-series reasoning_tokens). Zero for providers/models
+	// that do not report reasoning.
+	ReasoningTokens int `json:"reasoning_tokens,omitempty"`
 }
 
 // IsZero reports whether the Usage carries no token counts. Used to avoid
@@ -47,6 +51,7 @@ type TextResponse struct {
 	Provider     string         `json:"provider,omitempty"`
 	Model        string         `json:"model"`
 	Text         string         `json:"text"`
+	Refusal      string         `json:"refusal,omitempty"`
 	Thinking     *Thinking      `json:"thinking,omitempty"`
 	ToolCalls    []ToolCall     `json:"tool_calls,omitempty"`
 	FinishReason FinishReason   `json:"finish_reason"`

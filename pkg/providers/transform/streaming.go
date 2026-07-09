@@ -464,6 +464,11 @@ func openAIStreamUsage(data any) (*types.Usage, error) {
 			usage.CacheReadTokens = int(cached)
 		}
 	}
+	if details, ok := m["completion_tokens_details"].(map[string]any); ok {
+		if reasoning, ok := details["reasoning_tokens"].(float64); ok {
+			usage.ReasoningTokens = int(reasoning)
+		}
+	}
 	return usage, nil
 }
 

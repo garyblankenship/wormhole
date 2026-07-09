@@ -20,6 +20,7 @@ type chatCompletionResponse struct {
 type message struct {
 	Role             string     `json:"role"`
 	Content          string     `json:"content"`
+	Refusal          string     `json:"refusal,omitempty"`
 	ReasoningContent string     `json:"reasoning_content,omitempty"`
 	ToolCalls        []toolCall `json:"tool_calls,omitempty"`
 }
@@ -39,11 +40,16 @@ type toolCall struct {
 }
 
 type usage struct {
-	PromptTokens          int                 `json:"prompt_tokens"`
-	CompletionTokens      int                 `json:"completion_tokens"`
-	TotalTokens           int                 `json:"total_tokens"`
-	PromptCacheHitTokens  int                 `json:"prompt_cache_hit_tokens,omitempty"`
-	PromptTokensDetails   *promptTokensDetail `json:"prompt_tokens_details,omitempty"`
+	PromptTokens            int                     `json:"prompt_tokens"`
+	CompletionTokens        int                     `json:"completion_tokens"`
+	TotalTokens             int                     `json:"total_tokens"`
+	PromptCacheHitTokens    int                     `json:"prompt_cache_hit_tokens,omitempty"`
+	PromptTokensDetails     *promptTokensDetail     `json:"prompt_tokens_details,omitempty"`
+	CompletionTokensDetails *completionTokensDetail `json:"completion_tokens_details,omitempty"`
+}
+
+type completionTokensDetail struct {
+	ReasoningTokens int `json:"reasoning_tokens,omitempty"`
 }
 
 type promptTokensDetail struct {
@@ -130,6 +136,7 @@ type streamChoice struct {
 type messageDelta struct {
 	Role             string     `json:"role,omitempty"`
 	Content          string     `json:"content,omitempty"`
+	Refusal          string     `json:"refusal,omitempty"`
 	ReasoningContent string     `json:"reasoning_content,omitempty"`
 	ToolCalls        []toolCall `json:"tool_calls,omitempty"`
 }
