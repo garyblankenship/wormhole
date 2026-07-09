@@ -154,6 +154,22 @@ type ToolResultMessage struct {
 	Content      string `json:"content"`
 	ToolCallID   string `json:"tool_call_id"`
 	FunctionName string `json:"function_name,omitempty"`
+	// Error marks this result as a tool-execution failure and carries the error
+	// message. When non-empty, provider serializers emit the provider's native
+	// error framing (Anthropic is_error, Gemini functionResponse.error) so the
+	// model does not treat the error text as a successful result. json:"-"
+	// keeps it off the OpenAI wire (role:tool has no error concept).
+	Error string `json:"-"`
+}
+
+// WithError marks this tool result as a failed execution with the given error
+// message and returns the message for chaining. Providers that have a native
+// error channel (Anthropic is_error, Gemini functionResponse.error) surface it;
+// OpenAI's tool role has no error concept, so for OpenAI-format consumers the
+// error text should also be placed in Content.
+func (m *ToolResultMessage) WithError(errMsg string) *ToolResultMessage {
+	m.Error = errMsg
+	return m
 }
 
 func (m *ToolResultMessage) GetRole() Role {
