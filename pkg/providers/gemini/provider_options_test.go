@@ -56,3 +56,33 @@ func TestTypedReasoningMergedIntoGenerationConfig(t *testing.T) {
 		t.Fatalf("thinkingConfig = %#v", thinkingConfig)
 	}
 }
+
+func TestProviderOptionsGenerationConfigMergesIntoTextPayload(t *testing.T) {
+	t.Parallel()
+	maxTokens := 128
+	provider := New("key", types.NewProviderConfig("key"))
+
+	payload, err := provider.buildTextPayload(types.TextRequest{
+		BaseRequest: types.BaseRequest{
+			Model:     "gemini-test",
+			MaxTokens: &maxTokens,
+			ProviderOptions: map[string]any{
+				"generationConfig": map[string]any{
+					"responseMimeType": "application/json",
+				},
+			},
+		},
+		Messages: []types.Message{types.NewUserMessage("hi")},
+	})
+	if err != nil {
+		t.Fatalf("buildTextPayload returned error: %v", err)
+	}
+
+	generationConfig := payload["generationConfig"].(map[string]any)
+	if generationConfig["maxOutputTokens"] != 128 {
+		t.Fatalf("maxOutputTokens = %v, want 128", generationConfig["maxOutputTokens"])
+	}
+	if generationConfig["responseMimeType"] != "application/json" {
+		t.Fatalf("responseMimeType = %v, want application/json", generationConfig["responseMimeType"])
+	}
+}

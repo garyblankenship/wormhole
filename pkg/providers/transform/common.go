@@ -22,7 +22,7 @@ func MapFinishReason(reason string) types.FinishReason {
 		return types.FinishReasonToolCalls
 	case "content_filter", "safety", "recitation":
 		return types.FinishReasonContentFilter
-	case "other", "finish_reason_unspecified":
+	case "other", "finish_reason_unspecified", "load", "unload":
 		return types.FinishReasonOther
 	default:
 		return types.FinishReasonStop

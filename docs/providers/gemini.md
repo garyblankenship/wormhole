@@ -273,6 +273,23 @@ fmt.Printf("%+v\n", result)
 // Output: {Name:John Age:30 Email:john@example.com Skills:[Go Python]}
 ```
 
+For text requests that need Gemini JSON mode without a full schema, pass the
+native generation config through `ProviderOptions`. Gemini expects JSON control
+inside `generationConfig`, not as top-level OpenAI `response_format`:
+
+```go
+response, err := client.Text().
+    Model("gemini-2.5-flash").
+    Prompt("Return exactly one JSON object with key ok=true.").
+    MaxTokens(64).
+    ProviderOptions(map[string]any{
+        "generationConfig": map[string]any{
+            "responseMimeType": "application/json",
+        },
+    }).
+    Generate(ctx)
+```
+
 ### Embeddings
 
 Generate embeddings for semantic search and similarity:
@@ -402,16 +419,21 @@ The following features are not supported by Gemini and will return `NotImplement
 
 ## Provider Options
 
-Pass Gemini-specific options via `ProviderOptions`. Text requests merge options
-into the Gemini request body; image requests merge `generationConfig` with the
-SDK's required image response modalities and pass other Gemini fields through:
+Pass Gemini-specific options via `ProviderOptions`. Text requests merge
+`generationConfig` with the SDK-generated Gemini config, so options such as
+`responseMimeType` preserve standard settings like `maxOutputTokens`,
+`temperature`, `topP`, and `stopSequences`. Other text options are merged into
+the Gemini request body. Image requests merge `generationConfig` with the SDK's
+required image response modalities and pass other Gemini fields through:
 
 ```go
 response, err := client.Text().
     Model("gemini-2.5-flash").
     Prompt("Hello").
     ProviderOptions(map[string]any{
-        // Add any provider-specific options here
+        "generationConfig": map[string]any{
+            "responseMimeType": "application/json",
+        },
     }).
     Generate(ctx)
 ```

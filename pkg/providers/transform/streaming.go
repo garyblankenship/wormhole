@@ -11,13 +11,14 @@ import (
 // StreamingConfig configures how to parse streaming responses for a provider
 type StreamingConfig struct {
 	// JSON path configurations for extracting fields
-	TextFieldPath     string // e.g., "choices.0.delta.content", "candidates.0.content.parts.0.text"
-	ToolCallFieldPath string // e.g., "choices.0.delta.tool_calls", "candidates.0.content.parts.0.functionCall"
-	FinishReasonPath  string // e.g., "choices.0.finish_reason", "candidates.0.finishReason"
-	UsagePath         string // e.g., "usage", "usageMetadata"
-	IDPath            string // e.g., "id"
-	ModelPath         string // e.g., "model"
-	ThinkingPath      string // e.g., "choices.0.delta.reasoning_content"
+	TextFieldPath         string // e.g., "choices.0.delta.content", "candidates.0.content.parts.0.text"
+	ToolCallFieldPath     string // e.g., "choices.0.delta.tool_calls", "candidates.0.content.parts.0.functionCall"
+	FinishReasonPath      string // e.g., "choices.0.finish_reason", "candidates.0.finishReason"
+	UsagePath             string // e.g., "usage", "usageMetadata"
+	IDPath                string // e.g., "id"
+	ModelPath             string // e.g., "model"
+	ThinkingPath          string // e.g., "choices.0.delta.reasoning_content"
+	ExtraFinishReasonPath string // secondary path when FinishReasonPath is a bool true (e.g., Ollama "done_reason")
 
 	// Field adapters for provider-specific formats
 	TextAdapter         func(any) (string, error)
@@ -210,7 +211,16 @@ func (t *StreamingTransformer) ParseChunk(data []byte) (*types.TextChunk, error)
 				// Boolean finish reason (e.g., Ollama's "done" field).
 				// false = intermediate chunk, no finish reason. true = terminal.
 				if b {
-					reasonStr = "true"
+					if t.config.ExtraFinishReasonPath != "" {
+						if extra := t.getFieldByPath(response, t.config.ExtraFinishReasonPath); extra != nil {
+							if s, ok := extra.(string); ok && s != "" {
+								reasonStr = s
+							}
+						}
+					}
+					if reasonStr == "" {
+						reasonStr = "true"
+					}
 				}
 			}
 
@@ -474,19 +484,14 @@ func NewAnthropicStreamingTransformer() *StreamingTransformer {
 // NewOllamaStreamingTransformer creates a transformer configured for Ollama
 func NewOllamaStreamingTransformer() *StreamingTransformer {
 	return NewStreamingTransformer(StreamingConfig{
-		TextFieldPath:    "message.content",
-		FinishReasonPath: "done", // Ollama uses boolean done field
-		IDPath:           "",     // Ollama doesn't provide ID
-		ModelPath:        "model",
-		FinishReasonAdapter: func(reason string) types.FinishReason {
-			// Ollama uses boolean done field, but we treat "true" as stop
-			if reason == "true" {
-				return types.FinishReasonStop
-			}
-			return types.FinishReasonStop
-		},
-		ReturnsBatch: false,
-		ChunkType:    "text_chunk",
+		TextFieldPath:         "message.content",
+		FinishReasonPath:      "done",
+		ExtraFinishReasonPath: "done_reason",
+		IDPath:                "",
+		ModelPath:             "model",
+		FinishReasonAdapter:   MapFinishReason,
+		ReturnsBatch:          false,
+		ChunkType:             "text_chunk",
 	})
 }
 

@@ -367,6 +367,18 @@ func (g *Gemini) buildTextPayload(request types.TextRequest) (map[string]any, er
 	}
 
 	for k, v := range g.Config.MergedProviderOptions(request.Model, request.ProviderOptions) {
+		if k == "generationConfig" {
+			if opts, ok := v.(map[string]any); ok {
+				if existing, ok := payload["generationConfig"].(map[string]any); ok {
+					for optKey, optValue := range opts {
+						existing[optKey] = optValue
+					}
+				} else {
+					payload["generationConfig"] = opts
+				}
+				continue
+			}
+		}
 		payload[k] = v
 	}
 
