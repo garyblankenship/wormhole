@@ -3,6 +3,29 @@
 **Coverage caveat:** `openai/transform.go` was NOT audited — its review agent hit a 429 rate limit. Re-run that one file to close the gap.
 **Status legend:** ✅ FIXED (commit) · ⬜ OPEN
 
+## Release Status (2026-07-08)
+
+### ✅ Shipped this session
+| Area | Commit | What |
+|------|--------|------|
+| Ollama streaming (HIGH) | `13c1b85` + `00d4c52` + `b0a37c8` | IsDone-misfire fix (bool branch) + wire-conformance test + done_reason via ExtraFinishReasonPath |
+| Proxy field-completion | `e0b08dd` | `max_completion_tokens` (prefer over max_tokens) + embedding `dimensions` + `ChatToolCallFunction.Name` omitempty |
+| OpenAI capture | `8bbe3cd` | `completion_tokens_details.reasoning_tokens` → `types.Usage.ReasoningTokens` (o-series billing) + `refusal` → `TextResponse.Refusal`/streaming (content-filter) |
+
+### ⬜ Remaining OPEN
+- **Gemini structured-output + thinking parse failure** (`pkg/providers/gemini/transform.go:601`) — `transformStructuredResponse` concatenates thinking-part text into JSON parse input → all thinking-model structured-output calls fail. HIGH. Gate: `go test ./pkg/providers/gemini/`
+- **Proxy `ChatUsage.completion_tokens_details` passthrough** (`internal/server/types.go` + `handler.go`) — NOW UNBLOCKED by `8bbe3cd` (provider captures reasoning tokens). Add the field + wire from SDK `Usage.ReasoningTokens`. Gate: `go test ./internal/server/`
+- **`MapFinishReason` default → Stop not Other** (`pkg/providers/transform/common.go:28`) — unknown reasons silently mapped to Stop. MED. Gate: `go test ./pkg/providers/transform/`
+- **`transform/common.go` shared-helper asymmetries** — `TransformTextResponse` omits FinishReason (:38), `ParseUsageFromMap` drops cache tokens (:166), `ParseToolCallFromMap` drops index (:90), `LenientUnmarshal` isn't lenient (:236). Mostly dead-code today; footguns if wired. MED/LOW. Gate: `go test ./pkg/providers/transform/`
+- **Gemini safety-block reason** (`transform.go:529`) — generic "no candidates" instead of `promptFeedback.blockReason`. LOW.
+- **Gemini `thoughtsTokenCount`** (`gemini/types.go:49`) — thinking token costs dropped; cross-layer (`types.Usage` lacks `ThinkingTokens`). LOW.
+
+### ⛔ DEFERRED (need SDK support first — do NOT add parse-only proxy fields)
+- Proxy sampling params: `frequency_penalty`, `presence_penalty`, `seed` (need `TextRequestBuilder` methods); `n`, `parallel_tool_calls` (no SDK concept); `encoding_format` (need embeddings builder support).
+
+### Coverage note
+`openai/transform.go` audited 2026-07-08 (2 findings, both fixed in `8bbe3cd`). Full transform-fidelity coverage now complete across gemini/openai/ollama/common/proxy.
+
 ## Confirmed Findings
 
 | Severity | File:Line | Category | Summary | Failure Scenario | Status |
