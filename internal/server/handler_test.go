@@ -131,3 +131,27 @@ func TestProxyMapsDeveloperAndFunctionRoles(t *testing.T) {
 	require.True(t, ok, "function message must be a *types.ToolResultMessage")
 	assert.Equal(t, "call_1", toolMsg.ToolCallID)
 }
+
+func TestUpstreamErrorStatus_SDKInternalErrorsMapByCode(t *testing.T) {
+	t.Parallel()
+	cases := []struct {
+		code       types.ErrorCode
+		wantStatus int
+	}{
+		{types.ErrorCodeAuth, http.StatusUnauthorized},
+		{types.ErrorCodeRateLimit, http.StatusTooManyRequests},
+		{types.ErrorCodeTimeout, http.StatusGatewayTimeout},
+		{types.ErrorCodeRequest, http.StatusBadRequest},
+		{types.ErrorCodeModel, http.StatusBadRequest},
+	}
+	for _, tc := range cases {
+		err := types.NewWormholeError(tc.code, "msg", false) // StatusCode left 0
+		status, _, _ := upstreamErrorStatus(err)
+		assert.Equalf(t, tc.wantStatus, status, "code %s should map to %d, got %d", tc.code, tc.wantStatus, status)
+	}
+	// An upstream-provided status must still win over the code-based mapping.
+	withStatus := types.NewWormholeError(types.ErrorCodeAuth, "msg", false).WithStatusCode(403)
+	if st, _, _ := upstreamErrorStatus(withStatus); st != 403 {
+		t.Fatalf("upstream StatusCode must win: got %d, want 403", st)
+	}
+}

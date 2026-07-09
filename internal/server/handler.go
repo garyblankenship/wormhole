@@ -464,10 +464,20 @@ func upstreamErrorStatus(err error) (int, string, string) {
 	if whErr.StatusCode != 0 {
 		return whErr.StatusCode, errType, upstreamClientMessage(errType)
 	}
-	if errType == "invalid_request_error" {
+	// No upstream status (SDK-internal error). Map by code to the semantically
+	// correct HTTP status instead of defaulting everything to 502 bad gateway.
+	switch whErr.Code {
+	case types.ErrorCodeAuth:
+		return http.StatusUnauthorized, errType, upstreamClientMessage(errType)
+	case types.ErrorCodeRateLimit:
+		return http.StatusTooManyRequests, errType, upstreamClientMessage(errType)
+	case types.ErrorCodeTimeout:
+		return http.StatusGatewayTimeout, errType, upstreamClientMessage(errType)
+	case types.ErrorCodeModel, types.ErrorCodeRequest, types.ErrorCodeValidation:
 		return http.StatusBadRequest, errType, actionableInvalidRequestMessage(whErr)
+	default:
+		return http.StatusBadGateway, errType, upstreamClientMessage(errType)
 	}
-	return http.StatusBadGateway, errType, upstreamClientMessage(errType)
 }
 
 func upstreamClientMessage(errType string) string {
