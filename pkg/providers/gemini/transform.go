@@ -154,23 +154,29 @@ func (g *Gemini) transformMessageToParts(msg types.Message, model string) ([]map
 		}
 
 	case *types.ToolResultMessage:
-		// Content is often already a JSON string; parse it so Gemini receives a
-		// structured object under response.result instead of a re-escaped string.
-		// Non-JSON content (plain text, empty) passes through verbatim as before.
-		var result any
-		if err := json.Unmarshal([]byte(m.Content), &result); err != nil {
-			result = m.Content
-		}
 		fnName := m.FunctionName
 		if fnName == "" {
 			fnName = geminiCallName(m.ToolCallID)
 		}
+		response := map[string]any{}
+		if m.Error != "" {
+			// Gemini surfaces tool failures via response.error; without it the
+			// error text would be parsed as a successful response.result.
+			response["error"] = map[string]any{"message": m.Error}
+		} else {
+			// Content is often already a JSON string; parse it so Gemini receives a
+			// structured object under response.result instead of a re-escaped string.
+			// Non-JSON content (plain text, empty) passes through verbatim as before.
+			var result any
+			if err := json.Unmarshal([]byte(m.Content), &result); err != nil {
+				result = m.Content
+			}
+			response["result"] = result
+		}
 		parts = append(parts, map[string]any{
 			"functionResponse": map[string]any{
-				"name": fnName,
-				"response": map[string]any{
-					"result": result,
-				},
+				"name":     fnName,
+				"response": response,
 			},
 		})
 	case *types.SystemMessage:
