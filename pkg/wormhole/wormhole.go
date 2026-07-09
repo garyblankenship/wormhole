@@ -32,10 +32,12 @@ type Wormhole struct {
 	adaptiveLimiter atomic.Pointer[EnhancedAdaptiveLimiter]
 
 	// Shutdown management
-	shutdownOnce   sync.Once
-	shutdownChan   chan struct{}  // Signal for graceful shutdown
-	activeRequests sync.WaitGroup // Track in-flight requests
-	shuttingDown   atomic.Bool    // Atomic flag for shutdown state
+	shutdownOnce       sync.Once
+	shutdownErr        error
+	shutdownChan       chan struct{}  // Signal for graceful shutdown
+	requestAdmissionMu sync.Mutex     // Serializes request admission with shutdown
+	activeRequests     sync.WaitGroup // Track in-flight requests
+	shuttingDown       atomic.Bool    // Atomic flag for shutdown state
 
 	// Idempotency cache
 	idempotencyMu      sync.Mutex

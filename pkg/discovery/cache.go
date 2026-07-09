@@ -8,6 +8,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"sync"
 	"time"
@@ -68,6 +69,108 @@ func cacheLookupKeys(provider string) []string {
 		return []string{provider}
 	}
 	return []string{provider, base}
+}
+
+func cloneModels(models []*types.ModelInfo) []*types.ModelInfo {
+	if models == nil {
+		return nil
+	}
+
+	cloned := make([]*types.ModelInfo, len(models))
+	for i, model := range models {
+		if model == nil {
+			continue
+		}
+
+		modelCopy := *model
+		if model.Cost != nil {
+			costCopy := *model.Cost
+			modelCopy.Cost = &costCopy
+		}
+		modelCopy.Capabilities = append([]types.ModelCapability(nil), model.Capabilities...)
+		modelCopy.Constraints = cloneConstraints(model.Constraints)
+		cloned[i] = &modelCopy
+	}
+	return cloned
+}
+
+func cloneConstraints(constraints map[string]any) map[string]any {
+	if constraints == nil {
+		return nil
+	}
+
+	cloned := make(map[string]any, len(constraints))
+	for key, value := range constraints {
+		cloned[key] = cloneConstraintValue(value)
+	}
+	return cloned
+}
+
+func cloneConstraintValue(value any) any {
+	if value == nil {
+		return nil
+	}
+	return cloneConstraintReflect(reflect.ValueOf(value)).Interface()
+}
+
+func cloneConstraintReflect(value reflect.Value) reflect.Value {
+	if !value.IsValid() {
+		return value
+	}
+
+	switch value.Kind() {
+	case reflect.Interface:
+		if value.IsNil() {
+			return reflect.Zero(value.Type())
+		}
+		cloned := cloneConstraintReflect(value.Elem())
+		result := reflect.New(value.Type()).Elem()
+		result.Set(cloned)
+		return result
+	case reflect.Pointer:
+		if value.IsNil() {
+			return reflect.Zero(value.Type())
+		}
+		result := reflect.New(value.Type().Elem())
+		result.Elem().Set(cloneConstraintReflect(value.Elem()))
+		return result
+	case reflect.Map:
+		if value.IsNil() {
+			return reflect.Zero(value.Type())
+		}
+		result := reflect.MakeMapWithSize(value.Type(), value.Len())
+		iterator := value.MapRange()
+		for iterator.Next() {
+			result.SetMapIndex(iterator.Key(), cloneConstraintReflect(iterator.Value()))
+		}
+		return result
+	case reflect.Slice:
+		if value.IsNil() {
+			return reflect.Zero(value.Type())
+		}
+		result := reflect.MakeSlice(value.Type(), value.Len(), value.Len())
+		for i := 0; i < value.Len(); i++ {
+			result.Index(i).Set(cloneConstraintReflect(value.Index(i)))
+		}
+		return result
+	case reflect.Array:
+		result := reflect.New(value.Type()).Elem()
+		for i := 0; i < value.Len(); i++ {
+			result.Index(i).Set(cloneConstraintReflect(value.Index(i)))
+		}
+		return result
+	case reflect.Struct:
+		result := reflect.New(value.Type()).Elem()
+		result.Set(value)
+		for i := 0; i < value.NumField(); i++ {
+			if value.Type().Field(i).PkgPath == "" {
+				result.Field(i).Set(cloneConstraintReflect(value.Field(i)))
+			}
+		}
+		return result
+	default:
+		return value
+	}
 }
 
 // ModelCache implements 3-tier caching: memory -> file -> fallback
@@ -141,12 +244,35 @@ func (c *ModelCache) getProviderLock(provider string) *sync.RWMutex {
 
 // getProviderFilePath returns the provider-specific cache file path
 func (c *ModelCache) getProviderFilePath(provider string) string {
-	// Sanitize provider name for file usage
+	// Keep a short readable prefix while using the full provider hash as the
+	// shard identity. The hash prevents distinct names such as "a/b" and
+	// "a_b" from sharing a file and racing under different provider locks.
+	safeProvider := strings.Map(func(r rune) rune {
+		if r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9' || r == '-' || r == '_' {
+			return r
+		}
+		return '_'
+	}, provider)
+	if len(safeProvider) > 32 {
+		safeProvider = safeProvider[:32]
+	}
+	providerHash := sha256.Sum256([]byte(provider))
+	shardID := safeProvider + "-" + hex.EncodeToString(providerHash[:])
+
+	return c.providerCachePath(shardID)
+}
+
+// getLegacyProviderFilePath returns the pre-hash shard path. It is read only
+// for backward compatibility and must never be trusted without checking the
+// provider identity stored inside the shard.
+func (c *ModelCache) getLegacyProviderFilePath(provider string) string {
 	safeProvider := strings.ReplaceAll(provider, "/", "_")
 	safeProvider = strings.ReplaceAll(safeProvider, "..", "_")
 	safeProvider = strings.ReplaceAll(safeProvider, "\\", "_")
+	return c.providerCachePath(safeProvider)
+}
 
-	// Extract directory and base name from original filePath
+func (c *ModelCache) providerCachePath(shardID string) string {
 	dir := filepath.Dir(c.filePath)
 	base := filepath.Base(c.filePath)
 	// Remove extension if present
@@ -155,7 +281,7 @@ func (c *ModelCache) getProviderFilePath(provider string) string {
 		base = strings.TrimSuffix(base, ext)
 	}
 	// Construct provider-specific filename: base-provider.ext
-	providerBase := fmt.Sprintf("%s-%s%s", base, safeProvider, ext)
+	providerBase := fmt.Sprintf("%s-%s%s", base, shardID, ext)
 	return filepath.Join(dir, providerBase)
 }
 
@@ -221,7 +347,7 @@ func (c *ModelCache) Get(provider string) ([]*types.ModelInfo, bool) {
 				}
 				c.memoryMu.Unlock()
 			}
-			return entry.Models, true
+			return cloneModels(entry.Models), true
 		}
 	}
 
@@ -237,7 +363,7 @@ func (c *ModelCache) Get(provider string) ([]*types.ModelInfo, bool) {
 			c.memoryMu.Lock()
 			c.memory[provider] = entry
 			c.memoryMu.Unlock()
-			return models, true
+			return cloneModels(models), true
 		}
 	}
 
@@ -246,7 +372,7 @@ func (c *ModelCache) Get(provider string) ([]*types.ModelInfo, bool) {
 	defer c.mu.RUnlock()
 	for _, lookup := range cacheLookupKeys(provider) {
 		if models, ok := c.fallback[lookup]; ok {
-			return models, false // false = using fallback
+			return cloneModels(models), false // false = using fallback
 		}
 	}
 
@@ -255,6 +381,7 @@ func (c *ModelCache) Get(provider string) ([]*types.ModelInfo, bool) {
 
 // Set stores models in cache (L1 + L2)
 func (c *ModelCache) Set(provider string, models []*types.ModelInfo) {
+	models = cloneModels(models)
 	entry := &CacheEntry{
 		Models:    models,
 		Timestamp: time.Now(),
@@ -282,26 +409,41 @@ func (c *ModelCache) loadFromFile(provider string) ([]*types.ModelInfo, bool) {
 		// Try provider-specific file first
 		providerPath := c.getProviderFilePath(lookup)
 		data, err := os.ReadFile(providerPath) // #nosec G304 - path validated via ValidatePath
-		lock.RUnlock()
 		if err == nil {
-			// Parse provider-specific JSON (single CacheEntry)
-			var entry CacheEntry
-			if err := json.Unmarshal(data, &entry); err != nil {
-				return nil, false // Invalid JSON
+			lock.RUnlock()
+			entry, ok := c.decodeProviderShard(data, lookup)
+			if !ok {
+				return nil, false
 			}
-			// Reject shards from an incompatible schema version instead of
-			// trusting a shape that may have since changed
-			if entry.SchemaVersion != cacheSchemaVersion {
-				return nil, false // Schema mismatch, treat as cache miss
-			}
-			// Check TTL
 			if time.Since(entry.Timestamp) > c.fileTTL {
 				continue
 			}
 			if lookup != provider {
-				c.scheduleMigration(provider, &entry)
+				c.scheduleMigration(provider, entry)
 			}
 			return entry.Models, true
+		}
+		if !os.IsNotExist(err) {
+			lock.RUnlock()
+			return nil, false
+		}
+
+		legacyPath := c.getLegacyProviderFilePath(lookup)
+		data, err = os.ReadFile(legacyPath) // #nosec G304 - path validated via ValidatePath
+		lock.RUnlock()
+		if err == nil {
+			entry, ok := c.decodeProviderShard(data, lookup)
+			if !ok {
+				return nil, false
+			}
+			if time.Since(entry.Timestamp) > c.fileTTL {
+				continue
+			}
+			c.scheduleMigration(provider, entry)
+			return entry.Models, true
+		}
+		if !os.IsNotExist(err) {
+			return nil, false
 		}
 	}
 
@@ -322,6 +464,9 @@ func (c *ModelCache) loadFromFile(provider string) ([]*types.ModelInfo, bool) {
 		if !ok {
 			continue
 		}
+		if entry.Provider != "" && entry.Provider != lookup {
+			continue
+		}
 
 		// Check TTL
 		if time.Since(entry.Timestamp) > c.fileTTL {
@@ -334,6 +479,17 @@ func (c *ModelCache) loadFromFile(provider string) ([]*types.ModelInfo, bool) {
 	}
 
 	return nil, false
+}
+
+func (c *ModelCache) decodeProviderShard(data []byte, provider string) (*CacheEntry, bool) {
+	var entry CacheEntry
+	if err := json.Unmarshal(data, &entry); err != nil {
+		return nil, false
+	}
+	if entry.SchemaVersion != cacheSchemaVersion || entry.Provider != provider {
+		return nil, false
+	}
+	return &entry, true
 }
 
 func (c *ModelCache) scheduleMigration(provider string, entry *CacheEntry) {
@@ -350,6 +506,7 @@ func (c *ModelCache) scheduleMigration(provider string, entry *CacheEntry) {
 		defer c.wg.Done()
 
 		entryCopy := *entry
+		entryCopy.Models = cloneModels(entry.Models)
 		entryCopy.Provider = provider
 		c.migrateToSharded(provider, &entryCopy, gen)
 	}()

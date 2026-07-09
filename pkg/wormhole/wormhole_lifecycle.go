@@ -2,6 +2,7 @@ package wormhole
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sort"
 	"sync/atomic"
@@ -15,7 +16,6 @@ func (p *Wormhole) Close() error {
 
 // Shutdown gracefully shuts down the Wormhole client with zero-downtime support.
 func (p *Wormhole) Shutdown(ctx context.Context) error {
-	var shutdownErr error
 	p.shutdownOnce.Do(func() {
 		p.signalShutdown()
 
@@ -31,7 +31,7 @@ func (p *Wormhole) Shutdown(ctx context.Context) error {
 		select {
 		case <-done:
 		case <-ctx.Done():
-			shutdownErr = fmt.Errorf("shutdown timeout: %w", ctx.Err())
+			p.shutdownErr = errors.Join(p.shutdownErr, fmt.Errorf("shutdown timeout: %w", ctx.Err()))
 		}
 
 		var errs []error
@@ -62,14 +62,17 @@ func (p *Wormhole) Shutdown(ctx context.Context) error {
 		}
 
 		if len(errs) > 0 {
-			shutdownErr = fmt.Errorf("errors during shutdown cleanup: %v", errs)
+			p.shutdownErr = errors.Join(p.shutdownErr, fmt.Errorf("errors during shutdown cleanup: %w", errors.Join(errs...)))
 		}
 	})
 
-	return shutdownErr
+	return p.shutdownErr
 }
 
 func (p *Wormhole) signalShutdown() {
+	p.requestAdmissionMu.Lock()
+	defer p.requestAdmissionMu.Unlock()
+
 	p.shuttingDown.Store(true)
 	select {
 	case <-p.shutdownChan:
@@ -85,14 +88,13 @@ func (p *Wormhole) IsShuttingDown() bool {
 }
 
 func (p *Wormhole) trackRequest() bool {
+	p.requestAdmissionMu.Lock()
+	defer p.requestAdmissionMu.Unlock()
+
 	if p.shuttingDown.Load() {
 		return false
 	}
 	p.activeRequests.Add(1)
-	if p.shuttingDown.Load() {
-		p.activeRequests.Done()
-		return false
-	}
 	return true
 }
 
