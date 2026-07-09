@@ -207,11 +207,10 @@ func (t *StreamingTransformer) ParseChunk(data []byte) (*types.TextChunk, error)
 			if str, ok := val.(string); ok {
 				reasonStr = str
 			} else if b, ok := val.(bool); ok {
-				// Handle boolean finish reasons (e.g., Ollama's "done" field)
+				// Boolean finish reason (e.g., Ollama's "done" field).
+				// false = intermediate chunk, no finish reason. true = terminal.
 				if b {
 					reasonStr = "true"
-				} else {
-					reasonStr = "false"
 				}
 			}
 
