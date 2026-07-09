@@ -304,14 +304,25 @@ type StreamIdleTimeoutError struct {
 	Timeout time.Duration
 }
 
+type closeOnceReadCloser struct {
+	io.ReadCloser
+	once sync.Once
+	err  error
+}
+
+func (c *closeOnceReadCloser) Close() error {
+	c.once.Do(func() { c.err = c.ReadCloser.Close() })
+	return c.err
+}
+
 func (e *StreamIdleTimeoutError) Error() string {
 	return fmt.Sprintf("stream idle timeout: no chunk received within %s", e.Timeout)
 }
 
 // ProcessStreamWithIdleTimeout wraps ProcessStream with a per-chunk idle timeout.
 // If timeout is zero or negative, it falls through to ProcessStream (no watchdog).
-// When the watchdog fires, a single timeout error chunk is emitted and the source
-// channel is drained to ensure the body-closing goroutine can exit.
+// When the watchdog fires, the provider read is canceled and its body is closed
+// before a single timeout error chunk is emitted.
 func ProcessStreamWithIdleTimeout(
 	ctx context.Context,
 	body io.ReadCloser,
@@ -323,11 +334,14 @@ func ProcessStreamWithIdleTimeout(
 		return ProcessStream(ctx, body, transformer, bufferSize)
 	}
 
-	src := ProcessStream(ctx, body, transformer, bufferSize)
+	streamCtx, cancelStream := context.WithCancel(ctx)
+	ownedBody := &closeOnceReadCloser{ReadCloser: body}
+	src := ProcessStream(streamCtx, ownedBody, transformer, bufferSize)
 	out := make(chan types.TextChunk, bufferSize)
 
 	go func() {
 		defer close(out)
+		defer cancelStream()
 		timer := time.NewTimer(timeout)
 		defer timer.Stop()
 
@@ -353,6 +367,8 @@ func ProcessStreamWithIdleTimeout(
 					return
 				}
 			case <-timer.C:
+				cancelStream()
+				_ = ownedBody.Close()
 				select {
 				case out <- types.TextChunk{
 					Error: &StreamIdleTimeoutError{Timeout: timeout},
@@ -360,8 +376,6 @@ func ProcessStreamWithIdleTimeout(
 				case <-ctx.Done():
 					return
 				}
-				// Drain source so the body-closing goroutine can exit.
-				go drainChannel(src)
 				return
 			}
 		}

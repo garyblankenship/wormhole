@@ -810,9 +810,7 @@ func TestProcessStreamWithIdleTimeout_StallDetected(t *testing.T) {
 func TestProcessStreamWithIdleTimeout_NoFirstChunk(t *testing.T) {
 	t.Parallel()
 
-	// Reader that never sends anything
-	reader, _ := io.Pipe()
-	body := io.NopCloser(reader)
+	body := newBlockingReadCloser()
 
 	transformer := func(data []byte) (*types.TextChunk, error) {
 		return &types.TextChunk{Text: string(data)}, nil
@@ -828,6 +826,11 @@ func TestProcessStreamWithIdleTimeout_NoFirstChunk(t *testing.T) {
 	require.Len(t, chunks, 1)
 	assert.Error(t, chunks[0].Error)
 	assert.Contains(t, chunks[0].Error.Error(), "stream idle timeout")
+	select {
+	case <-body.closed:
+	default:
+		t.Fatal("idle timeout did not close the blocked upstream body")
+	}
 }
 
 func TestProcessStream_ConsumerStopsReading_GoroutineExits(t *testing.T) {
@@ -921,6 +924,25 @@ type trackingCloser struct {
 	io.Reader
 	once   sync.Once
 	closed chan struct{}
+}
+
+type blockingReadCloser struct {
+	once   sync.Once
+	closed chan struct{}
+}
+
+func newBlockingReadCloser() *blockingReadCloser {
+	return &blockingReadCloser{closed: make(chan struct{})}
+}
+
+func (b *blockingReadCloser) Read([]byte) (int, error) {
+	<-b.closed
+	return 0, io.EOF
+}
+
+func (b *blockingReadCloser) Close() error {
+	b.once.Do(func() { close(b.closed) })
+	return nil
 }
 
 func (t *trackingCloser) Close() error {

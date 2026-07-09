@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"log/slog"
 	"net/http"
@@ -17,6 +18,12 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+type shutdownErrorCloser struct {
+	err error
+}
+
+func (c shutdownErrorCloser) Close() error { return c.err }
 
 func newTestProxy(mock *wmtest.MockProvider, opts ...wormhole.Option) *proxy {
 	baseOpts := make([]wormhole.Option, 0, 4+len(opts))
@@ -46,6 +53,23 @@ func newCapturingTestProxy(provider *capturingTextProvider) *proxy {
 		},
 		Logger: slog.New(slog.NewTextHandler(io.Discard, nil)),
 	})
+}
+
+func TestProxyShutdownPropagatesWormholeError(t *testing.T) {
+	t.Parallel()
+
+	wantErr := errors.New("wormhole cleanup failed")
+	p := New(Config{
+		WormholeOpts: []wormhole.Option{
+			wormhole.WithDiscovery(false),
+			func(cfg *wormhole.Config) {
+				cfg.Closers = append(cfg.Closers, shutdownErrorCloser{err: wantErr})
+			},
+		},
+		Logger: slog.New(slog.NewTextHandler(io.Discard, nil)),
+	})
+
+	require.ErrorIs(t, p.Shutdown(context.Background()), wantErr)
 }
 
 type capturingTextProvider struct {
@@ -359,6 +383,7 @@ func TestProxyChatValidationAndUpstreamErrors(t *testing.T) {
 		{name: "invalid json", body: `{`, code: http.StatusBadRequest},
 		{name: "missing model", body: `{"messages":[{"role":"user","content":"hello"}]}`, code: http.StatusBadRequest},
 		{name: "missing messages", body: `{"model":"gpt-test"}`, code: http.StatusBadRequest},
+		{name: "unsupported message role", body: `{"model":"gpt-test","messages":[{"role":"systme","content":"hello"}]}`, code: http.StatusBadRequest},
 		{name: "upstream error", body: `{"model":"gpt-test","messages":[{"role":"user","content":"hello"}]}`, code: http.StatusBadGateway},
 	}
 
@@ -372,6 +397,22 @@ func TestProxyChatValidationAndUpstreamErrors(t *testing.T) {
 			assert.NotEmpty(t, out.Error.Message)
 		})
 	}
+}
+
+func TestProxyRejectsUnsupportedMessageRole(t *testing.T) {
+	t.Parallel()
+
+	p := newTestProxy(wmtest.NewMockProvider("openai"))
+	rec := performRequest(p, http.MethodPost, "/v1/chat/completions", `{
+		"model":"gpt-test",
+		"messages":[{"role":"systme","content":"hello"}]
+	}`)
+
+	require.Equal(t, http.StatusBadRequest, rec.Code)
+	var out ErrorResponse
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &out))
+	assert.Equal(t, "unsupported_message_role", out.Error.Code)
+	assert.Contains(t, out.Error.Message, `"systme"`)
 }
 
 func TestProxyRejectsOversizedChatBody(t *testing.T) {

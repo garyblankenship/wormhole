@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"crypto/subtle"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net"
@@ -108,8 +109,8 @@ func isLoopbackAddr(addr string) bool {
 // Shutdown gracefully stops the HTTP server and the wormhole client.
 func (p *proxy) Shutdown(ctx context.Context) error {
 	serverErr := p.server.Shutdown(ctx)
-	_ = p.wh.Shutdown(ctx)
-	return serverErr
+	wormholeErr := p.wh.Shutdown(ctx)
+	return errors.Join(serverErr, wormholeErr)
 }
 
 func (p *proxy) auth(next http.Handler) http.Handler {

@@ -95,12 +95,9 @@ func (p *proxy) handleChatCompletions(w http.ResponseWriter, r *http.Request) {
 			}
 			msgs = append(msgs, types.NewToolResultMessage(m.ToolCallID, m.Content.Text))
 		default:
-			if len(m.Content.Media) > 0 {
-				writeError(w, http.StatusBadRequest, "unsupported_content_part",
-					"image content parts are only supported on user messages", "invalid_request_error")
-				return
-			}
-			msgs = append(msgs, types.NewUserMessage(m.Content.Text))
+			writeError(w, http.StatusBadRequest, "unsupported_message_role",
+				fmt.Sprintf("unsupported message role %q", m.Role), "invalid_request_error")
+			return
 		}
 	}
 
