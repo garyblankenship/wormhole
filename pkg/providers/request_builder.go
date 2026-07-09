@@ -127,7 +127,7 @@ func (b *RequestBuilder) transformToolCalls(toolCalls []types.ToolCall) []map[st
 			argsJSON, err := json.Marshal(tc.Arguments)
 			if err == nil {
 				tcMap["function"] = map[string]any{
-					"name":      tc.Type,
+					"name":      tc.Name,
 					"arguments": string(argsJSON),
 				}
 			}

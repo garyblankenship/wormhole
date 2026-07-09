@@ -382,3 +382,18 @@ func TestPrepareMessages_StrandedAfterMatchedTurn(t *testing.T) {
 	require.Len(t, warnings, 1)
 	assert.Contains(t, warnings[0], "call_orphan")
 }
+
+func TestTransformToolCalls_MapFormUsesName(t *testing.T) {
+	t.Parallel()
+	calls := []types.ToolCall{
+		{ID: "call_1", Type: "function", Name: "get_weather", Arguments: map[string]any{"city": "sf"}},
+	}
+	got := (&RequestBuilder{}).transformToolCalls(calls)
+	fn, ok := got[0]["function"].(map[string]any)
+	if !ok {
+		t.Fatalf("missing function map: %v", got[0])
+	}
+	if name, _ := fn["name"].(string); name != "get_weather" {
+		t.Fatalf("function.name = %q, want %q (must use tc.Name, not tc.Type)", name, "get_weather")
+	}
+}
