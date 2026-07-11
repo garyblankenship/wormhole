@@ -364,6 +364,13 @@ func (p *proxy) handleEmbeddings(w http.ResponseWriter, r *http.Request) {
 }
 
 func (p *proxy) handleListModels(w http.ResponseWriter, r *http.Request) {
+	if r.URL.Query().Has("client_version") {
+		writeJSON(w, http.StatusOK, struct {
+			Models []any `json:"models"`
+		}{Models: []any{}})
+		return
+	}
+
 	providers := mergeProviderNames(p.wh.ConfiguredProviders(), p.wh.ModelDiscoveryProviders())
 	var entries []ModelEntry
 	ts := time.Now().Unix()

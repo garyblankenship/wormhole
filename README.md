@@ -525,9 +525,14 @@ Supported proxy endpoints:
 | Method | Path |
 | --- | --- |
 | `POST` | `/v1/chat/completions` |
+| `POST` | `/v1/responses` |
 | `POST` | `/v1/embeddings` |
 | `GET` | `/v1/models` |
 | `GET` | `/health` |
+
+The Responses bridge translates function and custom tools to Chat Completions.
+Provider-specific `namespace` and `web_search` tools have no portable Chat
+Completions equivalent and are omitted when translating the request.
 
 The proxy binds `127.0.0.1:8080` by default. To expose it on another interface
 (e.g. `--addr :8080`) you MUST set `WORMHOLE_API_KEY` — an unauthenticated
