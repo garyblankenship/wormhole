@@ -1,5 +1,19 @@
 # Changelog
 
+## v1.24.0 (2026-07-11)
+
+### Features
+- Proxy: add a Codex-compatible `/v1/responses` bridge with text streaming, function and custom tools, tool continuations, image input, usage, and incomplete-response mapping.
+- Text builder: add explicit cross-provider fallback routes for generation and streaming.
+
+### Fixes
+- Proxy: preserve custom and `allowed_tools` constraints, map Z.AI reasoning requests to `thinking.type`, emit complete streaming tool lifecycles, and reject malformed tool results locally.
+- Discovery: isolate cached model values from caller mutation and prevent provider shard-name collisions while preserving legacy cache migration.
+- Streaming and lifecycle: cancel failed provider attempts cleanly, enforce idle timeouts per attempt, and harden shutdown coordination.
+
+### Other
+- Add Codex model-list compatibility and expand fallback, lifecycle, discovery-cache, and production-hardening regression coverage.
+
 ## v1.23.0 (2026-07-09)
 
 ### Features
