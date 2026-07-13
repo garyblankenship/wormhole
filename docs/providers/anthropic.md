@@ -14,7 +14,6 @@ import (
     "fmt"
     "os"
 
-    "github.com/garyblankenship/wormhole/pkg/types"
     "github.com/garyblankenship/wormhole/pkg/wormhole"
 )
 
@@ -22,9 +21,7 @@ func main() {
     // Create a new client with Anthropic configuration
     client := wormhole.New(
         wormhole.WithDefaultProvider("anthropic"),
-        wormhole.WithProviderConfig("anthropic", types.ProviderConfig{
-            APIKey: os.Getenv("ANTHROPIC_API_KEY"),
-        }),
+        wormhole.WithAnthropic(os.Getenv("ANTHROPIC_API_KEY")),
     )
 
     ctx := context.Background()
@@ -56,39 +53,12 @@ provider := anthropic.New(types.ProviderConfig{
 })
 ```
 
-## Supported Models
+## Models
 
-### Claude 4.5 Family (Latest)
-
-| Model ID | Description |
-|----------|-------------|
-| `claude-sonnet-4-5` | Latest Sonnet (alias) |
-| `claude-sonnet-4-5-20250929` | Sonnet 4.5 (dated) |
-| `claude-haiku-4-5` | Latest Haiku (alias) |
-| `claude-haiku-4-5-20251001` | Haiku 4.5 (dated) |
-| `claude-opus-4-5` | Latest Opus (alias) |
-| `claude-opus-4-5-20251101` | Opus 4.5 (dated) |
-
-### Claude 4.x Family (Legacy)
-
-| Model ID | Description |
-|----------|-------------|
-| `claude-opus-4-1` | Opus 4.1 (alias) |
-| `claude-opus-4-1-20250805` | Opus 4.1 (dated) |
-| `claude-sonnet-4` | Sonnet 4.0 (alias) |
-| `claude-sonnet-4-0-20250514` | Sonnet 4.0 (dated) |
-
-### Claude 3.x Family (Legacy)
-
-| Model ID | Description |
-|----------|-------------|
-| `claude-3-7-sonnet` | Sonnet 3.7 (alias) |
-| `claude-3-7-sonnet-20250219` | Sonnet 3.7 (dated) |
-| `claude-3-5-haiku` | Haiku 3.5 (alias) |
-| `claude-3-5-haiku-20241022` | Haiku 3.5 (dated) |
-| `claude-3-haiku-20240307` | Haiku 3 (dated) |
-
-**Note**: Prefer using model aliases (e.g., `claude-sonnet-4-5`) over dated versions for better maintainability.
+Anthropic's catalog and aliases change independently of Wormhole. Use the
+[official Claude models reference](https://platform.claude.com/docs/en/about-claude/models/overview)
+for current IDs and lifecycle status. Prefer a stable alias, such as
+`claude-sonnet-4-5`, when you do not need a dated snapshot.
 
 ## Capabilities
 
@@ -134,7 +104,7 @@ Anthropic uses `stop_sequences` instead of `stop`. The SDK automatically renames
 response, err := client.Text().
     Model("claude-sonnet-4-5").
     Prompt("Count from 1 to 10").
-    Stop([]string{"\n\n"}).
+    Stop([]string{"\n\n"}...).
     Generate(ctx)
 ```
 
@@ -166,7 +136,7 @@ tools := []types.Tool{
 response, err := client.Text().
     Model("claude-sonnet-4-5").
     Prompt("What's the weather in Tokyo?").
-    Tools(tools).
+    Tools(tools...).
     Generate(ctx)
 
 if len(response.ToolCalls) > 0 {
@@ -248,8 +218,7 @@ You can add custom headers via `ProviderConfig.Headers` if needed:
 
 ```go
 client := wormhole.New(
-    wormhole.WithProviderConfig("anthropic", types.ProviderConfig{
-        APIKey: os.Getenv("ANTHROPIC_API_KEY"),
+    wormhole.WithAnthropic(os.Getenv("ANTHROPIC_API_KEY"), types.ProviderConfig{
         Headers: map[string]string{
             "anthropic-beta": "prompt-caching-2024-07-31", // Enable beta features
         },
@@ -273,8 +242,7 @@ Override the default Anthropic API endpoint:
 
 ```go
 client := wormhole.New(
-    wormhole.WithProviderConfig("anthropic", types.ProviderConfig{
-        APIKey:  os.Getenv("ANTHROPIC_API_KEY"),
+    wormhole.WithAnthropic(os.Getenv("ANTHROPIC_API_KEY"), types.ProviderConfig{
         BaseURL: "https://custom-api.example.com/v1",
     }),
 )
@@ -297,5 +265,5 @@ response, err := client.Text().
 ## Reference
 
 - [Anthropic Messages API](https://docs.anthropic.com/en/api/messages)
-- [Claude Models](https://docs.anthropic.com/en/docs/about-claude/models)
+- [Claude Models](https://platform.claude.com/docs/en/about-claude/models/overview)
 - [Tool Use](https://docs.anthropic.com/en/docs/tool-use)

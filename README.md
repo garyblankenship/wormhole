@@ -120,6 +120,12 @@ Known providers are described by `provider_profiles.json` and exposed through
 default OpenAI-compatible base URLs, environment variable names, local-provider
 flags, and discovery mode; Go code keeps the routing logic generic.
 
+## More Guides
+
+- Core concepts: [errors](docs/concepts/errors.md), [messages](docs/concepts/messages.md), and [options](docs/concepts/options.md)
+- App workflows: [model discovery](docs/model-discovery.md) and [tool calling](docs/tool-calling.md)
+- Providers: [OpenAI](docs/providers/openai.md), [Anthropic](docs/providers/anthropic.md), [Gemini](docs/providers/gemini.md), [OpenRouter](docs/providers/openrouter.md), [DeepSeek](docs/providers/deepseek.md), and [Z.AI](docs/providers/zai.md)
+
 OpenAI text generation uses Chat Completions by default. Opt into the Responses
 API when you want OpenAI's newer `/v1/responses` wire format:
 

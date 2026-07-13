@@ -56,6 +56,6 @@ Perfect for understanding how to build robust AI applications that aren't locked
 
 ## 📚 Additional Resources
 
-- **[JSON Schema with Claude Guide](../../docs/OPENROUTER_CLAUDE_JSON_SCHEMA.md)** - Complete guide for structured output with Claude models
-- **[Structured Output Comparison](../openrouter_structured_comparison.go)** - Side-by-side comparison of different approaches
+- **[OpenRouter Guide](../../docs/providers/openrouter.md)** - Configuration, structured output, tools, and routing
+- **[Structured Output](../../README.md#structured-output-make-the-model-use-the-measuring-cup)** - Wormhole's schema-first API
 - **[OpenRouter Features](https://openrouter.ai/docs/features)** - Official OpenRouter documentation

@@ -82,12 +82,12 @@ go build -o example main.go
 
 ## 📚 Documentation Context
 
-These examples complement the comprehensive documentation in [`docs/`](../docs/):
+These examples complement the main [Wormhole guide](../README.md):
 
-- **[docs/quick-start.md](../docs/quick-start.md)** - Getting started guide
-- **[docs/provider-guide.md](../docs/provider-guide.md)** - Provider configuration
-- **[docs/advanced-features.md](../docs/advanced-features.md)** - Enterprise patterns
-- **[docs/performance-benchmarks.md](../docs/performance-benchmarks.md)** - Performance analysis
+- **[Quick start](../README.md#open-a-portal)** - Create a client and generate text
+- **[Provider configuration](../README.md#provider-dimensions)** - Configure supported providers
+- **[Tool calling](../docs/tool-calling.md)** - Register and execute tools
+- **[Model discovery](../docs/model-discovery.md)** - Discover and cache provider catalogs
 
 ## 🎯 Project Evolution
 

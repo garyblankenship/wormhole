@@ -14,7 +14,6 @@ import (
     "fmt"
     "os"
 
-    "github.com/garyblankenship/wormhole/pkg/types"
     "github.com/garyblankenship/wormhole/pkg/wormhole"
 )
 
@@ -22,9 +21,7 @@ func main() {
     // Create a new client with Gemini configuration
     client := wormhole.New(
         wormhole.WithDefaultProvider("gemini"),
-        wormhole.WithProviderConfig("gemini", types.ProviderConfig{
-            APIKey: os.Getenv("GEMINI_API_KEY"),
-        }),
+        wormhole.WithGemini(os.Getenv("GEMINI_API_KEY")),
     )
 
     ctx := context.Background()
@@ -55,42 +52,12 @@ provider := gemini.New(os.Getenv("GEMINI_API_KEY"), types.ProviderConfig{
 })
 ```
 
-## Supported Models
+## Models
 
-### Gemini 3 Series (Latest)
-
-| Model ID | Description |
-|----------|-------------|
-| `gemini-3-pro-preview` | Latest Gemini 3 Pro (preview) |
-| `gemini-3-pro-image-preview` | Gemini 3 Pro with vision (preview) |
-
-### Gemini 2.5 Series
-
-| Model ID | Description |
-|----------|-------------|
-| `gemini-2.5-flash` | Flash 2.5 (stable) |
-| `gemini-2.5-flash-preview-09-2025` | Flash 2.5 (Sept 2025 preview) |
-| `gemini-2.5-flash-image` | Flash 2.5 with vision |
-| `gemini-2.5-flash-native-audio-preview-12-2025` | Flash 2.5 with audio (Dec) |
-| `gemini-2.5-flash-native-audio-preview-09-2025` | Flash 2.5 with audio (Sept) |
-| `gemini-2.5-flash-preview-tts` | Flash 2.5 text-to-speech (preview) |
-| `gemini-2.5-flash-lite` | Flash 2.5 Lite |
-| `gemini-2.5-flash-lite-preview-09-2025` | Flash 2.5 Lite (Sept 2025) |
-| `gemini-2.5-pro` | Gemini 2.5 Pro |
-| `gemini-2.5-pro-preview-tts` | Gemini 2.5 Pro with TTS (preview) |
-
-### Gemini 2.0 Series
-
-| Model ID | Description |
-|----------|-------------|
-| `gemini-2.0-flash` | Flash 2.0 |
-| `gemini-2.0-flash-001` | Flash 2.0 (v001) |
-| `gemini-2.0-flash-exp` | Flash 2.0 (experimental) |
-| `gemini-2.0-flash-preview-image-generation` | Flash 2.0 with image generation |
-| `gemini-2.0-flash-lite` | Flash 2.0 Lite |
-| `gemini-2.0-flash-lite-001` | Flash 2.0 Lite (v001) |
-
-**Note**: Prefer stable versions (e.g., `gemini-2.5-flash`) over preview/exp versions for production use.
+Google's model catalog and preview lifecycle change independently of Wormhole.
+Use the [official Gemini models reference](https://ai.google.dev/gemini-api/docs/models)
+for current IDs and availability. Prefer a stable model ID, such as
+`gemini-2.5-flash`, when a preview-specific feature is not required.
 
 ## Capabilities
 
@@ -239,7 +206,7 @@ tools := []types.Tool{
 response, err := client.Text().
     Model("gemini-2.5-flash").
     Prompt("What's the weather in Tokyo?").
-    Tools(tools).
+    Tools(tools...).
     ToolChoice(&types.ToolChoice{Type: types.ToolChoiceTypeAuto}).
     Generate(ctx)
 
@@ -301,7 +268,7 @@ response, err := client.Embeddings().
         "Hello world",
         "Natural language processing",
         "Machine learning embeddings",
-    }).
+    }...).
     ProviderOptions(map[string]any{
         "taskType": "SEMANTIC_SIMILARITY",
         "title":    "Document similarity analysis",
@@ -352,7 +319,7 @@ response, err := client.Text().
     MaxTokens(1024).
     Temperature(0.7).
     TopP(0.9).
-    Stop([]string{"\n\n"}).
+    Stop([]string{"\n\n"}...).
     Generate(ctx)
 ```
 
@@ -391,8 +358,7 @@ Override the default Gemini API endpoint:
 
 ```go
 client := wormhole.New(
-    wormhole.WithProviderConfig("gemini", types.ProviderConfig{
-        APIKey:  os.Getenv("GEMINI_API_KEY"),
+    wormhole.WithGemini(os.Getenv("GEMINI_API_KEY"), types.ProviderConfig{
         BaseURL: "https://custom-api.example.com/v1beta",
     }),
 )
@@ -404,8 +370,7 @@ Set request timeout (in seconds):
 
 ```go
 client := wormhole.New(
-    wormhole.WithProviderConfig("gemini", types.ProviderConfig{
-        APIKey:  os.Getenv("GEMINI_API_KEY"),
+    wormhole.WithGemini(os.Getenv("GEMINI_API_KEY"), types.ProviderConfig{
         Timeout: 30, // 30 seconds
     }),
 )

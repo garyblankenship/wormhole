@@ -1,6 +1,7 @@
 # OpenRouter Provider
 
-The OpenRouter provider provides access to 200+ models from multiple AI providers through a unified API gateway.
+The OpenRouter provider gives Wormhole access to OpenRouter's multi-provider
+catalog through its OpenAI-compatible API.
 
 ## Quick Start
 
@@ -24,7 +25,7 @@ func main() {
         wormhole.WithDefaultProvider("openrouter"),
         wormhole.WithOpenAICompatible("openrouter", "https://openrouter.ai/api/v1", types.ProviderConfig{
             APIKey:        os.Getenv("OPENROUTER_API_KEY"),
-            DynamicModels: true, // Enable access to all 200+ models
+            DynamicModels: true, // Accept the provider's changing catalog
         }),
     )
 
@@ -49,12 +50,12 @@ func main() {
 For the simplest setup, use the factory method:
 
 ```go
-client, err := wormhole.QuickOpenRouter()
+client, err := wormhole.QuickOpenRouter(os.Getenv("OPENROUTER_API_KEY"))
 if err != nil {
     panic(err)
 }
 
-// Access any model from 200+ available
+// Use any model ID available to your OpenRouter account.
 response, err := client.Text().
     Model("openai/gpt-5-mini").
     Prompt("Explain quantum computing").
@@ -79,31 +80,9 @@ All OpenRouter model IDs follow the format: `provider/model-name`
 | Cohere | `cohere/*` | `cohere/command-r-plus` |
 | xAI | `x-ai/*` | `x-ai/grok-beta` |
 
-### Popular Models
-
-```go
-// Flagship models
-models := []string{
-    "openai/gpt-5-mini",           // Efficient and fast
-    "anthropic/claude-sonnet-4-5", // Balanced performance
-    "google/gemini-2.5-flash",     // Fast with multimodal
-    "meta-llama/llama-3.1-70b-instruct", // Open-source powerhouse
-}
-
-// Try multiple providers for the same prompt
-for _, model := range models {
-    response, err := client.Text().
-        Model(model).
-        Prompt("What is Go?").
-        Generate(ctx)
-
-    if err != nil {
-        continue
-    }
-
-    fmt.Printf("%s: %s\n", model, response.Content())
-}
-```
+OpenRouter's catalog changes continuously. Use the
+[OpenRouter model directory](https://openrouter.ai/models) for current IDs,
+capabilities, context limits, and pricing.
 
 ## Capabilities
 
@@ -165,9 +144,9 @@ client := wormhole.New(
 Fetch available models dynamically:
 
 ```go
-import "github.com/garyblankenship/wormhole/pkg/discovery"
+import "github.com/garyblankenship/wormhole/pkg/discovery/fetchers"
 
-fetcher := discovery.NewOpenRouterFetcher()
+fetcher := fetchers.NewOpenRouterFetcher()
 models, err := fetcher.FetchModels(context.Background())
 
 for _, model := range models {
@@ -178,9 +157,10 @@ for _, model := range models {
 }
 ```
 
-### Cost Tracking
+### Token Usage
 
-OpenRouter returns pricing information in responses:
+Wormhole exposes the token counts returned by OpenRouter. Use the current model
+pricing from the OpenRouter model directory when calculating cost:
 
 ```go
 response, err := client.Text().
@@ -191,7 +171,6 @@ response, err := client.Text().
 if response.Usage != nil {
     fmt.Printf("Prompt tokens: %d\n", response.Usage.PromptTokens)
     fmt.Printf("Completion tokens: %d\n", response.Usage.CompletionTokens)
-    // OpenRouter adds cost info to response metadata
 }
 ```
 
@@ -253,7 +232,7 @@ tools := []types.Tool{
 response, err := client.Text().
     Model("anthropic/claude-sonnet-4-5").
     Prompt("What's the weather in Tokyo?").
-    Tools(tools).
+    Tools(tools...).
     Generate(ctx)
 
 if len(response.ToolCalls) > 0 {
@@ -296,7 +275,7 @@ response, err := client.Embeddings().
         "Go is awesome",
         "Rust is powerful",
         "Python is simple",
-    }).
+    }...).
     Generate(ctx)
 
 for _, embedding := range response.Embeddings {
@@ -344,26 +323,14 @@ response, err := client.Rerank().
 
 ### Pricing
 
-OpenRouter uses **pay-per-use** pricing with competitive rates:
-
-- Pricing varies by model and provider
-- Check [OpenRouter Models](https://openrouter.ai/models) for current rates
-- Costs are calculated per 1M tokens (prompt + completion)
-
-```go
-// Example pricing (as of 2025):
-// openai/gpt-5-mini:      $0.15/1M prompt, $0.60/1M completion
-// anthropic/claude-3-5-haiku: $0.80/1M prompt, $1.00/1M completion
-// meta-llama/llama-3.1-8b:   $0.05/1M prompt, $0.05/1M completion
-```
+Pricing varies by model and provider. Check the
+[OpenRouter model directory](https://openrouter.ai/models) for current rates.
 
 ### Rate Limits
 
-Rate limits vary by model and provider:
-
-- **Free tier**: 20 requests/minute, 200 requests/day
-- **Paid tier**: Limits depend on credits purchased
-- Headers returned: `x-ratelimit-limit-requests`, `x-ratelimit-remaining-requests`
+Rate limits vary by model, provider, and account. Check
+[OpenRouter's limits documentation](https://openrouter.ai/docs/api/reference/limits)
+for current rules. A `429` response remains the portable signal to back off.
 
 ```go
 // Handle rate limits gracefully
@@ -436,9 +403,8 @@ Override the default OpenRouter endpoint (not recommended):
 
 ```go
 client := wormhole.New(
-    wormhole.WithOpenAICompatible("openrouter", "https://openrouter.ai/api/v1", types.ProviderConfig{
-        APIKey:  os.Getenv("OPENROUTER_API_KEY"),
-        BaseURL: "https://custom-gateway.example.com",
+    wormhole.WithOpenAICompatible("openrouter", "https://custom-gateway.example.com", types.ProviderConfig{
+        APIKey: os.Getenv("OPENROUTER_API_KEY"),
     }),
 )
 ```
@@ -451,7 +417,7 @@ Set request timeout:
 client := wormhole.New(
     wormhole.WithOpenAICompatible("openrouter", "https://openrouter.ai/api/v1", types.ProviderConfig{
         APIKey:  os.Getenv("OPENROUTER_API_KEY"),
-        Timeout: 60, // 60 seconds
+        Timeout: 60, // seconds
     }),
 )
 ```
@@ -583,4 +549,4 @@ For embeddings, set `ProviderOptions` on the `types.EmbeddingsRequest` to forwar
 - [OpenRouter Documentation](https://openrouter.ai/docs)
 - [OpenRouter Models](https://openrouter.ai/models)
 - [OpenRouter API Reference](https://openrouter.ai/docs/quick-start)
-- [Pricing](https://openrouter.ai/docs#models)
+- [Rate Limits](https://openrouter.ai/docs/api/reference/limits)

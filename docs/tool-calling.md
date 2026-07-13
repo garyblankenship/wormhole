@@ -531,4 +531,4 @@ for _, toolCall := range response.ToolCalls {
 
 - [Main README](../README.md) - Full Wormhole documentation
 - [Examples](../examples/tool_calling/) - Complete working examples
-- [API Reference](api/README.md) - API overview
+- [Package Reference](https://pkg.go.dev/github.com/garyblankenship/wormhole/pkg/wormhole) - Exported API

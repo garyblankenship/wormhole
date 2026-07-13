@@ -4,7 +4,7 @@ This directory contains practical examples of using Wormhole's embeddings API fo
 
 ## Examples
 
-### [`basic_embeddings.go`](./basic_embeddings.go)
+### [`basic/main.go`](./basic/main.go)
 **What it does:** Demonstrates basic embedding generation across multiple providers (OpenAI, Ollama, Gemini) with proper error handling.
 
 **Key features:**
@@ -17,10 +17,10 @@ This directory contains practical examples of using Wormhole's embeddings API fo
 ```bash
 export OPENAI_API_KEY="your-key"
 export GEMINI_API_KEY="your-key"  # Optional
-go run basic_embeddings.go
+go run ./basic
 ```
 
-### [`semantic_search.go`](./semantic_search.go)
+### [`semantic/main.go`](./semantic/main.go)
 **What it does:** Complete semantic search implementation that finds documents by meaning rather than keywords.
 
 **Key features:**
@@ -37,10 +37,10 @@ go run basic_embeddings.go
 **Run it:**
 ```bash
 export OPENAI_API_KEY="your-key"
-go run semantic_search.go
+go run ./semantic
 ```
 
-### [`batch_processing.go`](./batch_processing.go)
+### [`batch/main.go`](./batch/main.go)
 **What it does:** Optimized batch processing patterns for high-volume embedding generation with performance analysis.
 
 **Key features:**
@@ -58,10 +58,10 @@ go run semantic_search.go
 **Run it:**
 ```bash
 export OPENAI_API_KEY="your-key"
-go run batch_processing.go
+go run ./batch
 ```
 
-### [`openai_compatible_providers.go`](./openai_compatible_providers.go)
+### [`providers/main.go`](./providers/main.go)
 **What it does:** Demonstrates how to use Groq, Mistral, and other OpenAI-compatible providers for embeddings without separate implementations.
 
 **Key features:**
@@ -80,7 +80,7 @@ go run batch_processing.go
 ```bash
 export MISTRAL_API_KEY="your-key"  # Optional
 export GROQ_API_KEY="your-key"    # Optional  
-go run openai_compatible_providers.go
+go run ./providers
 ```
 
 ## 🚀 Getting Started

@@ -309,11 +309,13 @@ client := wormhole.New(
 With custom logger:
 
 ```go
+logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{
+    Level: slog.LevelDebug,
+}))
+
 client := wormhole.New(
     wormhole.WithOpenAI(apiKey),
-    wormhole.WithDebugLogging(types.LoggerFunc(func(fmt string, args ...any) {
-        log.Printf("[Wormhole] "+fmt, args...)
-    })),
+    wormhole.WithDebugLogging(logger),
 )
 ```
 
@@ -717,5 +719,5 @@ func NewTestClient(apiKey string) *wormhole.Wormhole {
 
 ## See Also
 
-- [Client Architecture](./client.md) - Client lifecycle and usage
+- [Client Setup](../../README.md#open-a-portal) - Create and configure a client
 - [Errors](./errors.md) - Error handling and types

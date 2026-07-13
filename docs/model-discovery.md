@@ -8,7 +8,7 @@ Wormhole's dynamic model discovery system automatically fetches and caches avail
 
 ## Features
 
-- **3-Tier Caching**: Memory → File → Fallback for optimal performance and resilience
+- **3-Tier Caching**: Memory → File → Fallback for resilience across restarts and outages
 - **Automatic Background Refresh**: Models update periodically without blocking requests
 - **Offline Support**: Falls back to cached/hardcoded models when network is unavailable
 - **Zero Configuration**: Works out of the box with sensible defaults
@@ -118,8 +118,8 @@ not erase a previously valid catalog. Manual refresh is intentionally strict.
 #### OpenRouter
 - **Endpoint**: `GET https://openrouter.ai/api/v1/models`
 - **Auth**: None required (public endpoint)
-- **Models**: 200+ models from multiple providers
-- **Metadata**: Pricing, context length, moderation flags
+- **Models**: OpenRouter's current multi-provider catalog
+- **Metadata**: Model name, context length, and inferred capabilities
 
 #### Ollama
 - **Endpoint**: `GET http://localhost:11434/api/tags`
@@ -278,6 +278,9 @@ const (
 
 Default: `~/.wormhole/models.json`
 
+Wormhole creates cache directories with mode `0750` and writes cache shards with
+mode `0600`. Existing parent-directory permissions still apply.
+
 Example structure:
 
 ```json
@@ -332,15 +335,6 @@ When all caches expire and network is unavailable, the system uses hardcoded fal
 **Ollama**:
 - No fallback (user-specific)
 
-## Performance
-
-### Benchmarks
-
-- **L1 Cache Hit**: ~100ns (memory lookup)
-- **L2 Cache Hit**: ~1ms (file read + JSON parse)
-- **L3 Fallback**: ~50ns (hardcoded slice)
-- **API Fetch**: ~200-500ms (network + parsing)
-
 ### Background Refresh
 
 When cache becomes stale:
@@ -349,7 +343,8 @@ When cache becomes stale:
 3. Updates cache asynchronously
 4. Next request gets fresh data
 
-**No latency impact on end users.**
+Stale entries can return without waiting for the refresh. A cold miss still
+waits for the provider fetch.
 
 ## Best Practices
 
@@ -539,8 +534,8 @@ euClient := wormhole.New(
 ## Security Considerations
 
 - **API Keys**: Never log or cache API keys
-- **File Permissions**: Cache file is created with `0644` (user read/write only)
-- **Directory**: Cache directory created with `0755`
+- **File Permissions**: Cache shards are created with `0600`
+- **Directory**: Cache directories are created with `0750`
 - **Network**: All API calls use HTTPS (except localhost Ollama)
 
 ## Performance Tuning

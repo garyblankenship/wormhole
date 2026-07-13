@@ -24,7 +24,8 @@ and sends unprefixed models such as `glm-5.2` to Z.AI.
 
 ## Add an alternative Codex profile
 
-Save the following as `~/.codex/zai.config.toml` (or
+Copy the ready-to-use [`zai.config.toml`](../examples/codex/zai.config.toml), or
+save the following as `~/.codex/zai.config.toml` (or
 `$CODEX_HOME/zai.config.toml` when `CODEX_HOME` is set):
 
 ```toml

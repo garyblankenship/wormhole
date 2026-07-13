@@ -201,14 +201,14 @@ err := fmt.Errorf("operation failed: %w", originalErr)
 ```go
 import "github.com/garyblankenship/wormhole/pkg/types"
 
-// Create new WormholeError
-err := types.Errorf(ErrorCodeAuth, "authentication failed", originalErr)
+// Create a classified WormholeError while preserving the cause
+err := types.WrapError(types.ErrorCodeAuth, "authentication failed", false, originalErr)
 
 // Create with formatting
 err := types.Errorff("auth for %s failed", originalErr, userID)
 
 // Wrap existing error with context
-err := types.WrapError(ErrorCodeProvider, "provider unavailable", true, originalErr).
+err := types.WrapError(types.ErrorCodeProvider, "provider unavailable", true, originalErr).
     WithProvider("openai").
     WithModel("gpt-5.2").
     WithStatusCode(503)
@@ -219,9 +219,9 @@ err := types.WrapError(ErrorCodeProvider, "provider unavailable", true, original
 Add context to WormholeError:
 
 ```go
-err := types.NewWormholeError(ErrorCodeModel, "model error", false).
+err := types.NewWormholeError(types.ErrorCodeModel, "model error", false).
     WithProvider("anthropic").
-    WithModel("claude-3").
+    WithModel("claude-sonnet-4-5").
     WithDetails("temperature out of range").
     WithStatusCode(400)
 ```
@@ -247,8 +247,8 @@ if err != nil {
 ```go
 type RetryConfig struct {
     MaxRetries      int           // Maximum retry attempts (default: 3)
-    InitialDelay    time.Duration // Initial backoff delay (default: 100ms)
-    MaxDelay        time.Duration // Maximum backoff delay (default: 1s)
+    InitialDelay    time.Duration // Initial backoff delay (default: 1s)
+    MaxDelay        time.Duration // Maximum backoff delay (default: 30s)
     BackoffMultiple float64       // Backoff multiplier (default: 2.0)
     Jitter          bool          // Add randomness to prevent thundering herd
     RetryableFunc   func(error) bool // Custom retryable check
@@ -276,18 +276,12 @@ The following errors are considered retryable by default:
 Default retry strategy with exponential backoff:
 
 ```go
-config := &middleware.RetryConfig{
-    MaxRetries:      3,
-    InitialDelay:    100 * time.Millisecond,
-    MaxDelay:        1 * time.Second,
-    BackoffMultiple: 2.0,
-    Jitter:          true,
-}
+config := middleware.DefaultRetryConfig()
 
 // Delay calculation:
-// attempt 0: 100ms ± 25ms (with jitter)
-// attempt 1: 200ms ± 50ms
-// attempt 2: 400ms ± 100ms
+// attempt 0: 1s ± 25% (with jitter)
+// attempt 1: 2s ± 25%
+// attempt 2: 4s ± 25%
 ```
 
 ### Custom Retryable Function
@@ -348,25 +342,18 @@ delay := types.ParseRetryAfterHeader(resp.Header, time.Now())
 err = werr.WithRetryAfter(delay) // copy-style setter; returns a new *WormholeError
 ```
 
-### Using Retry Middleware
+### Configuring Provider Retries
 
 ```go
-import "github.com/garyblankenship/wormhole/pkg/middleware"
-
-client := &http.Client{Timeout: 30 * time.Second}
-
-retryClient, err := middleware.NewRetry(client, &middleware.RetryConfig{
-    MaxRetries:   3,
-    InitialDelay: 100 * time.Millisecond,
-    Jitter:       true,
-})
-if err != nil {
-    log.Fatal(err)
-}
-
-// All requests through retryClient automatically retry on retryable errors
-resp, err := retryClient.Do(req)
+client := wormhole.New(
+    wormhole.WithOpenAI(os.Getenv("OPENAI_API_KEY")),
+    wormhole.WithRetries(3, time.Second),
+)
 ```
+
+`WithRetries` sets the client default for providers that do not specify
+`ProviderConfig.MaxRetries` or `ProviderConfig.RetryDelay`. Set `MaxRetries` on a
+provider config when one provider needs different behavior.
 
 ## Error Creation Patterns
 
@@ -392,10 +379,10 @@ var (
 Convert HTTP status codes to WormholeErrors:
 
 ```go
-import "github.com/garyblankenship/wormhole/pkg/providers"
+import "github.com/garyblankenship/wormhole/pkg/types"
 
 statusCode := 429
-err := providers.HTTPStatusToError(statusCode)
+err := types.HTTPStatusToError(statusCode, responseBody)
 // Returns ErrRateLimited (retryable)
 ```
 
@@ -456,9 +443,8 @@ func DoWork() error {
     // ... work ...
     if err != nil {
         // Wrap with context
-        return types.Errorf(ErrorCodeProvider, "work failed", err).
-            WithProvider("openai").
-            WithRetryable(true)
+        return types.WrapError(types.ErrorCodeProvider, "work failed", true, err).
+            WithProvider("openai")
     }
     return nil
 }
