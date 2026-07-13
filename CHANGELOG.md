@@ -1,5 +1,18 @@
 # Changelog
 
+## v1.26.0 (2026-07-13)
+
+### Features
+- Proxy: add an OpenAI-compatible `POST /v1/rerank` endpoint with provider/model routing, `top_n`, and usage reporting.
+
+### Fixes
+- Agent tools: preserve tool-call correlation by emitting one result message per tool call, including parallel calls.
+
+### Other
+- Add the Codex-through-Z.AI bridge guide and ready-to-copy configuration assets.
+- Prune stale documentation, repair retained guides and examples, and restore navigation across the supported docs.
+- Stop tracking the ignored local API-contract audit artifact.
+
 ## v1.25.0 (2026-07-13)
 
 ### Features
