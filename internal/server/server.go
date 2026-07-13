@@ -63,6 +63,7 @@ func New(cfg Config) *proxy {
 	mux.HandleFunc("POST /v1/chat/completions", p.handleChatCompletions)
 	mux.HandleFunc("POST /v1/responses", p.handleResponses)
 	mux.HandleFunc("POST /v1/embeddings", p.handleEmbeddings)
+	mux.HandleFunc("POST /v1/rerank", p.handleRerank)
 	mux.HandleFunc("GET /v1/models", p.handleListModels)
 	mux.HandleFunc("GET /health", p.handleHealth)
 

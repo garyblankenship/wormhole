@@ -226,6 +226,39 @@ type EmbeddingUsage struct {
 	TotalTokens  int `json:"total_tokens"`
 }
 
+// RerankRequest is the OpenAI-compatible rerank request.
+type RerankRequest struct {
+	Model     string   `json:"model"`
+	Query     string   `json:"query"`
+	Documents []string `json:"documents"`
+	TopN      *int     `json:"top_n,omitempty"`
+}
+
+// RerankResponse is the OpenAI-compatible rerank response.
+type RerankResponse struct {
+	ID      string         `json:"id,omitempty"`
+	Model   string         `json:"model"`
+	Results []RerankResult `json:"results"`
+	Usage   *RerankUsage   `json:"usage,omitempty"`
+}
+
+// RerankResult is a single document and its relevance score.
+type RerankResult struct {
+	Index          int            `json:"index"`
+	RelevanceScore float64        `json:"relevance_score"`
+	Document       RerankDocument `json:"document"`
+}
+
+// RerankDocument is the OpenAI-compatible document result shape.
+type RerankDocument struct {
+	Text string `json:"text"`
+}
+
+// RerankUsage reports token usage when the provider supplies it.
+type RerankUsage struct {
+	TotalTokens int `json:"total_tokens"`
+}
+
 // ModelEntry is a single model in the list response.
 type ModelEntry struct {
 	ID      string `json:"id"`

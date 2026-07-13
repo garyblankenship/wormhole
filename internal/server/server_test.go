@@ -79,6 +79,32 @@ type capturingTextProvider struct {
 	requests []types.TextRequest
 }
 
+type capturingRerankProvider struct {
+	*wmtest.MockProvider
+	request  types.RerankRequest
+	response *types.RerankResponse
+	err      error
+}
+
+func (p *capturingRerankProvider) Rerank(_ context.Context, request types.RerankRequest) (*types.RerankResponse, error) {
+	p.request = request
+	return p.response, p.err
+}
+
+func newRerankTestProxy(provider types.Provider) *proxy {
+	return New(Config{
+		WormholeOpts: []wormhole.Option{
+			wormhole.WithCustomProvider("openai", func(types.ProviderConfig) (types.Provider, error) {
+				return provider, nil
+			}),
+			wormhole.WithProviderConfig("openai", types.ProviderConfig{}),
+			wormhole.WithDefaultProvider("openai"),
+			wormhole.WithDiscovery(false),
+		},
+		Logger: slog.New(slog.NewTextHandler(io.Discard, nil)),
+	})
+}
+
 func newCapturingTextProvider(name string) *capturingTextProvider {
 	return &capturingTextProvider{
 		MockProvider: wmtest.NewMockProvider(name).WithTextResponse(types.TextResponse{
@@ -616,6 +642,78 @@ func TestProxyEmbeddingsValidationAndUpstreamErrors(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			rec := performRequest(p, http.MethodPost, "/v1/embeddings", tt.body)
+			assert.Equal(t, tt.code, rec.Code)
+			var out ErrorResponse
+			require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &out))
+			assert.NotEmpty(t, out.Error.Message)
+		})
+	}
+}
+
+func TestProxyRerank(t *testing.T) {
+	t.Parallel()
+
+	provider := &capturingRerankProvider{
+		MockProvider: wmtest.NewMockProvider("openai"),
+		response: &types.RerankResponse{
+			ID:    "rerank-1",
+			Model: "rerank-test",
+			Results: []types.RerankResult{
+				{Index: 1, RelevanceScore: 0.95, Document: "second"},
+			},
+			Usage: &types.Usage{TotalTokens: 12},
+		},
+	}
+	p := newRerankTestProxy(provider)
+
+	rec := performRequest(p, http.MethodPost, "/v1/rerank", `{
+		"model":"openai/rerank-test",
+		"query":"best document",
+		"documents":["first","second"],
+		"top_n":1
+	}`)
+
+	require.Equal(t, http.StatusOK, rec.Code)
+	var out RerankResponse
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &out))
+	assert.Equal(t, "rerank-test", provider.request.Model)
+	assert.Equal(t, "best document", provider.request.Query)
+	assert.Equal(t, []string{"first", "second"}, provider.request.Documents)
+	require.NotNil(t, provider.request.TopN)
+	assert.Equal(t, 1, *provider.request.TopN)
+	assert.Equal(t, "rerank-1", out.ID)
+	assert.Equal(t, "rerank-test", out.Model)
+	require.Len(t, out.Results, 1)
+	assert.Equal(t, "second", out.Results[0].Document.Text)
+	require.NotNil(t, out.Usage)
+	assert.Equal(t, 12, out.Usage.TotalTokens)
+}
+
+func TestProxyRerankValidationAndUpstreamErrors(t *testing.T) {
+	t.Parallel()
+
+	provider := &capturingRerankProvider{
+		MockProvider: wmtest.NewMockProvider("openai"),
+		err:          errors.New("rerank provider unavailable"),
+	}
+	p := newRerankTestProxy(provider)
+
+	tests := []struct {
+		name string
+		body string
+		code int
+	}{
+		{name: "invalid json", body: `{`, code: http.StatusBadRequest},
+		{name: "missing model", body: `{"query":"q","documents":["one"]}`, code: http.StatusBadRequest},
+		{name: "missing query", body: `{"model":"rerank-test","documents":["one"]}`, code: http.StatusBadRequest},
+		{name: "missing documents", body: `{"model":"rerank-test","query":"q"}`, code: http.StatusBadRequest},
+		{name: "upstream error", body: `{"model":"rerank-test","query":"q","documents":["one"]}`, code: http.StatusBadGateway},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			rec := performRequest(p, http.MethodPost, "/v1/rerank", tt.body)
 			assert.Equal(t, tt.code, rec.Code)
 			var out ErrorResponse
 			require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &out))

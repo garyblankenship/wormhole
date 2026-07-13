@@ -404,6 +404,72 @@ func (p *proxy) handleEmbeddings(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, out)
 }
 
+func (p *proxy) handleRerank(w http.ResponseWriter, r *http.Request) {
+	var req RerankRequest
+	if err := decodeRequestBody(w, r, &req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid_json",
+			"Failed to parse request body: "+err.Error(), "invalid_request_error")
+		return
+	}
+
+	switch {
+	case req.Model == "":
+		writeError(w, http.StatusBadRequest, "model_required",
+			"model is required", "invalid_request_error")
+		return
+	case req.Query == "":
+		writeError(w, http.StatusBadRequest, "query_required",
+			"query is required", "invalid_request_error")
+		return
+	case len(req.Documents) == 0:
+		writeError(w, http.StatusBadRequest, "documents_required",
+			"documents is required", "invalid_request_error")
+		return
+	}
+
+	configuredProviders := p.wh.ConfiguredProviders()
+	effDefaultProvider := effectiveDefaultProvider(p.defaultProvider, configuredProviders)
+	provider, model := parseModelRoute(req.Model, effDefaultProvider, configuredProviders)
+
+	builder := p.wh.Rerank().Model(model).Query(req.Query).Documents(req.Documents...)
+	if provider != "" {
+		builder = builder.Using(provider)
+	}
+	if req.TopN != nil {
+		builder = builder.TopN(*req.TopN)
+	}
+
+	resp, err := builder.Generate(r.Context())
+	if err != nil {
+		p.logger.Error("rerank failed", "error", types.SafeErrorValue(err), "model", types.SafeLogString(req.Model))
+		status, errType, clientMsg := upstreamErrorStatus(err)
+		writeError(w, status, "upstream_error", clientMsg, errType)
+		return
+	}
+
+	results := make([]RerankResult, 0, len(resp.Results))
+	for _, result := range resp.Results {
+		results = append(results, RerankResult{
+			Index:          result.Index,
+			RelevanceScore: result.RelevanceScore,
+			Document:       RerankDocument{Text: result.Document},
+		})
+	}
+	responseModel := resp.Model
+	if responseModel == "" {
+		responseModel = model
+	}
+	out := RerankResponse{
+		ID:      resp.ID,
+		Model:   responseModel,
+		Results: results,
+	}
+	if resp.Usage != nil {
+		out.Usage = &RerankUsage{TotalTokens: resp.Usage.TotalTokens}
+	}
+	writeJSON(w, http.StatusOK, out)
+}
+
 func (p *proxy) handleListModels(w http.ResponseWriter, r *http.Request) {
 	if r.URL.Query().Has("client_version") {
 		writeJSON(w, http.StatusOK, struct {
