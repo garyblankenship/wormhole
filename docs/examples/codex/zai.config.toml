@@ -1,0 +1,11 @@
+model_provider = "zai"
+model = "glm-5.2"
+model_context_window = 1000000
+model_supports_reasoning_summaries = false
+model_catalog_json = "zai-models.json"
+
+[model_providers.zai]
+name = "Z.AI via Wormhole"
+base_url = "http://127.0.0.1:8080/v1"
+wire_api = "responses"
+env_key = "WORMHOLE_API_KEY"

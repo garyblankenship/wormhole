@@ -1,0 +1,36 @@
+{
+  "models": [
+    {
+      "slug": "glm-5.2",
+      "display_name": "GLM-5.2",
+      "description": "Z.AI Coding Plan through Wormhole's Responses API bridge.",
+      "default_reasoning_level": "high",
+      "supported_reasoning_levels": [
+        { "effort": "low", "description": "Enable Z.AI thinking (same upstream setting as medium and high)" },
+        { "effort": "medium", "description": "Enable Z.AI thinking (same upstream setting as low and high)" },
+        { "effort": "high", "description": "Enable Z.AI thinking (same upstream setting as low and medium)" }
+      ],
+      "shell_type": "shell_command",
+      "visibility": "list",
+      "supported_in_api": true,
+      "priority": 1,
+      "availability_nux": null,
+      "upgrade": null,
+      "base_instructions": "You are Codex, a coding agent. Follow the developer and user instructions precisely.",
+      "supports_reasoning_summaries": false,
+      "default_reasoning_summary": "none",
+      "support_verbosity": false,
+      "default_verbosity": null,
+      "apply_patch_tool_type": "freeform",
+      "truncation_policy": { "mode": "tokens", "limit": 10000 },
+      "supports_parallel_tool_calls": true,
+      "context_window": 1000000,
+      "max_context_window": 1000000,
+      "effective_context_window_percent": 95,
+      "experimental_supported_tools": [],
+      "input_modalities": ["text"],
+      "supports_search_tool": false,
+      "use_responses_lite": false
+    }
+  ]
+}

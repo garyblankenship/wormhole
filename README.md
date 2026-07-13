@@ -107,6 +107,7 @@ does not need a second garage.
 | Ollama | `WithOllama(config)` | text, streaming, structured output, embeddings, local model helpers |
 | Local OpenAI-compatible | `WithLocalOpenAI(baseURL)` or `QuickLocalOpenAI(baseURL)` | no-auth local text and streaming |
 | OpenRouter | `WithOpenAICompatible(...)` or `QuickOpenRouter()` | OpenAI-compatible text, streaming, structured output, tools, reranking where supported |
+| Z.AI | `WithProfiledOpenAICompatible("zai", config)` or `WithAllProvidersFromEnv()` | OpenAI-compatible text, streaming, structured output, tools, Codex through the proxy |
 | DeepSeek | `WithProfiledOpenAICompatible("deepseek", config)` | OpenAI-compatible text, streaming, structured output, tools, reasoning output |
 | Groq | `WithGroq(key)` | OpenAI-compatible text and streaming |
 | Mistral | `WithMistral(config)` | OpenAI-compatible text and streaming |
@@ -214,6 +215,8 @@ Common environment variables:
 | `OPENROUTER_API_KEY` | OpenRouter |
 | `GROQ_API_KEY` | Groq |
 | `MISTRAL_API_KEY` | Mistral |
+| `ZAI_API_KEY` | Z.AI |
+| `ZAI_BASE_URL` | Optional Z.AI upstream override |
 | `OLLAMA_BASE_URL` | Ollama native API |
 | `LMSTUDIO_BASE_URL` | LM Studio |
 | `WORMHOLE_API_KEY` | Optional proxy bearer token |
@@ -502,6 +505,10 @@ client := wormhole.New(
 The `wormhole` binary can run a local OpenAI-compatible proxy. Point OpenAI-style
 clients at one address and route models across provider dimensions with
 prefixes.
+
+To run Codex with GLM-5.2 on the Z.AI Coding Plan, use the focused
+[Codex with Z.AI guide](docs/providers/zai.md). It includes the named Codex
+profile, model metadata catalog, smoke tests, and 404 troubleshooting.
 
 ```bash
 go build -o wormhole ./cmd/wormhole

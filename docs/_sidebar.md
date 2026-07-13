@@ -6,6 +6,7 @@
 - [Anthropic](providers/anthropic.md)
 - [Google Gemini](providers/gemini.md)
 - [OpenRouter](providers/openrouter.md)
+- [Z.AI](providers/zai.md)
 
 ## Concepts
 
