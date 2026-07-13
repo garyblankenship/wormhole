@@ -94,8 +94,14 @@ func main() {
 
 **Cache Behavior**:
 - **FRESH**: Cache entry within TTL → Return immediately
-- **STALE**: Cache expired but available → Return + trigger background refresh
+- **STALE FALLBACK**: Built-in fallback catalog available → Return immediately
+  and refresh in the background
+- **EXPIRED LIVE**: Previously fetched catalog expired → Attempt a live fetch,
+  then return the last fetched catalog if the provider is unavailable
 - **MISS**: No cache entry → Block and fetch from provider API
+
+Ordinary model listing is stale-tolerant so a temporary provider outage does
+not erase a previously valid catalog. Manual refresh is intentionally strict.
 
 ### Provider APIs
 
@@ -210,7 +216,10 @@ for _, model := range models {
 
 #### `RefreshModels() error`
 
-Manually refreshes all provider model catalogs (bypasses cache).
+Manually refreshes all provider model catalogs (bypasses cache). Unlike ordinary
+listing, this is a strict live operation: provider failures are returned as a
+deterministically ordered joined error even when stale cached models remain
+available for subsequent reads.
 
 ```go
 if err := client.RefreshModels(); err != nil {
@@ -229,7 +238,8 @@ client.ClearModelCache()
 
 #### `StopModelDiscovery()`
 
-Stops background refresh goroutine (call during shutdown).
+Stops background refresh work and cancels any in-flight provider fetches (call
+during shutdown).
 
 ```go
 defer client.StopModelDiscovery()

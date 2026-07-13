@@ -84,3 +84,20 @@ func TestInitializeDiscoveryServiceRegistersConfiguredProviderFetchers(t *testin
 	require.Contains(t, providers, "gemini")
 	require.Contains(t, providers, "custom")
 }
+
+func TestInitializeDiscoveryServiceUsesAPIKeysFallback(t *testing.T) {
+	t.Parallel()
+
+	client := New(
+		WithDiscoveryConfig(discovery.DiscoveryConfig{
+			DisableFileCache:         true,
+			DisableBackgroundRefresh: true,
+		}),
+		WithProviderConfig("openai", types.ProviderConfig{APIKeys: []string{"test-openai-key"}}),
+		WithProviderConfig("gemini", types.ProviderConfig{APIKeys: []string{"test-gemini-key"}}),
+	)
+
+	providers := client.ModelDiscoveryProviders()
+	require.Contains(t, providers, "openai")
+	require.Contains(t, providers, "gemini")
+}

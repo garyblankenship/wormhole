@@ -113,6 +113,25 @@ func TestOpenAIStreamingTransformer_SimpleText(t *testing.T) {
 	assert.Empty(t, chunk.ToolCalls)
 }
 
+func TestOpenAIStreamingTransformer_Refusal(t *testing.T) {
+	t.Parallel()
+	transformer := NewOpenAIStreamingTransformer()
+
+	chunk, err := transformer.ParseChunk([]byte(`{
+		"id":"chatcmpl-refusal",
+		"model":"gpt-test",
+		"choices":[{"delta":{"refusal":"I cannot help with that."}}]
+	}`))
+	require.NoError(t, err)
+	require.NotNil(t, chunk)
+
+	assert.Equal(t, "I cannot help with that.", chunk.Refusal)
+	require.NotNil(t, chunk.Delta)
+	assert.Equal(t, "I cannot help with that.", chunk.Delta.Refusal)
+	assert.Empty(t, chunk.Text)
+	assert.Empty(t, chunk.Content())
+}
+
 func TestOpenAIStreamingTransformer_FinishReasonMapping(t *testing.T) {
 	t.Parallel()
 	transformer := NewOpenAIStreamingTransformer()
@@ -127,7 +146,7 @@ func TestOpenAIStreamingTransformer_FinishReasonMapping(t *testing.T) {
 		{"tool_calls", "tool_calls", types.FinishReasonToolCalls},
 		{"function_call", "function_call", types.FinishReasonToolCalls},
 		{"content_filter", "content_filter", types.FinishReasonContentFilter},
-		{"unknown", "unknown", types.FinishReasonStop},
+		{"unknown", "unknown", types.FinishReasonOther},
 	}
 
 	for _, tc := range testCases {
@@ -196,7 +215,7 @@ func TestOllamaStreamingTransformer(t *testing.T) {
 	assert.NotNil(t, chunk.Delta)
 	assert.Equal(t, "Hello world", chunk.Delta.Content)
 	require.NotNil(t, chunk.FinishReason)
-	assert.Equal(t, types.FinishReasonStop, *chunk.FinishReason)
+	assert.Equal(t, types.FinishReasonOther, *chunk.FinishReason)
 }
 
 func TestStreamingTransformer_EmptyData(t *testing.T) {

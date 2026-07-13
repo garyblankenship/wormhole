@@ -18,6 +18,7 @@ type StreamingConfig struct {
 	IDPath                string // e.g., "id"
 	ModelPath             string // e.g., "model"
 	ThinkingPath          string // e.g., "choices.0.delta.reasoning_content"
+	RefusalPath           string // e.g., "choices.0.delta.refusal"
 	ExtraFinishReasonPath string // secondary path when FinishReasonPath is a bool true (e.g., Ollama "done_reason")
 
 	// Field adapters for provider-specific formats
@@ -197,6 +198,19 @@ func (t *StreamingTransformer) ParseChunk(data []byte) (*types.TextChunk, error)
 				if chunk.Delta != nil {
 					chunk.Delta.Thinking = thinking
 				}
+			}
+		}
+	}
+
+	// Preserve refusal deltas separately from ordinary assistant text.
+	if t.config.RefusalPath != "" {
+		if val := t.getFieldByPath(response, t.config.RefusalPath); val != nil {
+			if refusal, ok := val.(string); ok && refusal != "" {
+				chunk.Refusal = refusal
+				if chunk.Delta == nil {
+					chunk.Delta = &types.ChunkDelta{}
+				}
+				chunk.Delta.Refusal = refusal
 			}
 		}
 	}
@@ -434,6 +448,7 @@ func NewOpenAIStreamingTransformer() *StreamingTransformer {
 		IDPath:              "id",
 		ModelPath:           "model",
 		ThinkingPath:        "choices.0.delta.reasoning_content",
+		RefusalPath:         "choices.0.delta.refusal",
 		FinishReasonAdapter: MapFinishReason,
 		UsageAdapter:        openAIStreamUsage,
 		ReturnsBatch:        false,

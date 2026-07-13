@@ -3,7 +3,9 @@ package types
 import (
 	"errors"
 	"fmt"
+	"log/slog"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 	"time"
@@ -76,12 +78,107 @@ type WormholeError struct {
 	RetryAfter time.Duration `json:"retry_after,omitempty"`
 }
 
+const maxSafeErrorFieldLength = 512
+
 // Error implements the error interface
 func (e *WormholeError) Error() string {
 	if e.Details != "" {
 		return fmt.Sprintf("%s: %s (%s)", e.Code, e.Message, e.Details)
 	}
 	return fmt.Sprintf("%s: %s", e.Code, e.Message)
+}
+
+// LogValue provides a bounded, structured representation for logs. Details and
+// Cause intentionally remain available to SDK callers but are never emitted.
+func (e *WormholeError) LogValue() slog.Value {
+	if e == nil {
+		return slog.GroupValue(slog.String("error_type", "*types.WormholeError"))
+	}
+	return slog.GroupValue(SafeErrorAttrs(e)...)
+}
+
+// SafeErrorAttrs returns the non-sensitive fields that may be written to logs.
+// Arbitrary errors are represented only by their concrete type because their
+// messages can contain upstream response bodies, credentials, or request data.
+func SafeErrorAttrs(err error) []slog.Attr {
+	if wormholeErr, ok := AsWormholeError(err); ok {
+		attrs := []slog.Attr{
+			slog.String("code", string(wormholeErr.Code)),
+			slog.String("message", safeErrorMessage(wormholeErr.Code)),
+			slog.Bool("retryable", wormholeErr.Retryable),
+		}
+		if wormholeErr.Provider != "" {
+			attrs = append(attrs, slog.String("provider", SafeLogString(wormholeErr.Provider)))
+		}
+		if wormholeErr.Model != "" {
+			attrs = append(attrs, slog.String("model", SafeLogString(wormholeErr.Model)))
+		}
+		if wormholeErr.StatusCode > 0 {
+			attrs = append(attrs, slog.Int("status_code", wormholeErr.StatusCode))
+		}
+		return attrs
+	}
+
+	errorType := "<nil>"
+	if err != nil {
+		errorType = fmt.Sprintf("%T", err)
+	}
+	return []slog.Attr{slog.String("error_type", boundedLogField(errorType))}
+}
+
+// safeErrorMessage deliberately derives log prose from the error class. The
+// caller-visible Message may contain provider-controlled response text.
+func safeErrorMessage(code ErrorCode) string {
+	switch code {
+	case ErrorCodeAuth:
+		return "authentication failed"
+	case ErrorCodeModel:
+		return "model request failed"
+	case ErrorCodeRateLimit:
+		return "rate limit exceeded"
+	case ErrorCodeRequest:
+		return "invalid request"
+	case ErrorCodeTimeout:
+		return "request timeout"
+	case ErrorCodeProvider:
+		return "provider request failed"
+	case ErrorCodeNetwork:
+		return "network request failed"
+	case ErrorCodeValidation:
+		return "validation failed"
+	case ErrorCodeMiddleware:
+		return "middleware request failed"
+	default:
+		return "request failed"
+	}
+}
+
+// SafeLogString bounds log metadata and strips credentials and query strings
+// from URL-shaped values.
+func SafeLogString(value string) string {
+	if strings.Contains(value, "://") {
+		if parsed, err := url.Parse(value); err == nil && parsed.Scheme != "" && parsed.Host != "" {
+			parsed.User = nil
+			parsed.RawQuery = ""
+			parsed.ForceQuery = false
+			parsed.Fragment = ""
+			value = parsed.String()
+		}
+	}
+	return boundedLogField(value)
+}
+
+// SafeErrorValue returns a structured slog value that cannot format the raw
+// error or its cause chain.
+func SafeErrorValue(err error) slog.Value {
+	return slog.GroupValue(SafeErrorAttrs(err)...)
+}
+
+func boundedLogField(value string) string {
+	if len(value) <= maxSafeErrorFieldLength {
+		return value
+	}
+	return value[:maxSafeErrorFieldLength]
 }
 
 // Unwrap returns the underlying error

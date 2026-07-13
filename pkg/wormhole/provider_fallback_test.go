@@ -4,9 +4,43 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 
+	"github.com/garyblankenship/wormhole/pkg/middleware"
 	"github.com/garyblankenship/wormhole/pkg/types"
 )
+
+func TestCircuitBreakerDoesNotBlockProviderFallback(t *testing.T) {
+	primary := &providerFallbackTextProvider{
+		BaseProvider: types.NewBaseProvider("primary"),
+		err:          errors.New("primary unavailable"),
+	}
+	secondary := &providerFallbackTextProvider{
+		BaseProvider: types.NewBaseProvider("secondary"),
+		response:     "fallback survived",
+	}
+	client := New(
+		WithDefaultProvider("primary"),
+		WithCustomProvider("primary", func(types.ProviderConfig) (types.Provider, error) { return primary, nil }),
+		WithProviderConfig("primary", types.ProviderConfig{}),
+		WithCustomProvider("secondary", func(types.ProviderConfig) (types.Provider, error) { return secondary, nil }),
+		WithProviderConfig("secondary", types.ProviderConfig{}),
+		WithMiddleware(middleware.CircuitBreakerMiddleware(1, time.Hour)),
+		WithDiscovery(false),
+	)
+
+	response, err := client.Text().
+		Model("primary-model").
+		WithProviderFallback(TextRoute{Provider: "secondary", Model: "secondary-model"}).
+		Prompt("hello").
+		Generate(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := response.Content(); got != "fallback survived" {
+		t.Fatalf("response = %q, want fallback survived", got)
+	}
+}
 
 type providerFallbackTextProvider struct {
 	*types.BaseProvider

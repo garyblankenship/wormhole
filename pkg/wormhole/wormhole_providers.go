@@ -48,7 +48,7 @@ func validateAPIKey(provider, apiKey string) error {
 }
 
 func shouldValidateAPIKey(provider string, config types.ProviderConfig) bool {
-	if config.APIKey == "" || config.NoAuth {
+	if config.EffectiveAPIKey() == "" || config.NoAuth {
 		return false
 	}
 	if provider != providerOpenAI || config.BaseURL == "" {
@@ -232,7 +232,17 @@ func cloneProviderConfig(config types.ProviderConfig) types.ProviderConfig {
 	}
 	if len(config.Params) > 0 {
 		cloned.Params = make(map[string]any, len(config.Params))
-		maps.Copy(cloned.Params, config.Params)
+		for key, value := range config.Params {
+			cloned.Params[key] = types.CloneValue(value)
+		}
+	}
+	cloned.APIKeys = append([]string(nil), config.APIKeys...)
+	cloned.DefaultProviderOptions = types.CloneMap(config.DefaultProviderOptions)
+	if config.ProviderOptionsByModel != nil {
+		cloned.ProviderOptionsByModel = make(map[string]map[string]any, len(config.ProviderOptionsByModel))
+		for model, options := range config.ProviderOptionsByModel {
+			cloned.ProviderOptionsByModel[model] = types.CloneMap(options)
+		}
 	}
 	if len(config.RequestPolicy.MaxTokensParamRules) > 0 {
 		cloned.RequestPolicy.MaxTokensParamRules = make([]types.MaxTokensParamRule, len(config.RequestPolicy.MaxTokensParamRules))
@@ -290,8 +300,11 @@ func (p *Wormhole) createProviderWithConfig(name string, config types.ProviderCo
 		return nil, err
 	}
 
+	if config.APIKey == "" {
+		config.APIKey = config.EffectiveAPIKey()
+	}
 	if shouldValidateAPIKey(name, config) {
-		if err := validateAPIKey(name, config.APIKey); err != nil {
+		if err := validateAPIKey(name, config.EffectiveAPIKey()); err != nil {
 			return nil, fmt.Errorf("invalid API key for provider %s: %w", name, err)
 		}
 	}
@@ -412,7 +425,7 @@ func validateConfig(c *Config) []string {
 		if cfg.NoAuth {
 			continue
 		}
-		if (!knownProfile || !profile.Local) && cfg.APIKey == "" {
+		if (!knownProfile || !profile.Local) && cfg.EffectiveAPIKey() == "" {
 			warnings = append(warnings, fmt.Sprintf(
 				"Provider '%s' is configured but has no API key. Requests will likely fail.",
 				name,

@@ -381,8 +381,8 @@ func (p *Provider) parseStreamChunk(data []byte) (*types.TextChunk, error) {
 	}
 
 	if choice.Delta.Refusal != "" {
-		chunk.Text = choice.Delta.Refusal
-		chunk.Delta.Content = choice.Delta.Refusal
+		chunk.Refusal = choice.Delta.Refusal
+		chunk.Delta.Refusal = choice.Delta.Refusal
 	}
 
 	if choice.Delta.ReasoningContent != "" {

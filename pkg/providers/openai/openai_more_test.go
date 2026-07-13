@@ -65,7 +65,6 @@ func TestImageCapabilityHasGenerateImageImplementation(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			provider, _ := newOpenAITestProviderWithConfig(t, tt.config, func(w http.ResponseWriter, r *http.Request) {
@@ -234,6 +233,19 @@ func TestParseStreamChunkFallback(t *testing.T) {
 	assert.Equal(t, "call-1", chunk.ToolCalls[0].ID)
 	assert.Equal(t, "lookup", chunk.ToolCalls[0].Name)
 	assert.Equal(t, map[string]any{"q": "ada"}, chunk.ToolCalls[0].Arguments)
+
+	chunk, err = provider.parseStreamChunk([]byte(`{
+		"id":"chunk-refusal",
+		"model":"gpt-4o-mini",
+		"choices":[{"delta":{"refusal":"I cannot help with that."}}]
+	}`))
+	require.NoError(t, err)
+	require.NotNil(t, chunk)
+	assert.Equal(t, "I cannot help with that.", chunk.Refusal)
+	require.NotNil(t, chunk.Delta)
+	assert.Equal(t, "I cannot help with that.", chunk.Delta.Refusal)
+	assert.Empty(t, chunk.Text)
+	assert.Empty(t, chunk.Content())
 }
 
 func TestHandleSpeechToTextStatusError(t *testing.T) {

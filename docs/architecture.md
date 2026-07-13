@@ -150,7 +150,8 @@ CommonBuilder (shared config, provider override, validation)
 - Provider override (`.Using("anthropic")`)
 - Base URL override (`.BaseURL("http://localhost:11434/v1")`)
 - Validation helpers (`.Validate()`)
-- Clone support (`.Clone()` for builder reuse)
+- Deep clone support (`.Clone()` detaches nested messages, media bytes, tool
+  calls, schemas, and provider options for safe builder reuse)
 
 **Advanced Features**:
 - **Fallback Models**: `.WithFallback("gpt-5.1-mini")` auto-retries on primary failure
@@ -536,8 +537,10 @@ BenchmarkConcurrent-16          6826171   146.4 ns/op    0 B/op    0 allocs/op
 
 **API Key Validation**:
 - Format validation before use (OpenAI: `sk-`, Anthropic: `sk-ant-`)
-- No logging in debug mode
-- Sanitization in error messages (`sk-1****cdef`)
+- Default and debug logging emit bounded structured classifications and safe
+  request metadata only
+- Raw upstream bodies, prompts, credential-bearing URLs, error details, and
+  causes are excluded from Wormhole-managed logs
 
 **TLS Configuration**:
 - `ProviderConfig.WithInsecureTLS(bool)` for legacy compatibility

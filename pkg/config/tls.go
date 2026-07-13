@@ -310,7 +310,9 @@ func rootCAPoolFingerprint(pool *x509.CertPool) string {
 	if pool == nil {
 		return "system"
 	}
-	subjects := pool.Subjects()
+	// CertPool has no other public deterministic iteration surface suitable for
+	// deriving a transport-cache identity.
+	subjects := pool.Subjects() //nolint:staticcheck
 	if len(subjects) == 0 {
 		return "empty"
 	}
@@ -323,7 +325,7 @@ func rootCAPoolFingerprint(pool *x509.CertPool) string {
 	})
 	h := sha256.New()
 	for _, subject := range subjects {
-		fmt.Fprintf(h, "%d:", len(subject))
+		_, _ = fmt.Fprintf(h, "%d:", len(subject))
 		_, _ = h.Write(subject)
 	}
 	return hex.EncodeToString(h.Sum(nil))

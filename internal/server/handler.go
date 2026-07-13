@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/garyblankenship/wormhole/pkg/types"
@@ -19,6 +20,62 @@ func (p *proxy) handleHealth(w http.ResponseWriter, _ *http.Request) {
 		Status:    "ok",
 		Timestamp: time.Now().UTC().Format(time.RFC3339),
 	})
+}
+
+func parseChatMessages(input []ChatCompletionRequestMessage) ([]types.Message, error) {
+	messages := make([]types.Message, 0, len(input))
+	for _, message := range input {
+		if message.Role != "user" && len(message.Content.Media) > 0 {
+			return nil, fmt.Errorf("image content parts are only supported on user messages")
+		}
+		switch message.Role {
+		case "system", "developer":
+			messages = append(messages, types.NewSystemMessage(message.Content.Text))
+		case "user":
+			messages = append(messages, &types.UserMessage{Content: message.Content.Text, Media: message.Content.Media})
+		case "assistant":
+			assistant := types.NewAssistantMessage(message.Content.Text)
+			if len(message.ToolCalls) > 0 {
+				toolCalls, err := toWormholeToolCalls(message.ToolCalls)
+				if err != nil {
+					return nil, err
+				}
+				assistant.ToolCalls = toolCalls
+			}
+			messages = append(messages, assistant)
+		case "tool", "function":
+			messages = append(messages, types.NewToolResultMessage(message.ToolCallID, message.Content.Text))
+		default:
+			return nil, fmt.Errorf("unsupported message role %q", message.Role)
+		}
+	}
+	return messages, nil
+}
+
+func parseChatToolConfig(input []ChatTool, rawChoice json.RawMessage) ([]types.Tool, *types.ToolChoice, error) {
+	tools, err := toWormholeTools(input)
+	if err != nil {
+		return nil, nil, err
+	}
+	choice, err := parseToolChoice(rawChoice)
+	if err != nil {
+		return nil, nil, err
+	}
+	if choice == nil {
+		return tools, nil, nil
+	}
+	if choice.Type == types.ToolChoiceTypeAny && len(tools) == 0 {
+		return nil, nil, fmt.Errorf("tool_choice %q requires at least one declared tool", "required")
+	}
+	if choice.Type == types.ToolChoiceTypeSpecific {
+		for _, tool := range tools {
+			if tool.Name == choice.ToolName {
+				return tools, choice, nil
+			}
+		}
+		return nil, nil, fmt.Errorf("selected tool %q is not declared", choice.ToolName)
+	}
+	return tools, choice, nil
 }
 
 func (p *proxy) handleChatCompletions(w http.ResponseWriter, r *http.Request) {
@@ -44,61 +101,15 @@ func (p *proxy) handleChatCompletions(w http.ResponseWriter, r *http.Request) {
 	effDefaultProvider := effectiveDefaultProvider(p.defaultProvider, configuredProviders)
 	provider, model := parseModelRoute(req.Model, effDefaultProvider, configuredProviders)
 
-	msgs := make([]types.Message, 0, len(req.Messages))
-	for _, m := range req.Messages {
-		switch m.Role {
-		case "system":
-			if len(m.Content.Media) > 0 {
-				writeError(w, http.StatusBadRequest, "unsupported_content_part",
-					"image content parts are only supported on user messages", "invalid_request_error")
-				return
-			}
-			msgs = append(msgs, types.NewSystemMessage(m.Content.Text))
-		case "user":
-			msgs = append(msgs, &types.UserMessage{
-				Content: m.Content.Text,
-				Media:   m.Content.Media,
-			})
-		case "assistant":
-			if len(m.Content.Media) > 0 {
-				writeError(w, http.StatusBadRequest, "unsupported_content_part",
-					"image content parts are only supported on user messages", "invalid_request_error")
-				return
-			}
-			am := types.NewAssistantMessage(m.Content.Text)
-			if len(m.ToolCalls) > 0 {
-				am.ToolCalls = toWormholeToolCalls(m.ToolCalls)
-			}
-			msgs = append(msgs, am)
-		case "tool":
-			if len(m.Content.Media) > 0 {
-				writeError(w, http.StatusBadRequest, "unsupported_content_part",
-					"image content parts are only supported on user messages", "invalid_request_error")
-				return
-			}
-			msgs = append(msgs, types.NewToolResultMessage(m.ToolCallID, m.Content.Text))
-		case "developer":
-			// OpenAI's "developer" role is the system-tier instruction in newer
-			// models; map it to a system message.
-			if len(m.Content.Media) > 0 {
-				writeError(w, http.StatusBadRequest, "unsupported_content_part",
-					"image content parts are only supported on user messages", "invalid_request_error")
-				return
-			}
-			msgs = append(msgs, types.NewSystemMessage(m.Content.Text))
-		case "function":
-			// Legacy OpenAI "function" role is a tool result; map it like "tool".
-			if len(m.Content.Media) > 0 {
-				writeError(w, http.StatusBadRequest, "unsupported_content_part",
-					"image content parts are only supported on user messages", "invalid_request_error")
-				return
-			}
-			msgs = append(msgs, types.NewToolResultMessage(m.ToolCallID, m.Content.Text))
-		default:
-			writeError(w, http.StatusBadRequest, "unsupported_message_role",
-				fmt.Sprintf("unsupported message role %q", m.Role), "invalid_request_error")
-			return
-		}
+	msgs, err := parseChatMessages(req.Messages)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, chatMessageErrorCode(err), err.Error(), "invalid_request_error")
+		return
+	}
+	tools, toolChoice, err := parseChatToolConfig(req.Tools, req.ToolChoice)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid_request_error", err.Error(), "invalid_request_error")
+		return
 	}
 
 	builder := p.wh.Text().Model(model).Messages(msgs...)
@@ -120,10 +131,10 @@ func (p *proxy) handleChatCompletions(w http.ResponseWriter, r *http.Request) {
 		builder = builder.Stop(req.Stop...)
 	}
 	if len(req.Tools) > 0 {
-		builder = builder.Tools(toWormholeTools(req.Tools)...)
+		builder = builder.Tools(tools...)
 	}
-	if tc := parseToolChoice(req.ToolChoice); tc != nil {
-		builder = builder.ToolChoice(tc)
+	if toolChoice != nil {
+		builder = builder.ToolChoice(toolChoice)
 	}
 	if len(req.ResponseFormat) > 0 {
 		effProvider := provider
@@ -152,18 +163,15 @@ func (p *proxy) handleChatCompletions(w http.ResponseWriter, r *http.Request) {
 
 	resp, err := builder.Generate(r.Context())
 	if err != nil {
-		p.logger.Error("text generation failed", "error", err, "model", req.Model)
+		p.logger.Error("text generation failed", "error", types.SafeErrorValue(err), "model", types.SafeLogString(req.Model))
 		status, errType, clientMsg := upstreamErrorStatus(err)
 		writeError(w, status, "upstream_error", clientMsg, errType)
 		return
 	}
 
-	fr := string(resp.FinishReason)
-	if fr == "" {
-		fr = "stop"
-	}
+	fr := string(normalizedFinishReason(resp.FinishReason))
 
-	msg := &ChatMessage{Role: "assistant", Content: resp.Text}
+	msg := &ChatMessage{Role: "assistant", Content: resp.Text, Refusal: resp.Refusal}
 	if len(resp.ToolCalls) > 0 {
 		msg.ToolCalls = fromWormholeToolCalls(resp.ToolCalls)
 	}
@@ -180,13 +188,20 @@ func (p *proxy) handleChatCompletions(w http.ResponseWriter, r *http.Request) {
 		}},
 	}
 	if resp.Usage != nil {
-		out.Usage = &ChatUsage{
-			PromptTokens:     resp.Usage.PromptTokens,
-			CompletionTokens: resp.Usage.CompletionTokens,
-			TotalTokens:      resp.Usage.TotalTokens,
-		}
+		out.Usage = toChatUsage(resp.Usage)
 	}
 	writeJSON(w, http.StatusOK, out)
+}
+
+func chatMessageErrorCode(err error) string {
+	switch {
+	case strings.Contains(err.Error(), "image content parts"):
+		return "unsupported_content_part"
+	case strings.Contains(err.Error(), "unsupported message role"):
+		return "unsupported_message_role"
+	default:
+		return "invalid_request_error"
+	}
 }
 
 func (p *proxy) streamChat(w http.ResponseWriter, r *http.Request, builder *wormhole.TextRequestBuilder, model string) {
@@ -199,7 +214,7 @@ func (p *proxy) streamChat(w http.ResponseWriter, r *http.Request, builder *worm
 
 	stream, err := builder.Stream(r.Context())
 	if err != nil {
-		p.logger.Error("stream creation failed", "error", err, "model", model)
+		p.logger.Error("stream creation failed", "error", types.SafeErrorValue(err), "model", types.SafeLogString(model))
 		status, errType, clientMsg := upstreamErrorStatus(err)
 		writeError(w, status, "upstream_error", clientMsg, errType)
 		return
@@ -211,7 +226,7 @@ func (p *proxy) streamChat(w http.ResponseWriter, r *http.Request, builder *worm
 
 	for chunk := range stream {
 		if chunk.Error != nil {
-			p.logger.Error("stream chunk error", "error", chunk.Error)
+			p.logger.Error("stream chunk error", "error", types.SafeErrorValue(chunk.Error))
 			if !committed {
 				status, errType, clientMsg := upstreamErrorStatus(chunk.Error)
 				writeError(w, status, "upstream_error", clientMsg, errType)
@@ -230,7 +245,7 @@ func (p *proxy) streamChat(w http.ResponseWriter, r *http.Request, builder *worm
 			committed = true
 		}
 
-		delta := &ChatMessage{Role: "assistant", Content: chunk.Content()}
+		delta := &ChatMessage{Role: "assistant", Content: chunk.Content(), Refusal: chunk.Refusal}
 		if tcs := toolState.delta(chunk); len(tcs) > 0 {
 			delta.ToolCalls = tcs
 		}
@@ -246,24 +261,20 @@ func (p *proxy) streamChat(w http.ResponseWriter, r *http.Request, builder *worm
 		}
 
 		if chunk.FinishReason != nil {
-			fr := string(*chunk.FinishReason)
+			fr := string(normalizedFinishReason(*chunk.FinishReason))
 			chunkResp.Choices[0].FinishReason = &fr
 		}
 		if chunk.Usage != nil {
-			chunkResp.Usage = &ChatUsage{
-				PromptTokens:     chunk.Usage.PromptTokens,
-				CompletionTokens: chunk.Usage.CompletionTokens,
-				TotalTokens:      chunk.Usage.TotalTokens,
-			}
+			chunkResp.Usage = toChatUsage(chunk.Usage)
 		}
 
 		data, marshalErr := json.Marshal(chunkResp)
 		if marshalErr != nil {
-			p.logger.Error("failed to marshal chunk", "error", marshalErr)
+			p.logger.Error("failed to marshal chunk", "error", types.SafeErrorValue(marshalErr))
 			break
 		}
 		if _, err := fmt.Fprintf(w, "data: %s\n\n", data); err != nil {
-			p.logger.Error("failed to write stream chunk", "error", err)
+			p.logger.Error("failed to write stream chunk", "error", types.SafeErrorValue(err))
 			break
 		}
 		flusher.Flush()
@@ -278,10 +289,40 @@ func (p *proxy) streamChat(w http.ResponseWriter, r *http.Request, builder *worm
 	}
 
 	if _, err := fmt.Fprint(w, "data: [DONE]\n\n"); err != nil {
-		p.logger.Error("failed to write stream terminator", "error", err)
+		p.logger.Error("failed to write stream terminator", "error", types.SafeErrorValue(err))
 		return
 	}
 	flusher.Flush()
+}
+
+func toChatUsage(usage *types.Usage) *ChatUsage {
+	if usage == nil {
+		return nil
+	}
+	out := &ChatUsage{
+		PromptTokens:     usage.PromptTokens,
+		CompletionTokens: usage.CompletionTokens,
+		TotalTokens:      usage.TotalTokens,
+	}
+	if usage.CacheReadTokens != 0 || usage.CacheWriteTokens != 0 {
+		out.PromptTokensDetails = &ChatPromptTokenDetails{
+			CachedTokens: usage.CacheReadTokens, CacheWriteTokens: usage.CacheWriteTokens,
+		}
+	}
+	if usage.ReasoningTokens != 0 {
+		out.CompletionTokensDetails = &ChatCompletionTokenDetails{ReasoningTokens: usage.ReasoningTokens}
+	}
+	return out
+}
+
+func normalizedFinishReason(reason types.FinishReason) types.FinishReason {
+	switch reason {
+	case types.FinishReasonStop, types.FinishReasonLength, types.FinishReasonToolCalls,
+		types.FinishReasonContentFilter, types.FinishReasonOther:
+		return reason
+	default:
+		return types.FinishReasonOther
+	}
 }
 
 func writeStreamError(w http.ResponseWriter, flusher http.Flusher, err error) {
@@ -334,7 +375,7 @@ func (p *proxy) handleEmbeddings(w http.ResponseWriter, r *http.Request) {
 
 	resp, err := builder.Generate(r.Context())
 	if err != nil {
-		p.logger.Error("embeddings failed", "error", err, "model", req.Model)
+		p.logger.Error("embeddings failed", "error", types.SafeErrorValue(err), "model", types.SafeLogString(req.Model))
 		status, errType, clientMsg := upstreamErrorStatus(err)
 		writeError(w, status, "upstream_error", clientMsg, errType)
 		return

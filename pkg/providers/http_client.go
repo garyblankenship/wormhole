@@ -223,8 +223,8 @@ func NewHTTPClientWrapper(name string, providerConfig types.ProviderConfig, tlsC
 	// Seed the first-attempt key from APIKeys[0] when only APIKeys is set, so the
 	// first request's auth uses APIKeys[0] and the pool's next() returns APIKeys[1]
 	// on the first 429.
-	if providerConfig.APIKey == "" && len(providerConfig.APIKeys) > 0 {
-		providerConfig.APIKey = providerConfig.APIKeys[0]
+	if providerConfig.APIKey == "" {
+		providerConfig.APIKey = providerConfig.EffectiveAPIKey()
 	}
 
 	w := &HTTPClientWrapper{

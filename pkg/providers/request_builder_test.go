@@ -397,3 +397,61 @@ func TestTransformToolCalls_MapFormUsesName(t *testing.T) {
 		t.Fatalf("function.name = %q, want %q (must use tc.Name, not tc.Type)", name, "get_weather")
 	}
 }
+
+func TestPrepareMessagesNormalizesCrossProviderToolCalls(t *testing.T) {
+	t.Parallel()
+
+	input := []types.Message{
+		&types.AssistantMessage{ToolCalls: []types.ToolCall{{
+			ID:       "call_1",
+			Function: &types.ToolCallFunction{Name: "lookup", Arguments: ""},
+		}}},
+		types.NewToolResultMessage("call_1", "ok"),
+	}
+	prepared, warnings, err := PrepareMessages(input)
+	require.NoError(t, err)
+	require.Empty(t, warnings)
+
+	call := prepared[0].(*types.AssistantMessage).ToolCalls[0]
+	assert.Equal(t, "lookup", call.Name)
+	assert.Empty(t, call.Arguments)
+	require.NotNil(t, call.Arguments)
+	require.NotNil(t, call.Function)
+	assert.Equal(t, "{}", call.Function.Arguments)
+}
+
+func TestPrepareMessagesRejectsToolArgumentConflict(t *testing.T) {
+	t.Parallel()
+
+	input := []types.Message{
+		&types.AssistantMessage{ToolCalls: []types.ToolCall{{
+			ID:        "call_1",
+			Name:      "lookup",
+			Arguments: map[string]any{"query": "top"},
+			Function:  &types.ToolCallFunction{Name: "other", Arguments: `{"query":"nested"}`},
+		}}},
+		types.NewToolResultMessage("call_1", "ok"),
+	}
+	_, _, err := PrepareMessages(input)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "conflicting argument representations")
+}
+
+func TestPrepareMessagesDeeplyDetachesCallerState(t *testing.T) {
+	t.Parallel()
+
+	image := &types.ImageMedia{Data: []byte("image")}
+	args := map[string]any{"nested": map[string]any{"value": "original"}}
+	input := []types.Message{
+		&types.UserMessage{Media: []types.Media{image}},
+		&types.AssistantMessage{ToolCalls: []types.ToolCall{{ID: "call_1", Name: "lookup", Arguments: args}}},
+		types.NewToolResultMessage("call_1", "ok"),
+	}
+	prepared, _, err := PrepareMessages(input)
+	require.NoError(t, err)
+
+	prepared[0].(*types.UserMessage).Media[0].(*types.ImageMedia).Data[0] = 'X'
+	prepared[1].(*types.AssistantMessage).ToolCalls[0].Arguments["nested"].(map[string]any)["value"] = "changed"
+	assert.Equal(t, []byte("image"), image.Data)
+	assert.Equal(t, "original", args["nested"].(map[string]any)["value"])
+}

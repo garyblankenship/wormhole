@@ -379,6 +379,21 @@ func (c *ModelCache) Get(provider string) ([]*types.ModelInfo, bool) {
 	return nil, false
 }
 
+// GetStale returns the most recent in-memory entry without applying its TTL.
+// It is used only after a live discovery failure; normal cache reads continue
+// to enforce freshness through Get.
+func (c *ModelCache) GetStale(provider string) []*types.ModelInfo {
+	for _, lookup := range cacheLookupKeys(provider) {
+		c.memoryMu.RLock()
+		entry := c.memory[lookup]
+		c.memoryMu.RUnlock()
+		if entry != nil && len(entry.Models) > 0 {
+			return cloneModels(entry.Models)
+		}
+	}
+	return nil
+}
+
 // Set stores models in cache (L1 + L2)
 func (c *ModelCache) Set(provider string, models []*types.ModelInfo) {
 	models = cloneModels(models)

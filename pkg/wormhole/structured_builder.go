@@ -36,13 +36,13 @@ func (b *StructuredRequestBuilder) Model(model string) *StructuredRequestBuilder
 
 // Messages sets the messages for the request
 func (b *StructuredRequestBuilder) Messages(messages ...types.Message) *StructuredRequestBuilder {
-	b.request.Messages = messages
+	b.request.Messages = types.CloneMessages(messages)
 	return b
 }
 
 // AddMessage adds a message to the request
 func (b *StructuredRequestBuilder) AddMessage(message types.Message) *StructuredRequestBuilder {
-	b.request.Messages = append(b.request.Messages, message)
+	b.request.Messages = append(b.request.Messages, types.CloneMessage(message))
 	return b
 }
 
@@ -129,7 +129,7 @@ func (b *StructuredRequestBuilder) Generate(ctx context.Context) (*types.Structu
 		}
 		defer release()
 
-		ctx = contextWithProvider(ctx, provider)
+		ctx = contextWithProviderOperation(ctx, provider, "structured")
 		if b.getWormhole().providerMiddleware != nil {
 			handler := b.getWormhole().providerMiddleware.ApplyStructured(provider.Structured)
 			return handler(ctx, *request)
@@ -223,15 +223,8 @@ func cloneStructuredRequest(src *types.StructuredRequest) *types.StructuredReque
 	}
 
 	cloneBaseRequestFields(&cloned.BaseRequest, &src.BaseRequest)
-	if len(src.Messages) > 0 {
-		cloned.Messages = make([]types.Message, len(src.Messages))
-		copy(cloned.Messages, src.Messages)
-	}
-	if schemaBytes, ok := src.Schema.([]byte); ok {
-		cloned.Schema = append([]byte(nil), schemaBytes...)
-	} else {
-		cloned.Schema = src.Schema
-	}
+	cloned.Messages = types.CloneMessages(src.Messages)
+	cloned.Schema = types.CloneSchema(src.Schema)
 
 	return cloned
 }

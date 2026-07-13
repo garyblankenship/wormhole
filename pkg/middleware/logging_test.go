@@ -73,25 +73,6 @@ func TestLoggingHelpers(t *testing.T) {
 	if len(config.RedactKeys) == 0 || !config.LogRequests || !config.LogResponses || !config.LogTiming || !config.LogErrors {
 		t.Fatalf("DefaultLoggingConfig = %#v", config)
 	}
-	redacted := redactSensitiveData(map[string]any{"api_key": "secret", "name": "visible"}, []string{"api_key"}).(map[string]any)
-	if redacted["api_key"] != "[REDACTED]" || redacted["name"] != "visible" {
-		t.Fatalf("redacted data = %#v", redacted)
-	}
-	if got := redactSensitiveData("plain", []string{"api_key"}); got != "plain" {
-		t.Fatalf("redactSensitiveData non-map = %#v, want plain", got)
-	}
-	if got := truncateString("abcdef", 3); got != "abc..." {
-		t.Fatalf("truncateString = %q, want abc...", got)
-	}
-	if got := truncateString("abc", 3); got != "abc" {
-		t.Fatalf("truncateString exact = %q, want abc", got)
-	}
-	if getMessageContent(types.NewUserMessage("user")) != "user" ||
-		getMessageContent(types.NewSystemMessage("system")) != "system" ||
-		getMessageContent(types.NewAssistantMessage("assistant")) != "assistant" {
-		t.Fatal("getMessageContent returned unexpected content")
-	}
-
 	logRequestDetails(config, &types.TextRequest{
 		BaseRequest: types.BaseRequest{Model: "gpt"},
 		Messages: []types.Message{
@@ -121,11 +102,83 @@ func TestLoggingHelpers(t *testing.T) {
 	logResponseDetails(config, types.AudioResponse{Model: "audio", Text: strings.Repeat("a", 120), Audio: []byte("abc"), Created: time.Now()}, time.Millisecond)
 	logResponseDetails(config, types.ImageResponse{Model: "image", Images: []types.GeneratedImage{{URL: "https://example.test"}, {B64JSON: "abc"}}}, time.Millisecond)
 	logResponseDetails(config, "plain", time.Millisecond)
-	logError(config, errors.New("plain"), time.Millisecond)
+	logError(context.Background(), config, errors.New("plain"), time.Millisecond)
 
 	if buf.Len() == 0 {
 		t.Fatal("expected helper log output")
 	}
+}
+
+func TestLoggingExcludesSensitivePayloadsAndRawErrors(t *testing.T) {
+	t.Parallel()
+
+	const (
+		secret = "sk-secret-api-key"
+		prompt = "private user prompt"
+		body   = `{"error":"private upstream response body"}`
+		keyURL = "https://provider.test/v1?api_key=url-secret"
+	)
+	oversized := strings.Repeat("attacker-controlled-detail-", 1000)
+	wormholeErr := types.NewWormholeError(types.ErrorCodeProvider, "provider rejected request "+secret, false).
+		WithProvider("openai").
+		WithModel("gpt-test").
+		WithStatusCode(400).
+		WithDetails(strings.Join([]string{secret, body, prompt, keyURL, oversized}, " ")).
+		WithCause(errors.New(secret))
+
+	var buf bytes.Buffer
+	logger := newTestLogger(&buf)
+	request := types.TextRequest{
+		BaseRequest: types.BaseRequest{
+			Model: keyURL,
+			ProviderOptions: map[string]any{
+				"api_key": secret,
+				"url":     keyURL,
+			},
+		},
+		Messages: []types.Message{types.NewUserMessage(prompt)},
+	}
+	ctx := context.WithValue(context.Background(), CtxKeyProvider, "openai")
+	ctx = context.WithValue(ctx, CtxKeyModel, "gpt-test")
+	ctx = context.WithValue(ctx, CtxKeyMethod, "text")
+	_, _ = DebugLoggingMiddleware(logger)(func(context.Context, any) (any, error) {
+		return types.TextResponse{Model: "gpt-test", Text: body}, wormholeErr
+	})(ctx, request)
+	_, _ = LoggingMiddleware(logger)(func(context.Context, any) (any, error) {
+		return nil, errors.New(body)
+	})(context.Background(), request)
+
+	output := buf.String()
+	for _, forbidden := range []string{secret, prompt, body, keyURL, oversized, "details=", "Cause"} {
+		if strings.Contains(output, forbidden) {
+			t.Fatalf("log output contains sensitive value %q: %s", forbidden, output)
+		}
+	}
+	for _, expected := range []string{"code=PROVIDER_ERROR", `message="provider request failed"`, "provider=openai", "model=gpt-test", "status_code=400", "retryable=false", "request_provider=openai", "request_model=gpt-test", "request_method=text"} {
+		if !strings.Contains(output, expected) {
+			t.Fatalf("log output missing safe field %q: %s", expected, output)
+		}
+	}
+}
+
+func TestLoggingConstructorsDefaultNilLogger(t *testing.T) {
+	if DefaultLoggingConfig(nil).Logger == nil {
+		t.Fatal("DefaultLoggingConfig(nil) retained a nil logger")
+	}
+
+	noop := func(context.Context, any) (any, error) { return nil, nil }
+	if _, err := LoggingMiddleware(nil)(noop)(context.Background(), nil); err != nil {
+		t.Fatalf("LoggingMiddleware(nil) returned error: %v", err)
+	}
+	if _, err := DetailedLoggingMiddleware(LoggingConfig{LogTiming: true})(noop)(context.Background(), nil); err != nil {
+		t.Fatalf("DetailedLoggingMiddleware with nil logger returned error: %v", err)
+	}
+	if _, err := NewTypedLoggingMiddleware(LoggingConfig{LogTiming: true}).ApplyText(
+		func(context.Context, types.TextRequest) (*types.TextResponse, error) { return nil, nil },
+	)(context.Background(), types.TextRequest{}); err != nil {
+		t.Fatalf("NewTypedLoggingMiddleware with nil logger returned error: %v", err)
+	}
+	_ = NewProviderLoggingMiddleware("test", nil)
 }
 
 func TestTypedLoggingMiddleware(t *testing.T) {

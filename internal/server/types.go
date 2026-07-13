@@ -111,6 +111,7 @@ func parseImageURLPart(rawURL string) (*types.ImageMedia, error) {
 type ChatMessage struct {
 	Role      string         `json:"role"`
 	Content   string         `json:"content"`
+	Refusal   string         `json:"refusal,omitempty"`
 	ToolCalls []ChatToolCall `json:"tool_calls,omitempty"`
 }
 
@@ -162,9 +163,20 @@ type ChatChoice struct {
 
 // ChatUsage is token usage in OpenAI format.
 type ChatUsage struct {
-	PromptTokens     int `json:"prompt_tokens"`
-	CompletionTokens int `json:"completion_tokens"`
-	TotalTokens      int `json:"total_tokens"`
+	PromptTokens            int                         `json:"prompt_tokens"`
+	CompletionTokens        int                         `json:"completion_tokens"`
+	TotalTokens             int                         `json:"total_tokens"`
+	PromptTokensDetails     *ChatPromptTokenDetails     `json:"prompt_tokens_details,omitempty"`
+	CompletionTokensDetails *ChatCompletionTokenDetails `json:"completion_tokens_details,omitempty"`
+}
+
+type ChatPromptTokenDetails struct {
+	CachedTokens     int `json:"cached_tokens"`
+	CacheWriteTokens int `json:"cache_write_tokens,omitempty"`
+}
+
+type ChatCompletionTokenDetails struct {
+	ReasoningTokens int `json:"reasoning_tokens"`
 }
 
 // EmbeddingRequest is the OpenAI-compatible embeddings request.

@@ -414,7 +414,7 @@ func cloneValue(src any) (any, error) {
 	}
 	srcType := reflect.TypeOf(src)
 	var dst any
-	if srcType.Kind() == reflect.Ptr {
+	if srcType.Kind() == reflect.Pointer {
 		dst = reflect.New(srcType.Elem()).Interface()
 	} else {
 		dst = reflect.New(srcType).Interface()
@@ -422,7 +422,7 @@ func cloneValue(src any) (any, error) {
 	if err := json.Unmarshal(data, dst); err != nil {
 		return nil, fmt.Errorf("cache clone unmarshal: %w", err)
 	}
-	if srcType.Kind() != reflect.Ptr {
+	if srcType.Kind() != reflect.Pointer {
 		dst = reflect.ValueOf(dst).Elem().Interface()
 	}
 	return dst, nil

@@ -55,7 +55,6 @@ func TestWithMethods_PreserveRetryAfter(t *testing.T) {
 		"WithCause":      base.WithCause(assert.AnError),
 	}
 	for name, got := range cases {
-		got := got
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 			assert.Equal(t, 7*time.Second, got.RetryAfter)

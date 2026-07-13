@@ -200,6 +200,19 @@ type ProviderConfig struct {
 	RetryMaxDelay *time.Duration `json:"retry_max_delay,omitempty"`
 }
 
+// EffectiveAPIKey returns the key used for the first provider request.
+// APIKey takes precedence; APIKeys[0] is the fallback for rotation-only
+// configurations.
+func (c ProviderConfig) EffectiveAPIKey() string {
+	if c.APIKey != "" {
+		return c.APIKey
+	}
+	if len(c.APIKeys) > 0 {
+		return c.APIKeys[0]
+	}
+	return ""
+}
+
 // ProviderRequestPolicy describes provider/model request serialization quirks
 // resolved before a provider adapter serializes a request.
 type ProviderRequestPolicy struct {
@@ -383,17 +396,12 @@ func (c ProviderConfig) MergedProviderOptions(model string, requestOptions map[s
 }
 
 func cloneAnyMap(src map[string]any) map[string]any {
-	if len(src) == 0 {
-		return nil
-	}
-	dst := make(map[string]any, len(src))
-	copyAnyMap(dst, src)
-	return dst
+	return CloneMap(src)
 }
 
 func copyAnyMap(dst, src map[string]any) {
 	for k, v := range src {
-		dst[k] = v
+		dst[k] = CloneValue(v)
 	}
 }
 

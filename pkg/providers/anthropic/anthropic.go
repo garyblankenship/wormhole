@@ -53,6 +53,9 @@ func (p *Provider) SupportedCapabilities() []types.ModelCapability {
 
 // Text generates a text response
 func (p *Provider) Text(ctx context.Context, request types.TextRequest) (*types.TextResponse, error) {
+	if _, _, err := providers.PrepareMessages(request.Messages); err != nil {
+		return nil, err
+	}
 	payload := p.buildMessagePayload(&request)
 
 	url := p.GetBaseURL() + "/messages"
@@ -90,6 +93,9 @@ func (p *Provider) stampProvider(ctx context.Context, in <-chan types.StreamChun
 
 // Stream generates a streaming text response
 func (p *Provider) Stream(ctx context.Context, request types.TextRequest) (<-chan types.StreamChunk, error) {
+	if _, _, err := providers.PrepareMessages(request.Messages); err != nil {
+		return nil, err
+	}
 	payload := p.buildMessagePayload(&request)
 	payload["stream"] = true
 

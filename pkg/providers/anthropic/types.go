@@ -68,8 +68,3 @@ type contentBlockStartEvent struct {
 		Name string `json:"name"`
 	} `json:"content_block"`
 }
-
-type contentBlockStopEvent struct {
-	Type  string `json:"type"`
-	Index int    `json:"index"`
-}

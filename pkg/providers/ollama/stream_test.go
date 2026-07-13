@@ -43,7 +43,7 @@ func TestParseStreamChunkFallback(t *testing.T) {
 	require.NotNil(t, chunk.Delta)
 	assert.Equal(t, "map[part:done]", chunk.Delta.Content)
 	require.NotNil(t, chunk.FinishReason)
-	assert.Equal(t, types.FinishReasonStop, *chunk.FinishReason)
+	assert.Equal(t, types.FinishReasonOther, *chunk.FinishReason)
 	require.NotNil(t, chunk.Usage)
 	assert.Equal(t, 7, chunk.Usage.TotalTokens)
 }

@@ -239,9 +239,9 @@ func TestTransform_MalformedToolCallArgs_FlaggedNotSwallowed(t *testing.T) {
 		Model:   "gpt-4o-mini",
 		Created: time.Now().Unix(),
 		Choices: []struct {
-			Index        int      `json:"index"`
-			Message      message  `json:"message"`
-			FinishReason string   `json:"finish_reason"`
+			Index        int     `json:"index"`
+			Message      message `json:"message"`
+			FinishReason string  `json:"finish_reason"`
 		}{
 			{
 				Message: message{

@@ -91,6 +91,9 @@ func (p *Provider) SupportedCapabilities() []types.ModelCapability {
 
 // Text generates a text response
 func (p *Provider) Text(ctx context.Context, request types.TextRequest) (*types.TextResponse, error) {
+	if _, _, err := providers.PrepareMessages(request.Messages); err != nil {
+		return nil, err
+	}
 	if p.Config.UseResponsesAPI {
 		return p.responsesText(ctx, request)
 	}
@@ -118,6 +121,9 @@ func (p *Provider) Text(ctx context.Context, request types.TextRequest) (*types.
 
 // Stream generates a streaming text response
 func (p *Provider) Stream(ctx context.Context, request types.TextRequest) (<-chan types.TextChunk, error) {
+	if _, _, err := providers.PrepareMessages(request.Messages); err != nil {
+		return nil, err
+	}
 	if p.Config.UseResponsesAPI {
 		return p.responsesStream(ctx, request)
 	}
@@ -173,9 +179,10 @@ func (p *Provider) Structured(ctx context.Context, request types.StructuredReque
 	}
 
 	// Determine the best method for structured output
-	if request.Mode == types.StructuredModeJSON {
+	switch request.Mode {
+	case types.StructuredModeJSON:
 		textRequest.ResponseFormat = map[string]string{"type": "json_object"}
-	} else if request.Mode == types.StructuredModeStrict {
+	case types.StructuredModeStrict:
 		// Native OpenAI strict structured output: emit a json_schema response_format.
 		// This is the Chat Completions (nested) shape; buildResponsesPayload reshapes
 		// it to the flattened Responses API shape when that transport is active.
@@ -195,7 +202,7 @@ func (p *Provider) Structured(ctx context.Context, request types.StructuredReque
 				"schema": schemaMap,
 			},
 		}
-	} else {
+	default:
 		// Use function calling for structured output
 		tool, err := p.schemaToTool(request.Schema, request.SchemaName)
 		if err != nil {

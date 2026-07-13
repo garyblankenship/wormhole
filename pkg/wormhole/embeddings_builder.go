@@ -224,7 +224,7 @@ func (b *EmbeddingsRequestBuilder) executeEmbeddings(ctx context.Context, reques
 	}
 	defer release()
 
-	ctx = contextWithProvider(ctx, provider)
+	ctx = contextWithProviderOperation(ctx, provider, "embeddings")
 	if b.getWormhole().providerMiddleware != nil {
 		handler := b.getWormhole().providerMiddleware.ApplyEmbeddings(provider.Embeddings)
 		return handler(ctx, *request)

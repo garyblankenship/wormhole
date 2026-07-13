@@ -59,6 +59,38 @@ func TestTextRequestBuilderConfiguration(t *testing.T) {
 	}
 }
 
+func TestTextRequestBuilderCloneDetachesNestedState(t *testing.T) {
+	t.Parallel()
+
+	client := New(WithDefaultProvider("openai"), WithOpenAI("test-key"), WithModelValidation(false), WithDiscovery(false))
+	message := &types.UserMessage{Media: []types.Media{&types.ImageMedia{Data: []byte("image")}}}
+	tool := types.Tool{Name: "lookup", InputSchema: map[string]any{
+		"properties": map[string]any{"query": map[string]any{"type": "string"}},
+	}}
+	options := map[string]any{"nested": map[string]any{"value": "original"}}
+	format := map[string]any{"schema": map[string]any{"type": "object"}}
+
+	builder := client.Text().Messages(message).Tools(tool).ProviderOptions(options).ResponseFormat(format)
+	clone := builder.Clone()
+	clone.request.Messages[0].(*types.UserMessage).Media[0].(*types.ImageMedia).Data[0] = 'X'
+	clone.request.Tools[0].InputSchema["properties"].(map[string]any)["query"].(map[string]any)["type"] = "number"
+	clone.request.ProviderOptions["nested"].(map[string]any)["value"] = "changed"
+	clone.request.ResponseFormat.(map[string]any)["schema"].(map[string]any)["type"] = "array"
+
+	if got := builder.request.Messages[0].(*types.UserMessage).Media[0].(*types.ImageMedia).Data; string(got) != "image" {
+		t.Fatalf("original media = %q", got)
+	}
+	if got := builder.request.Tools[0].InputSchema["properties"].(map[string]any)["query"].(map[string]any)["type"]; got != "string" {
+		t.Fatalf("original tool schema type = %v", got)
+	}
+	if got := builder.request.ProviderOptions["nested"].(map[string]any)["value"]; got != "original" {
+		t.Fatalf("original provider option = %v", got)
+	}
+	if got := builder.request.ResponseFormat.(map[string]any)["schema"].(map[string]any)["type"]; got != "object" {
+		t.Fatalf("original response format = %v", got)
+	}
+}
+
 // TestWithToolsDisabledIsNotNoOp reproduces a bug where WithToolsDisabled()
 // alone (without WithMaxToolIterations) was indistinguishable from the
 // zero-value "unset" state, so tools registered on the client would still

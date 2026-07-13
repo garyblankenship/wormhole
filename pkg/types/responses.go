@@ -133,6 +133,7 @@ type TextChunk struct {
 	Provider     string        `json:"provider,omitempty"`
 	Model        string        `json:"model,omitempty"`
 	Text         string        `json:"text,omitempty"`
+	Refusal      string        `json:"refusal,omitempty"`
 	Thinking     *Thinking     `json:"thinking,omitempty"`
 	Delta        *ChunkDelta   `json:"delta,omitempty"` // For OpenAI compatibility
 	ToolCall     *ToolCall     `json:"tool_call,omitempty"`
@@ -172,6 +173,7 @@ func (c *TextChunk) HasToolCalls() bool {
 // ChunkDelta represents streaming delta content
 type ChunkDelta struct {
 	Content   string     `json:"content,omitempty"`
+	Refusal   string     `json:"refusal,omitempty"`
 	Thinking  *Thinking  `json:"thinking,omitempty"`
 	ToolCalls []ToolCall `json:"tool_calls,omitempty"`
 }

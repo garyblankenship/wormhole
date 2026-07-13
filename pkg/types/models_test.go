@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestModelInfo_Structure(t *testing.T) {
@@ -674,4 +675,38 @@ func TestModelRegistry_ConcurrentAccess(t *testing.T) {
 			<-done
 		}
 	})
+}
+
+func TestModelRegistryDetachesNestedState(t *testing.T) {
+	t.Parallel()
+
+	registry := NewModelRegistry()
+	input := &ModelInfo{
+		ID:           "detached",
+		Provider:     "test",
+		Cost:         &ModelCost{InputTokens: 1},
+		Capabilities: []ModelCapability{CapabilityText},
+		Constraints:  map[string]any{"limits": map[string]any{"max": 10}},
+	}
+	registry.Register(input)
+
+	input.Cost.InputTokens = 99
+	input.Capabilities[0] = CapabilityAudio
+	input.Constraints["limits"].(map[string]any)["max"] = 99
+
+	got, ok := registry.Get("detached")
+	require.True(t, ok)
+	assert.Equal(t, float64(1), got.Cost.InputTokens)
+	assert.Equal(t, CapabilityText, got.Capabilities[0])
+	assert.Equal(t, 10, got.Constraints["limits"].(map[string]any)["max"])
+
+	got.Cost.InputTokens = 42
+	got.Capabilities[0] = CapabilityVision
+	got.Constraints["limits"].(map[string]any)["max"] = 42
+
+	again, ok := registry.Get("detached")
+	require.True(t, ok)
+	assert.Equal(t, float64(1), again.Cost.InputTokens)
+	assert.Equal(t, CapabilityText, again.Capabilities[0])
+	assert.Equal(t, 10, again.Constraints["limits"].(map[string]any)["max"])
 }

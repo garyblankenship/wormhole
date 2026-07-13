@@ -1,6 +1,7 @@
 package server
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -111,6 +112,22 @@ func performRequest(p *proxy, method, path, body string) *httptest.ResponseRecor
 	rec := httptest.NewRecorder()
 	p.server.Handler.ServeHTTP(rec, req)
 	return rec
+}
+
+func TestProxyLogsExcludeRawProviderErrors(t *testing.T) {
+	t.Parallel()
+
+	const secret = "upstream-body-with-api-key-sk-secret"
+	var logs bytes.Buffer
+	p := newTestProxy(wmtest.NewMockProvider("openai").WithError(secret))
+	p.logger = slog.New(slog.NewTextHandler(&logs, nil))
+
+	rec := performRequest(p, http.MethodPost, "/v1/chat/completions",
+		`{"model":"gpt-test","messages":[{"role":"user","content":"private prompt"}]}`)
+	require.Equal(t, http.StatusBadGateway, rec.Code)
+	assert.NotContains(t, logs.String(), secret)
+	assert.NotContains(t, logs.String(), "private prompt")
+	assert.Contains(t, logs.String(), "error_type")
 }
 
 func TestParseModelRoute(t *testing.T) {
@@ -450,6 +467,23 @@ func TestProxyChatStreaming(t *testing.T) {
 	assert.Contains(t, body, "hello")
 	assert.Contains(t, body, "world")
 	assert.Contains(t, body, "data: [DONE]")
+}
+
+func TestProxyChatStreamingRefusal(t *testing.T) {
+	t.Parallel()
+
+	mock := wmtest.NewMockProvider("openai").WithStreamChunks([]types.TextChunk{{Refusal: "I cannot help with that."}})
+	p := newTestProxy(mock)
+	rec := performRequest(p, http.MethodPost, "/v1/chat/completions", `{
+		"model":"gpt-test",
+		"stream":true,
+		"messages":[{"role":"user","content":"unsafe request"}]
+	}`)
+
+	require.Equal(t, http.StatusOK, rec.Code)
+	body := rec.Body.String()
+	assert.Contains(t, body, `"refusal":"I cannot help with that."`)
+	assert.NotContains(t, body, `"content":"I cannot help with that."`)
 }
 
 func TestProxyChatStreamingErrorBeforeCommitReturnsHTTPError(t *testing.T) {

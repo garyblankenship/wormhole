@@ -1,7 +1,8 @@
 package middleware
 
 import (
-	"encoding/json"
+	"context"
+	"log/slog"
 	"reflect"
 	"time"
 
@@ -21,6 +22,9 @@ func deref(v any) any {
 var defaultLoggingRedactKeys = []string{"api_key", "apikey", "token", "authorization"}
 
 func newDebugLoggingConfig(logger types.Logger) LoggingConfig {
+	if logger == nil {
+		logger = slog.Default()
+	}
 	return LoggingConfig{
 		Logger:       logger,
 		LogRequests:  true,
@@ -29,6 +33,41 @@ func newDebugLoggingConfig(logger types.Logger) LoggingConfig {
 		LogErrors:    true,
 		RedactKeys:   append([]string(nil), defaultLoggingRedactKeys...),
 	}
+}
+
+func normalizeLoggingConfig(config LoggingConfig) LoggingConfig {
+	if config.Logger == nil {
+		config.Logger = slog.Default()
+	}
+	return config
+}
+
+func requestMetadataAttrs(ctx context.Context) []any {
+	if ctx == nil {
+		return nil
+	}
+	attrs := make([]any, 0, 3)
+	for _, field := range []struct {
+		key  contextKey
+		name string
+	}{
+		{key: CtxKeyProvider, name: "request_provider"},
+		{key: CtxKeyModel, name: "request_model"},
+		{key: CtxKeyMethod, name: "request_method"},
+	} {
+		if value, ok := ctx.Value(field.key).(string); ok && value != "" {
+			attrs = append(attrs, slog.String(field.name, types.SafeLogString(boundedMetadata(value))))
+		}
+	}
+	return attrs
+}
+
+func boundedMetadata(value string) string {
+	const maxMetadataLength = 256
+	if len(value) <= maxMetadataLength {
+		return value
+	}
+	return value[:maxMetadataLength]
 }
 
 func logRequestDetails(config LoggingConfig, req any) {
@@ -44,10 +83,7 @@ func logRequestDetails(config LoggingConfig, req any) {
 	case types.ImageRequest:
 		logImageRequestDetails(config.Logger, r)
 	default:
-		sanitized := redactSensitiveData(req, config.RedactKeys)
-		if jsonData, err := json.MarshalIndent(sanitized, "", "  "); err == nil {
-			config.Logger.Debug("Request", "data", string(jsonData))
-		}
+		config.Logger.Debug("Request", "request_type", reflect.TypeOf(req))
 	}
 }
 
@@ -69,15 +105,9 @@ func logResponseDetails(config LoggingConfig, resp any, duration time.Duration) 
 }
 
 func logTextRequestDetails(logger types.Logger, request types.TextRequest) {
-	logger.Debug("Text request", "model", request.Model)
+	logger.Debug("Text request", "model", types.SafeLogString(request.Model))
 	if len(request.Messages) > 0 {
 		logger.Debug("Messages", "count", len(request.Messages))
-		for i, msg := range request.Messages {
-			logger.Debug("Message",
-				"index", i,
-				"role", msg.GetRole(),
-				"content", truncateString(getMessageContent(msg), 100))
-		}
 	}
 	if request.Temperature != nil {
 		logger.Debug("Temperature", "value", *request.Temperature)
@@ -91,7 +121,7 @@ func logTextRequestDetails(logger types.Logger, request types.TextRequest) {
 }
 
 func logTextResponseDetails(logger types.Logger, response types.TextResponse, duration time.Duration) {
-	logger.Debug("Text response received", "duration", duration, "model", response.Model)
+	logger.Debug("Text response received", "duration", duration, "model", types.SafeLogString(response.Model))
 	logger.Debug("Text details", "length", len(response.Text), "finish_reason", response.FinishReason)
 
 	if response.Usage != nil {
@@ -108,22 +138,21 @@ func logTextResponseDetails(logger types.Logger, response types.TextResponse, du
 	if len(response.ToolCalls) > 0 {
 		logger.Debug("Tool calls", "count", len(response.ToolCalls))
 		for i, call := range response.ToolCalls {
-			logger.Debug("Tool call", "index", i, "name", call.Name)
+			logger.Debug("Tool call", "index", i, "name", types.SafeLogString(call.Name))
 		}
 	}
 
-	logger.Debug("Preview", "text", truncateString(response.Text, 200))
 }
 
 func logStructuredRequestDetails(logger types.Logger, request types.StructuredRequest) {
-	logger.Debug("Structured request", "model", request.Model)
+	logger.Debug("Structured request", "model", types.SafeLogString(request.Model))
 	if request.Schema != nil {
 		logger.Debug("Schema provided for structured output")
 	}
 }
 
 func logStructuredResponseDetails(logger types.Logger, response types.StructuredResponse, duration time.Duration) {
-	logger.Debug("Structured response received", "duration", duration, "model", response.Model)
+	logger.Debug("Structured response received", "duration", duration, "model", types.SafeLogString(response.Model))
 	logger.Debug("Structured data received")
 
 	if response.Usage != nil {
@@ -135,11 +164,11 @@ func logStructuredResponseDetails(logger types.Logger, response types.Structured
 }
 
 func logEmbeddingsRequestDetails(logger types.Logger, request types.EmbeddingsRequest) {
-	logger.Debug("Embeddings request", "model", request.Model, "input_count", len(request.Input))
+	logger.Debug("Embeddings request", "model", types.SafeLogString(request.Model), "input_count", len(request.Input))
 }
 
 func logEmbeddingsResponseDetails(logger types.Logger, response types.EmbeddingsResponse, duration time.Duration) {
-	logger.Debug("Embeddings response received", "duration", duration, "model", response.Model)
+	logger.Debug("Embeddings response received", "duration", duration, "model", types.SafeLogString(response.Model))
 	logger.Debug("Embeddings details", "count", len(response.Embeddings))
 	if len(response.Embeddings) > 0 {
 		logger.Debug("Dimensions", "value", len(response.Embeddings[0].Embedding))
@@ -151,7 +180,7 @@ func logEmbeddingsResponseDetails(logger types.Logger, response types.Embeddings
 }
 
 func logAudioRequestDetails(logger types.Logger, request types.AudioRequest) {
-	logger.Debug("Audio request", "model", request.Model)
+	logger.Debug("Audio request", "model", types.SafeLogString(request.Model))
 	switch request.Type {
 	case types.AudioRequestTypeSTT:
 		logger.Debug("Type", "value", "Speech to Text")
@@ -164,10 +193,10 @@ func logAudioRequestDetails(logger types.Logger, request types.AudioRequest) {
 }
 
 func logAudioResponseDetails(logger types.Logger, response types.AudioResponse, duration time.Duration) {
-	logger.Debug("Audio response received", "duration", duration, "model", response.Model)
+	logger.Debug("Audio response received", "duration", duration, "model", types.SafeLogString(response.Model))
 
 	if response.Text != "" {
-		logger.Debug("Text", "value", truncateString(response.Text, 100))
+		logger.Debug("Text", "chars", len(response.Text))
 	}
 	if len(response.Audio) > 0 {
 		logger.Debug("Audio data", "bytes", len(response.Audio))
@@ -178,8 +207,8 @@ func logAudioResponseDetails(logger types.Logger, response types.AudioResponse, 
 }
 
 func logImageRequestDetails(logger types.Logger, request types.ImageRequest) {
-	logger.Debug("Image request", "model", request.Model)
-	logger.Debug("Prompt", "value", truncateString(request.Prompt, 100))
+	logger.Debug("Image request", "model", types.SafeLogString(request.Model))
+	logger.Debug("Prompt", "chars", len(request.Prompt))
 	if request.Size != "" {
 		logger.Debug("Size", "value", request.Size)
 	}
@@ -192,7 +221,7 @@ func logImageRequestDetails(logger types.Logger, request types.ImageRequest) {
 }
 
 func logImageResponseDetails(logger types.Logger, response types.ImageResponse, duration time.Duration) {
-	logger.Debug("Image response received", "duration", duration, "model", response.Model)
+	logger.Debug("Image response received", "duration", duration, "model", types.SafeLogString(response.Model))
 	logger.Debug("Images generated", "count", len(response.Images))
 
 	for i, img := range response.Images {

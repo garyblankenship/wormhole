@@ -108,6 +108,40 @@ func TestProviderRegistration(t *testing.T) {
 	})
 }
 
+func TestProviderFactoryUsesFirstAPIKeysEntryWhenAPIKeyIsEmpty(t *testing.T) {
+	var received types.ProviderConfig
+	client := New(
+		WithCustomProvider("custom", func(config types.ProviderConfig) (types.Provider, error) {
+			received = config
+			return mockpkg.NewMockProvider("custom"), nil
+		}),
+		WithProviderConfig("custom", types.ProviderConfig{APIKeys: []string{"test-first", "test-second"}}),
+		WithDiscovery(false),
+	)
+
+	if _, err := client.Provider("custom"); err != nil {
+		t.Fatal(err)
+	}
+	if received.APIKey != "test-first" {
+		t.Fatalf("factory APIKey = %q, want first APIKeys entry", received.APIKey)
+	}
+	if warnings := validateConfig(&client.config); len(warnings) != 0 {
+		t.Fatalf("APIKeys-only config warnings = %#v, want none", warnings)
+	}
+}
+
+func TestAPIKeysFallbackIsValidated(t *testing.T) {
+	client := New(
+		WithProviderConfig("openai", types.ProviderConfig{APIKeys: []string{"invalid-key"}}),
+		WithDiscovery(false),
+	)
+
+	_, err := client.Provider("openai")
+	if err == nil || !strings.Contains(err.Error(), "invalid OpenAI API key format") {
+		t.Fatalf("Provider error = %v, want APIKeys fallback validation failure", err)
+	}
+}
+
 func TestWithOpenAICompatibleOption(t *testing.T) {
 	t.Parallel()
 	t.Run("WithOpenAICompatible option registers provider", func(t *testing.T) {

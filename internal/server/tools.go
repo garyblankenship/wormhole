@@ -2,14 +2,22 @@ package server
 
 import (
 	"encoding/json"
+	"fmt"
+	"strings"
 
 	"github.com/garyblankenship/wormhole/pkg/types"
 )
 
 // toWormholeTools maps OpenAI-format request tools to wormhole tool definitions.
-func toWormholeTools(in []ChatTool) []types.Tool {
+func toWormholeTools(in []ChatTool) ([]types.Tool, error) {
 	out := make([]types.Tool, 0, len(in))
 	for _, t := range in {
+		if t.Type != "function" {
+			return nil, fmt.Errorf("unsupported tool type %q", t.Type)
+		}
+		if strings.TrimSpace(t.Function.Name) == "" {
+			return nil, fmt.Errorf("function tool name is required")
+		}
 		out = append(out, types.Tool{
 			Type:        "function",
 			Name:        t.Function.Name,
@@ -17,26 +25,26 @@ func toWormholeTools(in []ChatTool) []types.Tool {
 			InputSchema: t.Function.Parameters,
 		})
 	}
-	return out
+	return out, nil
 }
 
 // parseToolChoice maps an OpenAI tool_choice (string or object form) to a
 // wormhole ToolChoice. Returns nil when absent or unrecognized.
-func parseToolChoice(raw json.RawMessage) *types.ToolChoice {
-	if len(raw) == 0 {
-		return nil
+func parseToolChoice(raw json.RawMessage) (*types.ToolChoice, error) {
+	if len(raw) == 0 || strings.TrimSpace(string(raw)) == "null" {
+		return nil, nil
 	}
 	var s string
 	if err := json.Unmarshal(raw, &s); err == nil {
 		switch s {
 		case "auto":
-			return &types.ToolChoice{Type: types.ToolChoiceTypeAuto}
+			return &types.ToolChoice{Type: types.ToolChoiceTypeAuto}, nil
 		case "none":
-			return &types.ToolChoice{Type: types.ToolChoiceTypeNone}
+			return &types.ToolChoice{Type: types.ToolChoiceTypeNone}, nil
 		case "required":
-			return &types.ToolChoice{Type: types.ToolChoiceTypeAny}
+			return &types.ToolChoice{Type: types.ToolChoiceTypeAny}, nil
 		default:
-			return nil
+			return nil, fmt.Errorf("unsupported tool_choice %q", s)
 		}
 	}
 	var obj struct {
@@ -45,19 +53,38 @@ func parseToolChoice(raw json.RawMessage) *types.ToolChoice {
 			Name string `json:"name"`
 		} `json:"function"`
 	}
-	if err := json.Unmarshal(raw, &obj); err == nil && obj.Function.Name != "" {
-		return &types.ToolChoice{Type: types.ToolChoiceTypeSpecific, ToolName: obj.Function.Name}
+	if err := json.Unmarshal(raw, &obj); err != nil {
+		return nil, fmt.Errorf("invalid tool_choice: %w", err)
 	}
-	return nil
+	if obj.Type != "function" {
+		return nil, fmt.Errorf("unsupported tool_choice type %q", obj.Type)
+	}
+	if strings.TrimSpace(obj.Function.Name) == "" {
+		return nil, fmt.Errorf("function tool_choice name is required")
+	}
+	return &types.ToolChoice{Type: types.ToolChoiceTypeSpecific, ToolName: obj.Function.Name}, nil
 }
 
 // toWormholeToolCalls maps inbound OpenAI assistant tool_calls to wormhole tool calls.
-func toWormholeToolCalls(in []ChatToolCall) []types.ToolCall {
+func toWormholeToolCalls(in []ChatToolCall) ([]types.ToolCall, error) {
 	out := make([]types.ToolCall, 0, len(in))
 	for _, c := range in {
+		if c.Type != "function" {
+			return nil, fmt.Errorf("unsupported assistant tool call type %q", c.Type)
+		}
+		if strings.TrimSpace(c.Function.Name) == "" {
+			return nil, fmt.Errorf("assistant tool call name is required")
+		}
+		rawArguments := c.Function.Arguments
+		if strings.TrimSpace(rawArguments) == "" {
+			rawArguments = "{}"
+		}
 		var args map[string]any
-		if c.Function.Arguments != "" {
-			_ = json.Unmarshal([]byte(c.Function.Arguments), &args)
+		if err := json.Unmarshal([]byte(rawArguments), &args); err != nil {
+			return nil, fmt.Errorf("assistant tool call %q arguments must be a JSON object: %w", c.Function.Name, err)
+		}
+		if args == nil {
+			return nil, fmt.Errorf("assistant tool call %q arguments must be a JSON object", c.Function.Name)
 		}
 		out = append(out, types.ToolCall{
 			Type:      "function",
@@ -66,11 +93,11 @@ func toWormholeToolCalls(in []ChatToolCall) []types.ToolCall {
 			Arguments: args,
 			Function: &types.ToolCallFunction{
 				Name:      c.Function.Name,
-				Arguments: c.Function.Arguments,
+				Arguments: rawArguments,
 			},
 		})
 	}
-	return out
+	return out, nil
 }
 
 // fromWormholeToolCalls maps wormhole tool calls to OpenAI-format tool calls for
@@ -78,7 +105,8 @@ func toWormholeToolCalls(in []ChatToolCall) []types.ToolCall {
 func fromWormholeToolCalls(in []types.ToolCall) []ChatToolCall {
 	out := make([]ChatToolCall, 0, len(in))
 	for _, c := range in {
-		args := ""
+		args := "{}"
+		name := c.Name
 		switch {
 		case c.Function != nil && c.Function.Arguments != "":
 			args = c.Function.Arguments
@@ -87,11 +115,14 @@ func fromWormholeToolCalls(in []types.ToolCall) []ChatToolCall {
 				args = string(b)
 			}
 		}
+		if name == "" && c.Function != nil {
+			name = c.Function.Name
+		}
 		out = append(out, ChatToolCall{
 			ID:   c.ID,
 			Type: "function",
 			Function: ChatToolCallFunction{
-				Name:      c.Name,
+				Name:      name,
 				Arguments: args,
 			},
 		})

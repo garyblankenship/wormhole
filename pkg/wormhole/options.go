@@ -208,10 +208,10 @@ func applyProviderProfile(profile ProviderProfile, config *types.ProviderConfig)
 func mergeProfileProviderOptions(profileDefaults, configDefaults map[string]any) map[string]any {
 	merged := make(map[string]any, len(profileDefaults)+len(configDefaults))
 	for k, v := range profileDefaults {
-		merged[k] = v
+		merged[k] = types.CloneValue(v)
 	}
 	for k, v := range configDefaults {
-		merged[k] = v
+		merged[k] = types.CloneValue(v)
 	}
 	return merged
 }

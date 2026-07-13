@@ -78,7 +78,9 @@ func KnownProviderNames() []string {
 func KnownProviderProfiles() []ProviderProfile {
 	profiles, _ := loadProviderProfiles()
 	out := make([]ProviderProfile, len(profiles))
-	copy(out, profiles)
+	for i := range profiles {
+		out[i] = cloneProviderProfile(profiles[i])
+	}
 	return out
 }
 
@@ -86,7 +88,7 @@ func KnownProviderProfiles() []ProviderProfile {
 func ProviderProfileByName(name string) (ProviderProfile, bool) {
 	_, byName := loadProviderProfiles()
 	profile, ok := byName[name]
-	return profile, ok
+	return cloneProviderProfile(profile), ok
 }
 
 func loadProviderProfiles() ([]ProviderProfile, map[string]ProviderProfile) {
@@ -99,15 +101,17 @@ func loadProviderProfiles() ([]ProviderProfile, map[string]ProviderProfile) {
 		sort.Slice(profiles, func(i, j int) bool {
 			return profiles[i].Name < profiles[j].Name
 		})
+		stored := make([]ProviderProfile, len(profiles))
 		byName := make(map[string]ProviderProfile, len(profiles))
-		for _, profile := range profiles {
+		for i, profile := range profiles {
 			if profile.Name == "" {
 				providerProfiles.err = fmt.Errorf("load provider profiles: empty provider name")
 				return
 			}
-			byName[profile.Name] = profile
+			stored[i] = cloneProviderProfile(profile)
+			byName[profile.Name] = cloneProviderProfile(profile)
 		}
-		providerProfiles.list = profiles
+		providerProfiles.list = stored
 		providerProfiles.by = byName
 	})
 	if providerProfiles.err != nil {
@@ -118,6 +122,14 @@ func loadProviderProfiles() ([]ProviderProfile, map[string]ProviderProfile) {
 
 func providerProfile(name string) (ProviderProfile, bool) {
 	return ProviderProfileByName(name)
+}
+
+func cloneProviderProfile(src ProviderProfile) ProviderProfile {
+	dst := src
+	dst.APIKeyEnv = append([]string(nil), src.APIKeyEnv...)
+	dst.RequestPolicy.MaxTokensParamRules = append([]MaxTokensParamRule(nil), src.RequestPolicy.MaxTokensParamRules...)
+	dst.DefaultProviderOptions = cloneProviderOptions(src.DefaultProviderOptions)
+	return dst
 }
 
 func configuredBaseURL(profile ProviderProfile) string {
@@ -143,7 +155,7 @@ func envProviderProfiles() []ProviderProfile {
 	out := make([]ProviderProfile, 0, len(profiles))
 	for _, profile := range profiles {
 		if profile.AutoEnv {
-			out = append(out, profile)
+			out = append(out, cloneProviderProfile(profile))
 		}
 	}
 	return out

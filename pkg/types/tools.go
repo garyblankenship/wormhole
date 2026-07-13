@@ -1,7 +1,10 @@
 package types
 
 import (
+	"bytes"
 	"encoding/json"
+	"fmt"
+	"io"
 )
 
 // ToolChoiceType represents the type of tool choice
@@ -75,6 +78,66 @@ type ToolCallFunction struct {
 	Arguments string `json:"arguments"`
 }
 
+// NormalizeToolCall reconciles the provider-neutral and OpenAI-compatible
+// representations of a tool call. The provider-neutral Name and Arguments
+// fields are authoritative when present; the nested Function fills missing
+// values. Both representations are populated on success.
+func NormalizeToolCall(src ToolCall) (ToolCall, error) {
+	dst := CloneToolCall(src)
+	if dst.ArgsInvalid {
+		return ToolCall{}, fmt.Errorf("tool call %q has malformed arguments: %s", dst.ID, dst.ArgsParseError)
+	}
+
+	name := dst.Name
+	if name == "" && dst.Function != nil {
+		name = dst.Function.Name
+	}
+
+	topArguments := dst.Arguments
+	var nestedArguments map[string]any
+	if dst.Function != nil && dst.Function.Arguments != "" {
+		decoder := json.NewDecoder(bytes.NewBufferString(dst.Function.Arguments))
+		if err := decoder.Decode(&nestedArguments); err != nil {
+			return ToolCall{}, fmt.Errorf("tool call %q has malformed function arguments: %w", dst.ID, err)
+		}
+		if nestedArguments == nil {
+			return ToolCall{}, fmt.Errorf("tool call %q function arguments must be a JSON object", dst.ID)
+		}
+		var trailing any
+		if err := decoder.Decode(&trailing); err != io.EOF {
+			return ToolCall{}, fmt.Errorf("tool call %q has trailing function arguments data", dst.ID)
+		}
+	}
+
+	switch {
+	case topArguments != nil && nestedArguments != nil:
+		topJSON, err := json.Marshal(topArguments)
+		if err != nil {
+			return ToolCall{}, fmt.Errorf("tool call %q has malformed arguments: %w", dst.ID, err)
+		}
+		nestedJSON, err := json.Marshal(nestedArguments)
+		if err != nil {
+			return ToolCall{}, fmt.Errorf("tool call %q has malformed function arguments: %w", dst.ID, err)
+		}
+		if !bytes.Equal(topJSON, nestedJSON) {
+			return ToolCall{}, fmt.Errorf("tool call %q has conflicting argument representations", dst.ID)
+		}
+	case topArguments == nil && nestedArguments != nil:
+		topArguments = nestedArguments
+	case topArguments == nil:
+		topArguments = map[string]any{}
+	}
+
+	argumentsJSON, err := json.Marshal(topArguments)
+	if err != nil {
+		return ToolCall{}, fmt.Errorf("tool call %q has malformed arguments: %w", dst.ID, err)
+	}
+	dst.Name = name
+	dst.Arguments = CloneMap(topArguments)
+	dst.Function = &ToolCallFunction{Name: name, Arguments: string(argumentsJSON)}
+	return dst, nil
+}
+
 // ToolResult represents the result of a tool execution
 type ToolResult struct {
 	ToolCallID string `json:"tool_call_id"`
@@ -89,11 +152,11 @@ func NewTool(name, description string, inputSchema map[string]any) *Tool {
 		Type:        "function", // OpenAI compatibility
 		Name:        name,
 		Description: description,
-		InputSchema: inputSchema,
+		InputSchema: CloneMap(inputSchema),
 		Function: &ToolFunction{
 			Name:        name,
 			Description: description,
-			Parameters:  inputSchema,
+			Parameters:  CloneMap(inputSchema),
 		},
 	}
 }

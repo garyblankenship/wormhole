@@ -1,5 +1,23 @@
 # Changelog
 
+## v1.25.0 (2026-07-13)
+
+### Features
+- Proxy: complete sequenced Responses streaming lifecycles for text, refusals, function calls, custom tools, and detailed usage.
+- Provider configuration: support `APIKeys`-only authentication consistently through runtime requests and model discovery.
+- Types: add safe structured logging helpers and detached cloning for mutable request, model, registry, and provider-profile state.
+
+### Fixes
+- Security: prevent raw upstream bodies, causes, prompts, credentials, and unbounded provider-controlled metadata from reaching default logs.
+- Proxy: reject malformed or undeclared tools and tool choices before provider I/O, preserve refusal content, and map unknown finish reasons to `other`.
+- Middleware: isolate circuit breakers by provider and operation so one failed route cannot block healthy fallbacks.
+- Providers: normalize tool calls before serialization and stop Gemini and Ollama transformations from mutating caller-owned data.
+- Discovery: preserve stale catalogs for ordinary reads, make manual refresh strict and deterministic, and cancel in-flight refreshes promptly on shutdown.
+- Registries and builders: detach nested mutable state across clones, getters, registration, and option merging.
+
+### Other
+- Resolve the deterministic lint backlog and expand race/regression coverage across logging, circuits, discovery, proxy streaming, provider transforms, and ownership boundaries.
+
 ## v1.24.0 (2026-07-11)
 
 ### Features

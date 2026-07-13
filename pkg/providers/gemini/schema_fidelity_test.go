@@ -47,13 +47,17 @@ func TestNormalizeSchemaMap(t *testing.T) {
 	t.Parallel()
 	// [T,"null"] -> type:T + nullable:true
 	m := map[string]any{"type": []any{"string", "null"}}
-	normalizeSchemaMap(m)
+	normalized := normalizeSchemaMap(m)
+	if _, mutated := m["nullable"]; mutated {
+		t.Fatalf("normalization mutated caller schema: %#v", m)
+	}
+	m = normalized
 	if m["type"] != "string" || m["nullable"] != true {
 		t.Fatalf("nullable case: got %#v", m)
 	}
 	// multi-type union -> anyOf, type removed
 	m2 := map[string]any{"type": []any{"string", "number"}}
-	normalizeSchemaMap(m2)
+	m2 = normalizeSchemaMap(m2)
 	if _, ok := m2["type"]; ok {
 		t.Fatalf("multi-type: type should be removed, got %#v", m2)
 	}
@@ -68,7 +72,7 @@ func TestNormalizeSchemaMap(t *testing.T) {
 			"tags": map[string]any{"type": "array", "items": map[string]any{"type": []any{"string", "null"}}},
 		},
 	}
-	normalizeSchemaMap(m3)
+	m3 = normalizeSchemaMap(m3)
 	name := m3["properties"].(map[string]any)["name"].(map[string]any)
 	if name["type"] != "string" || name["nullable"] != true {
 		t.Fatalf("nested property not normalized: %#v", name)
@@ -79,7 +83,7 @@ func TestNormalizeSchemaMap(t *testing.T) {
 	}
 	// no regression: plain object/string untouched
 	m4 := map[string]any{"type": "object", "properties": map[string]any{"x": map[string]any{"type": "string"}}}
-	normalizeSchemaMap(m4)
+	m4 = normalizeSchemaMap(m4)
 	if m4["type"] != "object" {
 		t.Fatalf("plain object changed: %#v", m4)
 	}

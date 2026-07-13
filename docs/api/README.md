@@ -103,9 +103,11 @@ github.com/garyblankenship/wormhole
 | Function | Description |
 |----------|-------------|
 | `client.ListAvailableModels(provider) ([]*ModelInfo, error)` | List provider's models |
+| `client.ListAvailableModelsWithContext(ctx, provider) ([]*ModelInfo, error)` | List models with caller cancellation |
 | `client.SelectModels(ctx, query) ([]*ModelInfo, error)` | Filter and sort discovered models |
 | `client.SelectModel(ctx, query) (*ModelInfo, error)` | Return the first discovered model matching a query |
-| `client.RefreshModels() error` | Refresh model cache |
+| `client.RefreshModels() error` | Strictly refresh every provider from its live API |
+| `client.RefreshModelsWithContext(ctx) error` | Strict live refresh with caller cancellation |
 | `client.ClearModelCache()` | Clear cached models |
 
 ### Lifecycle
@@ -139,6 +141,10 @@ Profile-backed request policy also keeps provider/model token parameter quirks
 such as `max_completion_tokens` out of adapter conditionals.
 `KnownProviderProfiles()` returns all built-in profiles, and
 `ProviderProfileByName(name)` returns one profile.
+
+Profile getters and model discovery/selection getters return detached copies,
+including nested options, costs, capabilities, constraints, rules, and slices.
+Callers may mutate returned values without changing registry or profile state.
 
 ### Model Selection
 

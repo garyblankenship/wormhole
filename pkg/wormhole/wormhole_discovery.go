@@ -14,6 +14,7 @@ func (p *Wormhole) initializeDiscoveryService() {
 	var modelFetchers []discovery.ModelFetcher
 
 	for providerName, providerConfig := range p.config.Providers {
+		apiKey := providerConfig.EffectiveAPIKey()
 		profile, known := providerProfile(providerName)
 		discoveryKind := discoveryOpenAICompatible
 		if known {
@@ -22,12 +23,12 @@ func (p *Wormhole) initializeDiscoveryService() {
 
 		switch discoveryKind {
 		case discoveryOpenAI:
-			if providerConfig.APIKey != "" {
-				modelFetchers = append(modelFetchers, fetchers.NewOpenAIFetcher(providerConfig.APIKey))
+			if apiKey != "" {
+				modelFetchers = append(modelFetchers, fetchers.NewOpenAIFetcher(apiKey))
 			}
 		case discoveryAnthropic:
-			if providerConfig.APIKey != "" {
-				modelFetchers = append(modelFetchers, fetchers.NewAnthropicFetcher(providerConfig.APIKey))
+			if apiKey != "" {
+				modelFetchers = append(modelFetchers, fetchers.NewAnthropicFetcher(apiKey))
 			}
 		case discoveryOllama:
 			baseURL := providerConfig.BaseURL
@@ -38,15 +39,15 @@ func (p *Wormhole) initializeDiscoveryService() {
 		case discoveryOpenRouter:
 			modelFetchers = append(modelFetchers, fetchers.NewOpenRouterFetcher())
 		case discoveryGemini:
-			if providerConfig.APIKey != "" {
-				modelFetchers = append(modelFetchers, fetchers.NewGeminiFetcher(providerConfig.BaseURL, providerConfig.APIKey))
+			if apiKey != "" {
+				modelFetchers = append(modelFetchers, fetchers.NewGeminiFetcher(providerConfig.BaseURL, apiKey))
 			}
 		case discoveryOpenAICompatible:
 			if providerConfig.BaseURL != "" {
 				modelFetchers = append(modelFetchers, fetchers.NewOpenAICompatibleFetcher(
 					providerName,
 					providerConfig.BaseURL,
-					providerConfig.APIKey,
+					apiKey,
 					providerConfig.Headers,
 				))
 			}

@@ -25,7 +25,7 @@ func MapFinishReason(reason string) types.FinishReason {
 	case "other", "finish_reason_unspecified", "load", "unload":
 		return types.FinishReasonOther
 	default:
-		return types.FinishReasonStop
+		return types.FinishReasonOther
 	}
 }
 

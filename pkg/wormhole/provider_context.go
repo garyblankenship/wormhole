@@ -7,9 +7,10 @@ import (
 	"github.com/garyblankenship/wormhole/pkg/types"
 )
 
-func contextWithProvider(ctx context.Context, provider types.Provider) context.Context {
+func contextWithProviderOperation(ctx context.Context, provider types.Provider, operation string) context.Context {
 	if provider == nil {
 		return ctx
 	}
-	return context.WithValue(ctx, middleware.CtxKeyProvider, provider.Name())
+	ctx = context.WithValue(ctx, middleware.CtxKeyProvider, provider.Name())
+	return context.WithValue(ctx, middleware.CtxKeyMethod, operation)
 }

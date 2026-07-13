@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"sync/atomic"
 	"time"
 
@@ -90,16 +91,22 @@ func EnhancedMetricsMiddleware(collector *EnhancedMetricsCollector) Middleware {
 
 // LoggingMiddleware creates basic logging middleware
 func LoggingMiddleware(logger types.Logger) Middleware {
+	if logger == nil {
+		logger = slog.Default()
+	}
 	return func(next Handler) Handler {
 		return func(ctx context.Context, req any) (any, error) {
-			logger.Debug("Wormhole request", "request", req)
+			logger.Debug("Wormhole request", "request_type", fmt.Sprintf("%T", req))
 
 			resp, err := next(ctx, req)
 
 			if err != nil {
-				logger.Error("Wormhole request failed", "error", err)
+				args := make([]any, 0, 5)
+				args = append(args, "error", types.SafeErrorValue(err))
+				args = append(args, requestMetadataAttrs(ctx)...)
+				logger.Error("Wormhole request failed", args...)
 			} else {
-				logger.Debug("Wormhole response", "response", resp)
+				logger.Debug("Wormhole response", "response_type", fmt.Sprintf("%T", resp))
 			}
 
 			return resp, wrapIfNotWormholeError("logging", err)

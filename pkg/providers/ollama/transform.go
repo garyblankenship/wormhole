@@ -310,7 +310,7 @@ func (p *Provider) mapFinishReason(doneReason string) types.FinishReason {
 		// Model load/unload — not a normal generation stop.
 		return types.FinishReasonOther
 	default:
-		return types.FinishReasonStop
+		return types.FinishReasonOther
 	}
 }
 

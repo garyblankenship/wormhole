@@ -2,6 +2,7 @@ package discovery
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sort"
 	"sync"
@@ -180,11 +181,12 @@ func (s *DiscoveryService) GetModelsWithStatus(ctx context.Context, provider str
 		return nil, fmt.Errorf("no cached models for provider %s and offline mode enabled", provider)
 	}
 
-	models, err := s.fetchModels(ctx, provider)
+	models, err := s.fetchModels(ctx, provider, true)
 	if err != nil {
 		return nil, err
 	}
-	return &ModelsResult{Models: models, Stale: false}, nil
+	_, fresh := s.cache.Get(s.cacheKey(provider))
+	return &ModelsResult{Models: models, Stale: !fresh}, nil
 }
 
 // GetModels returns models for a provider (from cache or fetch).
@@ -206,32 +208,32 @@ func (s *DiscoveryService) RefreshModels(ctx context.Context) error {
 		providers = append(providers, name)
 	}
 	s.mu.RUnlock()
+	sort.Strings(providers)
 
 	// Fetch all providers in parallel
 	var wg sync.WaitGroup
-	errCh := make(chan error, len(providers))
+	errs := make([]error, len(providers))
 
-	for _, provider := range providers {
+	for i, provider := range providers {
 		wg.Add(1)
-		go func(p string) {
+		go func(index int, p string) {
 			defer wg.Done()
-			if _, err := s.fetchModels(ctx, p); err != nil {
-				errCh <- fmt.Errorf("%s: %w", p, err)
+			if _, err := s.fetchModels(ctx, p, false); err != nil {
+				errs[index] = fmt.Errorf("%s: %w", p, err)
 			}
-		}(provider)
+		}(i, provider)
 	}
 
 	wg.Wait()
-	close(errCh)
-
-	// Collect errors (pre-allocate for expected capacity)
-	errs := make([]error, 0, len(providers))
-	for err := range errCh {
-		errs = append(errs, err)
+	joined := errs[:0]
+	for _, err := range errs {
+		if err != nil {
+			joined = append(joined, err)
+		}
 	}
 
-	if len(errs) > 0 {
-		return fmt.Errorf("failed to refresh some providers: %v", errs)
+	if len(joined) > 0 {
+		return fmt.Errorf("failed to refresh providers: %w", errors.Join(joined...))
 	}
 
 	return nil
@@ -286,8 +288,10 @@ func (s *DiscoveryService) Stop() error {
 	return err
 }
 
-// fetchModels fetches models from a provider and updates cache
-func (s *DiscoveryService) fetchModels(ctx context.Context, provider string) ([]*types.ModelInfo, error) {
+// fetchModels fetches models from a provider and updates cache. staleOK is
+// reserved for ordinary reads and background refreshes; manual refreshes must
+// report the live failure even when valid cached data remains available.
+func (s *DiscoveryService) fetchModels(ctx context.Context, provider string, staleOK bool) ([]*types.ModelInfo, error) {
 	s.mu.RLock()
 	fetcher, ok := s.fetchers[provider]
 	s.mu.RUnlock()
@@ -296,16 +300,25 @@ func (s *DiscoveryService) fetchModels(ctx context.Context, provider string) ([]
 		return nil, fmt.Errorf("no fetcher registered for provider: %s", provider)
 	}
 
-	// Fetch with timeout
-	fetchCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	// Fetch with timeout and service-lifecycle cancellation. Stop must cancel
+	// live calls even when their caller context remains active.
+	serviceCtx, stopServiceCancel := s.contextWithServiceCancellation(ctx)
+	defer stopServiceCancel()
+	fetchCtx, cancel := context.WithTimeout(serviceCtx, 30*time.Second)
 	defer cancel()
 
 	models, err := fetcher.FetchModels(fetchCtx)
 	key := accountCacheKey(provider, fetcher)
 	if err != nil {
-		// Return cached/fallback on error
-		if cached, _ := s.cache.Get(key); len(cached) > 0 {
-			return cached, nil // Return stale cache
+		// Ordinary reads may keep serving the last known catalog when the live
+		// endpoint is unavailable. Strict manual refreshes report the failure.
+		if staleOK {
+			if cached := s.cache.GetStale(key); len(cached) > 0 {
+				return cached, nil
+			}
+			if fallback, _ := s.cache.Get(key); len(fallback) > 0 {
+				return fallback, nil
+			}
 		}
 		return nil, fmt.Errorf("failed to fetch models: %w", err)
 	}
@@ -314,6 +327,15 @@ func (s *DiscoveryService) fetchModels(ctx context.Context, provider string) ([]
 	s.cache.Set(key, models)
 
 	return models, nil
+}
+
+func (s *DiscoveryService) contextWithServiceCancellation(ctx context.Context) (context.Context, context.CancelFunc) {
+	combined, cancel := context.WithCancel(ctx)
+	stop := context.AfterFunc(s.ctx, cancel)
+	return combined, func() {
+		stop()
+		cancel()
+	}
 }
 
 // refreshProvider refreshes a single provider in background. If a refresh
@@ -347,7 +369,7 @@ func (s *DiscoveryService) refreshProvider(provider string) {
 		defer cancel()
 
 		// Ignore errors in background refresh (best effort)
-		_, _ = s.fetchModels(refreshCtx, provider)
+		_, _ = s.fetchModels(refreshCtx, provider, true)
 	}()
 }
 

@@ -60,13 +60,13 @@ func (b *TextRequestBuilder) Model(model string) *TextRequestBuilder {
 
 // Messages sets the messages for the request
 func (b *TextRequestBuilder) Messages(messages ...types.Message) *TextRequestBuilder {
-	b.request.Messages = messages
+	b.request.Messages = types.CloneMessages(messages)
 	return b
 }
 
 // AddMessage adds a message to the request
 func (b *TextRequestBuilder) AddMessage(message types.Message) *TextRequestBuilder {
-	b.request.Messages = append(b.request.Messages, message)
+	b.request.Messages = append(b.request.Messages, types.CloneMessage(message))
 	return b
 }
 
@@ -217,7 +217,7 @@ func (b *TextRequestBuilder) Stop(sequences ...string) *TextRequestBuilder {
 
 // Tools sets the tools available to the model
 func (b *TextRequestBuilder) Tools(tools ...types.Tool) *TextRequestBuilder {
-	b.request.Tools = tools
+	b.request.Tools = types.CloneTools(tools)
 	return b
 }
 
@@ -233,13 +233,13 @@ func (b *TextRequestBuilder) ToolChoice(choice any) *TextRequestBuilder {
 
 // ResponseFormat sets the response format
 func (b *TextRequestBuilder) ResponseFormat(format any) *TextRequestBuilder {
-	b.request.ResponseFormat = format
+	b.request.ResponseFormat = types.CloneValue(format)
 	return b
 }
 
 // ProviderOptions sets provider-specific options
 func (b *TextRequestBuilder) ProviderOptions(options map[string]any) *TextRequestBuilder {
-	b.request.ProviderOptions = options
+	b.request.ProviderOptions = types.CloneMap(options)
 	return b
 }
 
@@ -424,6 +424,7 @@ func (b *TextRequestBuilder) Generate(ctx context.Context) (*types.TextResponse,
 func (b *TextRequestBuilder) executeGenerate(ctx context.Context, provider types.Provider, request *types.TextRequest) (*types.TextResponse, error) {
 	// Check if we should enable automatic tool execution
 	wormhole := b.getWormhole()
+	ctx = contextWithProviderOperation(ctx, provider, "text")
 	shouldAutoExecuteTools := b.shouldAutoExecuteTools(wormhole)
 
 	// If auto-execution is enabled, use the tool executor
@@ -442,7 +443,6 @@ func (b *TextRequestBuilder) executeGenerate(ctx context.Context, provider types
 	// Standard execution without automatic tool handling
 
 	// Apply type-safe middleware chain if configured
-	ctx = contextWithProvider(ctx, provider)
 	if wormhole.providerMiddleware != nil {
 		handler := wormhole.providerMiddleware.ApplyText(provider.Text)
 		return handler(ctx, *request)
@@ -676,7 +676,7 @@ func (b *TextRequestBuilder) openStream(ctx context.Context, cancel context.Canc
 	var stream <-chan types.StreamChunk
 	var err error
 
-	ctx = contextWithProvider(ctx, provider)
+	ctx = contextWithProviderOperation(ctx, provider, "stream")
 	if b.getWormhole().providerMiddleware != nil {
 		handler := b.getWormhole().providerMiddleware.ApplyStream(provider.Stream)
 		stream, err = handler(ctx, *request)
@@ -754,7 +754,7 @@ func cloneTextRequest(src *types.TextRequest) *types.TextRequest {
 			Model: src.Model,
 		},
 		SystemPrompt:   src.SystemPrompt,
-		ResponseFormat: src.ResponseFormat,
+		ResponseFormat: types.CloneValue(src.ResponseFormat),
 	}
 
 	cloneBaseRequestFields(&cloned.BaseRequest, &src.BaseRequest)
@@ -762,14 +762,8 @@ func cloneTextRequest(src *types.TextRequest) *types.TextRequest {
 		toolChoice := *src.ToolChoice
 		cloned.ToolChoice = &toolChoice
 	}
-	if len(src.Messages) > 0 {
-		cloned.Messages = make([]types.Message, len(src.Messages))
-		copy(cloned.Messages, src.Messages)
-	}
-	if len(src.Tools) > 0 {
-		cloned.Tools = make([]types.Tool, len(src.Tools))
-		copy(cloned.Tools, src.Tools)
-	}
+	cloned.Messages = types.CloneMessages(src.Messages)
+	cloned.Tools = types.CloneTools(src.Tools)
 
 	return cloned
 }

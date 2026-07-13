@@ -156,7 +156,13 @@ func detailedErrorHandling(err error) {
 9. **Retryable check** - Convenience method that combines multiple conditions to determine retry suitability.
 
 > [!TIP]
-> Use `AsWormholeError` for logging and debugging - it provides the complete picture of what went wrong. The helper functions like `IsAuthError()` are more convenient for control flow.
+> Use `AsWormholeError` when application code intentionally needs the complete
+> diagnostic object. `Details`, `Cause`, and the string returned by `Error()`
+> can contain provider-controlled response data, so do not write them directly
+> to production logs. Passing a `WormholeError` to `slog` uses its safe,
+> bounded structured projection: code, class-derived message, provider, model,
+> status, and retryability. Wormhole's default proxy and middleware logging use
+> the same boundary.
 
 > [!WARNING]
 > Not all errors are `WormholeError` instances. Network errors or context cancellations may be standard Go errors. Always check the `ok` return value from type assertions.

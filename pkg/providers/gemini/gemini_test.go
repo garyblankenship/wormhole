@@ -1142,7 +1142,7 @@ func TestGeminiProvider_FinishReasonMapping(t *testing.T) {
 		{"RECITATION", types.FinishReasonContentFilter},
 		{"OTHER", types.FinishReasonOther},
 		{"FINISH_REASON_UNSPECIFIED", types.FinishReasonOther},
-		{"UNKNOWN_REASON", types.FinishReasonStop}, // Fallback
+		{"UNKNOWN_REASON", types.FinishReasonOther}, // Fallback
 	}
 
 	for _, tc := range testCases {

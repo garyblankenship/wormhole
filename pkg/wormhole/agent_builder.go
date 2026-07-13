@@ -187,7 +187,7 @@ func (b *AgentBuilder) Run(ctx context.Context, prompt string) (*AgentResult, er
 	executor := NewToolExecutor(mergedRegistry)
 
 	var steps []StepEvent
-	ctx = contextWithProvider(ctx, provider)
+	ctx = contextWithProviderOperation(ctx, provider, "agent")
 
 	for step := 1; step <= maxSteps; step++ {
 		if err := ctx.Err(); err != nil {

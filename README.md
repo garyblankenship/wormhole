@@ -437,6 +437,11 @@ rate-limiting, circuit breaking, caching, and health-aware routing. This is the
 part where the prototype gets seatbelts, brakes, and a dashboard light that
 means something.
 
+Circuit-breaker state is isolated by provider and operation, so a failed text
+route cannot block a healthy fallback, another provider, or embeddings on the
+same provider. Direct middleware calls without provider metadata share one
+stable default circuit.
+
 ```go
 openAIConfig := types.NewProviderConfig(os.Getenv("OPENAI_API_KEY")).
 	WithRetries(2, 200*time.Millisecond).
@@ -531,8 +536,18 @@ Supported proxy endpoints:
 | `GET` | `/health` |
 
 The Responses bridge translates function and custom tools to Chat Completions.
-Provider-specific `namespace` and `web_search` tools have no portable Chat
-Completions equivalent and are omitted when translating the request.
+Tool types without a portable bridge, including `namespace` and `web_search`,
+return `400 invalid_request_error` instead of being silently omitted. The proxy
+also rejects empty tool names, malformed or undeclared `tool_choice` values,
+and malformed assistant tool-call arguments before provider I/O. No-argument
+function calls are normalized to `{}`.
+
+Every Responses SSE event has a monotonically increasing `sequence_number`.
+Text streams emit item/content creation, text deltas, final text/content, and
+item completion before the terminal response; refusals use the matching
+refusal lifecycle. Usage includes cached-input and reasoning-output token
+details plus additive `cache_write_tokens` when available. Empty or unknown
+provider finish reasons map to `other`.
 
 The proxy binds `127.0.0.1:8080` by default. To expose it on another interface
 (e.g. `--addr :8080`) you MUST set `WORMHOLE_API_KEY` — an unauthenticated
@@ -540,8 +555,11 @@ non-loopback bind is refused at startup. Setting the key requires
 `Authorization: Bearer <token>` on `/v1/` requests. When the key is unset on a
 loopback bind the proxy logs a startup warning and serves `/v1/` endpoints
 without authentication. The token is compared in constant time. Upstream
-provider error messages are surfaced to clients, while the raw response body and
-request URL are kept in the server logs only.
+provider errors are mapped to bounded client messages. Default proxy and
+middleware logs contain only bounded error classification and safe request
+metadata; they do not emit raw upstream bodies, prompts, credential-bearing
+URLs, `WormholeError.Details`, or causes. SDK callers can still inspect
+`Details` and `Cause` directly when they intentionally need raw diagnostics.
 
 The proxy accepts OpenAI-style image chat content parts. Data URLs are converted
 to inline media before routing, so Gemini models can receive image-aware chat

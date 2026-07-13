@@ -2,8 +2,11 @@ package discovery
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
+	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -24,14 +27,16 @@ func (m *MockFetcher) Name() string {
 
 func (m *MockFetcher) FetchModels(ctx context.Context) ([]*types.ModelInfo, error) {
 	if m.shouldFail {
-		return nil, ctx.Err()
+		return nil, errors.New("fetch failed")
 	}
 	return m.models, nil
 }
 
 type blockingFetcher struct {
-	name  string
-	count atomic.Int32
+	name    string
+	count   atomic.Int32
+	started chan struct{}
+	once    sync.Once
 }
 
 func (f *blockingFetcher) Name() string {
@@ -40,8 +45,26 @@ func (f *blockingFetcher) Name() string {
 
 func (f *blockingFetcher) FetchModels(ctx context.Context) ([]*types.ModelInfo, error) {
 	f.count.Add(1)
+	if f.started != nil {
+		f.once.Do(func() { close(f.started) })
+	}
 	<-ctx.Done()
 	return nil, ctx.Err()
+}
+
+type switchingFetcher struct {
+	name   string
+	models []*types.ModelInfo
+	fail   atomic.Bool
+}
+
+func (f *switchingFetcher) Name() string { return f.name }
+
+func (f *switchingFetcher) FetchModels(context.Context) ([]*types.ModelInfo, error) {
+	if f.fail.Load() {
+		return nil, errors.New("live endpoint unavailable")
+	}
+	return f.models, nil
 }
 
 func TestDiscoveryService_GetModels(t *testing.T) {
@@ -183,6 +206,78 @@ func TestDiscoveryService_RefreshModels(t *testing.T) {
 	}
 }
 
+func TestDiscoveryServiceOrdinaryReadReturnsStaleAfterLiveFailure(t *testing.T) {
+	fetcher := &switchingFetcher{
+		name:   "test",
+		models: []*types.ModelInfo{{ID: "cached-model", Provider: "test"}},
+	}
+	service := NewDiscoveryService(DiscoveryConfig{
+		CacheTTL:                 time.Hour,
+		DisableFileCache:         true,
+		DisableBackgroundRefresh: true,
+	}, fetcher)
+	t.Cleanup(func() { _ = service.Stop() })
+
+	if _, err := service.GetModels(context.Background(), "test"); err != nil {
+		t.Fatalf("populate cache: %v", err)
+	}
+	service.cache.memoryMu.Lock()
+	service.cache.memory["test"].Timestamp = time.Now().Add(-2 * time.Hour)
+	service.cache.memoryMu.Unlock()
+	fetcher.fail.Store(true)
+
+	result, err := service.GetModelsWithStatus(context.Background(), "test")
+	if err != nil {
+		t.Fatalf("ordinary stale-tolerant read: %v", err)
+	}
+	if !result.Stale || len(result.Models) != 1 || result.Models[0].ID != "cached-model" {
+		t.Fatalf("result = %#v, want stale cached model", result)
+	}
+}
+
+func TestDiscoveryServiceRefreshIsStrictAndPreservesCache(t *testing.T) {
+	fetcher := &switchingFetcher{
+		name:   "test",
+		models: []*types.ModelInfo{{ID: "cached-model", Provider: "test"}},
+	}
+	service := NewDiscoveryService(DiscoveryConfig{
+		CacheTTL:                 time.Hour,
+		DisableFileCache:         true,
+		DisableBackgroundRefresh: true,
+	}, fetcher)
+	t.Cleanup(func() { _ = service.Stop() })
+
+	if _, err := service.GetModels(context.Background(), "test"); err != nil {
+		t.Fatalf("populate cache: %v", err)
+	}
+	fetcher.fail.Store(true)
+	if err := service.RefreshModels(context.Background()); err == nil || !strings.Contains(err.Error(), "test: failed to fetch models") {
+		t.Fatalf("strict refresh error = %v", err)
+	}
+
+	models, err := service.GetModels(context.Background(), "test")
+	if err != nil || len(models) != 1 || models[0].ID != "cached-model" {
+		t.Fatalf("cached models after failed refresh = (%#v, %v)", models, err)
+	}
+}
+
+func TestDiscoveryServiceRefreshErrorsAreDeterministic(t *testing.T) {
+	service := NewDiscoveryService(DiscoveryConfig{
+		DisableFileCache:         true,
+		DisableBackgroundRefresh: true,
+	}, &MockFetcher{name: "zeta", shouldFail: true}, &MockFetcher{name: "alpha", shouldFail: true})
+	t.Cleanup(func() { _ = service.Stop() })
+
+	err := service.RefreshModels(context.Background())
+	if err == nil {
+		t.Fatal("RefreshModels returned nil error")
+	}
+	message := err.Error()
+	if alpha, zeta := strings.Index(message, "alpha:"), strings.Index(message, "zeta:"); alpha < 0 || zeta < 0 || alpha > zeta {
+		t.Fatalf("refresh error order = %q, want alpha before zeta", message)
+	}
+}
+
 func TestDiscoveryService_RegisterFetcherAndStop(t *testing.T) {
 	t.Parallel()
 	mockModels := []*types.ModelInfo{{
@@ -225,38 +320,55 @@ func TestDiscoveryService_RegisterFetcherAndStop(t *testing.T) {
 func TestDiscoveryService_StartBackgroundRefreshOnlyStartsOnce(t *testing.T) {
 	t.Parallel()
 
-	fetcher := &blockingFetcher{name: "test"}
+	fetcher := &blockingFetcher{name: "test", started: make(chan struct{})}
 	service := NewDiscoveryService(DiscoveryConfig{
 		CacheTTL:        time.Hour,
 		EnableFileCache: false,
 		RefreshInterval: 5 * time.Millisecond,
 	}, fetcher)
-	ctx, cancel := context.WithCancel(context.Background())
-	// Stop must be registered first (LIFO cleanup order) so cancel runs before
-	// Stop's wg.Wait — blockingFetcher.FetchModels blocks on ctx.Done().
-	t.Cleanup(func() {
-		if err := service.Stop(); err != nil {
-			t.Fatalf("Stop returned error: %v", err)
-		}
-	})
-	t.Cleanup(cancel)
+	ctx := context.Background()
 
 	service.StartBackgroundRefresh(ctx)
 	service.StartBackgroundRefresh(ctx)
 
-	deadline := time.After(100 * time.Millisecond)
-	for fetcher.count.Load() == 0 {
-		select {
-		case <-deadline:
-			t.Fatal("background refresh did not start")
-		default:
-			time.Sleep(time.Millisecond)
-		}
+	select {
+	case <-fetcher.started:
+	case <-time.After(time.Second):
+		t.Fatal("background refresh did not start")
 	}
 
-	time.Sleep(15 * time.Millisecond)
+	if err := service.Stop(); err != nil {
+		t.Fatalf("Stop returned error: %v", err)
+	}
 	if got := fetcher.count.Load(); got != 1 {
 		t.Fatalf("background refresh fetch count = %d, want 1", got)
+	}
+}
+
+func TestDiscoveryServiceStopCancelsManualRefresh(t *testing.T) {
+	fetcher := &blockingFetcher{name: "test", started: make(chan struct{})}
+	service := NewDiscoveryService(DiscoveryConfig{
+		DisableFileCache:         true,
+		DisableBackgroundRefresh: true,
+	}, fetcher)
+	refreshDone := make(chan error, 1)
+	go func() { refreshDone <- service.RefreshModels(context.Background()) }()
+
+	select {
+	case <-fetcher.started:
+	case <-time.After(time.Second):
+		t.Fatal("manual refresh did not start")
+	}
+	if err := service.Stop(); err != nil {
+		t.Fatalf("Stop returned error: %v", err)
+	}
+	select {
+	case err := <-refreshDone:
+		if !errors.Is(err, context.Canceled) {
+			t.Fatalf("refresh error = %v, want context canceled", err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("manual refresh did not stop after service cancellation")
 	}
 }
 

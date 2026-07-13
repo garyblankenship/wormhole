@@ -60,7 +60,7 @@ func (c *Conversation) AddAll(msgs ...Message) *Conversation {
 // Messages returns the underlying message slice.
 // This is useful for passing to APIs that expect []Message.
 func (c *Conversation) Messages() []Message {
-	return c.messages
+	return CloneMessages(c.messages)
 }
 
 // Len returns the number of messages in the conversation.
@@ -82,11 +82,7 @@ func (c *Conversation) Clear() *Conversation {
 // Clone creates a deep copy of the conversation.
 // This is useful for branching conversations or testing variations.
 func (c *Conversation) Clone() *Conversation {
-	cloned := &Conversation{
-		messages: make([]Message, len(c.messages)),
-	}
-	copy(cloned.messages, c.messages)
-	return cloned
+	return &Conversation{messages: CloneMessages(c.messages)}
 }
 
 // Last returns the last message in the conversation, or nil if empty.
@@ -132,7 +128,7 @@ func (c *Conversation) WithoutSystem() *Conversation {
 // FromMessages creates a Conversation from an existing message slice.
 func FromMessages(msgs []Message) *Conversation {
 	return &Conversation{
-		messages: msgs,
+		messages: CloneMessages(msgs),
 	}
 }
 

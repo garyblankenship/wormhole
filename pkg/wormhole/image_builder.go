@@ -97,7 +97,7 @@ func (b *ImageRequestBuilder) Generate(ctx context.Context) (*types.ImageRespons
 		}
 		defer release()
 
-		ctx = contextWithProvider(ctx, provider)
+		ctx = contextWithProviderOperation(ctx, provider, "image")
 		if b.getWormhole().providerMiddleware != nil {
 			handler := b.getWormhole().providerMiddleware.ApplyImage(provider.GenerateImage)
 			return handler(ctx, *request)

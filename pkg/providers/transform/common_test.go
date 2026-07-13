@@ -25,7 +25,7 @@ func TestMapFinishReason(t *testing.T) {
 		"recitation":                types.FinishReasonContentFilter,
 		"other":                     types.FinishReasonOther,
 		"finish_reason_unspecified": types.FinishReasonOther,
-		"unexpected":                types.FinishReasonStop,
+		"unexpected":                types.FinishReasonOther,
 	}
 
 	for input, want := range tests {

@@ -63,9 +63,13 @@ func NewModelRegistry() *ModelRegistry {
 
 // Register adds a model to the registry (or updates an existing one by ID).
 func (r *ModelRegistry) Register(model *ModelInfo) {
+	if model == nil {
+		return
+	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
+	model = CloneModelInfo(model)
 	r.models[model.ID] = model
 
 	// Replace an existing entry for this ID in the provider's slice, else append —
@@ -85,7 +89,7 @@ func (r *ModelRegistry) Get(modelID string) (*ModelInfo, bool) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	model, exists := r.models[modelID]
-	return model, exists
+	return CloneModelInfo(model), exists
 }
 
 // GetByProvider returns all models for a provider (a copy, safe to retain).
@@ -94,7 +98,9 @@ func (r *ModelRegistry) GetByProvider(provider string) []*ModelInfo {
 	defer r.mu.RUnlock()
 	list := r.byProvider[provider]
 	out := make([]*ModelInfo, len(list))
-	copy(out, list)
+	for i := range list {
+		out[i] = CloneModelInfo(list[i])
+	}
 	return out
 }
 
@@ -106,7 +112,7 @@ func (r *ModelRegistry) GetByCapability(capability ModelCapability) []*ModelInfo
 	for _, model := range r.models {
 		for _, cap := range model.Capabilities {
 			if cap == capability {
-				results = append(results, model)
+				results = append(results, CloneModelInfo(model))
 				break
 			}
 		}
@@ -120,7 +126,7 @@ func (r *ModelRegistry) List() []*ModelInfo {
 	defer r.mu.RUnlock()
 	models := make([]*ModelInfo, 0, len(r.models))
 	for _, model := range r.models {
-		models = append(models, model)
+		models = append(models, CloneModelInfo(model))
 	}
 	return models
 }
@@ -136,7 +142,7 @@ func (r *ModelRegistry) Search(query string) []*ModelInfo {
 		if strings.Contains(strings.ToLower(model.ID), query) ||
 			strings.Contains(strings.ToLower(model.Name), query) ||
 			strings.Contains(strings.ToLower(model.Description), query) {
-			results = append(results, model)
+			results = append(results, CloneModelInfo(model))
 		}
 	}
 

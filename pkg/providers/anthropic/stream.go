@@ -59,19 +59,20 @@ func (p *Provider) parseStreamChunk(data []byte) (*types.StreamChunk, error) {
 		if err := json.Unmarshal(data, &event); err != nil {
 			return nil, err
 		}
-		if event.Delta.Type == "text_delta" {
+		switch event.Delta.Type {
+		case "text_delta":
 			chunk.Delta = &types.ChunkDelta{
 				Content: event.Delta.Text,
 			}
-		} else if event.Delta.Type == "thinking_delta" {
+		case "thinking_delta":
 			thinking := &types.Thinking{Content: event.Delta.Thinking}
 			chunk.Thinking = thinking
 			chunk.Delta = &types.ChunkDelta{Thinking: thinking}
-		} else if event.Delta.Type == "signature_delta" {
+		case "signature_delta":
 			thinking := &types.Thinking{Signature: event.Delta.Signature, Provider: "anthropic"}
 			chunk.Thinking = thinking
 			chunk.Delta = &types.ChunkDelta{Thinking: thinking}
-		} else if event.Delta.Type == "input_json_delta" {
+		case "input_json_delta":
 			// Tool-call argument fragment; carries no id/name (continuation).
 			chunk.Delta = &types.ChunkDelta{
 				ToolCalls: []types.ToolCall{{

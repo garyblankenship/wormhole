@@ -76,6 +76,54 @@ func TestProxyToolChoiceAndToolsAccepted(t *testing.T) {
 	require.Equal(t, http.StatusOK, rec.Code)
 }
 
+func TestProxyRejectsInvalidToolRequestsBeforeProvider(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		body string
+	}{
+		{name: "unsupported tool type", body: `{"model":"gpt-test","messages":[{"role":"user","content":"hi"}],"tools":[{"type":"web_search"}]}`},
+		{name: "empty tool name", body: `{"model":"gpt-test","messages":[{"role":"user","content":"hi"}],"tools":[{"type":"function","function":{"name":""}}]}`},
+		{name: "unknown tool choice", body: `{"model":"gpt-test","messages":[{"role":"user","content":"hi"}],"tool_choice":"sometimes"}`},
+		{name: "malformed tool choice", body: `{"model":"gpt-test","messages":[{"role":"user","content":"hi"}],"tool_choice":{"type":"function"}}`},
+		{name: "undeclared selected tool", body: `{"model":"gpt-test","messages":[{"role":"user","content":"hi"}],"tools":[{"type":"function","function":{"name":"declared"}}],"tool_choice":{"type":"function","function":{"name":"missing"}}}`},
+		{name: "malformed assistant arguments", body: `{"model":"gpt-test","messages":[{"role":"assistant","tool_calls":[{"id":"call_1","type":"function","function":{"name":"lookup","arguments":"{bad"}}]}]}`},
+		{name: "non object assistant arguments", body: `{"model":"gpt-test","messages":[{"role":"assistant","tool_calls":[{"id":"call_1","type":"function","function":{"name":"lookup","arguments":"[]"}}]}]}`},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			provider := newCapturingTextProvider("openai")
+			p := newCapturingTestProxy(provider)
+			rec := performRequest(p, http.MethodPost, "/v1/chat/completions", test.body)
+
+			require.Equal(t, http.StatusBadRequest, rec.Code)
+			var response ErrorResponse
+			require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &response))
+			assert.Equal(t, "invalid_request_error", response.Error.Type)
+			assert.Equal(t, "invalid_request_error", response.Error.Code)
+			assert.Empty(t, provider.lastRequest().Model, "provider must not be invoked")
+		})
+	}
+}
+
+func TestProxyCanonicalizesEmptyAssistantToolArguments(t *testing.T) {
+	t.Parallel()
+
+	provider := newCapturingTextProvider("openai")
+	p := newCapturingTestProxy(provider)
+	rec := performRequest(p, http.MethodPost, "/v1/chat/completions", `{"model":"gpt-test","messages":[{"role":"assistant","tool_calls":[{"id":"call_1","type":"function","function":{"name":"lookup","arguments":""}}]}]}`)
+
+	require.Equal(t, http.StatusOK, rec.Code)
+	require.Len(t, provider.lastRequest().Messages, 1)
+	assistant, ok := provider.lastRequest().Messages[0].(*types.AssistantMessage)
+	require.True(t, ok)
+	require.Len(t, assistant.ToolCalls, 1)
+	assert.Equal(t, `{}`, assistant.ToolCalls[0].Function.Arguments)
+	assert.NotNil(t, assistant.ToolCalls[0].Arguments)
+}
+
 func TestProxyRedactsUpstreamErrorDetails(t *testing.T) {
 	t.Parallel()
 

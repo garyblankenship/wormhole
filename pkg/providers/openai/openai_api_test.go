@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"sync/atomic"
 	"testing"
 
 	"github.com/garyblankenship/wormhole/pkg/types"
@@ -88,6 +89,34 @@ func TestProviderTextAndEmptyResponse(t *testing.T) {
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "empty response")
 	})
+}
+
+func TestProviderRejectsMalformedToolHistoryBeforeHTTP(t *testing.T) {
+	t.Parallel()
+
+	var requests atomic.Int32
+	provider, _ := newOpenAITestProvider(t, func(w http.ResponseWriter, r *http.Request) {
+		requests.Add(1)
+		w.WriteHeader(http.StatusInternalServerError)
+	})
+	request := types.TextRequest{
+		BaseRequest: types.BaseRequest{Model: "gpt-4o-mini"},
+		Messages: []types.Message{
+			&types.AssistantMessage{ToolCalls: []types.ToolCall{{
+				ID:        "call_1",
+				Name:      "lookup",
+				Arguments: map[string]any{"query": "top"},
+				Function:  &types.ToolCallFunction{Name: "lookup", Arguments: `{"query":"nested"}`},
+			}}},
+			types.NewToolResultMessage("call_1", "ok"),
+		},
+	}
+
+	_, err := provider.Text(context.Background(), request)
+	require.ErrorContains(t, err, "conflicting argument representations")
+	_, err = provider.Stream(context.Background(), request)
+	require.ErrorContains(t, err, "conflicting argument representations")
+	assert.Zero(t, requests.Load())
 }
 
 func TestProviderStructuredJSONAndTools(t *testing.T) {

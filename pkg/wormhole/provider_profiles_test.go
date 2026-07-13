@@ -23,7 +23,6 @@ func TestProviderProfilesExposeKnownProviders(t *testing.T) {
 		{name: "zai", baseURL: "https://api.z.ai/api/coding/paas/v4"},
 	}
 	for _, tt := range tests {
-		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			profile, ok := ProviderProfileByName(tt.name)
@@ -59,6 +58,32 @@ func TestProviderProfilesExposeKnownProviders(t *testing.T) {
 	}
 }
 
+func TestProviderProfileGettersDetachNestedState(t *testing.T) {
+	t.Parallel()
+
+	openAI, ok := ProviderProfileByName("openai")
+	if !ok {
+		t.Fatal("openai profile missing")
+	}
+	openAI.APIKeyEnv[0] = "MUTATED"
+	openAI.RequestPolicy.MaxTokensParamRules[0].Param = "mutated"
+
+	deepseek, ok := ProviderProfileByName("deepseek")
+	if !ok {
+		t.Fatal("deepseek profile missing")
+	}
+	deepseek.DefaultProviderOptions["thinking"].(map[string]any)["type"] = "mutated"
+
+	again, _ := ProviderProfileByName("openai")
+	if again.APIKeyEnv[0] == "MUTATED" || again.RequestPolicy.MaxTokensParamRules[0].Param == "mutated" {
+		t.Fatal("provider profile getter exposed nested registry state")
+	}
+	againDeepseek, _ := ProviderProfileByName("deepseek")
+	if againDeepseek.DefaultProviderOptions["thinking"].(map[string]any)["type"] == "mutated" {
+		t.Fatal("provider profile getter exposed nested default options")
+	}
+}
+
 func TestProfiledOpenAICompatibleUsesProfileBaseURL(t *testing.T) {
 	t.Parallel()
 
@@ -72,7 +97,6 @@ func TestProfiledOpenAICompatibleUsesProfileBaseURL(t *testing.T) {
 		{name: "zai", baseURL: "https://api.z.ai/api/coding/paas/v4"},
 	}
 	for _, tt := range tests {
-		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			client := New(WithProfiledOpenAICompatible(tt.name, types.ProviderConfig{APIKey: "test-key"}), WithDiscovery(false))

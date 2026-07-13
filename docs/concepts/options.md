@@ -147,6 +147,11 @@ client := wormhole.New(
 )
 ```
 
+`ProviderConfig.APIKey` takes precedence when set. Otherwise Wormhole uses
+`APIKeys[0]` consistently for initial runtime authentication, configuration
+validation, and model discovery; remaining entries stay available for key
+rotation.
+
 **Common OpenAI-compatible providers:**
 
 - **Groq**: `WithGroq(apiKey)`

@@ -56,7 +56,7 @@ func executeAudioProviderRequest[T any](
 		}
 		defer release()
 
-		ctx = contextWithProvider(ctx, provider)
+		ctx = contextWithProviderOperation(ctx, provider, "audio")
 		if w.providerMiddleware != nil {
 			handler := w.providerMiddleware.ApplyAudio(provider.Audio)
 			audioResp, err := handler(ctx, audioRequest)

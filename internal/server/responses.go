@@ -77,11 +77,20 @@ type responsesExecution struct {
 }
 
 type responsesUsage struct {
-	InputTokens        int `json:"input_tokens"`
-	OutputTokens       int `json:"output_tokens"`
-	TotalTokens        int `json:"total_tokens"`
-	InputTokenDetails  any `json:"input_tokens_details"`
-	OutputTokenDetails any `json:"output_tokens_details"`
+	InputTokens        int                         `json:"input_tokens"`
+	OutputTokens       int                         `json:"output_tokens"`
+	TotalTokens        int                         `json:"total_tokens"`
+	InputTokenDetails  responsesInputTokenDetails  `json:"input_tokens_details"`
+	OutputTokenDetails responsesOutputTokenDetails `json:"output_tokens_details"`
+}
+
+type responsesInputTokenDetails struct {
+	CachedTokens     int `json:"cached_tokens"`
+	CacheWriteTokens int `json:"cache_write_tokens,omitempty"`
+}
+
+type responsesOutputTokenDetails struct {
+	ReasoningTokens int `json:"reasoning_tokens"`
 }
 
 type responsesOutputItem struct {
@@ -98,8 +107,9 @@ type responsesOutputItem struct {
 
 type responsesOutputText struct {
 	Type        string `json:"type"`
-	Text        string `json:"text"`
-	Annotations []any  `json:"annotations"`
+	Text        string `json:"text,omitempty"`
+	Refusal     string `json:"refusal,omitempty"`
+	Annotations []any  `json:"annotations,omitempty"`
 }
 
 type responsesEnvelope struct {
@@ -115,15 +125,19 @@ type responsesEnvelope struct {
 }
 
 type responsesEvent struct {
-	Type         string               `json:"type"`
-	Response     *responsesEnvelope   `json:"response,omitempty"`
-	OutputIndex  *int                 `json:"output_index,omitempty"`
-	ContentIndex *int                 `json:"content_index,omitempty"`
-	ItemID       string               `json:"item_id,omitempty"`
-	Delta        string               `json:"delta,omitempty"`
-	Arguments    string               `json:"arguments,omitempty"`
-	Input        string               `json:"input,omitempty"`
-	Item         *responsesOutputItem `json:"item,omitempty"`
+	Type           string               `json:"type"`
+	SequenceNumber int                  `json:"sequence_number"`
+	Response       *responsesEnvelope   `json:"response,omitempty"`
+	OutputIndex    *int                 `json:"output_index,omitempty"`
+	ContentIndex   *int                 `json:"content_index,omitempty"`
+	ItemID         string               `json:"item_id,omitempty"`
+	Delta          string               `json:"delta,omitempty"`
+	Arguments      string               `json:"arguments,omitempty"`
+	Input          string               `json:"input,omitempty"`
+	Text           string               `json:"text,omitempty"`
+	Refusal        string               `json:"refusal,omitempty"`
+	Part           *responsesOutputText `json:"part,omitempty"`
+	Item           *responsesOutputItem `json:"item,omitempty"`
 }
 
 type responsesToolChoiceSelection struct {
@@ -162,7 +176,7 @@ func (p *proxy) handleResponses(w http.ResponseWriter, r *http.Request) {
 
 	resp, err := execution.builder.Generate(r.Context())
 	if err != nil {
-		p.logger.Error("responses generation failed", "error", err, "model", req.Model)
+		p.logger.Error("responses generation failed", "error", types.SafeErrorValue(err), "model", types.SafeLogString(req.Model))
 		status, errType, clientMsg := upstreamErrorStatus(err)
 		writeError(w, status, "upstream_error", clientMsg, errType)
 		return
@@ -180,8 +194,6 @@ func (p *proxy) responsesBuilder(req responsesRequest) (responsesExecution, erro
 	provider, model := parseModelRoute(req.Model, effDefaultProvider, configuredProviders)
 
 	builder := p.wh.Text().Model(model).Messages(messages...)
-	customTools := make(map[string]bool)
-	availableTools := make(map[string]bool)
 	toolSelection, err := parseResponsesToolChoice(req.ToolChoice)
 	if err != nil {
 		return responsesExecution{}, err
@@ -198,63 +210,15 @@ func (p *proxy) responsesBuilder(req responsesRequest) (responsesExecution, erro
 	if req.MaxOutputTokens != nil {
 		builder = builder.MaxTokens(*req.MaxOutputTokens)
 	}
-	if len(req.Tools) > 0 {
-		tools := make([]types.Tool, 0, len(req.Tools))
-		for _, tool := range req.Tools {
-			switch tool.Type {
-			case "function":
-				if tool.Name == "" {
-					return responsesExecution{}, fmt.Errorf("function tool name is required")
-				}
-				if toolSelection.allowedTools != nil && !toolSelection.allowedTools[tool.Name] {
-					continue
-				}
-				tools = append(tools, *types.NewTool(tool.Name, tool.Description, tool.Parameters))
-				availableTools[tool.Name] = true
-			case "custom":
-				if tool.Name == "" {
-					return responsesExecution{}, fmt.Errorf("custom tool name is required")
-				}
-				if toolSelection.allowedTools != nil && !toolSelection.allowedTools[tool.Name] {
-					continue
-				}
-				customTools[tool.Name] = true
-				schema := map[string]any{
-					"type":                 "object",
-					"properties":           map[string]any{"input": map[string]any{"type": "string", "description": "Raw custom tool input"}},
-					"required":             []string{"input"},
-					"additionalProperties": false,
-				}
-				tools = append(tools, *types.NewTool(tool.Name, tool.Description, schema))
-				availableTools[tool.Name] = true
-			case "namespace", "web_search":
-				// Chat Completions has no namespace-tool equivalent. Namespaces are
-				// optional capability groupings, so omit them rather than rejecting
-				// an otherwise portable coding request.
-				continue
-			default:
-				return responsesExecution{}, fmt.Errorf("unsupported tool type %q with name %q", tool.Type, tool.Name)
-			}
-		}
-		if len(tools) > 0 {
-			builder = builder.Tools(tools...)
-		}
+	tools, customTools, err := translateResponsesTools(req.Tools, toolSelection)
+	if err != nil {
+		return responsesExecution{}, err
 	}
-	if toolSelection.allowedTools != nil {
-		for name := range toolSelection.allowedTools {
-			if !availableTools[name] {
-				return responsesExecution{}, fmt.Errorf("allowed tool %q has no Chat Completions equivalent", name)
-			}
-		}
+	if len(tools) > 0 {
+		builder = builder.Tools(tools...)
 	}
-	if choice := toolSelection.choice; choice != nil {
-		if choice.Type == types.ToolChoiceTypeAny && len(availableTools) == 0 {
-			return responsesExecution{}, fmt.Errorf("tool_choice requires a tool, but no portable tools remain after translation")
-		}
-		if choice.Type == types.ToolChoiceTypeSpecific && !availableTools[choice.ToolName] {
-			return responsesExecution{}, fmt.Errorf("selected tool %q has no Chat Completions equivalent", choice.ToolName)
-		}
-		builder = builder.ToolChoice(choice)
+	if toolSelection.choice != nil {
+		builder = builder.ToolChoice(toolSelection.choice)
 	}
 	if req.Reasoning != nil && req.Reasoning.Effort != "" {
 		targetProvider := provider
@@ -272,6 +236,49 @@ func (p *proxy) responsesBuilder(req responsesRequest) (responsesExecution, erro
 		}
 	}
 	return responsesExecution{builder: builder, model: model, customTools: customTools}, nil
+}
+
+func translateResponsesTools(input []responsesTool, selection responsesToolChoiceSelection) ([]types.Tool, map[string]bool, error) {
+	tools := make([]types.Tool, 0, len(input))
+	customTools := make(map[string]bool)
+	available := make(map[string]bool)
+	for _, tool := range input {
+		if tool.Type != "function" && tool.Type != "custom" {
+			return nil, nil, fmt.Errorf("unsupported tool type %q with name %q", tool.Type, tool.Name)
+		}
+		if tool.Name == "" {
+			return nil, nil, fmt.Errorf("%s tool name is required", tool.Type)
+		}
+		if selection.allowedTools != nil && !selection.allowedTools[tool.Name] {
+			continue
+		}
+		schema := tool.Parameters
+		if tool.Type == "custom" {
+			customTools[tool.Name] = true
+			schema = map[string]any{
+				"type":                 "object",
+				"properties":           map[string]any{"input": map[string]any{"type": "string", "description": "Raw custom tool input"}},
+				"required":             []string{"input"},
+				"additionalProperties": false,
+			}
+		}
+		tools = append(tools, *types.NewTool(tool.Name, tool.Description, schema))
+		available[tool.Name] = true
+	}
+	for name := range selection.allowedTools {
+		if !available[name] {
+			return nil, nil, fmt.Errorf("allowed tool %q has no Chat Completions equivalent", name)
+		}
+	}
+	if choice := selection.choice; choice != nil {
+		if choice.Type == types.ToolChoiceTypeAny && len(available) == 0 {
+			return nil, nil, fmt.Errorf("tool_choice requires a tool, but no portable tools remain after translation")
+		}
+		if choice.Type == types.ToolChoiceTypeSpecific && !available[choice.ToolName] {
+			return nil, nil, fmt.Errorf("selected tool %q has no Chat Completions equivalent", choice.ToolName)
+		}
+	}
+	return tools, customTools, nil
 }
 
 func responsesMessages(req responsesRequest) ([]types.Message, error) {
@@ -309,9 +316,13 @@ func responsesMessages(req responsesRequest) ([]types.Message, error) {
 			if item.CallID == "" || item.Name == "" {
 				return nil, fmt.Errorf("function_call requires call_id and name")
 			}
-			messages = appendAssistantToolCall(messages, ChatToolCall{
+			var appendErr error
+			messages, appendErr = appendAssistantToolCall(messages, ChatToolCall{
 				ID: item.CallID, Type: "function", Function: ChatToolCallFunction{Name: item.Name, Arguments: item.Arguments},
 			})
+			if appendErr != nil {
+				return nil, appendErr
+			}
 		case "custom_tool_call":
 			if item.CallID == "" || item.Name == "" {
 				return nil, fmt.Errorf("custom_tool_call requires call_id and name")
@@ -320,9 +331,12 @@ func responsesMessages(req responsesRequest) ([]types.Message, error) {
 			if err != nil {
 				return nil, fmt.Errorf("encode custom tool input: %w", err)
 			}
-			messages = appendAssistantToolCall(messages, ChatToolCall{
+			messages, err = appendAssistantToolCall(messages, ChatToolCall{
 				ID: item.CallID, Type: "function", Function: ChatToolCallFunction{Name: item.Name, Arguments: string(arguments)},
 			})
+			if err != nil {
+				return nil, err
+			}
 		case "function_call_output", "custom_tool_call_output":
 			if item.CallID == "" {
 				return nil, fmt.Errorf("%s requires call_id", item.Type)
@@ -344,17 +358,21 @@ func responsesMessages(req responsesRequest) ([]types.Message, error) {
 	return messages, nil
 }
 
-func appendAssistantToolCall(messages []types.Message, call ChatToolCall) []types.Message {
-	toolCall := toWormholeToolCalls([]ChatToolCall{call})[0]
+func appendAssistantToolCall(messages []types.Message, call ChatToolCall) ([]types.Message, error) {
+	toolCalls, err := toWormholeToolCalls([]ChatToolCall{call})
+	if err != nil {
+		return nil, err
+	}
+	toolCall := toolCalls[0]
 	if len(messages) > 0 {
 		if assistant, ok := messages[len(messages)-1].(*types.AssistantMessage); ok {
 			assistant.ToolCalls = append(assistant.ToolCalls, toolCall)
-			return messages
+			return messages, nil
 		}
 	}
 	assistant := types.NewAssistantMessage("")
 	assistant.ToolCalls = []types.ToolCall{toolCall}
-	return append(messages, assistant)
+	return append(messages, assistant), nil
 }
 
 func responsesContent(raw json.RawMessage) (string, []types.Media, error) {
@@ -389,7 +407,7 @@ func parseResponsesToolChoice(raw json.RawMessage) (responsesToolChoiceSelection
 	if len(raw) == 0 || strings.TrimSpace(string(raw)) == "null" {
 		return responsesToolChoiceSelection{}, nil
 	}
-	if choice := parseToolChoice(raw); choice != nil {
+	if choice, err := parseToolChoice(raw); err == nil && choice != nil {
 		return responsesToolChoiceSelection{choice: choice}, nil
 	}
 	var item struct {
@@ -438,8 +456,8 @@ func parseResponsesToolChoice(raw json.RawMessage) (responsesToolChoiceSelection
 
 func completedResponsesEnvelope(resp *types.TextResponse, model string, customTools map[string]bool) responsesEnvelope {
 	outputs := make([]responsesOutputItem, 0, 1+len(resp.ToolCalls))
-	if resp.Text != "" {
-		outputs = append(outputs, completedMessageOutput("msg_"+resp.ID, resp.Text))
+	if resp.Text != "" || resp.Refusal != "" {
+		outputs = append(outputs, completedMessageOutput("msg_"+resp.ID, resp.Text, resp.Refusal))
 	}
 	for _, call := range resp.ToolCalls {
 		outputs = append(outputs, completedToolOutput(call, len(outputs), customTools[call.Name]))
@@ -460,12 +478,19 @@ func responsesStatus(reason types.FinishReason) (string, any) {
 	}
 }
 
-func completedMessageOutput(id, text string) responsesOutputItem {
-	return responsesOutputItem{ID: id, Type: "message", Status: "completed", Role: "assistant", Content: []responsesOutputText{{Type: "output_text", Text: text, Annotations: []any{}}}}
+func completedMessageOutput(id, text, refusal string) responsesOutputItem {
+	content := make([]responsesOutputText, 0, 2)
+	if text != "" {
+		content = append(content, responsesOutputText{Type: "output_text", Text: text, Annotations: []any{}})
+	}
+	if refusal != "" {
+		content = append(content, responsesOutputText{Type: "refusal", Refusal: refusal})
+	}
+	return responsesOutputItem{ID: id, Type: "message", Status: "completed", Role: "assistant", Content: content}
 }
 
 func completedToolOutput(call types.ToolCall, index int, custom bool) responsesOutputItem {
-	arguments := ""
+	arguments := "{}"
 	if call.Function != nil {
 		arguments = call.Function.Arguments
 	}
@@ -492,7 +517,11 @@ func toResponsesUsage(usage *types.Usage) *responsesUsage {
 	if usage == nil {
 		return nil
 	}
-	return &responsesUsage{InputTokens: usage.PromptTokens, OutputTokens: usage.CompletionTokens, TotalTokens: usage.TotalTokens}
+	return &responsesUsage{
+		InputTokens: usage.PromptTokens, OutputTokens: usage.CompletionTokens, TotalTokens: usage.TotalTokens,
+		InputTokenDetails:  responsesInputTokenDetails{CachedTokens: usage.CacheReadTokens, CacheWriteTokens: usage.CacheWriteTokens},
+		OutputTokenDetails: responsesOutputTokenDetails{ReasoningTokens: usage.ReasoningTokens},
+	}
 }
 
 func (p *proxy) streamResponses(w http.ResponseWriter, r *http.Request, execution responsesExecution) {
@@ -514,7 +543,13 @@ func (p *proxy) streamResponses(w http.ResponseWriter, r *http.Request, executio
 	createdAt := time.Now().Unix()
 	outputIndex := 0
 	messageOpened := false
+	textOpened := false
+	refusalOpened := false
+	textContentIndex := -1
+	refusalContentIndex := -1
+	nextContentIndex := 0
 	var text strings.Builder
+	var refusal strings.Builder
 	toolDeltas := newStreamToolState()
 	tools := map[int]ChatToolCall{}
 	var usage *types.Usage
@@ -524,26 +559,53 @@ func (p *proxy) streamResponses(w http.ResponseWriter, r *http.Request, executio
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("Connection", "keep-alive")
 	w.WriteHeader(http.StatusOK)
-	writeResponsesSSE(w, responsesEvent{Type: "response.created", Response: &responsesEnvelope{ID: responseID, Object: "response", CreatedAt: createdAt, Status: "in_progress", Model: model, Output: []responsesOutputItem{}, Error: nil, IncompleteDetails: nil}})
+	sse := responsesSSEWriter{w: w}
+	sse.write(responsesEvent{Type: "response.created", Response: &responsesEnvelope{ID: responseID, Object: "response", CreatedAt: createdAt, Status: "in_progress", Model: model, Output: []responsesOutputItem{}, Error: nil, IncompleteDetails: nil}})
 	flusher.Flush()
+	openMessage := func() {
+		if messageOpened {
+			return
+		}
+		messageOpened = true
+		index := outputIndex
+		item := responsesOutputItem{ID: messageID, Type: "message", Status: "in_progress", Role: "assistant", Content: []responsesOutputText{}}
+		sse.write(responsesEvent{Type: "response.output_item.added", OutputIndex: &index, Item: &item})
+		outputIndex++
+	}
 
 	for chunk := range stream {
 		if chunk.Error != nil {
-			writeResponsesFailure(w, responseID, model, createdAt, chunk.Error)
+			writeResponsesFailure(&sse, responseID, model, createdAt, chunk.Error)
 			flusher.Flush()
 			return
 		}
 		if content := chunk.Content(); content != "" {
-			if !messageOpened {
-				messageOpened = true
-				index := outputIndex
-				item := responsesOutputItem{ID: messageID, Type: "message", Status: "in_progress", Role: "assistant", Content: []responsesOutputText{}}
-				writeResponsesSSE(w, responsesEvent{Type: "response.output_item.added", OutputIndex: &index, Item: &item})
-				outputIndex++
+			openMessage()
+			if !textOpened {
+				textOpened = true
+				textContentIndex = nextContentIndex
+				nextContentIndex++
+				index := 0
+				part := responsesOutputText{Type: "output_text", Text: "", Annotations: []any{}}
+				sse.write(responsesEvent{Type: "response.content_part.added", OutputIndex: &index, ContentIndex: &textContentIndex, ItemID: messageID, Part: &part})
 			}
 			text.WriteString(content)
-			index, contentIndex := 0, 0
-			writeResponsesSSE(w, responsesEvent{Type: "response.output_text.delta", OutputIndex: &index, ContentIndex: &contentIndex, ItemID: messageID, Delta: content})
+			index := 0
+			sse.write(responsesEvent{Type: "response.output_text.delta", OutputIndex: &index, ContentIndex: &textContentIndex, ItemID: messageID, Delta: content})
+		}
+		if chunk.Refusal != "" {
+			openMessage()
+			if !refusalOpened {
+				refusalOpened = true
+				refusalContentIndex = nextContentIndex
+				nextContentIndex++
+				index := 0
+				part := responsesOutputText{Type: "refusal", Refusal: ""}
+				sse.write(responsesEvent{Type: "response.content_part.added", OutputIndex: &index, ContentIndex: &refusalContentIndex, ItemID: messageID, Part: &part})
+			}
+			refusal.WriteString(chunk.Refusal)
+			index := 0
+			sse.write(responsesEvent{Type: "response.refusal.delta", OutputIndex: &index, ContentIndex: &refusalContentIndex, ItemID: messageID, Delta: chunk.Refusal})
 		}
 		for _, delta := range toolDeltas.delta(chunk) {
 			if delta.Index == nil {
@@ -571,9 +633,27 @@ func (p *proxy) streamResponses(w http.ResponseWriter, r *http.Request, executio
 	outputs := make([]responsesOutputItem, 0, outputIndex+len(tools))
 	if messageOpened {
 		index := 0
-		item := completedMessageOutput(messageID, text.String())
+		finalText := text.String()
+		finalRefusal := refusal.String()
+		item := responsesOutputItem{ID: messageID, Type: "message", Status: "completed", Role: "assistant", Content: make([]responsesOutputText, nextContentIndex)}
+		if textOpened {
+			item.Content[textContentIndex] = responsesOutputText{Type: "output_text", Text: finalText, Annotations: []any{}}
+		}
+		if refusalOpened {
+			item.Content[refusalContentIndex] = responsesOutputText{Type: "refusal", Refusal: finalRefusal}
+		}
 		outputs = append(outputs, item)
-		writeResponsesSSE(w, responsesEvent{Type: "response.output_item.done", OutputIndex: &index, Item: &item})
+		if textOpened {
+			part := item.Content[textContentIndex]
+			sse.write(responsesEvent{Type: "response.output_text.done", OutputIndex: &index, ContentIndex: &textContentIndex, ItemID: messageID, Text: finalText})
+			sse.write(responsesEvent{Type: "response.content_part.done", OutputIndex: &index, ContentIndex: &textContentIndex, ItemID: messageID, Part: &part})
+		}
+		if refusalOpened {
+			part := item.Content[refusalContentIndex]
+			sse.write(responsesEvent{Type: "response.refusal.done", OutputIndex: &index, ContentIndex: &refusalContentIndex, ItemID: messageID, Refusal: finalRefusal})
+			sse.write(responsesEvent{Type: "response.content_part.done", OutputIndex: &index, ContentIndex: &refusalContentIndex, ItemID: messageID, Part: &part})
+		}
+		sse.write(responsesEvent{Type: "response.output_item.done", OutputIndex: &index, Item: &item})
 	}
 	for index := 0; index < len(tools); index++ {
 		call := tools[index]
@@ -584,15 +664,15 @@ func (p *proxy) streamResponses(w http.ResponseWriter, r *http.Request, executio
 		added.Status = "in_progress"
 		added.Arguments = ""
 		added.Input = ""
-		writeResponsesSSE(w, responsesEvent{Type: "response.output_item.added", OutputIndex: &idx, Item: &added})
+		sse.write(responsesEvent{Type: "response.output_item.added", OutputIndex: &idx, Item: &added})
 		if item.Type == "custom_tool_call" {
-			writeResponsesSSE(w, responsesEvent{Type: "response.custom_tool_call_input.delta", OutputIndex: &idx, ItemID: item.ID, Delta: item.Input})
-			writeResponsesSSE(w, responsesEvent{Type: "response.custom_tool_call_input.done", OutputIndex: &idx, ItemID: item.ID, Input: item.Input})
+			sse.write(responsesEvent{Type: "response.custom_tool_call_input.delta", OutputIndex: &idx, ItemID: item.ID, Delta: item.Input})
+			sse.write(responsesEvent{Type: "response.custom_tool_call_input.done", OutputIndex: &idx, ItemID: item.ID, Input: item.Input})
 		} else {
-			writeResponsesSSE(w, responsesEvent{Type: "response.function_call_arguments.delta", OutputIndex: &idx, ItemID: item.ID, Delta: item.Arguments})
-			writeResponsesSSE(w, responsesEvent{Type: "response.function_call_arguments.done", OutputIndex: &idx, ItemID: item.ID, Arguments: item.Arguments})
+			sse.write(responsesEvent{Type: "response.function_call_arguments.delta", OutputIndex: &idx, ItemID: item.ID, Delta: item.Arguments})
+			sse.write(responsesEvent{Type: "response.function_call_arguments.done", OutputIndex: &idx, ItemID: item.ID, Arguments: item.Arguments})
 		}
-		writeResponsesSSE(w, responsesEvent{Type: "response.output_item.done", OutputIndex: &idx, Item: &item})
+		sse.write(responsesEvent{Type: "response.output_item.done", OutputIndex: &idx, Item: &item})
 		outputIndex++
 	}
 	status, incompleteDetails := responsesStatus(finishReason)
@@ -601,32 +681,36 @@ func (p *proxy) streamResponses(w http.ResponseWriter, r *http.Request, executio
 	if status == "incomplete" {
 		eventType = "response.incomplete"
 	}
-	writeResponsesSSE(w, responsesEvent{Type: eventType, Response: &completed})
+	sse.write(responsesEvent{Type: eventType, Response: &completed})
 	flusher.Flush()
 }
 
-func writeResponsesSSE(w http.ResponseWriter, event responsesEvent) {
+type responsesSSEWriter struct {
+	w        http.ResponseWriter
+	sequence int
+}
+
+func (s *responsesSSEWriter) write(event responsesEvent) {
+	event.SequenceNumber = s.sequence
+	s.sequence++
 	data, err := json.Marshal(event)
 	if err != nil {
 		return
 	}
-	_, _ = fmt.Fprintf(w, "event: %s\ndata: %s\n\n", event.Type, data)
+	_, _ = fmt.Fprintf(s.w, "event: %s\ndata: %s\n\n", event.Type, data)
 }
 
-func writeResponsesFailure(w http.ResponseWriter, responseID, model string, createdAt int64, err error) {
+func writeResponsesFailure(sse *responsesSSEWriter, responseID, model string, createdAt int64, err error) {
 	_, errType, clientMsg := upstreamErrorStatus(err)
 	code := responsesErrorCode(err)
-	event := map[string]any{
-		"type": "response.failed",
-		"response": map[string]any{
-			"id": responseID, "object": "response", "created_at": createdAt, "status": "failed", "model": model,
-			"output": []any{}, "error": map[string]any{"code": code, "message": clientMsg, "type": errType},
+	event := responsesEvent{
+		Type: "response.failed",
+		Response: &responsesEnvelope{
+			ID: responseID, Object: "response", CreatedAt: createdAt, Status: "failed", Model: model,
+			Output: []responsesOutputItem{}, Error: map[string]any{"code": code, "message": clientMsg, "type": errType},
 		},
 	}
-	data, marshalErr := json.Marshal(event)
-	if marshalErr == nil {
-		_, _ = fmt.Fprintf(w, "event: response.failed\ndata: %s\n\n", data)
-	}
+	sse.write(event)
 }
 
 func responsesErrorCode(err error) string {

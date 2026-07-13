@@ -54,7 +54,7 @@ type AdaptiveLimiter struct {
 
 	stopChan chan struct{}
 	stopOnce sync.Once
-	wg sync.WaitGroup
+	wg       sync.WaitGroup
 }
 
 // NewAdaptiveLimiter creates a new adaptive limiter with the given configuration.

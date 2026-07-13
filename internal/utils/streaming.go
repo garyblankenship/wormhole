@@ -251,7 +251,6 @@ func (p *StreamProcessor) Process(ctx context.Context, chunks chan<- types.TextC
 
 		// Handle [DONE] marker
 		if event.Data == streamDoneMarker {
-			finished = true
 			return
 		}
 
@@ -402,7 +401,6 @@ func ProcessNDJSONStream(
 		scanner := bufio.NewScanner(body)
 		// Ollama can return large final chunks with usage data.
 		scanner.Buffer(make([]byte, 0, 64*1024), 1<<20)
-		done := false
 		for scanner.Scan() {
 			line := scanner.Bytes()
 			if len(line) == 0 {
@@ -426,7 +424,6 @@ func ProcessNDJSONStream(
 				return
 			}
 			if chunk.IsDone() {
-				done = true
 				return
 			}
 		}
@@ -437,20 +434,12 @@ func ProcessNDJSONStream(
 			}
 			return
 		}
-		if !done {
-			select {
-			case chunks <- types.TextChunk{Error: fmt.Errorf("NDJSON stream ended before terminal chunk")}:
-			case <-ctx.Done():
-			}
+		select {
+		case chunks <- types.TextChunk{Error: fmt.Errorf("NDJSON stream ended before terminal chunk")}:
+		case <-ctx.Done():
 		}
 	}()
 	return chunks
-}
-
-// drainChannel discards remaining items from a channel until it closes.
-func drainChannel(ch <-chan types.TextChunk) {
-	for range ch {
-	}
 }
 
 // MergeTextChunks merges text chunks into a complete response

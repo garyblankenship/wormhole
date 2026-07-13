@@ -439,6 +439,15 @@ client.RegisterTool(
 )
 ```
 
+### Tool-call normalization
+
+Before provider serialization, Wormhole reconciles the provider-neutral
+`ToolCall.Name` and `ToolCall.Arguments` fields with the nested OpenAI-compatible
+`ToolCall.Function`. Top-level values take precedence and the nested function
+fills missing values. No-argument calls become `{}` in both representations.
+Conflicting or malformed arguments fail before HTTP I/O instead of being
+silently changed or sent upstream.
+
 ### Streaming with Tools
 
 Tool calling works with streaming responses:

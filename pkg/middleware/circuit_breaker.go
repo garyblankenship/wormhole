@@ -40,6 +40,50 @@ type CircuitBreaker struct {
 	maxHalfOpenCalls int32        // int32 for atomic comparison
 }
 
+const defaultCircuitKey = "default\x00default"
+
+type circuitBreakerRegistry struct {
+	mu               sync.RWMutex
+	breakers         map[string]*CircuitBreaker
+	failureThreshold int
+	timeout          time.Duration
+}
+
+func newCircuitBreakerRegistry(failureThreshold int, timeout time.Duration) *circuitBreakerRegistry {
+	return &circuitBreakerRegistry{
+		breakers:         make(map[string]*CircuitBreaker),
+		failureThreshold: failureThreshold,
+		timeout:          timeout,
+	}
+}
+
+func circuitKey(ctx context.Context) string {
+	provider, _ := ctx.Value(CtxKeyProvider).(string)
+	method, _ := ctx.Value(CtxKeyMethod).(string)
+	if provider == "" && method == "" {
+		return defaultCircuitKey
+	}
+	return provider + "\x00" + method
+}
+
+func (r *circuitBreakerRegistry) breaker(ctx context.Context) *CircuitBreaker {
+	key := circuitKey(ctx)
+	r.mu.RLock()
+	breaker := r.breakers[key]
+	r.mu.RUnlock()
+	if breaker != nil {
+		return breaker
+	}
+
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if breaker = r.breakers[key]; breaker == nil {
+		breaker = NewCircuitBreaker(r.failureThreshold, r.timeout)
+		r.breakers[key] = breaker
+	}
+	return breaker
+}
+
 // NewCircuitBreaker creates a new circuit breaker
 func NewCircuitBreaker(failureThreshold int, timeout time.Duration) *CircuitBreaker {
 	// maxHalfOpen is the probe budget admitted per half-open cycle. successThreshold
@@ -157,10 +201,11 @@ func (cb *CircuitBreaker) Close() error {
 
 // CircuitBreakerMiddleware creates a middleware with circuit breaker protection
 func CircuitBreakerMiddleware(threshold int, timeout time.Duration) Middleware {
-	breaker := NewCircuitBreaker(threshold, timeout)
+	registry := newCircuitBreakerRegistry(threshold, timeout)
 
 	return func(next Handler) Handler {
 		return func(ctx context.Context, req any) (any, error) {
+			breaker := registry.breaker(ctx)
 			result, err := breaker.Execute(ctx, func() (any, error) {
 				return next(ctx, req)
 			})

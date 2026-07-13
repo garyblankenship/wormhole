@@ -12,7 +12,7 @@ import (
 func TestToWormholeTools(t *testing.T) {
 	t.Parallel()
 
-	got := toWormholeTools([]ChatTool{
+	got, err := toWormholeTools([]ChatTool{
 		{
 			Type: "function",
 			Function: ChatToolFunction{
@@ -22,6 +22,7 @@ func TestToWormholeTools(t *testing.T) {
 			},
 		},
 	})
+	require.NoError(t, err)
 
 	require.Len(t, got, 1)
 	assert.Equal(t, "function", got[0].Type)
@@ -52,12 +53,18 @@ func TestParseToolChoice(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			got := parseToolChoice(tt.raw)
+			got, err := parseToolChoice(tt.raw)
 			if tt.nilWant {
+				if len(tt.raw) > 0 {
+					require.Error(t, err)
+				} else {
+					require.NoError(t, err)
+				}
 				require.Nil(t, got)
 				return
 			}
 
+			require.NoError(t, err)
 			require.NotNil(t, got)
 			assert.Equal(t, tt.wantType, got.Type)
 			assert.Equal(t, tt.wantName, got.ToolName)
@@ -71,7 +78,7 @@ func TestToWormholeToolCalls(t *testing.T) {
 	t.Run("valid arguments", func(t *testing.T) {
 		t.Parallel()
 
-		got := toWormholeToolCalls([]ChatToolCall{
+		got, err := toWormholeToolCalls([]ChatToolCall{
 			{
 				ID:   "call_1",
 				Type: "function",
@@ -81,6 +88,7 @@ func TestToWormholeToolCalls(t *testing.T) {
 				},
 			},
 		})
+		require.NoError(t, err)
 
 		require.Len(t, got, 1)
 		assert.Equal(t, "call_1", got[0].ID)
@@ -92,7 +100,7 @@ func TestToWormholeToolCalls(t *testing.T) {
 	t.Run("invalid arguments", func(t *testing.T) {
 		t.Parallel()
 
-		got := toWormholeToolCalls([]ChatToolCall{
+		got, err := toWormholeToolCalls([]ChatToolCall{
 			{
 				ID:   "call_1",
 				Type: "function",
@@ -103,11 +111,8 @@ func TestToWormholeToolCalls(t *testing.T) {
 			},
 		})
 
-		require.Len(t, got, 1)
-		assert.Equal(t, "call_1", got[0].ID)
-		assert.Equal(t, "get_weather", got[0].Name)
-		assert.Empty(t, got[0].Arguments)
-		assert.Equal(t, `{bad`, got[0].Function.Arguments)
+		require.Error(t, err)
+		assert.Nil(t, got)
 	})
 }
 

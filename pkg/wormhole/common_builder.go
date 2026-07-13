@@ -1,10 +1,6 @@
 package wormhole
 
-import (
-	"maps"
-
-	"github.com/garyblankenship/wormhole/pkg/types"
-)
+import "github.com/garyblankenship/wormhole/pkg/types"
 
 // CommonBuilder contains shared fields and methods for all request builders
 type CommonBuilder struct {
@@ -121,15 +117,9 @@ func cloneBaseRequestFields(dst, src *types.BaseRequest) {
 	dst.ProviderOptions = cloneProviderOptions(src.ProviderOptions)
 }
 
-// cloneProviderOptions returns a shallow copy of the provider options map.
-// Returns nil if the source is empty.
+// cloneProviderOptions returns a detached copy of provider options.
 func cloneProviderOptions(src map[string]any) map[string]any {
-	if len(src) == 0 {
-		return nil
-	}
-	dst := make(map[string]any, len(src))
-	maps.Copy(dst, src)
-	return dst
+	return types.CloneMap(src)
 }
 
 func prepareExecutionMessages(systemPrompt string, messages []types.Message) []types.Message {

@@ -265,10 +265,10 @@ func (g *Gemini) transformTools(tools []types.Tool) []map[string]any {
 func (g *Gemini) transformToolSchema(schema map[string]any) map[string]any {
 	// Gemini expects JSON Schema format
 	if _, ok := schema["type"]; !ok {
+		schema = types.CloneMap(schema)
 		schema["type"] = "object"
 	}
-	normalizeSchemaMap(schema)
-	return schema
+	return normalizeSchemaMap(schema)
 }
 
 // transformToolChoice converts tool choice to Gemini format
@@ -321,79 +321,95 @@ func (g *Gemini) transformSchema(schema types.Schema) map[string]any {
 //	["T"]          -> {type:"T"}
 //
 // It recurses into properties, items, and anyOf/oneOf/allOf/$defs/definitions.
-func normalizeSchemaMap(m map[string]any) {
+func normalizeSchemaMap(schema map[string]any) map[string]any {
+	normalized := types.CloneMap(schema)
+	normalizeSchemaMapInPlace(normalized)
+	return normalized
+}
+
+func normalizeSchemaMapInPlace(m map[string]any) {
 	if m == nil {
 		return
 	}
+	normalizeSchemaType(m)
+	normalizeSchemaChildren(m)
+}
+
+func normalizeSchemaType(m map[string]any) {
 	if raw, ok := m["type"]; ok {
 		if list, ok := typeStringList(raw); ok {
-			seen := map[string]bool{}
-			nonNull := make([]string, 0, len(list))
-			hasNull := false
-			for _, t := range list {
-				if t == "null" {
-					hasNull = true
-					continue
-				}
-				if !seen[t] {
-					seen[t] = true
-					nonNull = append(nonNull, t)
-				}
-			}
-			switch {
-			case len(nonNull) == 1:
-				m["type"] = nonNull[0]
-				if hasNull {
-					m["nullable"] = true
-				}
-			case len(nonNull) > 1:
-				branches := make([]any, 0, len(nonNull))
-				for _, t := range nonNull {
-					branches = append(branches, map[string]any{"type": t})
-				}
-				delete(m, "type")
-				m["anyOf"] = branches
-				if hasNull {
-					m["nullable"] = true
-				}
-			case hasNull:
-				m["type"] = "null"
-			}
+			normalizeSchemaTypeList(m, list)
 		}
 	}
+}
+
+func normalizeSchemaTypeList(m map[string]any, list []string) {
+	seen := make(map[string]struct{}, len(list))
+	nonNull := make([]string, 0, len(list))
+	hasNull := false
+	for _, schemaType := range list {
+		if schemaType == "null" {
+			hasNull = true
+			continue
+		}
+		if _, duplicate := seen[schemaType]; duplicate {
+			continue
+		}
+		seen[schemaType] = struct{}{}
+		nonNull = append(nonNull, schemaType)
+	}
+	if hasNull {
+		m["nullable"] = true
+	}
+	switch len(nonNull) {
+	case 0:
+		m["type"] = "null"
+	case 1:
+		m["type"] = nonNull[0]
+	default:
+		branches := make([]any, len(nonNull))
+		for i, schemaType := range nonNull {
+			branches[i] = map[string]any{"type": schemaType}
+		}
+		delete(m, "type")
+		m["anyOf"] = branches
+	}
+}
+
+func normalizeSchemaChildren(m map[string]any) {
 	if props, ok := m["properties"].(map[string]any); ok {
 		for _, v := range props {
 			if sub, ok := v.(map[string]any); ok {
-				normalizeSchemaMap(sub)
+				normalizeSchemaMapInPlace(sub)
 			}
 		}
 	}
 	if items, ok := m["items"].(map[string]any); ok {
-		normalizeSchemaMap(items)
+		normalizeSchemaMapInPlace(items)
 	}
 	if itemsList, ok := m["items"].([]any); ok {
-		for _, v := range itemsList {
-			if sub, ok := v.(map[string]any); ok {
-				normalizeSchemaMap(sub)
-			}
-		}
+		normalizeSchemaList(itemsList)
 	}
 	for _, key := range []string{"anyOf", "oneOf", "allOf"} {
 		if arr, ok := m[key].([]any); ok {
-			for _, v := range arr {
-				if sub, ok := v.(map[string]any); ok {
-					normalizeSchemaMap(sub)
-				}
-			}
+			normalizeSchemaList(arr)
 		}
 	}
 	for _, key := range []string{"$defs", "definitions"} {
 		if defs, ok := m[key].(map[string]any); ok {
 			for _, v := range defs {
 				if sub, ok := v.(map[string]any); ok {
-					normalizeSchemaMap(sub)
+					normalizeSchemaMapInPlace(sub)
 				}
 			}
+		}
+	}
+}
+
+func normalizeSchemaList(schemas []any) {
+	for _, schema := range schemas {
+		if nested, ok := schema.(map[string]any); ok {
+			normalizeSchemaMapInPlace(nested)
 		}
 	}
 }
@@ -424,8 +440,7 @@ func (g *Gemini) schemaToMap(schema types.Schema) map[string]any {
 	if bytes, ok := schema.([]byte); ok {
 		var result map[string]any
 		if err := json.Unmarshal(bytes, &result); err == nil {
-			normalizeSchemaMap(result)
-			return result
+			return normalizeSchemaMap(result)
 		}
 	}
 
@@ -811,7 +826,6 @@ func (g *Gemini) handleStream(ctx context.Context, stream io.ReadCloser) <-chan 
 				return
 			}
 			if done {
-				terminal = true
 				return
 			}
 			for _, chunk := range chunks {

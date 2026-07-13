@@ -15,7 +15,7 @@ type TypedLoggingMiddleware struct {
 // NewTypedLoggingMiddleware creates a new type-safe logging middleware
 func NewTypedLoggingMiddleware(config LoggingConfig) *TypedLoggingMiddleware {
 	return &TypedLoggingMiddleware{
-		config: config,
+		config: normalizeLoggingConfig(config),
 	}
 }
 
@@ -60,7 +60,7 @@ func withLogging[Req any, Resp any](
 
 	// Log error if enabled and error occurred
 	if config.LogErrors && err != nil {
-		logError(config, err, duration)
+		logError(ctx, config, err, duration)
 	}
 
 	return resp, err
@@ -101,7 +101,7 @@ func (m *TypedLoggingMiddleware) ApplyStream(next types.StreamHandler) types.Str
 		}
 
 		if m.config.LogErrors && err != nil {
-			logError(m.config, err, time.Since(start))
+			logError(ctx, m.config, err, time.Since(start))
 			return stream, err
 		}
 

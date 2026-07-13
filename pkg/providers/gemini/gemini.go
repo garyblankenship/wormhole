@@ -39,8 +39,8 @@ func New(apiKey string, config types.ProviderConfig) *Gemini {
 	// param, advances the keyPool, and re-applies the new ?key= on the retry. Baking
 	// the key into the URL string (the old approach) made mid-flight key rotation a
 	// no-op because the retried request reused the original key.
-	if apiKey == "" && len(config.APIKeys) > 0 {
-		apiKey = config.APIKeys[0]
+	if apiKey == "" {
+		apiKey = config.EffectiveAPIKey()
 	}
 	authStrategy := providers.AuthStrategy(&providers.NoAuthStrategy{})
 	if apiKey != "" {
@@ -309,7 +309,7 @@ func (g *Gemini) addImageConfig(generationConfig map[string]any, options map[str
 func (g *Gemini) buildTextPayload(request types.TextRequest) (map[string]any, error) {
 	prepared, _, prepareErr := providers.PrepareMessages(request.Messages)
 	if prepareErr != nil {
-		prepared = request.Messages
+		return nil, prepareErr
 	}
 	contents, err := g.transformMessages(prepared, request.Model)
 	if err != nil {

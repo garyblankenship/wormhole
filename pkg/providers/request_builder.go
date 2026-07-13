@@ -150,7 +150,7 @@ func (b *RequestBuilder) TransformTool(tool types.Tool) map[string]any {
 
 	// Add parameters if provided
 	if tool.InputSchema != nil {
-		toolMap["function"].(map[string]any)["parameters"] = tool.InputSchema
+		toolMap["function"].(map[string]any)["parameters"] = types.CloneMap(tool.InputSchema)
 	}
 
 	return toolMap
@@ -273,138 +273,124 @@ func PrepareMessages(messages []types.Message) ([]types.Message, []string, error
 		return nil, nil, nil
 	}
 
-	// Build a copy.
-	out := make([]types.Message, len(messages))
+	prepared, normalizedIDs, err := prepareMessageCopies(messages)
+	if err != nil {
+		return nil, nil, err
+	}
+	normalizeToolResultIDs(prepared, normalizedIDs)
+	callIDs, resultIDs := collectToolMessageIDs(prepared)
+	return filterUnmatchedToolMessages(prepared, callIDs, resultIDs)
+}
 
-	// First pass: repair assistant messages and collect normalized IDs.
-	normalizedIDs := make(map[string]string) // original → normalized
-
-	for i, msg := range messages {
-		switch m := msg.(type) {
+func prepareMessageCopies(messages []types.Message) ([]types.Message, map[string]string, error) {
+	prepared := types.CloneMessages(messages)
+	normalizedIDs := make(map[string]string)
+	for i, message := range prepared {
+		switch message := message.(type) {
 		case *types.AssistantMessage:
-			repaired := *m
-			repaired.Content = strings.ToValidUTF8(repaired.Content, "")
-
-			if len(repaired.ToolCalls) > 0 {
-				repaired.ToolCalls = make([]types.ToolCall, len(m.ToolCalls))
-				copy(repaired.ToolCalls, m.ToolCalls)
-
-				// Create a fresh set for each assistant message.
-				msgIDSet := make(map[string]struct{}, len(repaired.ToolCalls))
-
-				for j := range repaired.ToolCalls {
-					tc := &repaired.ToolCalls[j]
-					if tc.Function != nil {
-						fc := *tc.Function
-						tc.Function = &fc
-					}
-
-					// Synthesize missing ID.
-					if tc.ID == "" {
-						tc.ID = fmt.Sprintf("synth_%d_%d", i, j)
-					}
-
-					// Normalize to the shared safe charset before any matching.
-					original := tc.ID
-					tc.ID = normalizeToolCallID(tc.ID)
-
-					// Check duplicates within this assistant message (post-normalization;
-					// two distinct originals that normalize to the same ID collide).
-					if _, dup := msgIDSet[tc.ID]; dup {
-						return nil, nil, fmt.Errorf("duplicate tool-call ID %q in assistant message at index %d", tc.ID, i)
-					}
-					msgIDSet[tc.ID] = struct{}{}
-					normalizedIDs[original] = tc.ID
-				}
+			if err := prepareAssistantMessage(message, i, normalizedIDs); err != nil {
+				return nil, nil, err
 			}
-
-			out[i] = &repaired
-
 		case *types.ToolResultMessage:
-			repaired := *m
-			repaired.Content = strings.ToValidUTF8(repaired.Content, "")
-			out[i] = &repaired
-
+			message.Content = strings.ToValidUTF8(message.Content, "")
 		case *types.UserMessage:
-			repaired := *m
-			repaired.Content = strings.ToValidUTF8(repaired.Content, "")
-			out[i] = &repaired
-
+			message.Content = strings.ToValidUTF8(message.Content, "")
 		case *types.SystemMessage:
-			repaired := *m
-			repaired.Content = strings.ToValidUTF8(repaired.Content, "")
-			out[i] = &repaired
-
-		default:
-			out[i] = msg
+			message.Content = strings.ToValidUTF8(message.Content, "")
 		}
 	}
+	return prepared, normalizedIDs, nil
+}
 
-	// Second pass: normalize tool-result IDs so they match the normalized
-	// tool-call IDs produced in the first pass.
-	for i, msg := range out {
-		if tr, ok := msg.(*types.ToolResultMessage); ok {
-			repaired := *tr
-			if normalized, found := normalizedIDs[repaired.ToolCallID]; found {
-				repaired.ToolCallID = normalized
-			} else {
-				repaired.ToolCallID = normalizeToolCallID(repaired.ToolCallID)
-			}
-			out[i] = &repaired
+func prepareAssistantMessage(message *types.AssistantMessage, messageIndex int, normalizedIDs map[string]string) error {
+	message.Content = strings.ToValidUTF8(message.Content, "")
+	messageIDs := make(map[string]struct{}, len(message.ToolCalls))
+	for i := range message.ToolCalls {
+		toolCall := message.ToolCalls[i]
+		if toolCall.ID == "" {
+			toolCall.ID = fmt.Sprintf("synth_%d_%d", messageIndex, i)
 		}
+		originalID := toolCall.ID
+		toolCall.ID = normalizeToolCallID(toolCall.ID)
+		normalized, err := types.NormalizeToolCall(toolCall)
+		if err != nil {
+			return fmt.Errorf("assistant message at index %d: %w", messageIndex, err)
+		}
+		if _, duplicate := messageIDs[normalized.ID]; duplicate {
+			return fmt.Errorf("duplicate tool-call ID %q in assistant message at index %d", normalized.ID, messageIndex)
+		}
+		messageIDs[normalized.ID] = struct{}{}
+		normalizedIDs[originalID] = normalized.ID
+		message.ToolCalls[i] = normalized
 	}
+	return nil
+}
 
-	// Third pass: drop orphaned tool calls and stranded tool results.
-	// Matching is on the already-normalized IDs in `out`.
-	resultIDs := make(map[string]struct{}) // normalized tool-result IDs present
-	callIDs := make(map[string]struct{})   // normalized tool-call IDs present
-	for _, msg := range out {
-		switch m := msg.(type) {
+func normalizeToolResultIDs(messages []types.Message, normalizedIDs map[string]string) {
+	for _, message := range messages {
+		result, ok := message.(*types.ToolResultMessage)
+		if !ok {
+			continue
+		}
+		if normalized, found := normalizedIDs[result.ToolCallID]; found {
+			result.ToolCallID = normalized
+			continue
+		}
+		result.ToolCallID = normalizeToolCallID(result.ToolCallID)
+	}
+}
+
+func collectToolMessageIDs(messages []types.Message) (map[string]struct{}, map[string]struct{}) {
+	callIDs := make(map[string]struct{})
+	resultIDs := make(map[string]struct{})
+	for _, message := range messages {
+		switch message := message.(type) {
 		case *types.AssistantMessage:
-			for _, tc := range m.ToolCalls {
-				callIDs[tc.ID] = struct{}{}
+			for _, toolCall := range message.ToolCalls {
+				callIDs[toolCall.ID] = struct{}{}
 			}
 		case *types.ToolResultMessage:
-			resultIDs[m.ToolCallID] = struct{}{}
+			resultIDs[message.ToolCallID] = struct{}{}
 		}
 	}
+	return callIDs, resultIDs
+}
 
-	var warnings []string
-	repaired := make([]types.Message, 0, len(out))
-	for i, msg := range out {
-		switch m := msg.(type) {
+func filterUnmatchedToolMessages(messages []types.Message, callIDs, resultIDs map[string]struct{}) ([]types.Message, []string, error) {
+	warnings := make([]string, 0)
+	repaired := make([]types.Message, 0, len(messages))
+	for i, message := range messages {
+		switch message := message.(type) {
 		case *types.AssistantMessage:
-			if len(m.ToolCalls) == 0 {
-				repaired = append(repaired, msg)
-				continue
-			}
-			kept := make([]types.ToolCall, 0, len(m.ToolCalls))
-			dropped := false
-			for _, tc := range m.ToolCalls {
-				if _, matched := resultIDs[tc.ID]; matched {
-					kept = append(kept, tc)
-					continue
-				}
-				dropped = true
-				warnings = append(warnings, fmt.Sprintf("dropped orphaned tool call %s at assistant message index %d", tc.ID, i))
-			}
-			if !dropped {
-				repaired = append(repaired, msg)
-				continue
-			}
-			am := *m
-			am.ToolCalls = kept
-			repaired = append(repaired, &am)
+			kept, droppedWarnings := matchedToolCalls(message.ToolCalls, resultIDs, i)
+			message.ToolCalls = kept
+			warnings = append(warnings, droppedWarnings...)
+			repaired = append(repaired, message)
 		case *types.ToolResultMessage:
-			if _, matched := callIDs[m.ToolCallID]; matched {
-				repaired = append(repaired, msg)
+			if _, matched := callIDs[message.ToolCallID]; matched {
+				repaired = append(repaired, message)
 				continue
 			}
-			warnings = append(warnings, fmt.Sprintf("dropped stranded tool result %s at index %d", m.ToolCallID, i))
+			warnings = append(warnings, fmt.Sprintf("dropped stranded tool result %s at index %d", message.ToolCallID, i))
 		default:
-			repaired = append(repaired, msg)
+			repaired = append(repaired, message)
 		}
 	}
-
 	return repaired, warnings, nil
+}
+
+func matchedToolCalls(toolCalls []types.ToolCall, resultIDs map[string]struct{}, messageIndex int) ([]types.ToolCall, []string) {
+	if len(toolCalls) == 0 {
+		return toolCalls, nil
+	}
+	kept := make([]types.ToolCall, 0, len(toolCalls))
+	var warnings []string
+	for _, toolCall := range toolCalls {
+		if _, matched := resultIDs[toolCall.ID]; matched {
+			kept = append(kept, toolCall)
+			continue
+		}
+		warnings = append(warnings, fmt.Sprintf("dropped orphaned tool call %s at assistant message index %d", toolCall.ID, messageIndex))
+	}
+	return kept, warnings
 }

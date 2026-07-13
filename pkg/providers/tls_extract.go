@@ -27,30 +27,16 @@ func ExtractTLSConfigFromProviderConfig(providerConfig types.ProviderConfig) *co
 	for key, value := range tlsParams {
 		switch key {
 		case "min_version":
-			if v, ok := value.(float64); ok {
-				tlsConfig.MinVersion = uint16(v)
-			} else if v, ok := value.(uint16); ok {
+			if v, ok := tlsUint16(value); ok {
 				tlsConfig.MinVersion = v
 			}
 		case "max_version":
-			if v, ok := value.(float64); ok {
-				tlsConfig.MaxVersion = uint16(v)
-			} else if v, ok := value.(uint16); ok {
+			if v, ok := tlsUint16(value); ok {
 				tlsConfig.MaxVersion = v
 			}
 		case "cipher_suites":
-			if slice, ok := value.([]any); ok {
-				var cipherSuites []uint16
-				for _, item := range slice {
-					if v, ok := item.(float64); ok {
-						cipherSuites = append(cipherSuites, uint16(v))
-					} else if v, ok := item.(uint16); ok {
-						cipherSuites = append(cipherSuites, v)
-					}
-				}
-				if len(cipherSuites) > 0 {
-					tlsConfig.CipherSuites = cipherSuites
-				}
+			if cipherSuites := tlsCipherSuites(value); len(cipherSuites) > 0 {
+				tlsConfig.CipherSuites = cipherSuites
 			}
 		case "insecure_skip_verify":
 			if v, ok := value.(bool); ok {
@@ -65,13 +51,47 @@ func ExtractTLSConfigFromProviderConfig(providerConfig types.ProviderConfig) *co
 				tlsConfig.ServerName = v
 			}
 		case "handshake_timeout":
-			if v, ok := value.(float64); ok {
-				tlsConfig.HandshakeTimeout = time.Duration(v) * time.Second
-			} else if v, ok := value.(time.Duration); ok {
+			if v, ok := tlsDuration(value); ok {
 				tlsConfig.HandshakeTimeout = v
 			}
 		}
 	}
 
 	return &tlsConfig
+}
+
+func tlsUint16(value any) (uint16, bool) {
+	switch v := value.(type) {
+	case float64:
+		return uint16(v), true
+	case uint16:
+		return v, true
+	default:
+		return 0, false
+	}
+}
+
+func tlsCipherSuites(value any) []uint16 {
+	slice, ok := value.([]any)
+	if !ok {
+		return nil
+	}
+	cipherSuites := make([]uint16, 0, len(slice))
+	for _, item := range slice {
+		if v, ok := tlsUint16(item); ok {
+			cipherSuites = append(cipherSuites, v)
+		}
+	}
+	return cipherSuites
+}
+
+func tlsDuration(value any) (time.Duration, bool) {
+	switch v := value.(type) {
+	case float64:
+		return time.Duration(v) * time.Second, true
+	case time.Duration:
+		return v, true
+	default:
+		return 0, false
+	}
 }
