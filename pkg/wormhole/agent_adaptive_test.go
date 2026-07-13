@@ -65,6 +65,46 @@ func TestAgentBuilderConfigurationAndRun(t *testing.T) {
 	}
 }
 
+func TestAgentBuilderMultipleToolResults(t *testing.T) {
+	t.Parallel()
+
+	provider := &mockToolProvider{responses: []*types.TextResponse{
+		{ToolCalls: []types.ToolCall{
+			{ID: "call_1", Name: "first", Arguments: map[string]any{}},
+			{ID: "call_2", Name: "second", Arguments: map[string]any{}},
+		}},
+		{Text: "done"},
+	}}
+	client := New(
+		WithDefaultProvider("mock"),
+		WithCustomProvider("mock", func(types.ProviderConfig) (types.Provider, error) {
+			return provider, nil
+		}),
+		WithProviderConfig("mock", types.ProviderConfig{}),
+		WithDiscovery(false),
+	)
+	builder := client.Agent().Using("mock").Model("mock-model")
+	for _, name := range []string{"first", "second"} {
+		builder.AddTool(name, name, map[string]any{"type": "object"}, func(context.Context, map[string]any) (any, error) {
+			return name, nil
+		})
+	}
+
+	_, err := builder.Run(context.Background(), "run both")
+	if err != nil {
+		t.Fatalf("Run returned error: %v", err)
+	}
+	if len(provider.requests) != 2 || len(provider.requests[1].Messages) != 4 {
+		t.Fatalf("second request messages = %#v", provider.requests)
+	}
+	for i, wantID := range []string{"call_1", "call_2"} {
+		message, ok := provider.requests[1].Messages[i+2].(*types.ToolResultMessage)
+		if !ok || message.ToolCallID != wantID {
+			t.Fatalf("tool result %d = %#v, want ID %q", i, provider.requests[1].Messages[i+2], wantID)
+		}
+	}
+}
+
 func TestAgentBuilderValidationAndToolMerge(t *testing.T) {
 	t.Parallel()
 

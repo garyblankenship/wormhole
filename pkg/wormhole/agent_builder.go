@@ -243,8 +243,10 @@ func (b *AgentBuilder) Run(ctx context.Context, prompt string) (*AgentResult, er
 			Thinking:  resp.Thinking,
 		}
 
-		toolResultMsg := executor.BuildToolResultMessage(toolResults)
-		request.Messages = append(request.Messages, assistantMsg, toolResultMsg)
+		request.Messages = append(request.Messages, assistantMsg)
+		for _, toolResultMsg := range executor.BuildToolResultMessages(toolResults) {
+			request.Messages = append(request.Messages, toolResultMsg)
+		}
 	}
 
 	return nil, fmt.Errorf("agent: max steps (%d) reached without final response", maxSteps)

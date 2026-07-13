@@ -18,6 +18,7 @@ const testResultKey = "result"
 type mockToolProvider struct {
 	callCount int
 	responses []*types.TextResponse
+	requests  []types.TextRequest
 }
 
 func (m *mockToolProvider) Name() string {
@@ -37,6 +38,7 @@ func (m *mockToolProvider) Text(ctx context.Context, request types.TextRequest) 
 		return nil, fmt.Errorf("no more mock responses available")
 	}
 
+	m.requests = append(m.requests, request)
 	response := m.responses[m.callCount]
 	m.callCount++
 	return response, nil
@@ -235,19 +237,32 @@ func TestToolExecutor_BuildToolResultMessage(t *testing.T) {
 			ToolCallID: "call_1",
 			Result:     map[string]any{"data": "success"},
 		},
-		{
-			ToolCallID: "call_2",
-			Error:      "execution failed",
-		},
 	}
 
 	message := executor.BuildToolResultMessage(results)
 
 	assert.Equal(t, types.RoleTool, message.GetRole())
+	assert.Equal(t, "call_1", message.ToolCallID)
 	assert.Contains(t, message.Content, "call_1")
 	assert.Contains(t, message.Content, "success")
-	assert.Contains(t, message.Content, "call_2")
-	assert.Contains(t, message.Content, "failed")
+}
+
+func TestToolExecutor_BuildToolResultMessages(t *testing.T) {
+	t.Parallel()
+	executor := NewToolExecutor(NewToolRegistry())
+
+	messages := executor.BuildToolResultMessages([]types.ToolResult{
+		{ToolCallID: "call_1", Name: "first", Result: "one"},
+		{ToolCallID: "call_2", Name: "second", Error: "failed"},
+	})
+
+	require.Len(t, messages, 2)
+	assert.Equal(t, "call_1", messages[0].ToolCallID)
+	assert.Equal(t, "first", messages[0].FunctionName)
+	assert.Contains(t, messages[0].Content, `"one"`)
+	assert.Equal(t, "call_2", messages[1].ToolCallID)
+	assert.Equal(t, "second", messages[1].FunctionName)
+	assert.Contains(t, messages[1].Content, "failed")
 }
 
 func TestToolExecutor_ExecuteWithTools_SingleRound(t *testing.T) {
@@ -315,6 +330,43 @@ func TestToolExecutor_ExecuteWithTools_SingleRound(t *testing.T) {
 	assert.NotNil(t, response)
 	assert.Equal(t, "The weather in SF is 72°F and sunny.", response.Text)
 	assert.Equal(t, 2, provider.callCount) // Should make 2 calls
+}
+
+func TestToolExecutor_ExecuteWithTools_MultipleToolResults(t *testing.T) {
+	t.Parallel()
+	registry := NewToolRegistry()
+	for _, name := range []string{"first", "second"} {
+		registry.Register(name, types.NewToolDefinition(types.Tool{
+			Type:        "function",
+			Name:        name,
+			InputSchema: map[string]any{"type": "object"},
+		}, func(context.Context, map[string]any) (any, error) {
+			return name, nil
+		}))
+	}
+
+	provider := &mockToolProvider{responses: []*types.TextResponse{
+		{ToolCalls: []types.ToolCall{
+			{ID: "call_1", Name: "first", Arguments: map[string]any{}},
+			{ID: "call_2", Name: "second", Arguments: map[string]any{}},
+		}},
+		{Text: "done"},
+	}}
+
+	_, err := NewToolExecutor(registry).ExecuteWithTools(context.Background(), types.TextRequest{
+		BaseRequest: types.BaseRequest{Model: "test-model"},
+		Messages:    []types.Message{types.NewUserMessage("run both")},
+	}, provider, 2)
+	require.NoError(t, err)
+	require.Len(t, provider.requests, 2)
+	require.Len(t, provider.requests[1].Messages, 4)
+
+	first, ok := provider.requests[1].Messages[2].(*types.ToolResultMessage)
+	require.True(t, ok)
+	second, ok := provider.requests[1].Messages[3].(*types.ToolResultMessage)
+	require.True(t, ok)
+	assert.Equal(t, "call_1", first.ToolCallID)
+	assert.Equal(t, "call_2", second.ToolCallID)
 }
 
 func TestToolExecutor_ExecuteWithTools_MaxIterations(t *testing.T) {

@@ -326,8 +326,10 @@ func (e *ToolExecutor) ExecuteAll(ctx context.Context, toolCalls []types.ToolCal
 	return results
 }
 
-// BuildToolResultMessage creates a ToolResultMessage from tool results
-// This message is added to the conversation history to provide tool execution results back to the LLM
+// BuildToolResultMessage creates one ToolResultMessage.
+//
+// Deprecated: pass exactly one result, or use BuildToolResultMessages. A single
+// message cannot preserve ToolCallID correlation for multiple tool calls.
 func (e *ToolExecutor) BuildToolResultMessage(toolResults []types.ToolResult) *types.ToolResultMessage {
 	// For most providers, tool results are sent as a special message with role "tool"
 	// The content depends on whether there are errors
@@ -366,6 +368,17 @@ func (e *ToolExecutor) BuildToolResultMessage(toolResults []types.ToolResult) *t
 		ToolCallID:   toolCallID,
 		FunctionName: functionName,
 	}
+}
+
+// BuildToolResultMessages creates one ToolResultMessage per tool result.
+// Providers correlate tool results by ToolCallID, so parallel calls must not be
+// collapsed into a single message associated with only the first call.
+func (e *ToolExecutor) BuildToolResultMessages(toolResults []types.ToolResult) []*types.ToolResultMessage {
+	messages := make([]*types.ToolResultMessage, 0, len(toolResults))
+	for _, result := range toolResults {
+		messages = append(messages, e.BuildToolResultMessage([]types.ToolResult{result}))
+	}
+	return messages
 }
 
 // Stop stops any background goroutines used by the tool executor
@@ -441,11 +454,10 @@ func (e *ToolExecutor) ExecuteWithTools(
 			Thinking:  response.Thinking,
 		}
 
-		// Build tool result message
-		toolResultMessage := e.BuildToolResultMessage(toolResults)
-
-		// Add both messages to the conversation (they implement Message interface)
-		currentRequest.Messages = append(currentRequest.Messages, assistantMessage, toolResultMessage)
+		currentRequest.Messages = append(currentRequest.Messages, assistantMessage)
+		for _, toolResultMessage := range e.BuildToolResultMessages(toolResults) {
+			currentRequest.Messages = append(currentRequest.Messages, toolResultMessage)
+		}
 
 		// Continue loop - will call provider again with updated messages
 	}
