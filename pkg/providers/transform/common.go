@@ -2,6 +2,7 @@ package transform
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -34,7 +35,8 @@ func MapFinishReason(reason string) types.FinishReason {
 type ResponseTransform struct{}
 
 // TransformTextResponse transforms a basic text response from provider format
-// to Wormhole format. This can be used as a base for provider-specific implementations.
+// to Wormhole format. Because it has no provider finish-reason input, it uses
+// FinishReasonOther instead of leaking an invalid zero value.
 func (t *ResponseTransform) TransformTextResponse(
 	id, model string,
 	text string,
@@ -43,12 +45,13 @@ func (t *ResponseTransform) TransformTextResponse(
 	toolCalls []types.ToolCall,
 ) *types.TextResponse {
 	return &types.TextResponse{
-		ID:        id,
-		Model:     model,
-		Text:      text,
-		ToolCalls: toolCalls,
-		Usage:     usage,
-		Created:   created,
+		ID:           id,
+		Model:        model,
+		Text:         text,
+		ToolCalls:    toolCalls,
+		FinishReason: types.FinishReasonOther,
+		Usage:        usage,
+		Created:      created,
 	}
 }
 
@@ -90,6 +93,9 @@ func (t *ResponseTransform) ExtractToolCallsFromChoices(choices []map[string]any
 func (t *ResponseTransform) ParseToolCallFromMap(toolCallMap map[string]any) *types.ToolCall {
 	tc := &types.ToolCall{}
 
+	if index, ok := toolCallMap["index"].(float64); ok {
+		tc.Index = int(index)
+	}
 	if id, ok := toolCallMap["id"].(string); ok {
 		tc.ID = id
 	}
@@ -179,6 +185,12 @@ func (t *ResponseTransform) ParseUsageFromMap(responseMap map[string]any) *types
 	if totalTokens, ok := usageMap["total_tokens"].(float64); ok {
 		usage.TotalTokens = int(totalTokens)
 	}
+	if cacheReadTokens, ok := usageMap["cache_read_tokens"].(float64); ok {
+		usage.CacheReadTokens = int(cacheReadTokens)
+	}
+	if cacheWriteTokens, ok := usageMap["cache_write_tokens"].(float64); ok {
+		usage.CacheWriteTokens = int(cacheWriteTokens)
+	}
 	return usage
 }
 
@@ -234,13 +246,19 @@ func (t *ResponseTransform) BuildEmbeddingFromVector(index int, vector []float64
 
 // LenientUnmarshal attempts to unmarshal JSON, ignoring unknown fields and type mismatches
 func (t *ResponseTransform) LenientUnmarshal(data []byte, v any) error {
-	// Try standard unmarshal first
-	if err := json.Unmarshal(data, v); err != nil {
-		// For structured output, we may want to be more lenient
-		// For now, just return the error
-		return types.NewWormholeError(types.ErrorCodeRequest, "failed to unmarshal", true).WithCause(err)
+	err := json.Unmarshal(data, v)
+	if err == nil {
+		return nil
 	}
-	return nil
+
+	// encoding/json continues decoding after a field type mismatch, leaving the
+	// incompatible field unchanged while populating compatible fields. Accept
+	// that partial result; malformed JSON and other decode errors remain fatal.
+	var typeError *json.UnmarshalTypeError
+	if errors.As(err, &typeError) {
+		return nil
+	}
+	return types.NewWormholeError(types.ErrorCodeRequest, "failed to unmarshal", true).WithCause(err)
 }
 
 // NewResponseTransform creates a new ResponseTransform instance

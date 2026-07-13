@@ -47,6 +47,7 @@ func TestResponseTransformCommonHelpers(t *testing.T) {
 	assert.Equal(t, "id", text.ID)
 	assert.Equal(t, "hello", text.Text)
 	assert.Equal(t, toolCalls, text.ToolCalls)
+	assert.Equal(t, types.FinishReasonOther, text.FinishReason)
 	assert.Same(t, usage, text.Usage)
 
 	structured := transformer.TransformStructuredResponse("id", "model", map[string]any{"ok": true}, usage, created)
@@ -92,14 +93,16 @@ func TestResponseTransformParseToolCallVariants(t *testing.T) {
 	transformer := NewResponseTransform()
 
 	openaiCall := transformer.ParseToolCallFromMap(map[string]any{
-		"id":   "call-1",
-		"type": "function",
+		"index": float64(7),
+		"id":    "call-1",
+		"type":  "function",
 		"function": map[string]any{
 			"name":      "lookup",
 			"arguments": `{"city":"London"}`,
 		},
 	})
 	require.NotNil(t, openaiCall)
+	assert.Equal(t, 7, openaiCall.Index)
 	assert.Equal(t, "lookup", openaiCall.Name)
 	assert.Equal(t, "London", openaiCall.Arguments["city"])
 
@@ -134,9 +137,11 @@ func TestResponseTransformParsingHelpers(t *testing.T) {
 		"model":   "model-1",
 		"created": float64(100),
 		"usage": map[string]any{
-			"prompt_tokens":     float64(1),
-			"completion_tokens": float64(2),
-			"total_tokens":      float64(3),
+			"prompt_tokens":      float64(1),
+			"completion_tokens":  float64(2),
+			"total_tokens":       float64(3),
+			"cache_read_tokens":  float64(4),
+			"cache_write_tokens": float64(5),
 		},
 	}
 
@@ -146,6 +151,8 @@ func TestResponseTransformParsingHelpers(t *testing.T) {
 	usage := transformer.ParseUsageFromMap(response)
 	require.NotNil(t, usage)
 	assert.Equal(t, 3, usage.TotalTokens)
+	assert.Equal(t, 4, usage.CacheReadTokens)
+	assert.Equal(t, 5, usage.CacheWriteTokens)
 	assert.Nil(t, transformer.ParseUsageFromMap(map[string]any{}))
 
 	assert.Contains(t, transformer.ParseResponseID(map[string]any{}), "resp-")
@@ -156,6 +163,14 @@ func TestResponseTransformParsingHelpers(t *testing.T) {
 	var decoded map[string]any
 	require.NoError(t, transformer.LenientUnmarshal([]byte(`{"ok":true}`), &decoded))
 	require.Error(t, transformer.LenientUnmarshal([]byte(`{`), &decoded))
+
+	var partial struct {
+		Count int    `json:"count"`
+		Name  string `json:"name"`
+	}
+	require.NoError(t, transformer.LenientUnmarshal([]byte(`{"count":"unknown","name":"kept","extra":true}`), &partial))
+	assert.Zero(t, partial.Count)
+	assert.Equal(t, "kept", partial.Name)
 }
 
 func TestStreamingTransformerCustomConfig(t *testing.T) {
