@@ -1,4 +1,4 @@
-package utils
+package stream
 
 import (
 	"context"
@@ -10,9 +10,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/garyblankenship/wormhole/pkg/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/garyblankenship/wormhole/internal/testutil"
+	"github.com/garyblankenship/wormhole/pkg/types"
 )
 
 // openAIStreamTransformer transforms OpenAI streaming responses
@@ -372,7 +374,7 @@ func TestMergeTextChunks(t *testing.T) {
 			{Text: "World"},
 		}
 
-		response := MergeTextChunks(chunks)
+		response := testutil.MergeTextChunks(chunks)
 
 		assert.Equal(t, "test-1", response.ID)
 		assert.Equal(t, "gpt-5", response.Model)
@@ -397,7 +399,7 @@ func TestMergeTextChunks(t *testing.T) {
 			},
 		}
 
-		response := MergeTextChunks(chunks)
+		response := testutil.MergeTextChunks(chunks)
 
 		assert.Equal(t, "Hello World", response.Text)
 		assert.Equal(t, types.FinishReasonStop, response.FinishReason)
@@ -432,7 +434,7 @@ func TestMergeTextChunks(t *testing.T) {
 			{ToolCall: &toolCall2},
 		}
 
-		response := MergeTextChunks(chunks)
+		response := testutil.MergeTextChunks(chunks)
 
 		assert.Equal(t, "I'll help you with that.", response.Text)
 		assert.Len(t, response.ToolCalls, 2)
@@ -443,7 +445,7 @@ func TestMergeTextChunks(t *testing.T) {
 	t.Run("empty chunks", func(t *testing.T) {
 		chunks := []types.TextChunk{}
 
-		response := MergeTextChunks(chunks)
+		response := testutil.MergeTextChunks(chunks)
 
 		assert.Equal(t, "", response.ID)
 		assert.Equal(t, "", response.Model)
@@ -460,7 +462,7 @@ func TestMergeTextChunks(t *testing.T) {
 			{Text: " World"},
 		}
 
-		response := MergeTextChunks(chunks)
+		response := testutil.MergeTextChunks(chunks)
 
 		// Error chunks should not affect the merged response
 		assert.Equal(t, "Hello World", response.Text)
@@ -472,7 +474,7 @@ func TestMergeTextChunks(t *testing.T) {
 			{ID: "new-id", Model: "new-model", Text: " World"},
 		}
 
-		response := MergeTextChunks(chunks)
+		response := testutil.MergeTextChunks(chunks)
 
 		// Should use the latest non-empty values
 		assert.Equal(t, "new-id", response.ID)
@@ -490,95 +492,12 @@ func TestMergeTextChunks(t *testing.T) {
 			{FinishReason: &finishReason, Usage: &types.Usage{}},
 		}
 
-		response := MergeTextChunks(chunks)
+		response := testutil.MergeTextChunks(chunks)
 
 		assert.NotNil(t, response.Usage)
 		assert.Equal(t, 10, response.Usage.PromptTokens)
 		assert.Equal(t, 5, response.Usage.CompletionTokens)
 		assert.Equal(t, 15, response.Usage.TotalTokens)
-	})
-}
-
-func TestJSONStreamParser_Creation(t *testing.T) {
-	reader := strings.NewReader(`{"test": "data"}`)
-	parser := NewJSONStreamParser(reader)
-
-	assert.NotNil(t, parser)
-	assert.NotNil(t, parser.decoder)
-}
-
-func TestJSONStreamParser_Parsing(t *testing.T) {
-	t.Run("parse single object", func(t *testing.T) {
-		input := `{"name": "test", "value": 123}`
-		parser := NewJSONStreamParser(strings.NewReader(input))
-
-		var result map[string]any
-		err := parser.Parse(&result)
-
-		require.NoError(t, err)
-		assert.Equal(t, "test", result["name"])
-		assert.Equal(t, float64(123), result["value"]) // JSON numbers are float64
-	})
-
-	t.Run("parse multiple objects", func(t *testing.T) {
-		input := `{"id": 1}
-{"id": 2}
-{"id": 3}`
-		parser := NewJSONStreamParser(strings.NewReader(input))
-
-		var results []map[string]any
-
-		for {
-			var obj map[string]any
-			err := parser.Parse(&obj)
-			if err == io.EOF {
-				break
-			}
-			require.NoError(t, err)
-			results = append(results, obj)
-		}
-
-		assert.Len(t, results, 3)
-		assert.Equal(t, float64(1), results[0]["id"])
-		assert.Equal(t, float64(2), results[1]["id"])
-		assert.Equal(t, float64(3), results[2]["id"])
-	})
-
-	t.Run("parse into struct", func(t *testing.T) {
-		type TestStruct struct {
-			Name  string `json:"name"`
-			Value int    `json:"value"`
-		}
-
-		input := `{"name": "test", "value": 456}`
-		parser := NewJSONStreamParser(strings.NewReader(input))
-
-		var result TestStruct
-		err := parser.Parse(&result)
-
-		require.NoError(t, err)
-		assert.Equal(t, "test", result.Name)
-		assert.Equal(t, 456, result.Value)
-	})
-
-	t.Run("parse error with invalid JSON", func(t *testing.T) {
-		input := `{"name": "test", "value": 123,}` // Invalid trailing comma
-		parser := NewJSONStreamParser(strings.NewReader(input))
-
-		var result map[string]any
-		err := parser.Parse(&result)
-
-		assert.Error(t, err)
-		assert.Contains(t, err.Error(), "invalid character")
-	})
-
-	t.Run("EOF on empty input", func(t *testing.T) {
-		parser := NewJSONStreamParser(strings.NewReader(""))
-
-		var result map[string]any
-		err := parser.Parse(&result)
-
-		assert.Equal(t, io.EOF, err)
 	})
 }
 
@@ -616,7 +535,7 @@ data: [DONE]
 		assert.Equal(t, types.FinishReason("stop"), *received[3].FinishReason)
 
 		// Merge chunks to verify complete response
-		response := MergeTextChunks(received)
+		response := testutil.MergeTextChunks(received)
 		assert.Equal(t, "Hello World", response.Text)
 		assert.Equal(t, "chatcmpl-123", response.ID)
 		assert.Equal(t, types.FinishReason("stop"), response.FinishReason)
@@ -662,7 +581,7 @@ data: {"type":"message_stop"}
 		assert.Len(t, received, 4) // message_start, 2 deltas, message_stop
 
 		// Merge and verify
-		response := MergeTextChunks(received)
+		response := testutil.MergeTextChunks(received)
 		assert.Equal(t, "Hello World", response.Text)
 		assert.Equal(t, "msg_123", response.ID)
 		assert.Equal(t, types.FinishReasonStop, response.FinishReason)
@@ -733,107 +652,7 @@ data: [DONE]
 	})
 }
 
-func TestProcessStreamWithIdleTimeout_Disabled(t *testing.T) {
-	t.Parallel()
-
-	// Zero timeout should fall through to plain ProcessStream
-	body := io.NopCloser(strings.NewReader("data: \"hello\"\n\ndata: [DONE]\n\n"))
-	transformer := func(data []byte) (*types.TextChunk, error) {
-		return &types.TextChunk{Text: string(data)}, nil
-	}
-
-	ch := ProcessStreamWithIdleTimeout(context.Background(), body, transformer, 10, 0)
-	var chunks []types.TextChunk
-	for c := range ch {
-		chunks = append(chunks, c)
-	}
-	assert.Len(t, chunks, 1)
-	assert.Equal(t, "\"hello\"", chunks[0].Text)
-}
-
-func TestProcessStreamWithIdleTimeout_NormalCompletion(t *testing.T) {
-	t.Parallel()
-
-	// Stream that emits quickly \u2014 should complete before timeout
-	body := io.NopCloser(strings.NewReader("data: \"fast\"\n\ndata: [DONE]\n\n"))
-	transformer := func(data []byte) (*types.TextChunk, error) {
-		if string(data) == "[DONE]" {
-			return nil, nil
-		}
-		return &types.TextChunk{Text: string(data)}, nil
-	}
-
-	ch := ProcessStreamWithIdleTimeout(context.Background(), body, transformer, 10, 5*time.Second)
-	var chunks []types.TextChunk
-	for c := range ch {
-		chunks = append(chunks, c)
-	}
-	require.Len(t, chunks, 1)
-	assert.Equal(t, "\"fast\"", chunks[0].Text)
-	assert.NoError(t, chunks[0].Error)
-}
-
-func TestProcessStreamWithIdleTimeout_StallDetected(t *testing.T) {
-	t.Parallel()
-
-	// Create a reader that sends one chunk then blocks forever.
-	reader, writer := io.Pipe()
-	body := io.NopCloser(reader)
-
-	transformer := func(data []byte) (*types.TextChunk, error) {
-		return &types.TextChunk{Text: string(data)}, nil
-	}
-
-	ch := ProcessStreamWithIdleTimeout(context.Background(), body, transformer, 10, 50*time.Millisecond)
-
-	// Send one chunk, then stall
-	go func() {
-		_, _ = writer.Write([]byte("data: first\n\n"))
-		// Block \u2014 never close writer
-	}()
-
-	var chunks []types.TextChunk
-	for c := range ch {
-		chunks = append(chunks, c)
-	}
-
-	// Should get: first chunk + timeout error
-	require.Len(t, chunks, 2)
-	assert.Equal(t, "first", chunks[0].Text)
-	assert.Error(t, chunks[1].Error)
-	assert.Contains(t, chunks[1].Error.Error(), "stream idle timeout")
-
-	// Clean up so the blocked writer goroutine doesn't leak
-	require.NoError(t, writer.Close())
-}
-
-func TestProcessStreamWithIdleTimeout_NoFirstChunk(t *testing.T) {
-	t.Parallel()
-
-	body := newBlockingReadCloser()
-
-	transformer := func(data []byte) (*types.TextChunk, error) {
-		return &types.TextChunk{Text: string(data)}, nil
-	}
-
-	ch := ProcessStreamWithIdleTimeout(context.Background(), body, transformer, 10, 50*time.Millisecond)
-
-	var chunks []types.TextChunk
-	for c := range ch {
-		chunks = append(chunks, c)
-	}
-
-	require.Len(t, chunks, 1)
-	assert.Error(t, chunks[0].Error)
-	assert.Contains(t, chunks[0].Error.Error(), "stream idle timeout")
-	select {
-	case <-body.closed:
-	default:
-		t.Fatal("idle timeout did not close the blocked upstream body")
-	}
-}
-
-func TestProcessStream_ConsumerStopsReading_GoroutineExits(t *testing.T) {
+func TestProcessSSEConsumerStopsReadingClosesBody(t *testing.T) {
 	t.Parallel()
 
 	// Body that yields more chunks than the channel buffer can hold, so the
@@ -852,7 +671,7 @@ func TestProcessStream_ConsumerStopsReading_GoroutineExits(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	// bufferSize 1 so the producer blocks on the second send while we never read.
-	chunks := ProcessStream(ctx, body, transformer, 1)
+	chunks := ProcessSSE(ctx, body, transformer, 1)
 
 	// Do NOT read from chunks. Cancel and confirm the goroutine exits
 	// (body.Close runs) within a bounded time.
@@ -868,7 +687,7 @@ func TestProcessStream_ConsumerStopsReading_GoroutineExits(t *testing.T) {
 	_ = chunks
 }
 
-func TestProcessNDJSONStreamClosesAfterTerminalChunk(t *testing.T) {
+func TestProcessNDJSONClosesAfterTerminalChunk(t *testing.T) {
 	t.Parallel()
 
 	stop := types.FinishReasonStop
@@ -887,7 +706,7 @@ func TestProcessNDJSONStreamClosesAfterTerminalChunk(t *testing.T) {
 	}
 
 	var chunks []types.TextChunk
-	for chunk := range ProcessNDJSONStream(context.Background(), body, transformer, 1) {
+	for chunk := range ProcessNDJSON(context.Background(), body, transformer, 1) {
 		chunks = append(chunks, chunk)
 	}
 	require.Len(t, chunks, 2)
@@ -897,7 +716,7 @@ func TestProcessNDJSONStreamClosesAfterTerminalChunk(t *testing.T) {
 	assert.NoError(t, chunks[1].Error)
 }
 
-func TestProcessNDJSONStreamReportsPrematureEOF(t *testing.T) {
+func TestProcessNDJSONReportsPrematureEOF(t *testing.T) {
 	t.Parallel()
 
 	body := io.NopCloser(strings.NewReader(`{"text":"partial"}` + "\n"))
@@ -910,7 +729,7 @@ func TestProcessNDJSONStreamReportsPrematureEOF(t *testing.T) {
 	}
 
 	var chunks []types.TextChunk
-	for chunk := range ProcessNDJSONStream(context.Background(), body, transformer, 1) {
+	for chunk := range ProcessNDJSON(context.Background(), body, transformer, 1) {
 		chunks = append(chunks, chunk)
 	}
 	require.Len(t, chunks, 2)
@@ -919,30 +738,126 @@ func TestProcessNDJSONStreamReportsPrematureEOF(t *testing.T) {
 	assert.Contains(t, chunks[1].Error.Error(), "ended before terminal chunk")
 }
 
+func TestProcessSSEReportsPrematureEOF(t *testing.T) {
+	t.Parallel()
+
+	body := io.NopCloser(strings.NewReader("data: partial\n\n"))
+	transformer := func(data []byte) (*types.TextChunk, error) {
+		return &types.TextChunk{Text: string(data)}, nil
+	}
+
+	var chunks []types.TextChunk
+	for chunk := range ProcessSSE(context.Background(), body, transformer, 1) {
+		chunks = append(chunks, chunk)
+	}
+	require.Len(t, chunks, 2)
+	assert.Equal(t, "partial", chunks[0].Text)
+	require.Error(t, chunks[1].Error)
+	assert.Contains(t, chunks[1].Error.Error(), "stream ended prematurely")
+}
+
+func TestProcessSSEClosesAfterTerminalChunkWithoutDoneMarker(t *testing.T) {
+	t.Parallel()
+
+	stop := types.FinishReasonStop
+	body := io.NopCloser(strings.NewReader("data: partial\n\ndata: terminal\n\n"))
+	transformer := func(data []byte) (*types.TextChunk, error) {
+		chunk := &types.TextChunk{Text: string(data)}
+		if string(data) == "terminal" {
+			chunk.FinishReason = &stop
+		}
+		return chunk, nil
+	}
+
+	var chunks []types.TextChunk
+	for chunk := range ProcessSSE(context.Background(), body, transformer, 1) {
+		chunks = append(chunks, chunk)
+	}
+	require.Len(t, chunks, 2)
+	assert.Equal(t, "partial", chunks[0].Text)
+	assert.True(t, chunks[1].IsDone())
+	assert.NoError(t, chunks[1].Error)
+}
+
+func TestProcessSSEHandlesOversizedFrame(t *testing.T) {
+	t.Parallel()
+
+	payload := strings.Repeat("x", 2*sseReaderBufferSize)
+	body := io.NopCloser(strings.NewReader("data: " + payload + "\n\ndata: [DONE]\n\n"))
+	transformer := func(data []byte) (*types.TextChunk, error) {
+		return &types.TextChunk{Text: string(data)}, nil
+	}
+
+	var chunks []types.TextChunk
+	for chunk := range ProcessSSE(context.Background(), body, transformer, 1) {
+		chunks = append(chunks, chunk)
+	}
+	require.Len(t, chunks, 1)
+	assert.Equal(t, payload, chunks[0].Text)
+	assert.NoError(t, chunks[0].Error)
+}
+
+func TestProcessNDJSONConsumerStopsReadingClosesBody(t *testing.T) {
+	t.Parallel()
+
+	var input strings.Builder
+	for i := 0; i < 50; i++ {
+		input.WriteString("{\"text\":\"x\"}\n")
+	}
+	closed := make(chan struct{})
+	body := &trackingCloser{Reader: strings.NewReader(input.String()), closed: closed}
+	transformer := func(data []byte) (*types.TextChunk, error) {
+		return &types.TextChunk{Text: string(data)}, nil
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	chunks := ProcessNDJSON(ctx, body, transformer, 1)
+	cancel()
+
+	select {
+	case <-closed:
+	case <-time.After(2 * time.Second):
+		t.Fatal("producer goroutine did not exit after context cancellation")
+	}
+	_ = chunks
+}
+
+func TestProcessNDJSONHandlesOversizedFrame(t *testing.T) {
+	t.Parallel()
+
+	stop := types.FinishReasonStop
+	payload := strings.Repeat("x", 200*1024)
+	body := io.NopCloser(strings.NewReader(`{"text":"` + payload + `","done":true}` + "\n"))
+	transformer := func(data []byte) (*types.TextChunk, error) {
+		var raw struct {
+			Text string `json:"text"`
+			Done bool   `json:"done"`
+		}
+		if err := json.Unmarshal(data, &raw); err != nil {
+			return nil, err
+		}
+		chunk := &types.TextChunk{Text: raw.Text}
+		if raw.Done {
+			chunk.FinishReason = &stop
+		}
+		return chunk, nil
+	}
+
+	var chunks []types.TextChunk
+	for chunk := range ProcessNDJSON(context.Background(), body, transformer, 1) {
+		chunks = append(chunks, chunk)
+	}
+	require.Len(t, chunks, 1)
+	assert.Equal(t, payload, chunks[0].Text)
+	assert.True(t, chunks[0].IsDone())
+	assert.NoError(t, chunks[0].Error)
+}
+
 // trackingCloser signals on close so a test can assert the producer goroutine exited.
 type trackingCloser struct {
 	io.Reader
 	once   sync.Once
 	closed chan struct{}
-}
-
-type blockingReadCloser struct {
-	once   sync.Once
-	closed chan struct{}
-}
-
-func newBlockingReadCloser() *blockingReadCloser {
-	return &blockingReadCloser{closed: make(chan struct{})}
-}
-
-func (b *blockingReadCloser) Read([]byte) (int, error) {
-	<-b.closed
-	return 0, io.EOF
-}
-
-func (b *blockingReadCloser) Close() error {
-	b.once.Do(func() { close(b.closed) })
-	return nil
 }
 
 func (t *trackingCloser) Close() error {

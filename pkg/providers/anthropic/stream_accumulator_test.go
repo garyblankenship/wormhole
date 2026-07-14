@@ -9,11 +9,12 @@ import (
 	"strconv"
 	"testing"
 
-	"github.com/garyblankenship/wormhole/internal/utils"
-	"github.com/garyblankenship/wormhole/pkg/providers/anthropic"
-	"github.com/garyblankenship/wormhole/pkg/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/garyblankenship/wormhole/internal/testutil"
+	"github.com/garyblankenship/wormhole/pkg/providers/anthropic"
+	"github.com/garyblankenship/wormhole/pkg/types"
 )
 
 func TestAnthropicStreamToolCallAccumulation(t *testing.T) {
@@ -99,7 +100,7 @@ func TestAnthropicStreamToolCallAccumulation(t *testing.T) {
 	assert.Equal(t, "get_weather", tc.Name)
 	assert.Equal(t, "Paris", tc.Arguments["location"])
 
-	merged := utils.MergeTextChunks(chunks)
+	merged := testutil.MergeTextChunks(chunks)
 	require.Len(t, merged.ToolCalls, 1)
 	assert.Equal(t, "toolu_abc", merged.ToolCalls[0].ID)
 	assert.Equal(t, "get_weather", merged.ToolCalls[0].Name)

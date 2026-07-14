@@ -23,6 +23,9 @@ realtime APIs, use the provider SDKs or REST APIs directly.
 [![Go](https://img.shields.io/badge/Go-1.23+-blue.svg)](https://golang.org)
 [![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
+Planning a v2 upgrade? See the [v2 migration guide](docs/v2-migration.md) for
+the final import mapping and removed implementation packages.
+
 ## Open A Portal
 
 ```bash

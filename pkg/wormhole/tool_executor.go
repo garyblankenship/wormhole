@@ -10,7 +10,7 @@ import (
 
 	"github.com/garyblankenship/wormhole/internal/pool"
 	"github.com/garyblankenship/wormhole/pkg/types"
-	"github.com/garyblankenship/wormhole/pkg/validation"
+	"github.com/garyblankenship/wormhole/pkg/validation" //nolint:staticcheck // Supported v1 implementation dependency; internalized in v2.
 )
 
 // ToolExecutor handles the execution of tools and orchestration of multi-turn conversations

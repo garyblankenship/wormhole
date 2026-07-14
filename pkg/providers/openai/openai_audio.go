@@ -8,7 +8,6 @@ import (
 	"log/slog"
 	"net/http"
 
-	"github.com/garyblankenship/wormhole/internal/utils"
 	"github.com/garyblankenship/wormhole/pkg/types"
 )
 
@@ -74,16 +73,16 @@ func (p *Provider) handleSpeechToText(ctx context.Context, request types.AudioRe
 	}
 
 	// Build multipart form data
-	formData := utils.AudioFormData{
-		Audio:       audio,
-		Filename:    "audio.wav",
-		Model:       request.Model,
-		Language:    request.Language,
-		Prompt:      request.Prompt,
-		Temperature: request.Temperature,
+	formData := audioFormData{
+		audio:       audio,
+		filename:    "audio.wav",
+		model:       request.Model,
+		language:    request.Language,
+		prompt:      request.Prompt,
+		temperature: request.Temperature,
 	}
 
-	reader, contentType, err := utils.BuildAudioForm(formData)
+	reader, contentType, err := buildAudioForm(formData)
 	if err != nil {
 		return nil, p.RequestError("failed to build audio form", err)
 	}

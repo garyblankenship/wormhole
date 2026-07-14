@@ -16,13 +16,14 @@ import (
 	"time"
 
 	"github.com/garyblankenship/wormhole/internal/pool"
-	"github.com/garyblankenship/wormhole/internal/utils"
 	"github.com/garyblankenship/wormhole/pkg/config"
 	"github.com/garyblankenship/wormhole/pkg/types"
 )
 
-// HTTPClient is the interface for HTTP clients (alias for utils.HTTPClient).
-type HTTPClient = utils.HTTPClient
+// HTTPClient is the request-execution boundary used by providers.
+type HTTPClient interface {
+	Do(req *http.Request) (*http.Response, error)
+}
 
 // responseBodyPool pools byte slices for response bodies to reduce allocations.
 // Stores *[]byte so sync.Pool.Put receives a pointer type (SA6002).
@@ -210,7 +211,7 @@ type HTTPClientWrapper struct {
 	Config         types.ProviderConfig
 	tlsConfig      *config.TLSConfig
 	httpClient     *http.Client
-	retryClient    *utils.RetryableHTTPClient
+	retryClient    *retryableHTTPClient
 	authStrategy   AuthStrategy
 	keyPool        *keyPool
 	transportCache *TransportCache
@@ -248,7 +249,7 @@ func NewHTTPClientWrapper(name string, providerConfig types.ProviderConfig, tlsC
 		w.httpClient = w.transportCache.newSecureHTTPClient(0, tlsConfig, nil, providerConfig.BaseURL)
 	}
 
-	retryConfig := utils.DefaultRetryConfig()
+	retryConfig := defaultRetryConfig()
 	if providerConfig.MaxRetries != nil {
 		retryConfig.MaxRetries = *providerConfig.MaxRetries
 	}
@@ -264,9 +265,9 @@ func NewHTTPClientWrapper(name string, providerConfig types.ProviderConfig, tlsC
 
 	// Use injected client for retry wrapper if provided, otherwise use the concrete httpClient
 	if httpClient != nil {
-		w.retryClient = utils.NewRetryableHTTPClient(httpClient, retryConfig)
+		w.retryClient = newRetryableHTTPClient(httpClient, retryConfig)
 	} else {
-		w.retryClient = utils.NewRetryableHTTPClient(w.httpClient, retryConfig)
+		w.retryClient = newRetryableHTTPClient(w.httpClient, retryConfig)
 	}
 
 	// Stateful key rotation: only rotate after a retryable rate-limit response.
@@ -274,7 +275,7 @@ func NewHTTPClientWrapper(name string, providerConfig types.ProviderConfig, tlsC
 		pool := w.keyPool
 		auth := authStrategy
 		baseCfg := providerConfig
-		w.retryClient.OnRetry = func(reqClone *http.Request, _ int, retryErr *utils.RetryableError, previousRequest *http.Request) {
+		w.retryClient.OnRetry = func(reqClone *http.Request, _ int, retryErr *retryableError, previousRequest *http.Request) {
 			cfg := baseCfg
 			now := time.Now()
 			if retryErr != nil && retryErr.StatusCode == http.StatusTooManyRequests {
@@ -471,7 +472,7 @@ func (w *HTTPClientWrapper) handleRequestError(ctx context.Context, err error) e
 		return ctx.Err()
 	}
 
-	var retryErr *utils.RetryableError
+	var retryErr *retryableError
 	if errors.As(err, &retryErr) && retryErr.StatusCode > 0 {
 		details := err.Error()
 		// If the retry layer preserved the provider error body, fold its structured
@@ -518,7 +519,7 @@ func (w *HTTPClientWrapper) buildErrorResponse(statusCode int, status, url strin
 	wormholeErr := types.NewWormholeError(
 		errorCode,
 		errorMessage,
-		utils.IsRetryableStatusCode(statusCode),
+		isRetryableStatusCode(statusCode),
 	).WithDetails(details)
 
 	wormholeErr.StatusCode = statusCode

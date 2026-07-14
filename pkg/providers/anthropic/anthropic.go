@@ -5,9 +5,9 @@ import (
 	"encoding/json"
 	"net/http"
 
-	"github.com/garyblankenship/wormhole/internal/utils"
 	"github.com/garyblankenship/wormhole/pkg/providers"
-	transform "github.com/garyblankenship/wormhole/pkg/providers/transform"
+	providerstream "github.com/garyblankenship/wormhole/pkg/providers/internal/stream"
+	transform "github.com/garyblankenship/wormhole/pkg/providers/transform" //nolint:staticcheck // Supported v1 implementation dependency; internalized in v2.
 	"github.com/garyblankenship/wormhole/pkg/types"
 )
 
@@ -106,7 +106,7 @@ func (p *Provider) Stream(ctx context.Context, request types.TextRequest) (<-cha
 		return nil, err
 	}
 
-	return p.stampProvider(ctx, p.accumulatingStream(ctx, utils.ProcessStream(ctx, body, p.parseStreamChunk, 100))), nil
+	return p.stampProvider(ctx, p.accumulatingStream(ctx, providerstream.ProcessSSE(ctx, body, p.parseStreamChunk, 100))), nil
 }
 
 // Structured generates a structured response
@@ -144,16 +144,9 @@ func (p *Provider) Structured(ctx context.Context, request types.StructuredReque
 		return nil, p.ProviderError("no tool call in response")
 	}
 
-	var data any
-	if response.ToolCalls[0].Function != nil {
-		err = utils.UnmarshalAnthropicToolArgs(response.ToolCalls[0].Function.Arguments, &data)
-	} else {
-		// Fallback to Arguments field
-		jsonBytes, _ := json.Marshal(response.ToolCalls[0].Arguments)
-		err = utils.LenientUnmarshal(jsonBytes, &data)
-	}
+	data, err := p.parseStructuredToolCall(response.ToolCalls[0])
 	if err != nil {
-		return nil, p.RequestError("failed to parse structured response", err)
+		return nil, err
 	}
 
 	return &types.StructuredResponse{
@@ -163,6 +156,21 @@ func (p *Provider) Structured(ctx context.Context, request types.StructuredReque
 		Usage:   response.Usage,
 		Created: response.Created,
 	}, nil
+}
+
+func (p *Provider) parseStructuredToolCall(toolCall types.ToolCall) (any, error) {
+	var data any
+	var err error
+	if toolCall.Function != nil {
+		err = unmarshalToolArgs(toolCall.Function.Arguments, &data)
+	} else {
+		jsonBytes, _ := json.Marshal(toolCall.Arguments)
+		err = lenientUnmarshal(jsonBytes, &data)
+	}
+	if err != nil {
+		return nil, p.RequestError("failed to parse structured response", err)
+	}
+	return data, nil
 }
 
 // Embeddings is not supported by Anthropic

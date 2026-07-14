@@ -7,10 +7,11 @@ import (
 	"net/http"
 	"testing"
 
-	"github.com/garyblankenship/wormhole/internal/utils"
-	"github.com/garyblankenship/wormhole/pkg/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/garyblankenship/wormhole/internal/testutil"
+	"github.com/garyblankenship/wormhole/pkg/types"
 )
 
 func TestOpenAIStreamToolCallAccumulation(t *testing.T) {
@@ -69,7 +70,7 @@ func TestOpenAIStreamToolCallAccumulation(t *testing.T) {
 	assert.Equal(t, "Paris", tc.Arguments["location"])
 	assert.Equal(t, "celsius", tc.Arguments["unit"])
 
-	merged := utils.MergeTextChunks(chunks)
+	merged := testutil.MergeTextChunks(chunks)
 	require.Len(t, merged.ToolCalls, 1)
 	assert.Equal(t, "call_abc", merged.ToolCalls[0].ID)
 	assert.Equal(t, "get_weather", merged.ToolCalls[0].Name)
@@ -132,7 +133,7 @@ func TestOpenAIStreamToolCallAccumulationDefaultTransformer(t *testing.T) {
 	assert.Equal(t, "Paris", tc.Arguments["location"])
 	assert.Equal(t, "celsius", tc.Arguments["unit"])
 
-	merged := utils.MergeTextChunks(chunks)
+	merged := testutil.MergeTextChunks(chunks)
 	require.Len(t, merged.ToolCalls, 1)
 	assert.Equal(t, "call_abc", merged.ToolCalls[0].ID)
 	assert.Equal(t, "get_weather", merged.ToolCalls[0].Name)
@@ -174,7 +175,7 @@ func TestOpenAIStreamParallelToolCallsUseWireIndex(t *testing.T) {
 		chunks = append(chunks, chunk)
 	}
 
-	merged := utils.MergeTextChunks(chunks)
+	merged := testutil.MergeTextChunks(chunks)
 	require.Len(t, merged.ToolCalls, 2)
 	assert.Equal(t, "call_a", merged.ToolCalls[0].ID)
 	assert.Equal(t, "first", merged.ToolCalls[0].Name)

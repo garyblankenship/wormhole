@@ -11,10 +11,11 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/garyblankenship/wormhole/internal/utils"
-	"github.com/garyblankenship/wormhole/pkg/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/garyblankenship/wormhole/internal/testutil"
+	"github.com/garyblankenship/wormhole/pkg/types"
 )
 
 func TestOllamaStreamWireConformance(t *testing.T) {
@@ -69,7 +70,7 @@ func TestOllamaStreamWireConformance(t *testing.T) {
 		assert.Equal(t, types.FinishReasonStop, *last.FinishReason)
 
 		// Merged text sanity check.
-		merged := utils.MergeTextChunks(chunks)
+		merged := testutil.MergeTextChunks(chunks)
 		assert.Equal(t, "Hello world!", merged.Text)
 	})
 

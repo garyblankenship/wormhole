@@ -9,8 +9,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/garyblankenship/wormhole/internal/utils"
-	providerTransform "github.com/garyblankenship/wormhole/pkg/providers/transform"
+	providerstream "github.com/garyblankenship/wormhole/pkg/providers/internal/stream"
+	providerTransform "github.com/garyblankenship/wormhole/pkg/providers/transform" //nolint:staticcheck // Supported v1 implementation dependency; internalized in v2.
 	"github.com/garyblankenship/wormhole/pkg/types"
 )
 
@@ -813,7 +813,7 @@ func (g *Gemini) handleStream(ctx context.Context, stream io.ReadCloser) <-chan 
 			_ = stream.Close()
 		}()
 
-		scanner := utils.NewSSEScanner(stream)
+		scanner := providerstream.NewSSEScanner(stream)
 		terminal := false
 		sawEvent := false
 		for scanner.Scan() {

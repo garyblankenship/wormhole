@@ -13,7 +13,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/garyblankenship/wormhole/internal/utils"
 	"github.com/garyblankenship/wormhole/pkg/types"
 )
 
@@ -34,10 +33,10 @@ func writeShardAtomic(path string, data []byte) error {
 	}
 	tempPath := tmp.Name()
 	defer func() {
-		_ = os.Remove(tempPath) // #nosec G304 - path validated via ValidatePath -- no-op once renamed
+		_ = os.Remove(tempPath) // #nosec G304 - path validated via validateCachePath -- no-op once renamed
 	}()
 
-	if err := tmp.Chmod(0600); err != nil { // #nosec G304 - path validated via ValidatePath
+	if err := tmp.Chmod(0600); err != nil { // #nosec G304 - path validated via validateCachePath
 		_ = tmp.Close()
 		return err
 	}
@@ -52,7 +51,7 @@ func writeShardAtomic(path string, data []byte) error {
 	if err := tmp.Close(); err != nil {
 		return err
 	}
-	return os.Rename(tempPath, path) // #nosec G304 - path validated via ValidatePath
+	return os.Rename(tempPath, path) // #nosec G304 - path validated via validateCachePath
 }
 
 func baseProviderKey(provider string) string {
@@ -423,7 +422,7 @@ func (c *ModelCache) loadFromFile(provider string) ([]*types.ModelInfo, bool) {
 
 		// Try provider-specific file first
 		providerPath := c.getProviderFilePath(lookup)
-		data, err := os.ReadFile(providerPath) // #nosec G304 - path validated via ValidatePath
+		data, err := os.ReadFile(providerPath) // #nosec G304 - path validated via validateCachePath
 		if err == nil {
 			lock.RUnlock()
 			entry, ok := c.decodeProviderShard(data, lookup)
@@ -444,7 +443,7 @@ func (c *ModelCache) loadFromFile(provider string) ([]*types.ModelInfo, bool) {
 		}
 
 		legacyPath := c.getLegacyProviderFilePath(lookup)
-		data, err = os.ReadFile(legacyPath) // #nosec G304 - path validated via ValidatePath
+		data, err = os.ReadFile(legacyPath) // #nosec G304 - path validated via validateCachePath
 		lock.RUnlock()
 		if err == nil {
 			entry, ok := c.decodeProviderShard(data, lookup)
@@ -463,7 +462,7 @@ func (c *ModelCache) loadFromFile(provider string) ([]*types.ModelInfo, bool) {
 	}
 
 	// Fallback to monolithic file for backward compatibility
-	data, err := os.ReadFile(c.filePath) // #nosec G304 - path validated via ValidatePath
+	data, err := os.ReadFile(c.filePath) // #nosec G304 - path validated via validateCachePath
 	if err != nil {
 		return nil, false // File doesn't exist or can't be read
 	}
@@ -590,12 +589,12 @@ func (c *ModelCache) appendToJournal(provider string, models []*types.ModelInfo)
 
 	// Ensure directory exists
 	dir := filepath.Dir(journalPath)
-	if err := os.MkdirAll(dir, 0750); err != nil { // #nosec G304 - path validated via ValidatePath
+	if err := os.MkdirAll(dir, 0750); err != nil { // #nosec G304 - path validated via validateCachePath
 		return err
 	}
 
 	// Append with O_APPEND flag
-	f, err := os.OpenFile(journalPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0600) // #nosec G304 - path validated via ValidatePath
+	f, err := os.OpenFile(journalPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0600) // #nosec G304 - path validated via validateCachePath
 	if err != nil {
 		return err
 	}
@@ -641,7 +640,7 @@ func (c *ModelCache) Clear() {
 		// Remove monolithic file for backward compatibility
 		if err := os.Remove(c.filePath); err != nil && !os.IsNotExist(err) {
 			// Log warning - file removal failed for unexpected reason
-			log.Printf("warning: failed to remove cache file %s: %v", c.filePath, err) // #nosec G304 - path validated via ValidatePath
+			log.Printf("warning: failed to remove cache file %s: %v", c.filePath, err) // #nosec G304 - path validated via validateCachePath
 		}
 		// Remove provider-specific files
 		c.clearProviderFiles()
@@ -664,7 +663,7 @@ func (c *ModelCache) clearProviderFiles() {
 	}
 	for _, path := range matches {
 		if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
-			log.Printf("warning: failed to remove provider cache file %s: %v", path, err) // #nosec G304 - path validated via ValidatePath
+			log.Printf("warning: failed to remove provider cache file %s: %v", path, err) // #nosec G304 - path validated via validateCachePath
 		}
 	}
 }
@@ -717,35 +716,6 @@ func (c *ModelCache) cleanupExpired() {
 			delete(c.memory, k)
 		}
 	}
-}
-
-// expandPath expands ~ to home directory and validates the path.
-// Returns a validated, safe path. If validation fails, returns a default safe path.
-func expandPath(path string) (string, error) {
-	// Expand ~/ prefix
-	expanded := path
-	if strings.HasPrefix(path, "~/") {
-		home, err := os.UserHomeDir()
-		if err == nil {
-			expanded = filepath.Join(home, path[2:])
-		}
-	}
-
-	// Validate the path (no base restriction, but prevent traversal)
-	validated, err := utils.ValidatePath(expanded, "")
-	if err != nil {
-		// Log warning and fallback to default path
-		log.Printf("warning: invalid cache path %q: %v, using default", path, err)
-		// Default to current directory with safe name
-		defaultPath := "./wormhole-cache.json"
-		validated, err = utils.ValidatePath(defaultPath, "")
-		if err != nil {
-			// This should never happen, but if it does, return error
-			return "", fmt.Errorf("failed to validate default cache path: %w", err)
-		}
-		return validated, nil
-	}
-	return validated, nil
 }
 
 // getFallbackModels returns minimal hardcoded models for offline mode

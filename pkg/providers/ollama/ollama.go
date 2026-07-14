@@ -6,9 +6,9 @@ import (
 	"fmt"
 	"net/http"
 
-	"github.com/garyblankenship/wormhole/internal/utils"
 	"github.com/garyblankenship/wormhole/pkg/providers"
-	transform "github.com/garyblankenship/wormhole/pkg/providers/transform"
+	providerstream "github.com/garyblankenship/wormhole/pkg/providers/internal/stream"
+	transform "github.com/garyblankenship/wormhole/pkg/providers/transform" //nolint:staticcheck // Supported v1 implementation dependency; internalized in v2.
 	"github.com/garyblankenship/wormhole/pkg/types"
 )
 
@@ -107,7 +107,7 @@ func (p *Provider) Stream(ctx context.Context, request types.TextRequest) (<-cha
 		return nil, err
 	}
 
-	return p.stampProvider(ctx, utils.ProcessNDJSONStream(ctx, body, p.parseStreamChunk, 100)), nil
+	return p.stampProvider(ctx, providerstream.ProcessNDJSON(ctx, body, p.parseStreamChunk, 100)), nil
 }
 
 // Structured generates a structured response using JSON mode

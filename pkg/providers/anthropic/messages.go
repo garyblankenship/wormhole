@@ -3,7 +3,6 @@ package anthropic
 import (
 	"fmt"
 
-	"github.com/garyblankenship/wormhole/internal/utils"
 	"github.com/garyblankenship/wormhole/pkg/config"
 	"github.com/garyblankenship/wormhole/pkg/providers"
 	"github.com/garyblankenship/wormhole/pkg/types"
@@ -204,7 +203,7 @@ func (p *Provider) buildContent(msg types.Message) []map[string]any {
 			if input == nil {
 				input = map[string]any{}
 				if toolCall.Function != nil {
-					_ = utils.UnmarshalAnthropicToolArgs(toolCall.Function.Arguments, &input)
+					_ = unmarshalToolArgs(toolCall.Function.Arguments, &input)
 				}
 			}
 

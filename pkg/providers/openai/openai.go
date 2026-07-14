@@ -6,9 +6,9 @@ import (
 	"net/http"
 
 	"github.com/garyblankenship/wormhole/internal/pool"
-	"github.com/garyblankenship/wormhole/internal/utils"
 	"github.com/garyblankenship/wormhole/pkg/providers"
-	transform "github.com/garyblankenship/wormhole/pkg/providers/transform"
+	providerstream "github.com/garyblankenship/wormhole/pkg/providers/internal/stream"
+	transform "github.com/garyblankenship/wormhole/pkg/providers/transform" //nolint:staticcheck // Supported v1 implementation dependency; internalized in v2.
 	"github.com/garyblankenship/wormhole/pkg/types"
 )
 
@@ -141,7 +141,7 @@ func (p *Provider) Stream(ctx context.Context, request types.TextRequest) (<-cha
 		return nil, err
 	}
 
-	return p.stampProvider(ctx, p.accumulatingStream(ctx, utils.ProcessStream(ctx, body, p.parseStreamChunk, 100))), nil
+	return p.stampProvider(ctx, p.accumulatingStream(ctx, providerstream.ProcessSSE(ctx, body, p.parseStreamChunk, 100))), nil
 }
 
 // stampProvider sets Provider on the terminal chunk. Sole closer of out;

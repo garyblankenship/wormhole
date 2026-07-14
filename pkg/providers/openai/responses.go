@@ -7,8 +7,8 @@ import (
 	"time"
 
 	"github.com/garyblankenship/wormhole/internal/pool"
-	"github.com/garyblankenship/wormhole/internal/utils"
 	"github.com/garyblankenship/wormhole/pkg/providers"
+	providerstream "github.com/garyblankenship/wormhole/pkg/providers/internal/stream"
 	"github.com/garyblankenship/wormhole/pkg/types"
 )
 
@@ -60,7 +60,7 @@ func (p *Provider) responsesStream(ctx context.Context, request types.TextReques
 		return nil, err
 	}
 
-	return p.stampProvider(ctx, utils.ProcessStream(ctx, body, p.parseResponsesStreamChunk, 100)), nil
+	return p.stampProvider(ctx, providerstream.ProcessSSE(ctx, body, p.parseResponsesStreamChunk, 100)), nil
 }
 
 // normalizeResponsesFormat adapts a Chat Completions response_format value to the

@@ -1,7 +1,7 @@
-package utils
+package providers
 
 import (
-	"context"
+	"crypto/rand"
 	"fmt"
 	"io"
 	"log"
@@ -13,13 +13,8 @@ import (
 	"github.com/garyblankenship/wormhole/pkg/types"
 )
 
-// HTTPClient defines the interface for HTTP clients
-type HTTPClient interface {
-	Do(req *http.Request) (*http.Response, error)
-}
-
-// RetryConfig holds configuration for retry logic
-type RetryConfig struct {
+// retryConfig holds configuration for provider HTTP retries.
+type retryConfig struct {
 	MaxRetries      int           // Maximum number of retry attempts
 	InitialDelay    time.Duration // Initial delay between retries
 	MaxDelay        time.Duration // Maximum delay between retries
@@ -27,9 +22,8 @@ type RetryConfig struct {
 	Jitter          bool          // Add random jitter to prevent thundering herd
 }
 
-// DefaultRetryConfig returns sensible defaults for retry configuration
-func DefaultRetryConfig() RetryConfig {
-	return RetryConfig{
+func defaultRetryConfig() retryConfig {
+	return retryConfig{
 		MaxRetries:      config.GetDefaultMaxRetries(),
 		InitialDelay:    config.GetDefaultInitialDelay(),
 		MaxDelay:        config.GetDefaultMaxDelay(),
@@ -42,8 +36,7 @@ func DefaultRetryConfig() RetryConfig {
 // downstream classification (error bodies are small; this is a safety cap).
 const maxErrorBodyBytes = 64 << 10
 
-// RetryableError represents an error that can be retried
-type RetryableError struct {
+type retryableError struct {
 	Err         error
 	StatusCode  int
 	ShouldRetry bool
@@ -51,12 +44,12 @@ type RetryableError struct {
 	Body        []byte        // Bounded copy of the error response body, for downstream classification
 }
 
-func (e *RetryableError) Error() string {
+func (e *retryableError) Error() string {
 	return fmt.Sprintf("retryable error (status: %d, should_retry: %t): %v", e.StatusCode, e.ShouldRetry, e.Err)
 }
 
 // Unwrap returns the underlying error for error unwrapping
-func (e *RetryableError) Unwrap() error {
+func (e *retryableError) Unwrap() error {
 	return e.Err
 }
 
@@ -64,8 +57,7 @@ func (e *RetryableError) Unwrap() error {
 // "server overloaded" signal with no stdlib http.Status* constant.
 const statusOverloaded = 529
 
-// IsRetryableStatusCode determines if an HTTP status code should be retried
-func IsRetryableStatusCode(statusCode int) bool {
+func isRetryableStatusCode(statusCode int) bool {
 	switch statusCode {
 	case http.StatusRequestTimeout, // 408 - Request timeout
 		http.StatusTooManyRequests,     // 429 - Rate limited
@@ -80,33 +72,31 @@ func IsRetryableStatusCode(statusCode int) bool {
 	}
 }
 
-// RetryableHTTPClient wraps an HTTP client with retry logic
-type RetryableHTTPClient struct {
+type retryableHTTPClient struct {
 	Client HTTPClient
-	Config RetryConfig
+	Config retryConfig
 	// OnRetry, if non-nil, is invoked on the cloned request before a retry
 	// attempt (attempt >= 1). retryErr describes the previous failed attempt
 	// and previousRequest is the exact request that produced it.
-	OnRetry func(reqClone *http.Request, attempt int, retryErr *RetryableError, previousRequest *http.Request)
+	OnRetry func(reqClone *http.Request, attempt int, retryErr *retryableError, previousRequest *http.Request)
 }
 
-// NewRetryableHTTPClient creates a new retryable HTTP client
-func NewRetryableHTTPClient(client HTTPClient, config RetryConfig) *RetryableHTTPClient {
+func newRetryableHTTPClient(client HTTPClient, config retryConfig) *retryableHTTPClient {
 	if client == nil {
 		// Default to no timeout - let context timeouts handle this
 		client = &http.Client{}
 	}
 
-	return &RetryableHTTPClient{
+	return &retryableHTTPClient{
 		Client: client,
 		Config: config,
 	}
 }
 
 // Do executes an HTTP request with retry logic
-func (r *RetryableHTTPClient) Do(req *http.Request) (*http.Response, error) {
+func (r *retryableHTTPClient) Do(req *http.Request) (*http.Response, error) {
 	var lastErr error
-	var lastRetryErr *RetryableError
+	var lastRetryErr *retryableError
 	var previousRequest *http.Request
 
 	for attempt := 0; attempt <= r.Config.MaxRetries; attempt++ {
@@ -134,7 +124,7 @@ func (r *RetryableHTTPClient) Do(req *http.Request) (*http.Response, error) {
 		previousRequest = reqClone
 
 		// If no error and successful status, return immediately
-		if err == nil && !IsRetryableStatusCode(resp.StatusCode) {
+		if err == nil && !isRetryableStatusCode(resp.StatusCode) {
 			return resp, nil
 		}
 
@@ -146,7 +136,7 @@ func (r *RetryableHTTPClient) Do(req *http.Request) (*http.Response, error) {
 
 		// Handle different error scenarios
 		if err != nil {
-			lastRetryErr = &RetryableError{
+			lastRetryErr = &retryableError{
 				Err:         err,
 				ShouldRetry: true, // Network errors are generally retryable
 			}
@@ -157,10 +147,10 @@ func (r *RetryableHTTPClient) Do(req *http.Request) (*http.Response, error) {
 			// provider's structured error (e.g. insufficient_quota) survives to the
 			// final surfaced error even after retries are exhausted.
 			body, _ := io.ReadAll(io.LimitReader(resp.Body, maxErrorBodyBytes))
-			lastRetryErr = &RetryableError{
+			lastRetryErr = &retryableError{
 				Err:         fmt.Errorf("HTTP %d", resp.StatusCode),
 				StatusCode:  resp.StatusCode,
-				ShouldRetry: IsRetryableStatusCode(resp.StatusCode),
+				ShouldRetry: isRetryableStatusCode(resp.StatusCode),
 				RetryAfter:  retryAfter,
 				Body:        body,
 			}
@@ -196,7 +186,7 @@ func (r *RetryableHTTPClient) Do(req *http.Request) (*http.Response, error) {
 }
 
 // calculateDelay computes the delay before the next retry attempt
-func (r *RetryableHTTPClient) calculateDelay(attempt int, retryAfter time.Duration) time.Duration {
+func (r *retryableHTTPClient) calculateDelay(attempt int, retryAfter time.Duration) time.Duration {
 	// If server specified Retry-After, respect it
 	if retryAfter > 0 {
 		if retryAfter > r.Config.MaxDelay {
@@ -230,55 +220,14 @@ func (r *RetryableHTTPClient) calculateDelay(attempt int, retryAfter time.Durati
 
 // secureRandomFloat returns a cryptographically secure random float between -1 and 1
 func secureRandomFloat() float64 {
-	val, err := SecureRandomFloat()
-	if err != nil {
-		// Fallback to less secure but functional randomness
-		return 0.0
+	var b [8]byte
+	if _, err := rand.Read(b[:]); err != nil {
+		return 0
 	}
-	// Scale from [0, 1) to [-1, 1]
-	return val*2 - 1
-}
-
-// RetryFunc is a function that can be retried
-type RetryFunc func() error
-
-// WithRetry executes a function with retry logic
-func WithRetry(ctx context.Context, config RetryConfig, fn RetryFunc) error {
-	var lastErr error
-
-	for attempt := 0; attempt <= config.MaxRetries; attempt++ {
-		err := fn()
-
-		if err == nil {
-			return nil // Success
-		}
-
-		lastErr = err
-
-		// Check if error is retryable
-		if retryErr, ok := err.(*RetryableError); ok && !retryErr.ShouldRetry {
-			return err // Not retryable
-		}
-
-		// Don't wait after the last attempt
-		if attempt == config.MaxRetries {
-			break
-		}
-
-		// Calculate delay
-		delay := time.Duration(float64(config.InitialDelay) * math.Pow(config.BackoffMultiple, float64(attempt)))
-		if delay > config.MaxDelay {
-			delay = config.MaxDelay
-		}
-
-		// Wait before retry
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case <-time.After(delay):
-			// Continue to next attempt
-		}
-	}
-
-	return fmt.Errorf("max retries (%d) exceeded: %w", config.MaxRetries, lastErr)
+	// Keep the top 53 bits so conversion to float64 is exact, then scale the
+	// result from [0, 1) to [-1, 1).
+	const denominator = float64(uint64(1) << 53)
+	n := uint64(b[0])<<56 | uint64(b[1])<<48 | uint64(b[2])<<40 | uint64(b[3])<<32 |
+		uint64(b[4])<<24 | uint64(b[5])<<16 | uint64(b[6])<<8 | uint64(b[7])
+	return (float64(n>>11)/denominator)*2 - 1
 }

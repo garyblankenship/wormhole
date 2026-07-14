@@ -9,10 +9,11 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/garyblankenship/wormhole/internal/utils"
-	"github.com/garyblankenship/wormhole/pkg/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	providerstream "github.com/garyblankenship/wormhole/pkg/providers/internal/stream"
+	"github.com/garyblankenship/wormhole/pkg/types"
 )
 
 func TestAnthropicStreamWireConformance(t *testing.T) {
@@ -23,7 +24,7 @@ func TestAnthropicStreamWireConformance(t *testing.T) {
 
 	p := &Provider{}
 	ctx := context.Background()
-	in := utils.ProcessStream(ctx, io.NopCloser(strings.NewReader(string(data))), p.parseStreamChunk, 100)
+	in := providerstream.ProcessSSE(ctx, io.NopCloser(strings.NewReader(string(data))), p.parseStreamChunk, 100)
 	out := p.accumulatingStream(ctx, in)
 
 	chunks := []types.StreamChunk{}

@@ -3,7 +3,10 @@ package anthropic
 import (
 	"testing"
 
-	"github.com/garyblankenship/wormhole/internal/utils"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
+	"github.com/garyblankenship/wormhole/pkg/types"
 )
 
 // TestJSONRobustness tests that the Anthropic provider can handle
@@ -70,7 +73,7 @@ func TestJSONRobustness(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			var data map[string]any
-			err := utils.UnmarshalAnthropicToolArgs(tt.toolArguments, &data)
+			err := unmarshalToolArgs(tt.toolArguments, &data)
 
 			if tt.expectError {
 				if err == nil {
@@ -107,7 +110,7 @@ func TestJSONRobustness_Benchmarks(t *testing.T) {
 	// Run this multiple times to check for performance issues
 	for i := 0; i < 100; i++ {
 		var data map[string]any
-		err := utils.UnmarshalAnthropicToolArgs(complexArgs, &data)
+		err := unmarshalToolArgs(complexArgs, &data)
 		if err != nil {
 			t.Fatalf("Iteration %d failed: %v", i, err)
 		}
@@ -122,4 +125,21 @@ func TestJSONRobustness_Benchmarks(t *testing.T) {
 	}
 
 	t.Log("Successfully parsed complex Claude response 100 times")
+}
+
+func TestParseStructuredToolCallWrapsArgumentErrors(t *testing.T) {
+	t.Parallel()
+
+	provider := New(types.ProviderConfig{})
+	_, err := provider.parseStructuredToolCall(types.ToolCall{
+		Function: &types.ToolCallFunction{Arguments: `{"incomplete": }`},
+	})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to parse structured response")
+	assert.Contains(t, err.Error(), "failed to parse Anthropic tool arguments")
+
+	wormholeErr, ok := types.AsWormholeError(err)
+	require.True(t, ok)
+	assert.Equal(t, types.ErrorCodeRequest, wormholeErr.Code)
+	require.Error(t, wormholeErr.Cause)
 }

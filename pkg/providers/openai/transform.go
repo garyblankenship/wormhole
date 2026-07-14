@@ -7,9 +7,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/garyblankenship/wormhole/internal/utils"
 	"github.com/garyblankenship/wormhole/pkg/providers"
-	providerTransform "github.com/garyblankenship/wormhole/pkg/providers/transform"
+	providerTransform "github.com/garyblankenship/wormhole/pkg/providers/transform" //nolint:staticcheck // Supported v1 implementation dependency; internalized in v2.
 	"github.com/garyblankenship/wormhole/pkg/types"
 )
 
@@ -240,9 +239,8 @@ func (p *Provider) transformTools(tools []types.Tool) []map[string]any {
 }
 
 // cleanJSONResponse removes markdown code blocks from JSON responses
-// Delegates to shared utility for consistent behavior across providers
 func cleanJSONResponse(content string) string {
-	return utils.ExtractJSONFromMarkdown(content)
+	return extractJSONFromMarkdown(content)
 }
 
 // transformTextResponse converts OpenAI response to internal format

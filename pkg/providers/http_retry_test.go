@@ -1,4 +1,4 @@
-package utils
+package providers
 
 import (
 	"context"
@@ -10,13 +10,14 @@ import (
 	"testing"
 	"time"
 
-	"github.com/garyblankenship/wormhole/pkg/config"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/garyblankenship/wormhole/pkg/config"
 )
 
 func TestRetryConfig_Defaults(t *testing.T) {
-	retryConfig := DefaultRetryConfig()
+	retryConfig := defaultRetryConfig()
 
 	assert.Equal(t, config.DefaultMaxRetries, retryConfig.MaxRetries)
 	assert.Equal(t, config.DefaultInitialDelay, retryConfig.InitialDelay)
@@ -28,7 +29,7 @@ func TestRetryConfig_Defaults(t *testing.T) {
 func TestRetryableError(t *testing.T) {
 	t.Run("error message formatting", func(t *testing.T) {
 		originalErr := errors.New("connection refused")
-		retryErr := &RetryableError{
+		retryErr := &retryableError{
 			Err:         originalErr,
 			StatusCode:  503,
 			ShouldRetry: true,
@@ -40,7 +41,7 @@ func TestRetryableError(t *testing.T) {
 	})
 
 	t.Run("non-retryable error", func(t *testing.T) {
-		retryErr := &RetryableError{
+		retryErr := &retryableError{
 			Err:         errors.New("bad request"),
 			StatusCode:  400,
 			ShouldRetry: false,
@@ -51,7 +52,7 @@ func TestRetryableError(t *testing.T) {
 
 	t.Run("unwrap returns cause", func(t *testing.T) {
 		cause := errors.New("connection reset")
-		retryErr := &RetryableError{Err: cause}
+		retryErr := &retryableError{Err: cause}
 
 		assert.True(t, errors.Is(retryErr, cause))
 		assert.Equal(t, cause, retryErr.Unwrap())
@@ -60,6 +61,7 @@ func TestRetryableError(t *testing.T) {
 
 func TestIsRetryableStatusCode(t *testing.T) {
 	retryableCodes := []int{
+		http.StatusRequestTimeout,      // 408
 		http.StatusTooManyRequests,     // 429
 		http.StatusInternalServerError, // 500
 		http.StatusBadGateway,          // 502
@@ -81,13 +83,13 @@ func TestIsRetryableStatusCode(t *testing.T) {
 
 	for _, code := range retryableCodes {
 		t.Run(http.StatusText(code), func(t *testing.T) {
-			assert.True(t, IsRetryableStatusCode(code), "Status %d should be retryable", code)
+			assert.True(t, isRetryableStatusCode(code), "Status %d should be retryable", code)
 		})
 	}
 
 	for _, code := range nonRetryableCodes {
 		t.Run(http.StatusText(code), func(t *testing.T) {
-			assert.False(t, IsRetryableStatusCode(code), "Status %d should not be retryable", code)
+			assert.False(t, isRetryableStatusCode(code), "Status %d should not be retryable", code)
 		})
 	}
 }
@@ -95,18 +97,18 @@ func TestIsRetryableStatusCode(t *testing.T) {
 func TestNewRetryableHTTPClient(t *testing.T) {
 	t.Run("with custom client", func(t *testing.T) {
 		customClient := &http.Client{Timeout: 10 * time.Second}
-		config := DefaultRetryConfig()
+		config := defaultRetryConfig()
 
-		retryClient := NewRetryableHTTPClient(customClient, config)
+		retryClient := newRetryableHTTPClient(customClient, config)
 
 		assert.Equal(t, customClient, retryClient.Client)
 		assert.Equal(t, config, retryClient.Config)
 	})
 
 	t.Run("with nil client", func(t *testing.T) {
-		config := DefaultRetryConfig()
+		config := defaultRetryConfig()
 
-		retryClient := NewRetryableHTTPClient(nil, config)
+		retryClient := newRetryableHTTPClient(nil, config)
 
 		assert.NotNil(t, retryClient.Client)
 		// Type assert to access Timeout field
@@ -125,7 +127,7 @@ func TestRetryableHTTPClient_Do_Success(t *testing.T) {
 	}))
 	defer server.Close()
 
-	config := RetryConfig{
+	config := retryConfig{
 		MaxRetries:      3,
 		InitialDelay:    10 * time.Millisecond,
 		MaxDelay:        100 * time.Millisecond,
@@ -133,7 +135,7 @@ func TestRetryableHTTPClient_Do_Success(t *testing.T) {
 		Jitter:          false, // Disable for predictable testing
 	}
 
-	client := NewRetryableHTTPClient(nil, config)
+	client := newRetryableHTTPClient(nil, config)
 
 	req, err := http.NewRequest("GET", server.URL, nil)
 	require.NoError(t, err)
@@ -165,7 +167,7 @@ func TestRetryableHTTPClient_Do_RetryableErrors(t *testing.T) {
 	}))
 	defer server.Close()
 
-	config := RetryConfig{
+	config := retryConfig{
 		MaxRetries:      3,
 		InitialDelay:    1 * time.Millisecond, // Fast for testing
 		MaxDelay:        10 * time.Millisecond,
@@ -173,7 +175,7 @@ func TestRetryableHTTPClient_Do_RetryableErrors(t *testing.T) {
 		Jitter:          false,
 	}
 
-	client := NewRetryableHTTPClient(nil, config)
+	client := newRetryableHTTPClient(nil, config)
 
 	req, err := http.NewRequest("GET", server.URL, nil)
 	require.NoError(t, err)
@@ -201,8 +203,8 @@ func TestRetryableHTTPClient_Do_NonRetryableError(t *testing.T) {
 	}))
 	defer server.Close()
 
-	config := DefaultRetryConfig()
-	client := NewRetryableHTTPClient(nil, config)
+	config := defaultRetryConfig()
+	client := newRetryableHTTPClient(nil, config)
 
 	req, err := http.NewRequest("GET", server.URL, nil)
 	require.NoError(t, err)
@@ -231,7 +233,7 @@ func TestRetryableHTTPClient_Do_ExceedMaxRetries(t *testing.T) {
 	}))
 	defer server.Close()
 
-	config := RetryConfig{
+	config := retryConfig{
 		MaxRetries:      2,
 		InitialDelay:    1 * time.Millisecond,
 		MaxDelay:        10 * time.Millisecond,
@@ -239,7 +241,7 @@ func TestRetryableHTTPClient_Do_ExceedMaxRetries(t *testing.T) {
 		Jitter:          false,
 	}
 
-	client := NewRetryableHTTPClient(nil, config)
+	client := newRetryableHTTPClient(nil, config)
 
 	req, err := http.NewRequest("GET", server.URL, nil)
 	require.NoError(t, err)
@@ -263,7 +265,7 @@ func TestRetryableHTTPClient_Do_ContextCancellation(t *testing.T) {
 	}))
 	defer server.Close()
 
-	config := RetryConfig{
+	config := retryConfig{
 		MaxRetries:      5,
 		InitialDelay:    100 * time.Millisecond, // Long delay
 		MaxDelay:        1 * time.Second,
@@ -271,7 +273,7 @@ func TestRetryableHTTPClient_Do_ContextCancellation(t *testing.T) {
 		Jitter:          false,
 	}
 
-	client := NewRetryableHTTPClient(nil, config)
+	client := newRetryableHTTPClient(nil, config)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
 	defer cancel()
@@ -310,7 +312,7 @@ func TestRetryableHTTPClient_Do_RetryAfterHeader(t *testing.T) {
 	}))
 	defer server.Close()
 
-	config := RetryConfig{
+	config := retryConfig{
 		MaxRetries:      2,
 		InitialDelay:    10 * time.Millisecond, // Short initial delay
 		MaxDelay:        5 * time.Second,
@@ -318,7 +320,7 @@ func TestRetryableHTTPClient_Do_RetryAfterHeader(t *testing.T) {
 		Jitter:          false,
 	}
 
-	client := NewRetryableHTTPClient(nil, config)
+	client := newRetryableHTTPClient(nil, config)
 
 	req, err := http.NewRequest("GET", server.URL, nil)
 	require.NoError(t, err)
@@ -340,14 +342,14 @@ func TestRetryableHTTPClient_Do_RetryAfterHeader(t *testing.T) {
 }
 
 func TestRetryableHTTPClient_calculateDelay(t *testing.T) {
-	config := RetryConfig{
+	config := retryConfig{
 		InitialDelay:    100 * time.Millisecond,
 		MaxDelay:        5 * time.Second,
 		BackoffMultiple: 2.0,
 		Jitter:          false,
 	}
 
-	client := NewRetryableHTTPClient(nil, config)
+	client := newRetryableHTTPClient(nil, config)
 
 	t.Run("exponential backoff", func(t *testing.T) {
 		delay0 := client.calculateDelay(0, 0)
@@ -376,136 +378,53 @@ func TestRetryableHTTPClient_calculateDelay(t *testing.T) {
 		assert.Equal(t, 5*time.Second, delay) // Capped at MaxDelay
 	})
 
-	t.Run("with jitter", func(t *testing.T) {
+	t.Run("jitter stays within documented twenty percent bounds", func(t *testing.T) {
 		jitterConfig := config
 		jitterConfig.Jitter = true
-		jitterClient := NewRetryableHTTPClient(nil, jitterConfig)
+		jitterClient := newRetryableHTTPClient(nil, jitterConfig)
 
-		// Test that jitter affects the delay (may or may not vary due to timing)
-		delay := jitterClient.calculateDelay(1, 0)
-
-		// With jitter, the delay should still be reasonable
-		// Base delay for attempt 1 is 200ms, jitter can add ±20%
-		assert.Greater(t, delay, 80*time.Millisecond) // 200ms - 60% buffer
-		assert.LessOrEqual(t, delay, 5*time.Second)   // Should be capped by MaxDelay
+		// Attempt 1 has a 200 ms base delay, so ±20% is [160 ms, 240 ms].
+		for range 100 {
+			delay := jitterClient.calculateDelay(1, 0)
+			assert.GreaterOrEqual(t, delay, 160*time.Millisecond)
+			assert.LessOrEqual(t, delay, 240*time.Millisecond)
+		}
 	})
 }
 
-func TestWithRetry_Success(t *testing.T) {
-	attempt := 0
-	fn := func() error {
-		attempt++
-		if attempt < 3 {
-			return &RetryableError{
-				Err:         errors.New("temporary failure"),
-				ShouldRetry: true,
-			}
-		}
-		return nil // Success on 3rd attempt
+func TestRetryableHTTPClient_CapturesBoundedErrorBody(t *testing.T) {
+	want := strings.Repeat("a", maxErrorBodyBytes)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusServiceUnavailable)
+		_, _ = io.WriteString(w, want+"not-captured")
+	}))
+	defer server.Close()
+
+	client := newRetryableHTTPClient(server.Client(), retryConfig{
+		MaxRetries:      1,
+		InitialDelay:    time.Nanosecond,
+		MaxDelay:        time.Nanosecond,
+		BackoffMultiple: 1,
+	})
+	req, err := http.NewRequest(http.MethodGet, server.URL, nil)
+	require.NoError(t, err)
+
+	resp, err := client.Do(req)
+	if resp != nil {
+		t.Cleanup(func() { _ = resp.Body.Close() })
 	}
+	assert.Nil(t, resp)
+	require.Error(t, err)
 
-	config := RetryConfig{
-		MaxRetries:      3,
-		InitialDelay:    1 * time.Millisecond,
-		MaxDelay:        10 * time.Millisecond,
-		BackoffMultiple: 2.0,
-	}
-
-	err := WithRetry(context.Background(), config, fn)
-
-	assert.NoError(t, err)
-	assert.Equal(t, 3, attempt)
-}
-
-func TestWithRetry_NonRetryableError(t *testing.T) {
-	attempt := 0
-	fn := func() error {
-		attempt++
-		return &RetryableError{
-			Err:         errors.New("bad request"),
-			StatusCode:  400,
-			ShouldRetry: false,
-		}
-	}
-
-	config := DefaultRetryConfig()
-
-	err := WithRetry(context.Background(), config, fn)
-
-	assert.Error(t, err)
-	assert.Equal(t, 1, attempt) // Should not retry
-
-	retryErr, ok := err.(*RetryableError)
-	assert.True(t, ok)
-	assert.False(t, retryErr.ShouldRetry)
-}
-
-func TestWithRetry_ExceedMaxRetries(t *testing.T) {
-	attempt := 0
-	fn := func() error {
-		attempt++
-		return errors.New("always fails")
-	}
-
-	config := RetryConfig{
-		MaxRetries:      2,
-		InitialDelay:    1 * time.Millisecond,
-		MaxDelay:        10 * time.Millisecond,
-		BackoffMultiple: 2.0,
-	}
-
-	err := WithRetry(context.Background(), config, fn)
-
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "max retries (2) exceeded")
-	assert.Equal(t, 3, attempt) // Initial + 2 retries
-}
-
-func TestWithRetry_ContextCancellation(t *testing.T) {
-	attempt := 0
-	fn := func() error {
-		attempt++
-		return errors.New("always fails")
-	}
-
-	config := RetryConfig{
-		MaxRetries:      5,
-		InitialDelay:    100 * time.Millisecond, // Long delay
-		MaxDelay:        1 * time.Second,
-		BackoffMultiple: 2.0,
-	}
-
-	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
-	defer cancel()
-
-	start := time.Now()
-	err := WithRetry(ctx, config, fn)
-	duration := time.Since(start)
-
-	assert.Error(t, err)
-	assert.Equal(t, context.DeadlineExceeded, err)
-	assert.Equal(t, 1, attempt) // Should only try once before context cancellation
-	assert.Less(t, duration, 150*time.Millisecond)
-}
-
-func TestWithRetry_ImmediateSuccess(t *testing.T) {
-	attempt := 0
-	fn := func() error {
-		attempt++
-		return nil // Succeed immediately
-	}
-
-	config := DefaultRetryConfig()
-
-	err := WithRetry(context.Background(), config, fn)
-
-	assert.NoError(t, err)
-	assert.Equal(t, 1, attempt)
+	var retryErr *retryableError
+	require.ErrorAs(t, err, &retryErr)
+	require.Len(t, retryErr.Body, maxErrorBodyBytes)
+	assert.Equal(t, want, string(retryErr.Body))
 }
 
 func TestRetryableHTTPClient_NetworkError(t *testing.T) {
 	// Use an invalid URL to simulate network error
-	config := RetryConfig{
+	config := retryConfig{
 		MaxRetries:      2,
 		InitialDelay:    1 * time.Millisecond,
 		MaxDelay:        10 * time.Millisecond,
@@ -513,7 +432,7 @@ func TestRetryableHTTPClient_NetworkError(t *testing.T) {
 		Jitter:          false,
 	}
 
-	client := NewRetryableHTTPClient(nil, config)
+	client := newRetryableHTTPClient(nil, config)
 
 	req, err := http.NewRequest("GET", "http://invalid-host-that-does-not-exist.local", nil)
 	require.NoError(t, err)
@@ -548,7 +467,7 @@ func TestRetryableHTTPClient_RequestCloning(t *testing.T) {
 	}))
 	defer server.Close()
 
-	config := RetryConfig{
+	config := retryConfig{
 		MaxRetries:      2,
 		InitialDelay:    1 * time.Millisecond,
 		MaxDelay:        10 * time.Millisecond,
@@ -556,7 +475,7 @@ func TestRetryableHTTPClient_RequestCloning(t *testing.T) {
 		Jitter:          false,
 	}
 
-	client := NewRetryableHTTPClient(nil, config)
+	client := newRetryableHTTPClient(nil, config)
 
 	requestBody := "test request body"
 	req, err := http.NewRequest("POST", server.URL, strings.NewReader(requestBody))
@@ -586,7 +505,7 @@ func TestRetryableHTTPClient_Do_NonReplayableBodyFailsOnRetry(t *testing.T) {
 	}))
 	defer server.Close()
 
-	config := RetryConfig{
+	config := retryConfig{
 		MaxRetries:      2,
 		InitialDelay:    1 * time.Millisecond,
 		MaxDelay:        10 * time.Millisecond,
@@ -594,7 +513,7 @@ func TestRetryableHTTPClient_Do_NonReplayableBodyFailsOnRetry(t *testing.T) {
 		Jitter:          false,
 	}
 
-	client := NewRetryableHTTPClient(nil, config)
+	client := newRetryableHTTPClient(nil, config)
 
 	req, err := http.NewRequest("POST", server.URL, strings.NewReader("test request body"))
 	require.NoError(t, err)
@@ -636,7 +555,7 @@ func TestRetryableHTTPClient_RealWorldScenario(t *testing.T) {
 	}))
 	defer server.Close()
 
-	config := RetryConfig{
+	config := retryConfig{
 		MaxRetries:      3,
 		InitialDelay:    10 * time.Millisecond,
 		MaxDelay:        2 * time.Second,
@@ -644,7 +563,7 @@ func TestRetryableHTTPClient_RealWorldScenario(t *testing.T) {
 		Jitter:          false,
 	}
 
-	client := NewRetryableHTTPClient(nil, config)
+	client := newRetryableHTTPClient(nil, config)
 
 	req, err := http.NewRequest("GET", server.URL, nil)
 	require.NoError(t, err)

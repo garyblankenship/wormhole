@@ -8,10 +8,11 @@ import (
 	"os"
 	"testing"
 
-	"github.com/garyblankenship/wormhole/internal/utils"
-	"github.com/garyblankenship/wormhole/pkg/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/garyblankenship/wormhole/internal/testutil"
+	"github.com/garyblankenship/wormhole/pkg/types"
 )
 
 func TestOpenAIStreamWireConformance(t *testing.T) {
@@ -49,7 +50,7 @@ func TestOpenAIStreamWireConformance(t *testing.T) {
 		chunks = append(chunks, chunk)
 	}
 
-	merged := utils.MergeTextChunks(chunks)
+	merged := testutil.MergeTextChunks(chunks)
 	assert.Equal(t, "Let me check.", merged.Text)
 
 	var toolCallChunk types.TextChunk

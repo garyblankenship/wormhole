@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"time"
 
-	providerTransform "github.com/garyblankenship/wormhole/pkg/providers/transform"
+	providerTransform "github.com/garyblankenship/wormhole/pkg/providers/transform" //nolint:staticcheck // Supported v1 implementation dependency; internalized in v2.
 	"github.com/garyblankenship/wormhole/pkg/types"
 )
 

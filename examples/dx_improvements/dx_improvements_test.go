@@ -6,7 +6,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/garyblankenship/wormhole/internal/utils"
 	"github.com/garyblankenship/wormhole/pkg/middleware"
 )
 
@@ -15,7 +14,7 @@ func TestMiddlewareDiscovery(t *testing.T) {
 	middlewares := middleware.AvailableMiddleware()
 
 	// Should have the key middleware from DX improvements
-	// Retry was moved to internal/utils
+	// Provider HTTP retries are configured through provider options, not middleware.
 	expectedMiddleware := map[string]bool{
 		"CacheMiddleware":          true,
 		"CircuitBreakerMiddleware": true,
@@ -74,8 +73,7 @@ func TestCacheConfigurationPattern(t *testing.T) {
 }
 
 func TestRetryConfigurationPattern(t *testing.T) {
-	// Test DefaultRetryConfig usage (recommended pattern)
-	defaultConfig := utils.DefaultRetryConfig()
+	defaultConfig := middleware.DefaultRetryConfig()
 	if defaultConfig.MaxRetries == 0 {
 		t.Error("Expected default config to have non-zero MaxRetries")
 	}
@@ -83,24 +81,19 @@ func TestRetryConfigurationPattern(t *testing.T) {
 		t.Error("Expected default config to have non-zero InitialDelay")
 	}
 
-	// Test custom configuration pattern
-	customConfig := utils.RetryConfig{
+	customConfig := middleware.RetryConfig{
 		MaxRetries:      5,
 		InitialDelay:    2 * time.Second,
 		MaxDelay:        30 * time.Second,
-		BackoffMultiple: 2.0,
+		BackoffMultiple: 2,
 		Jitter:          true,
 	}
-
 	if customConfig.MaxRetries != 5 {
 		t.Errorf("Expected MaxRetries=5, got %d", customConfig.MaxRetries)
 	}
 	if customConfig.InitialDelay != 2*time.Second {
 		t.Errorf("Expected InitialDelay=2s, got %v", customConfig.InitialDelay)
 	}
-
-	// Retry logic is now in internal/utils with exponential backoff built-in
-	// The configurations are validated, which is the main test goal
 }
 
 func TestProductionMiddlewareStack(t *testing.T) {
@@ -112,7 +105,7 @@ func TestProductionMiddlewareStack(t *testing.T) {
 	}
 
 	// Verify all middleware can be created (the stack from the example)
-	// Retry is now in internal/utils, so we use the remaining middleware
+	// Provider HTTP retry is not middleware, so this stack uses the remaining middleware.
 	middlewares := []middleware.Middleware{
 		middleware.CircuitBreakerMiddleware(5, 30*time.Second),
 		middleware.RateLimitMiddleware(100),
@@ -159,7 +152,7 @@ func TestDXImprovementPatterns(t *testing.T) {
 		t.Error("Expected LRU cache to be created")
 	}
 
-	// 3. Test backoff algorithms are now in internal/utils
+	// 3. Test provider HTTP retry backoff is covered by the providers package
 	// The middleware discovery and cache patterns are the main DX improvements
 }
 
@@ -176,7 +169,7 @@ func TestDXImprovementsIntegration(t *testing.T) {
 	}
 	cacheMW := middleware.CacheMiddleware(cacheConfig)
 
-	// Retry logic is now in internal/utils, not exposed as middleware
+	// Provider HTTP retry is not exposed as middleware
 	// Create a complete middleware stack with remaining middleware
 	chain := middleware.NewChain(
 		middleware.CircuitBreakerMiddleware(3, 10*time.Second),

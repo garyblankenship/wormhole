@@ -1,15 +1,12 @@
-package utils
+package stream
 
 import (
 	"bufio"
 	"bytes"
 	"context"
-	"encoding/json"
 	"fmt"
 	"io"
-	"strings"
 	"sync"
-	"time"
 
 	"github.com/garyblankenship/wormhole/pkg/types"
 )
@@ -277,10 +274,10 @@ func (p *StreamProcessor) Process(ctx context.Context, chunks chan<- types.TextC
 	}
 }
 
-// ProcessStream creates and processes a stream in a goroutine, returning the channel
+// ProcessSSE creates and processes an SSE stream in a goroutine, returning the channel.
 // This is a convenience function that combines channel creation, goroutine launch, and processing.
 // ctx cancellation unblocks the producer goroutine's sends and lets the body close.
-func ProcessStream(
+func ProcessSSE(
 	ctx context.Context,
 	body io.ReadCloser,
 	transformer func([]byte) (*types.TextChunk, error),
@@ -297,96 +294,10 @@ func ProcessStream(
 	return chunks
 }
 
-// StreamIdleTimeoutError is returned when a stream stalls for longer than the
-// configured idle timeout.
-type StreamIdleTimeoutError struct {
-	Timeout time.Duration
-}
-
-type closeOnceReadCloser struct {
-	io.ReadCloser
-	once sync.Once
-	err  error
-}
-
-func (c *closeOnceReadCloser) Close() error {
-	c.once.Do(func() { c.err = c.ReadCloser.Close() })
-	return c.err
-}
-
-func (e *StreamIdleTimeoutError) Error() string {
-	return fmt.Sprintf("stream idle timeout: no chunk received within %s", e.Timeout)
-}
-
-// ProcessStreamWithIdleTimeout wraps ProcessStream with a per-chunk idle timeout.
-// If timeout is zero or negative, it falls through to ProcessStream (no watchdog).
-// When the watchdog fires, the provider read is canceled and its body is closed
-// before a single timeout error chunk is emitted.
-func ProcessStreamWithIdleTimeout(
-	ctx context.Context,
-	body io.ReadCloser,
-	transformer func([]byte) (*types.TextChunk, error),
-	bufferSize int,
-	timeout time.Duration,
-) <-chan types.TextChunk {
-	if timeout <= 0 {
-		return ProcessStream(ctx, body, transformer, bufferSize)
-	}
-
-	streamCtx, cancelStream := context.WithCancel(ctx)
-	ownedBody := &closeOnceReadCloser{ReadCloser: body}
-	src := ProcessStream(streamCtx, ownedBody, transformer, bufferSize)
-	out := make(chan types.TextChunk, bufferSize)
-
-	go func() {
-		defer close(out)
-		defer cancelStream()
-		timer := time.NewTimer(timeout)
-		defer timer.Stop()
-
-		for {
-			select {
-			case chunk, ok := <-src:
-				if !ok {
-					return
-				}
-				if !timer.Stop() {
-					select {
-					case <-timer.C:
-					default:
-					}
-				}
-				select {
-				case out <- chunk:
-				case <-ctx.Done():
-					return
-				}
-				timer.Reset(timeout)
-				if chunk.Error != nil {
-					return
-				}
-			case <-timer.C:
-				cancelStream()
-				_ = ownedBody.Close()
-				select {
-				case out <- types.TextChunk{
-					Error: &StreamIdleTimeoutError{Timeout: timeout},
-				}:
-				case <-ctx.Done():
-					return
-				}
-				return
-			}
-		}
-	}()
-
-	return out
-}
-
-// ProcessNDJSONStream processes an NDJSON (newline-delimited JSON) stream.
+// ProcessNDJSON processes an NDJSON (newline-delimited JSON) stream.
 // Each line is a complete JSON object with no SSE framing (used by Ollama).
 // ctx cancellation unblocks the producer goroutine's sends and lets the body close.
-func ProcessNDJSONStream(
+func ProcessNDJSON(
 	ctx context.Context,
 	body io.ReadCloser,
 	transformer func([]byte) (*types.TextChunk, error),
@@ -440,69 +351,4 @@ func ProcessNDJSONStream(
 		}
 	}()
 	return chunks
-}
-
-// MergeTextChunks merges text chunks into a complete response
-func MergeTextChunks(chunks []types.TextChunk) *types.TextResponse {
-	var text strings.Builder
-	var toolCalls []types.ToolCall
-	var usage *types.Usage
-	var finishReason types.FinishReason
-	var id, model string
-
-	for _, chunk := range chunks {
-		if chunk.ID != "" {
-			id = chunk.ID
-		}
-		if chunk.Model != "" {
-			model = chunk.Model
-		}
-		if chunk.Text != "" {
-			text.WriteString(chunk.Text)
-		}
-		if chunk.FinishReason != nil {
-			finishReason = *chunk.FinishReason
-		}
-		// Keep the latest usage that actually carries token counts. An empty but
-		// non-nil Usage on a trailing chunk (some OpenAI-compatible proxies emit
-		// "usage":{}) must not clobber a good earlier value.
-		if chunk.Usage != nil && !chunk.Usage.IsZero() {
-			usage = chunk.Usage
-		}
-		if chunk.ToolCall != nil {
-			toolCalls = append(toolCalls, *chunk.ToolCall)
-		}
-		// Streaming providers accumulate fragmented tool calls and attach the
-		// assembled set to the terminal chunk's ToolCalls (plural). Fold those
-		// in too, otherwise streamed tool calls never reach the merged response.
-		if len(chunk.ToolCalls) > 0 {
-			toolCalls = append(toolCalls, chunk.ToolCalls...)
-		}
-	}
-
-	return &types.TextResponse{
-		ID:           id,
-		Model:        model,
-		Text:         text.String(),
-		ToolCalls:    toolCalls,
-		FinishReason: finishReason,
-		Usage:        usage,
-	}
-}
-
-// JSONStreamParser parses JSON responses from a stream
-type JSONStreamParser struct {
-	decoder *json.Decoder
-}
-
-// NewJSONStreamParser creates a new JSON stream parser
-func NewJSONStreamParser(r io.Reader) *JSONStreamParser {
-	return &JSONStreamParser{
-		decoder: json.NewDecoder(r),
-	}
-}
-
-// Parse reads and parses the next JSON object
-func (p *JSONStreamParser) Parse(v any) error {
-	return p.decoder.Decode(v)
 }

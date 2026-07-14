@@ -8,7 +8,7 @@ import (
 	"strings"
 
 	"github.com/garyblankenship/wormhole/pkg/providers"
-	transform "github.com/garyblankenship/wormhole/pkg/providers/transform"
+	transform "github.com/garyblankenship/wormhole/pkg/providers/transform" //nolint:staticcheck // Supported v1 implementation dependency; internalized in v2.
 	"github.com/garyblankenship/wormhole/pkg/types"
 )
 
