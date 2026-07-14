@@ -21,7 +21,7 @@ Wormhole now supports **native tool calling** (also known as function calling), 
 ```go
 import (
     "context"
-    "github.com/garyblankenship/wormhole/pkg/wormhole"
+    "github.com/garyblankenship/wormhole/v2"
 )
 
 client := wormhole.New(wormhole.WithOpenAI("your-api-key"))
@@ -531,4 +531,4 @@ for _, toolCall := range response.ToolCalls {
 
 - [Main README](../README.md) - Full Wormhole documentation
 - [Examples](../examples/tool_calling/) - Complete working examples
-- [Package Reference](https://pkg.go.dev/github.com/garyblankenship/wormhole/pkg/wormhole) - Exported API
+- [Package Reference](https://pkg.go.dev/github.com/garyblankenship/wormhole/v2) - Exported API

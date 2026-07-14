@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/garyblankenship/wormhole/pkg/types"
+	"github.com/garyblankenship/wormhole/v2/types"
 )
 
 // ChatCompletionRequest is the OpenAI-compatible chat completion request.

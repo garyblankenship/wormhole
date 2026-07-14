@@ -6,8 +6,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/garyblankenship/wormhole/pkg/types"
-	"github.com/garyblankenship/wormhole/pkg/wormhole"
+	"github.com/garyblankenship/wormhole/v2"
+	"github.com/garyblankenship/wormhole/v2/types"
 )
 
 const errModelNotFound = "model not found"

@@ -3,7 +3,7 @@ package testutil
 import (
 	"strings"
 
-	"github.com/garyblankenship/wormhole/pkg/types"
+	"github.com/garyblankenship/wormhole/v2/types"
 )
 
 // MergeTextChunks combines streamed chunks for test assertions.

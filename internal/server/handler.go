@@ -9,8 +9,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/garyblankenship/wormhole/pkg/types"
-	wormhole "github.com/garyblankenship/wormhole/pkg/wormhole"
+	wormhole "github.com/garyblankenship/wormhole/v2"
+	"github.com/garyblankenship/wormhole/v2/types"
 )
 
 const maxProxyRequestBodyBytes = 20 << 20

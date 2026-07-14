@@ -7,10 +7,11 @@ import (
 	"strings"
 	"testing"
 
-	wmtest "github.com/garyblankenship/wormhole/pkg/testing"
-	"github.com/garyblankenship/wormhole/pkg/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/garyblankenship/wormhole/v2/types"
+	wmtest "github.com/garyblankenship/wormhole/v2/wormholetest"
 )
 
 func TestProxyResponsesTextStream(t *testing.T) {

@@ -13,7 +13,7 @@ formatters:
   settings:
     goimports:
       local-prefixes:
-        - github.com/prism-php/prism-go
+        - github.com/garyblankenship/wormhole/v2
 
 linters:
   enable:
@@ -58,12 +58,12 @@ linters:
       - linters:
           - staticcheck
         text: "ST1000:"
-      - path: pkg/providers/transform/streaming\.go
+      - path: providers/internal/transform/streaming\.go
         linters:
           - gocyclo
-      - path: pkg/middleware/adapter\.go
+      - path: middleware/adapter\.go
         linters:
           - dupl
-      - path: pkg/middleware/typed_enhanced_metrics\.go
+      - path: middleware/typed_enhanced_metrics\.go
         linters:
           - dupl

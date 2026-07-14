@@ -9,11 +9,12 @@ import (
 	"net/http"
 	"testing"
 
-	wmtest "github.com/garyblankenship/wormhole/pkg/testing"
-	"github.com/garyblankenship/wormhole/pkg/types"
-	wormhole "github.com/garyblankenship/wormhole/pkg/wormhole"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	wormhole "github.com/garyblankenship/wormhole/v2"
+	"github.com/garyblankenship/wormhole/v2/types"
+	wmtest "github.com/garyblankenship/wormhole/v2/wormholetest"
 )
 
 // erroringTextProvider returns a configurable error from Text, used to verify

@@ -14,7 +14,7 @@ import (
     "fmt"
     "os"
 
-    "github.com/garyblankenship/wormhole/pkg/wormhole"
+    "github.com/garyblankenship/wormhole/v2"
 )
 
 func main() {
@@ -45,7 +45,7 @@ func main() {
 For more control, you can create the Anthropic provider directly:
 
 ```go
-import anthropic "github.com/garyblankenship/wormhole/pkg/providers/anthropic"
+import anthropic "github.com/garyblankenship/wormhole/v2/providers/anthropic"
 
 provider := anthropic.New(types.ProviderConfig{
     APIKey: os.Getenv("ANTHROPIC_API_KEY"),

@@ -14,9 +14,9 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/garyblankenship/wormhole/internal/server"
-	"github.com/garyblankenship/wormhole/pkg/types"
-	wormhole "github.com/garyblankenship/wormhole/pkg/wormhole"
+	wormhole "github.com/garyblankenship/wormhole/v2"
+	"github.com/garyblankenship/wormhole/v2/internal/server"
+	"github.com/garyblankenship/wormhole/v2/types"
 )
 
 var version = "dev"

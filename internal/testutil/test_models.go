@@ -3,7 +3,7 @@ package testutil
 import (
 	"testing"
 
-	"github.com/garyblankenship/wormhole/pkg/types"
+	"github.com/garyblankenship/wormhole/v2/types"
 )
 
 // SetupTestModels registers test models in the global model registry for testing

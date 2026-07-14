@@ -7,8 +7,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/garyblankenship/wormhole/pkg/types"
-	wormhole "github.com/garyblankenship/wormhole/pkg/wormhole"
+	wormhole "github.com/garyblankenship/wormhole/v2"
+	"github.com/garyblankenship/wormhole/v2/types"
 )
 
 type responsesRequest struct {

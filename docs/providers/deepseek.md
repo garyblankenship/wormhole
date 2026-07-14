@@ -16,8 +16,8 @@ import (
     "fmt"
     "os"
 
-    "github.com/garyblankenship/wormhole/pkg/types"
-    "github.com/garyblankenship/wormhole/pkg/wormhole"
+    "github.com/garyblankenship/wormhole/v2/types"
+    "github.com/garyblankenship/wormhole/v2"
 )
 
 func main() {

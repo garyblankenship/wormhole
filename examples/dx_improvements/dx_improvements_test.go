@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/garyblankenship/wormhole/pkg/middleware"
+	"github.com/garyblankenship/wormhole/v2/middleware"
 )
 
 func TestMiddlewareDiscovery(t *testing.T) {

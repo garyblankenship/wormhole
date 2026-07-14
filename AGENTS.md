@@ -159,11 +159,11 @@ Wormhole is a **provider bridge / gateway** — a unified façade over LLM provi
 ## Development Notes
 
 - Use `go build ./...` to verify changes
-- Run `go test ./pkg/wormhole/... -short` for quick validation
+- Run `go test . -short` for quick root-package validation
 - Model names in README.md examples should use current stable versions
 - Prefer aliases (e.g., `claude-sonnet-4-5`) over dated versions for examples
 - Proxy server lives in `internal/server/` (types, router, server, handler) + `cmd/wormhole/` (CLI)
 - Model prefix routing: `provider/model` in the request → strips prefix, routes to that provider; unprefixed → default provider
 - Zero new dependencies: proxy uses stdlib only (`net/http`, `encoding/json`, `log/slog`)
-- Agent builder lives in `pkg/wormhole/agent_builder.go` + `wormhole_agent.go` — scoped tool registry merges with global, agent tools override globals
+- Agent builder lives in `agent_builder.go` + `wormhole_agent.go` — scoped tool registry merges with global, agent tools override globals
 - `AgentAddTool` is a package-level generic function (Go disallows generic methods on structs)

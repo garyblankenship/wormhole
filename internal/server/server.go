@@ -11,7 +11,7 @@ import (
 	"strings"
 	"time"
 
-	wormhole "github.com/garyblankenship/wormhole/pkg/wormhole"
+	wormhole "github.com/garyblankenship/wormhole/v2"
 )
 
 // Config holds server configuration.

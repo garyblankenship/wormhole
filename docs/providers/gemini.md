@@ -14,7 +14,7 @@ import (
     "fmt"
     "os"
 
-    "github.com/garyblankenship/wormhole/pkg/wormhole"
+    "github.com/garyblankenship/wormhole/v2"
 )
 
 func main() {
@@ -45,7 +45,7 @@ func main() {
 For more control, you can create the Gemini provider directly:
 
 ```go
-import "github.com/garyblankenship/wormhole/pkg/providers/gemini"
+import "github.com/garyblankenship/wormhole/v2/providers/gemini"
 
 provider := gemini.New(os.Getenv("GEMINI_API_KEY"), types.ProviderConfig{
     // BaseURL is optional; defaults to https://generativelanguage.googleapis.com/v1beta
@@ -157,7 +157,7 @@ img, err := client.Image().
 ```
 
 Reference images are sent as inline Gemini `inlineData` parts. Import
-`github.com/garyblankenship/wormhole/pkg/providers/gemini` for the image input
+`github.com/garyblankenship/wormhole/v2/providers/gemini` for the image input
 type:
 
 ```go

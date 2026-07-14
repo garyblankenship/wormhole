@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/garyblankenship/wormhole/pkg/wormhole"
+	"github.com/garyblankenship/wormhole/v2"
 )
 
 func main() {

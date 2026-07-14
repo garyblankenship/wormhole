@@ -4,7 +4,7 @@ Use Wormhole 1.24.0 or newer to give Codex's Responses API client a local
 bridge to the Z.AI GLM Coding Plan API.
 
 ```bash
-go install github.com/garyblankenship/wormhole/cmd/wormhole@latest
+go install github.com/garyblankenship/wormhole/v2/cmd/wormhole@latest
 export ZAI_API_KEY="your-zai-api-key"
 export WORMHOLE_API_KEY="YOUR_API_KEY"
 wormhole serve --default-provider zai

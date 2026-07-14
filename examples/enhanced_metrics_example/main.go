@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/garyblankenship/wormhole/pkg/middleware"
-	"github.com/garyblankenship/wormhole/pkg/types"
+	"github.com/garyblankenship/wormhole/v2/middleware"
+	"github.com/garyblankenship/wormhole/v2/types"
 )
 
 func main() {

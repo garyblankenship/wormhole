@@ -8,7 +8,7 @@ import (
 	"os"
 	"sort"
 
-	"github.com/garyblankenship/wormhole/pkg/wormhole"
+	"github.com/garyblankenship/wormhole/v2"
 )
 
 // Document represents a searchable document with its embedding

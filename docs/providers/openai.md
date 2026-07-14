@@ -8,7 +8,7 @@ import (
     "fmt"
     "os"
 
-    "github.com/garyblankenship/wormhole/pkg/wormhole"
+    "github.com/garyblankenship/wormhole/v2"
 )
 
 func main() {
@@ -40,7 +40,7 @@ import (
     "fmt"
     "os"
 
-    "github.com/garyblankenship/wormhole/pkg/wormhole"
+    "github.com/garyblankenship/wormhole/v2"
 )
 
 func main() {
@@ -108,10 +108,10 @@ implement `/responses`.
 
 | Field | Type | Default | Source |
 | --- | --- | --- | --- |
-| `BaseURL` | `string` | `https://api.openai.com/v1` | `pkg/providers/openai/openai.go` |
-| `ChatPath` | `string` | `/chat/completions` | `pkg/providers/openai/openai.go` |
-| `UseResponsesAPI` | `bool` | `false` | `pkg/types/provider.go` |
-| `ResponsesPath` | `string` | `/responses` | `pkg/providers/openai/openai.go` |
+| `BaseURL` | `string` | `https://api.openai.com/v1` | `providers/openai/openai.go` |
+| `ChatPath` | `string` | `/chat/completions` | `providers/openai/openai.go` |
+| `UseResponsesAPI` | `bool` | `false` | `types/provider.go` |
+| `ResponsesPath` | `string` | `/responses` | `providers/openai/openai.go` |
 
 Configure the Responses path only when you are targeting a compatible proxy:
 

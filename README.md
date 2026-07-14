@@ -23,13 +23,13 @@ realtime APIs, use the provider SDKs or REST APIs directly.
 [![Go](https://img.shields.io/badge/Go-1.23+-blue.svg)](https://golang.org)
 [![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-Planning a v2 upgrade? See the [v2 migration guide](docs/v2-migration.md) for
-the final import mapping and removed implementation packages.
+Upgrading from v1? See the [v2 migration guide](docs/v2-migration.md) for the
+import mapping and removed implementation packages.
 
 ## Open A Portal
 
 ```bash
-go get github.com/garyblankenship/wormhole@latest
+go get github.com/garyblankenship/wormhole/v2@latest
 ```
 
 ```go
@@ -40,7 +40,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/garyblankenship/wormhole/pkg/wormhole"
+	"github.com/garyblankenship/wormhole/v2"
 )
 
 func main() {
@@ -660,7 +660,7 @@ client := wormhole.New(
 )
 ```
 
-Custom providers can use `pkg/testing` conformance checks to verify the public
+Custom providers can use `wormholetest` conformance checks to verify the public
 provider contract:
 
 ```go
@@ -677,7 +677,7 @@ Use the mock provider to test application logic without network calls. Burning
 real tokens to unit-test branching logic is not science; it is a billing event.
 
 ```go
-import wmtest "github.com/garyblankenship/wormhole/pkg/testing"
+import wmtest "github.com/garyblankenship/wormhole/v2/wormholetest"
 
 func TestSummarize(t *testing.T) {
 	mock := wmtest.NewMockProvider("openai").
@@ -716,7 +716,7 @@ Benchmarks:
 
 ```bash
 make bench
-go test -bench=. -benchmem ./pkg/wormhole
+go test -bench=. -benchmem .
 ```
 
 ## Security: Do Not Lick The Glowing Cable

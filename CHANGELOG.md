@@ -1,12 +1,13 @@
 # Changelog
 
-## v1.27.0 (2026-07-14)
+## v2.0.0 (Unreleased)
+
+### Breaking changes
+- Prepare the v2 module and package-layout migration; see the [v2 migration guide](docs/v2-migration.md) for import mappings and removed implementation packages.
 
 ### Other
-- Move provider stream, retry, multipart, JSON, and discovery cache-path helpers out of the internal utility package and into their owning packages without changing runtime behavior.
-- Add characterization coverage for streaming edge cases, HTTP retry and key-rotation policy, multipart formatting, provider JSON parsing, and discovery cache paths.
-- Deprecate the v1 adapter and implementation-only validation/transform packages ahead of their documented v2 removal or internalization.
-- Add the [v2 migration guide](docs/v2-migration.md) with final import mappings and package-removal policy.
+- Move provider stream, retry, multipart, JSON, and discovery cache-path helpers to the packages that own them.
+- Deprecate the v1 adapter and implementation-only packages scheduled for removal or internalization in v2.
 
 ## v1.26.0 (2026-07-13)
 

@@ -214,4 +214,4 @@ User: "What's the weather in the city where it's 3pm right now?"
 ## See Also
 
 - [Main README](../../README.md) - Full Wormhole documentation
-- [Package Reference](https://pkg.go.dev/github.com/garyblankenship/wormhole/pkg/wormhole) - Exported API
+- [Package Reference](https://pkg.go.dev/github.com/garyblankenship/wormhole/v2) - Exported API

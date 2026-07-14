@@ -26,7 +26,7 @@ test-live:
 # Run tests with coverage report
 test-coverage:
 	@echo "Running tests with coverage..."
-	@go test -v ./pkg/... ./internal/... -coverprofile=coverage.out
+	@go test -v ./... -coverprofile=coverage.out
 	@go tool cover -html=coverage.out -o coverage.html
 	@echo "Coverage report generated: coverage.html"
 
@@ -67,19 +67,19 @@ update-deps:
 # Run performance benchmarks
 bench:
 	@echo "Running performance benchmarks..."
-	@go test -bench=. -benchmem ./pkg/wormhole/ -run="^$$"
+	@go test -bench=. -benchmem . -run="^$$"
 
 # Run comprehensive benchmarks with profiling
 bench-profile:
 	@echo "Running benchmarks with CPU and memory profiling..."
-	@go test -bench=. -benchmem -cpuprofile=cpu.prof -memprofile=mem.prof ./pkg/wormhole/ -run="^$$"
+	@go test -bench=. -benchmem -cpuprofile=cpu.prof -memprofile=mem.prof . -run="^$$"
 	@echo "Profiles generated: cpu.prof, mem.prof"
 	@echo "Analyze with: go tool pprof cpu.prof"
 
 # Prepare release (requires version argument)
 prepare-release:
 	@if [ -z "$(VERSION)" ]; then \
-		echo "Usage: make prepare-release VERSION=v1.0.0"; \
+		echo "Usage: make prepare-release VERSION=v2.0.0"; \
 		exit 1; \
 	fi
 	@echo "Preparing release $(VERSION)..."
@@ -138,7 +138,7 @@ security:
 # Performance regression test
 perf-test:
 	@echo "Running performance regression tests..."
-	@go test -bench=BenchmarkTextRequestBuilder -count=5 ./pkg/wormhole/ | tee bench.txt
+	@go test -bench=BenchmarkTextRequestBuilder -count=5 . | tee bench.txt
 	@echo "Performance results saved to bench.txt"
 
 # Help
@@ -166,7 +166,7 @@ help:
 	@echo "    make perf-test     - Performance regression test"
 	@echo ""
 	@echo "  🚀 Release"
-	@echo "    make prepare-release VERSION=v1.0.0 - Prepare release"
+	@echo "    make prepare-release VERSION=v2.0.0 - Prepare release"
 	@echo "    make release       - Create GitHub release"
 	@echo "    make release-check - Validate release config"
 	@echo "    make release-snapshot - Create test release"

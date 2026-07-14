@@ -144,7 +144,7 @@ if errors.As(err, &validErr) {
 Use built-in type-checking helpers:
 
 ```go
-import "github.com/garyblankenship/wormhole/pkg/types"
+import "github.com/garyblankenship/wormhole/v2/types"
 
 if types.IsAuthError(err) {
     // Handle authentication failures
@@ -172,7 +172,7 @@ if types.IsMiddlewareError(err) {
 Check for specific error instances:
 
 ```go
-import "github.com/garyblankenship/wormhole/pkg/types"
+import "github.com/garyblankenship/wormhole/v2/types"
 
 if errors.Is(err, types.ErrInvalidAPIKey) {
     // Prompt for new API key
@@ -199,7 +199,7 @@ err := fmt.Errorf("operation failed: %w", originalErr)
 ### Wormhole Error Wrapping
 
 ```go
-import "github.com/garyblankenship/wormhole/pkg/types"
+import "github.com/garyblankenship/wormhole/v2/types"
 
 // Create a classified WormholeError while preserving the cause
 err := types.WrapError(types.ErrorCodeAuth, "authentication failed", false, originalErr)
@@ -307,7 +307,7 @@ config := &middleware.RetryConfig{
 Get suggested retry delay from error:
 
 ```go
-import "github.com/garyblankenship/wormhole/pkg/types"
+import "github.com/garyblankenship/wormhole/v2/types"
 
 // GetRetryAfter returns a suggested delay, or 0 when the error is not retryable.
 // It prefers a provider-supplied hint when present, then falls back to
@@ -362,7 +362,7 @@ provider config when one provider needs different behavior.
 Use predefined errors for common cases:
 
 ```go
-import "github.com/garyblankenship/wormhole/pkg/types"
+import "github.com/garyblankenship/wormhole/v2/types"
 
 var (
     ErrInvalidAPIKey    = types.ErrInvalidAPIKey
@@ -379,7 +379,7 @@ var (
 Convert HTTP status codes to WormholeErrors:
 
 ```go
-import "github.com/garyblankenship/wormhole/pkg/types"
+import "github.com/garyblankenship/wormhole/v2/types"
 
 statusCode := 429
 err := types.HTTPStatusToError(statusCode, responseBody)
@@ -389,7 +389,7 @@ err := types.HTTPStatusToError(statusCode, responseBody)
 ### Custom Error Creation
 
 ```go
-import "github.com/garyblankenship/wormhole/pkg/types"
+import "github.com/garyblankenship/wormhole/v2/types"
 
 // Simple error
 err := types.NewWormholeError(

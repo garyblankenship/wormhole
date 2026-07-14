@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"log"
 
-	"github.com/garyblankenship/wormhole/pkg/types"
-	"github.com/garyblankenship/wormhole/pkg/wormhole"
+	"github.com/garyblankenship/wormhole/v2"
+	"github.com/garyblankenship/wormhole/v2/types"
 )
 
 func main() {

@@ -74,7 +74,7 @@ release:
   footer: |
     ## 📦 Installation
     ```bash
-    go get github.com/garyblankenship/wormhole@{{ .Tag }}
+    go get github.com/garyblankenship/wormhole/v2@{{ .Tag }}
     ```
     
     ## 🚀 Quick Start
@@ -91,7 +91,7 @@ release:
     ```
     
     ## 📚 Resources
-    - [📖 **Documentation**](https://pkg.go.dev/github.com/garyblankenship/wormhole@{{ .Tag }})
+    - [📖 **Documentation**](https://pkg.go.dev/github.com/garyblankenship/wormhole/v2@{{ .Tag }})
     - [🚀 **Examples**](https://github.com/garyblankenship/wormhole/tree/{{ .Tag }}/examples)
     - [📋 **Changelog**](https://github.com/garyblankenship/wormhole/blob/{{ .Tag }}/CHANGELOG.md)
     

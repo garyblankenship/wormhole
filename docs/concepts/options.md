@@ -97,9 +97,9 @@ Responses-specific provider options:
 
 | Option | Type | Default | Source | Effect |
 |--------|------|---------|--------|--------|
-| `UseResponsesAPI` | `bool` | `false` | `pkg/types/provider.go` | Route OpenAI `Text()` and `Stream()` through `/responses` |
-| `ResponsesPath` | `string` | `/responses` | `pkg/providers/openai/openai.go` | Override the path appended to `BaseURL` |
-| `ChatPath` | `string` | `/chat/completions` | `pkg/providers/openai/openai.go` | Override the Chat Completions path when Responses mode is off |
+| `UseResponsesAPI` | `bool` | `false` | `types/provider.go` | Route OpenAI `Text()` and `Stream()` through `/responses` |
+| `ResponsesPath` | `string` | `/responses` | `providers/openai/openai.go` | Override the path appended to `BaseURL` |
+| `ChatPath` | `string` | `/chat/completions` | `providers/openai/openai.go` | Override the Chat Completions path when Responses mode is off |
 
 Use `ProviderOptions()` on a text request for advanced Responses fields that do
 not have first-class builder methods:
@@ -337,7 +337,7 @@ client := wormhole.New(
 Add type-safe middleware to the execution chain:
 
 ```go
-import "github.com/garyblankenship/wormhole/pkg/middleware"
+import "github.com/garyblankenship/wormhole/v2/middleware"
 
 client := wormhole.New(
     wormhole.WithOpenAI(apiKey),
@@ -367,7 +367,7 @@ client := wormhole.New(
 Configure dynamic model discovery:
 
 ```go
-import "github.com/garyblankenship/wormhole/pkg/discovery"
+import "github.com/garyblankenship/wormhole/v2/discovery"
 
 client := wormhole.New(
     wormhole.WithOpenAI(apiKey),
