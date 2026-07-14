@@ -1,6 +1,6 @@
 # Changelog
 
-## v2.0.0 (Unreleased)
+## v2.0.0 (2026-07-14)
 
 ### Breaking changes
 - Prepare the v2 module and package-layout migration; see the [v2 migration guide](docs/v2-migration.md) for import mappings and removed implementation packages.
