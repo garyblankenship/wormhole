@@ -42,6 +42,20 @@ func convertUsage(meta *usageMetadata) *types.Usage {
 	}
 }
 
+func (g *Gemini) noCandidatesError(response *geminiTextResponse) error {
+	if reason := promptBlockReason(response); reason != "" {
+		return g.ProviderErrorf("prompt blocked: %s", reason)
+	}
+	return g.ProviderError("no candidates in response")
+}
+
+func promptBlockReason(response *geminiTextResponse) string {
+	if response.PromptFeedback == nil {
+		return ""
+	}
+	return strings.TrimSpace(response.PromptFeedback.BlockReason)
+}
+
 // transformMessages converts types.Message to Gemini format. The model name is
 // threaded through so the replay path can apply Gemini-3-specific thoughtSignature
 // handling (see transformMessageToParts).
@@ -549,7 +563,7 @@ func (g *Gemini) transformTextResponse(response *geminiTextResponse) (*types.Tex
 	}
 
 	if len(response.Candidates) == 0 {
-		return nil, g.ProviderError("no candidates in response")
+		return nil, g.noCandidatesError(response)
 	}
 
 	candidate := response.Candidates[0]
@@ -613,7 +627,7 @@ func (g *Gemini) transformStructuredResponse(response *geminiTextResponse, schem
 	}
 
 	if len(response.Candidates) == 0 {
-		return nil, g.ProviderError("no candidates in response")
+		return nil, g.noCandidatesError(response)
 	}
 
 	candidate := response.Candidates[0]
@@ -682,7 +696,7 @@ func (g *Gemini) transformImagesResponse(response *geminiTextResponse, model str
 	}
 
 	if len(response.Candidates) == 0 {
-		return nil, g.ProviderError("no candidates in response")
+		return nil, g.noCandidatesError(response)
 	}
 
 	var text strings.Builder
@@ -782,6 +796,9 @@ func (g *Gemini) parseStreamEvent(data string) ([]types.TextChunk, bool, error) 
 		return nil, false, g.ProviderError(response.Error.Message)
 	}
 	if len(response.Candidates) == 0 {
+		if promptBlockReason(&response) != "" {
+			return nil, false, g.noCandidatesError(&response)
+		}
 		return nil, false, nil
 	}
 

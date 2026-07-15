@@ -163,6 +163,62 @@ func TestTransformTextResponse_SyntheticToolCallIDs(t *testing.T) {
 	assert.NotEqual(t, out.ToolCalls[0].ID, out.ToolCalls[1].ID)
 }
 
+func TestTransformResponses_SurfacePromptBlockReason(t *testing.T) {
+	t.Parallel()
+
+	provider := New("test-key", types.ProviderConfig{})
+	response := &geminiTextResponse{
+		PromptFeedback: &promptFeedback{BlockReason: "SAFETY"},
+	}
+
+	tests := []struct {
+		name      string
+		transform func() error
+	}{
+		{
+			name: "text",
+			transform: func() error {
+				_, err := provider.transformTextResponse(response)
+				return err
+			},
+		},
+		{
+			name: "structured",
+			transform: func() error {
+				_, err := provider.transformStructuredResponse(response, nil)
+				return err
+			},
+		},
+		{
+			name: "images",
+			transform: func() error {
+				_, err := provider.transformImagesResponse(response, "gemini-test")
+				return err
+			},
+		},
+		{
+			name: "stream",
+			transform: func() error {
+				_, _, err := provider.parseStreamEvent(`{"promptFeedback":{"blockReason":"SAFETY"}}`)
+				return err
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := tt.transform()
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), "SAFETY")
+			assert.NotContains(t, err.Error(), "no candidates")
+			providerErr, ok := types.AsWormholeError(err)
+			require.True(t, ok)
+			assert.Equal(t, types.ErrorCodeProvider, providerErr.Code)
+			assert.Equal(t, "gemini", providerErr.Provider)
+		})
+	}
+}
+
 func TestProcessStreamCandidate_SyntheticToolCallIDs(t *testing.T) {
 	t.Parallel()
 
