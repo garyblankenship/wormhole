@@ -22,6 +22,10 @@ func TestTextRequestBuilderConfiguration(t *testing.T) {
 		SystemPrompt("system").
 		Temperature(0.5).
 		TopP(0.9).
+		FrequencyPenalty(0.4).
+		PresencePenalty(-0.3).
+		Seed(42).
+		ParallelToolCalls(false).
 		MaxTokens(128).
 		Stop("END").
 		Tools(tool).
@@ -40,6 +44,9 @@ func TestTextRequestBuilderConfiguration(t *testing.T) {
 	}
 	if builder.request.SystemPrompt != "system" || *builder.request.Temperature != 0.5 || *builder.request.TopP != 0.9 {
 		t.Fatalf("sampling config = %#v", builder.request)
+	}
+	if *builder.request.FrequencyPenalty != 0.4 || *builder.request.PresencePenalty != -0.3 || *builder.request.Seed != 42 || *builder.request.ParallelToolCalls {
+		t.Fatalf("extended sampling config = %#v", builder.request.BaseRequest)
 	}
 	if *builder.request.MaxTokens != 128 || builder.request.Stop[0] != "END" {
 		t.Fatalf("limit config = %#v", builder.request)

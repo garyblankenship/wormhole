@@ -2,16 +2,17 @@ package types
 
 // BaseRequest contains common request fields
 type BaseRequest struct {
-	Model            string         `json:"model"`
-	Temperature      *float32       `json:"temperature,omitempty"`
-	TopP             *float32       `json:"top_p,omitempty"`
-	MaxTokens        *int           `json:"max_tokens,omitempty"`
-	Stop             []string       `json:"stop,omitempty"`
-	PresencePenalty  *float32       `json:"presence_penalty,omitempty"`
-	FrequencyPenalty *float32       `json:"frequency_penalty,omitempty"`
-	Seed             *int           `json:"seed,omitempty"`
-	ProviderOptions  map[string]any `json:"-"`
-	Reasoning        *Reasoning     `json:"reasoning,omitempty"`
+	Model             string         `json:"model"`
+	Temperature       *float32       `json:"temperature,omitempty"`
+	TopP              *float32       `json:"top_p,omitempty"`
+	MaxTokens         *int           `json:"max_tokens,omitempty"`
+	Stop              []string       `json:"stop,omitempty"`
+	PresencePenalty   *float32       `json:"presence_penalty,omitempty"`
+	FrequencyPenalty  *float32       `json:"frequency_penalty,omitempty"`
+	Seed              *int           `json:"seed,omitempty"`
+	ParallelToolCalls *bool          `json:"parallel_tool_calls,omitempty"`
+	ProviderOptions   map[string]any `json:"-"`
+	Reasoning         *Reasoning     `json:"reasoning,omitempty"`
 }
 
 // GetProviderOptions returns the provider-specific options. It exists so cache
@@ -70,11 +71,21 @@ const (
 
 // EmbeddingsRequest represents an embeddings request
 type EmbeddingsRequest struct {
-	Model           string         `json:"model"`
-	Input           []string       `json:"input"`
-	Dimensions      *int           `json:"dimensions,omitempty"`
-	ProviderOptions map[string]any `json:"-"`
+	Model           string                  `json:"model"`
+	Input           []string                `json:"input"`
+	Dimensions      *int                    `json:"dimensions,omitempty"`
+	EncodingFormat  EmbeddingEncodingFormat `json:"encoding_format,omitempty"`
+	ProviderOptions map[string]any          `json:"-"`
 }
+
+// EmbeddingEncodingFormat controls how embedding vectors are represented in
+// the normalized response.
+type EmbeddingEncodingFormat string
+
+const (
+	EmbeddingEncodingFloat  EmbeddingEncodingFormat = "float"
+	EmbeddingEncodingBase64 EmbeddingEncodingFormat = "base64"
+)
 
 // RerankRequest reranks documents by relevance to a query.
 type RerankRequest struct {

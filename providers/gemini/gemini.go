@@ -307,6 +307,9 @@ func (g *Gemini) addImageConfig(generationConfig map[string]any, options map[str
 
 // buildTextPayload builds the request payload for text generation
 func (g *Gemini) buildTextPayload(request types.TextRequest) (map[string]any, error) {
+	if request.ParallelToolCalls != nil {
+		return nil, g.ValidationError("parallel_tool_calls is not supported by Gemini")
+	}
 	prepared, _, prepareErr := providers.PrepareMessages(request.Messages)
 	if prepareErr != nil {
 		return nil, prepareErr
@@ -346,6 +349,15 @@ func (g *Gemini) buildTextPayload(request types.TextRequest) (map[string]any, er
 	}
 	if stop, ok := stdConfig["stop"]; ok {
 		generationConfig["stopSequences"] = stop
+	}
+	if request.FrequencyPenalty != nil {
+		generationConfig["frequencyPenalty"] = *request.FrequencyPenalty
+	}
+	if request.PresencePenalty != nil {
+		generationConfig["presencePenalty"] = *request.PresencePenalty
+	}
+	if request.Seed != nil {
+		generationConfig["seed"] = *request.Seed
 	}
 	if thinking := geminiThinkingConfig(request.Reasoning); len(thinking) > 0 {
 		generationConfig["thinkingConfig"] = thinking

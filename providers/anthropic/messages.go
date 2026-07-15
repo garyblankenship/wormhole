@@ -59,8 +59,18 @@ func (p *Provider) buildMessagePayload(request *types.TextRequest) map[string]an
 	// Tools
 	if len(request.Tools) > 0 {
 		payload["tools"] = p.transformTools(request.Tools)
+		var toolChoice map[string]any
 		if request.ToolChoice != nil {
-			payload["tool_choice"] = p.transformToolChoice(request.ToolChoice)
+			toolChoice = p.transformToolChoice(request.ToolChoice)
+		}
+		if request.ParallelToolCalls != nil && (request.ToolChoice == nil || request.ToolChoice.Type != types.ToolChoiceTypeNone) {
+			if toolChoice == nil {
+				toolChoice = map[string]any{"type": "auto"}
+			}
+			toolChoice["disable_parallel_tool_use"] = !*request.ParallelToolCalls
+		}
+		if toolChoice != nil {
+			payload["tool_choice"] = toolChoice
 		}
 	}
 

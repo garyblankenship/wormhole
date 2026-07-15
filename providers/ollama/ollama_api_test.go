@@ -234,16 +234,16 @@ func TestTransformHelpers(t *testing.T) {
 	topP := float32(0.8)
 	req := &types.TextRequest{
 		BaseRequest: types.BaseRequest{
-			Model:     "llama3",
-			MaxTokens: &maxTokens,
-			TopP:      &topP,
-			Stop:      []string{"stop"},
-			Seed:      &seed,
+			Model:            "llama3",
+			MaxTokens:        &maxTokens,
+			TopP:             &topP,
+			Stop:             []string{"stop"},
+			Seed:             &seed,
+			PresencePenalty:  &presencePenalty,
+			FrequencyPenalty: &frequencyPenalty,
 			ProviderOptions: map[string]any{
-				"top_k":             topK,
-				"repeat_penalty":    repeatPenalty,
-				"presence_penalty":  presencePenalty,
-				"frequency_penalty": frequencyPenalty,
+				"top_k":          topK,
+				"repeat_penalty": repeatPenalty,
 			},
 		},
 		Messages: []types.Message{

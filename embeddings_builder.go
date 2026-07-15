@@ -2,7 +2,10 @@ package wormhole
 
 import (
 	"context"
+	"encoding/base64"
+	"encoding/binary"
 	"fmt"
+	"math"
 	"time"
 
 	"github.com/garyblankenship/wormhole/v2/types"
@@ -56,6 +59,13 @@ func (b *EmbeddingsRequestBuilder) AddInput(input string) *EmbeddingsRequestBuil
 // Returns the builder for chaining. Validation errors are returned by Generate().
 func (b *EmbeddingsRequestBuilder) Dimensions(dims int) *EmbeddingsRequestBuilder {
 	b.request.Dimensions = &dims
+	return b
+}
+
+// EncodingFormat controls whether returned embeddings are numeric vectors or
+// OpenAI-compatible base64 strings containing little-endian float32 values.
+func (b *EmbeddingsRequestBuilder) EncodingFormat(format types.EmbeddingEncodingFormat) *EmbeddingsRequestBuilder {
+	b.request.EncodingFormat = format
 	return b
 }
 
@@ -114,6 +124,9 @@ func (b *EmbeddingsRequestBuilder) Validate() error {
 	if b.request.Dimensions != nil && *b.request.Dimensions <= 0 {
 		errs.Add("dimensions", "positive", *b.request.Dimensions, "must be a positive integer")
 	}
+	if format := b.request.EncodingFormat; !validEmbeddingEncodingFormat(format) {
+		errs.Add("encoding_format", "enum", format, "must be float or base64")
+	}
 
 	return errs.Error()
 }
@@ -146,10 +159,17 @@ func (b *EmbeddingsRequestBuilder) Generate(ctx context.Context) (*types.Embeddi
 	if request.Model == "" {
 		return nil, types.NewValidationError("model", "required", nil, "no model specified")
 	}
+	if !validEmbeddingEncodingFormat(request.EncodingFormat) {
+		return nil, types.NewValidationError("encoding_format", "enum", request.EncodingFormat, "must be float or base64")
+	}
 
-	return executeTrackedRequest(ctx, b.getWormhole(), b.idempotencyScope("embeddings.generate"), request, func(ctx context.Context) (*types.EmbeddingsResponse, error) {
+	response, err := executeTrackedRequest(ctx, b.getWormhole(), b.idempotencyScope("embeddings.generate"), request, func(ctx context.Context) (*types.EmbeddingsResponse, error) {
 		return b.executeEmbeddings(ctx, request)
 	})
+	if err != nil {
+		return nil, err
+	}
+	return encodeEmbeddingsResponse(response, request.EncodingFormat), nil
 }
 
 // GenerateBatched executes the embeddings request in sub-batches and returns
@@ -176,8 +196,11 @@ func (b *EmbeddingsRequestBuilder) GenerateBatched(ctx context.Context, batchSiz
 	if batchSize <= 0 {
 		return nil, types.NewValidationError("batch_size", "positive", batchSize, "must be a positive integer")
 	}
+	if !validEmbeddingEncodingFormat(request.EncodingFormat) {
+		return nil, types.NewValidationError("encoding_format", "enum", request.EncodingFormat, "must be float or base64")
+	}
 
-	return executeTrackedRequest(ctx, b.getWormhole(), b.idempotencyScope("embeddings.generate_batched"), request, func(ctx context.Context) (*types.EmbeddingsResponse, error) {
+	response, err := executeTrackedRequest(ctx, b.getWormhole(), b.idempotencyScope("embeddings.generate_batched"), request, func(ctx context.Context) (*types.EmbeddingsResponse, error) {
 		out := make([]types.Embedding, len(request.Input))
 		var combined *types.EmbeddingsResponse
 		var usage *types.Usage
@@ -215,6 +238,32 @@ func (b *EmbeddingsRequestBuilder) GenerateBatched(ctx context.Context, batchSiz
 		combined.Usage = usage
 		return combined, nil
 	})
+	if err != nil {
+		return nil, err
+	}
+	return encodeEmbeddingsResponse(response, request.EncodingFormat), nil
+}
+
+func encodeEmbeddingsResponse(response *types.EmbeddingsResponse, format types.EmbeddingEncodingFormat) *types.EmbeddingsResponse {
+	if response == nil || format != types.EmbeddingEncodingBase64 {
+		return response
+	}
+	for i := range response.Embeddings {
+		if response.Embeddings[i].Base64 == "" {
+			vector := response.Embeddings[i].Embedding
+			encoded := make([]byte, len(vector)*4)
+			for j, value := range vector {
+				binary.LittleEndian.PutUint32(encoded[j*4:], math.Float32bits(float32(value)))
+			}
+			response.Embeddings[i].Base64 = base64.StdEncoding.EncodeToString(encoded)
+		}
+		response.Embeddings[i].Embedding = nil
+	}
+	return response
+}
+
+func validEmbeddingEncodingFormat(format types.EmbeddingEncodingFormat) bool {
+	return format == "" || format == types.EmbeddingEncodingFloat || format == types.EmbeddingEncodingBase64
 }
 
 func (b *EmbeddingsRequestBuilder) executeEmbeddings(ctx context.Context, request *types.EmbeddingsRequest) (*types.EmbeddingsResponse, error) {
@@ -298,7 +347,8 @@ func cloneEmbeddingsRequest(src *types.EmbeddingsRequest) *types.EmbeddingsReque
 	}
 
 	cloned := &types.EmbeddingsRequest{
-		Model: src.Model,
+		Model:          src.Model,
+		EncodingFormat: src.EncodingFormat,
 	}
 	if src.Dimensions != nil {
 		dimensions := *src.Dimensions

@@ -195,6 +195,33 @@ func (b *TextRequestBuilder) TopP(topP float32) *TextRequestBuilder {
 	return b
 }
 
+// FrequencyPenalty adjusts how strongly repeated tokens are penalized.
+// Supported range is -2.0 to 2.0.
+func (b *TextRequestBuilder) FrequencyPenalty(penalty float32) *TextRequestBuilder {
+	b.request.FrequencyPenalty = &penalty
+	return b
+}
+
+// PresencePenalty adjusts how strongly tokens already present are penalized.
+// Supported range is -2.0 to 2.0.
+func (b *TextRequestBuilder) PresencePenalty(penalty float32) *TextRequestBuilder {
+	b.request.PresencePenalty = &penalty
+	return b
+}
+
+// Seed requests deterministic sampling from providers that support it.
+func (b *TextRequestBuilder) Seed(seed int) *TextRequestBuilder {
+	b.request.Seed = &seed
+	return b
+}
+
+// ParallelToolCalls controls whether a provider may emit multiple tool calls
+// in one model turn.
+func (b *TextRequestBuilder) ParallelToolCalls(enabled bool) *TextRequestBuilder {
+	b.request.ParallelToolCalls = &enabled
+	return b
+}
+
 // Reasoning sets provider-neutral reasoning controls for models that support
 // thinking or effort parameters. ProviderOptions can still override provider
 // wire fields for advanced use.

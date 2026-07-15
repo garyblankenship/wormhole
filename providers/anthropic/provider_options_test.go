@@ -49,3 +49,42 @@ func TestTypedReasoningMergedIntoMessagePayload(t *testing.T) {
 		t.Fatalf("thinking = %#v", thinking)
 	}
 }
+
+func TestParallelToolCallsMapsToAnthropicToolChoice(t *testing.T) {
+	t.Parallel()
+	provider := New(types.NewProviderConfig("key"))
+	parallel := false
+	payload := provider.buildMessagePayload(&types.TextRequest{
+		BaseRequest: types.BaseRequest{Model: "claude-test", ParallelToolCalls: &parallel},
+		Messages:    []types.Message{types.NewUserMessage("hi")},
+		Tools:       []types.Tool{{Name: "lookup", InputSchema: map[string]any{"type": "object"}}},
+	})
+	choice, ok := payload["tool_choice"].(map[string]any)
+	if !ok || choice["type"] != "auto" || choice["disable_parallel_tool_use"] != true {
+		t.Fatalf("tool_choice = %#v", payload["tool_choice"])
+	}
+
+	frequency := float32(0.1)
+	if err := provider.validateSamplingControls(types.TextRequest{BaseRequest: types.BaseRequest{FrequencyPenalty: &frequency}}); err == nil {
+		t.Fatal("Anthropic accepted unsupported frequency_penalty")
+	}
+
+	none := &types.ToolChoice{Type: types.ToolChoiceTypeNone}
+	request := types.TextRequest{
+		BaseRequest: types.BaseRequest{Model: "claude-test", ParallelToolCalls: &parallel},
+		Messages:    []types.Message{types.NewUserMessage("hi")},
+		Tools:       []types.Tool{{Name: "lookup", InputSchema: map[string]any{"type": "object"}}},
+		ToolChoice:  none,
+	}
+	if err := provider.validateSamplingControls(request); err == nil {
+		t.Fatal("Anthropic accepted parallel_tool_calls with tool_choice none")
+	}
+	payload = provider.buildMessagePayload(&request)
+	choice = payload["tool_choice"].(map[string]any)
+	if choice["type"] != "none" {
+		t.Fatalf("tool_choice type = %v, want none", choice["type"])
+	}
+	if _, ok := choice["disable_parallel_tool_use"]; ok {
+		t.Fatalf("tool_choice contains invalid disable_parallel_tool_use: %#v", choice)
+	}
+}

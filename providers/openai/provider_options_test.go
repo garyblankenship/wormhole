@@ -28,6 +28,38 @@ func TestProviderOptionsMergedIntoChatPayload(t *testing.T) {
 	}
 }
 
+func TestTypedSamplingControlsReachOpenAIPayloads(t *testing.T) {
+	t.Parallel()
+	frequency := float32(0.4)
+	presence := float32(-0.3)
+	seed := 42
+	parallel := false
+	provider := New(types.NewProviderConfig("key"))
+	request := &types.TextRequest{
+		BaseRequest: types.BaseRequest{
+			Model:             "gpt-test",
+			FrequencyPenalty:  &frequency,
+			PresencePenalty:   &presence,
+			Seed:              &seed,
+			ParallelToolCalls: &parallel,
+		},
+		Messages: []types.Message{types.NewUserMessage("hi")},
+	}
+
+	chat := provider.buildChatPayload(request)
+	if chat["frequency_penalty"] != frequency || chat["presence_penalty"] != presence || chat["seed"] != seed || chat["parallel_tool_calls"] != parallel {
+		t.Fatalf("chat sampling controls = %#v", chat)
+	}
+
+	responses := provider.buildResponsesPayload(request)
+	if responses["parallel_tool_calls"] != parallel {
+		t.Fatalf("responses parallel_tool_calls = %v, want false", responses["parallel_tool_calls"])
+	}
+	if err := provider.validateResponsesSampling(*request); err == nil {
+		t.Fatal("Responses API accepted unsupported penalty/seed controls")
+	}
+}
+
 func TestProviderOptionsMergedIntoResponsesPayload(t *testing.T) {
 	t.Parallel()
 	provider := New(types.NewProviderConfig("key").

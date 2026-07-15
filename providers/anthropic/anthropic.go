@@ -53,6 +53,9 @@ func (p *Provider) SupportedCapabilities() []types.ModelCapability {
 
 // Text generates a text response
 func (p *Provider) Text(ctx context.Context, request types.TextRequest) (*types.TextResponse, error) {
+	if err := p.validateSamplingControls(request); err != nil {
+		return nil, err
+	}
 	if _, _, err := providers.PrepareMessages(request.Messages); err != nil {
 		return nil, err
 	}
@@ -93,6 +96,9 @@ func (p *Provider) stampProvider(ctx context.Context, in <-chan types.StreamChun
 
 // Stream generates a streaming text response
 func (p *Provider) Stream(ctx context.Context, request types.TextRequest) (<-chan types.StreamChunk, error) {
+	if err := p.validateSamplingControls(request); err != nil {
+		return nil, err
+	}
 	if _, _, err := providers.PrepareMessages(request.Messages); err != nil {
 		return nil, err
 	}
@@ -107,6 +113,16 @@ func (p *Provider) Stream(ctx context.Context, request types.TextRequest) (<-cha
 	}
 
 	return p.stampProvider(ctx, p.accumulatingStream(ctx, providerstream.ProcessSSE(ctx, body, p.parseStreamChunk, 100))), nil
+}
+
+func (p *Provider) validateSamplingControls(request types.TextRequest) error {
+	if request.FrequencyPenalty != nil || request.PresencePenalty != nil || request.Seed != nil {
+		return p.ValidationError("frequency_penalty, presence_penalty, and seed are not supported by Anthropic")
+	}
+	if request.ParallelToolCalls != nil && request.ToolChoice != nil && request.ToolChoice.Type == types.ToolChoiceTypeNone {
+		return p.ValidationError("parallel_tool_calls cannot be used when Anthropic tool_choice is none")
+	}
+	return nil
 }
 
 // Structured generates a structured response

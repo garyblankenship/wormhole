@@ -69,6 +69,14 @@ func (p *Provider) buildOptions(request *types.TextRequest) *options {
 		opts.Seed = request.Seed
 		hasOptions = true
 	}
+	if request.PresencePenalty != nil {
+		opts.PresencePenalty = request.PresencePenalty
+		hasOptions = true
+	}
+	if request.FrequencyPenalty != nil {
+		opts.FrequencyPenalty = request.FrequencyPenalty
+		hasOptions = true
+	}
 
 	// Provider-specific options
 	if request.ProviderOptions != nil {
@@ -80,13 +88,17 @@ func (p *Provider) buildOptions(request *types.TextRequest) *options {
 			opts.RepeatPenalty = &repeatPenalty
 			hasOptions = true
 		}
-		if presencePenalty, ok := request.ProviderOptions["presence_penalty"].(float32); ok {
-			opts.PresencePenalty = &presencePenalty
-			hasOptions = true
+		if request.PresencePenalty == nil {
+			if presencePenalty, ok := request.ProviderOptions["presence_penalty"].(float32); ok {
+				opts.PresencePenalty = &presencePenalty
+				hasOptions = true
+			}
 		}
-		if frequencyPenalty, ok := request.ProviderOptions["frequency_penalty"].(float32); ok {
-			opts.FrequencyPenalty = &frequencyPenalty
-			hasOptions = true
+		if request.FrequencyPenalty == nil {
+			if frequencyPenalty, ok := request.ProviderOptions["frequency_penalty"].(float32); ok {
+				opts.FrequencyPenalty = &frequencyPenalty
+				hasOptions = true
+			}
 		}
 	}
 

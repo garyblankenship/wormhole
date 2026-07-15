@@ -57,6 +57,40 @@ func TestTypedReasoningMergedIntoGenerationConfig(t *testing.T) {
 	}
 }
 
+func TestTypedSamplingControlsReachGenerationConfig(t *testing.T) {
+	t.Parallel()
+	frequency := float32(0.4)
+	presence := float32(-0.3)
+	seed := 42
+	provider := New("key", types.NewProviderConfig("key"))
+
+	payload, err := provider.buildTextPayload(types.TextRequest{
+		BaseRequest: types.BaseRequest{
+			Model:            "gemini-test",
+			FrequencyPenalty: &frequency,
+			PresencePenalty:  &presence,
+			Seed:             &seed,
+		},
+		Messages: []types.Message{types.NewUserMessage("hi")},
+	})
+	if err != nil {
+		t.Fatalf("buildTextPayload returned error: %v", err)
+	}
+	generationConfig := payload["generationConfig"].(map[string]any)
+	if generationConfig["frequencyPenalty"] != frequency || generationConfig["presencePenalty"] != presence || generationConfig["seed"] != seed {
+		t.Fatalf("generationConfig = %#v", generationConfig)
+	}
+
+	parallel := true
+	_, err = provider.buildTextPayload(types.TextRequest{
+		BaseRequest: types.BaseRequest{Model: "gemini-test", ParallelToolCalls: &parallel},
+		Messages:    []types.Message{types.NewUserMessage("hi")},
+	})
+	if err == nil {
+		t.Fatal("Gemini accepted unsupported parallel_tool_calls")
+	}
+}
+
 func TestProviderOptionsGenerationConfigMergesIntoTextPayload(t *testing.T) {
 	t.Parallel()
 	maxTokens := 128

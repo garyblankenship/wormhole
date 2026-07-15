@@ -31,6 +31,9 @@ const (
 )
 
 func (p *Provider) responsesText(ctx context.Context, request types.TextRequest) (*types.TextResponse, error) {
+	if err := p.validateResponsesSampling(request); err != nil {
+		return nil, err
+	}
 	payload := p.buildResponsesPayload(&request)
 
 	var response responsesResponse
@@ -52,6 +55,9 @@ func (p *Provider) responsesText(ctx context.Context, request types.TextRequest)
 }
 
 func (p *Provider) responsesStream(ctx context.Context, request types.TextRequest) (<-chan types.TextChunk, error) {
+	if err := p.validateResponsesSampling(request); err != nil {
+		return nil, err
+	}
 	payload := p.buildResponsesPayload(&request)
 	payload["stream"] = true
 
@@ -106,6 +112,9 @@ func (p *Provider) buildResponsesPayload(request *types.TextRequest) map[string]
 	if request.MaxTokens != nil && *request.MaxTokens > 0 {
 		payload["max_output_tokens"] = p.maxTokensValue(*request.MaxTokens)
 	}
+	if request.ParallelToolCalls != nil {
+		payload["parallel_tool_calls"] = *request.ParallelToolCalls
+	}
 
 	if reasoning := reasoningPayload(request.Reasoning); len(reasoning) > 0 {
 		payload["reasoning"] = reasoning
@@ -129,6 +138,13 @@ func (p *Provider) buildResponsesPayload(request *types.TextRequest) map[string]
 	}
 
 	return payload
+}
+
+func (p *Provider) validateResponsesSampling(request types.TextRequest) error {
+	if request.FrequencyPenalty != nil || request.PresencePenalty != nil || request.Seed != nil {
+		return p.ValidationError("frequency_penalty, presence_penalty, and seed are not supported by the OpenAI Responses API")
+	}
+	return nil
 }
 
 func (p *Provider) transformResponsesInput(messages []types.Message) []map[string]any {

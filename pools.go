@@ -81,6 +81,7 @@ func getEmbeddingsRequest() *types.EmbeddingsRequest {
 	req.Input = req.Input[:0]
 	req.Model = ""
 	req.Dimensions = nil
+	req.EncodingFormat = ""
 	req.ProviderOptions = nil
 	return req
 }

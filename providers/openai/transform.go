@@ -64,6 +64,18 @@ func (p *Provider) addGenerationParams(payload map[string]any, request *types.Te
 			payload[paramName] = maxTokens
 		}
 	}
+	if request.FrequencyPenalty != nil {
+		payload["frequency_penalty"] = *request.FrequencyPenalty
+	}
+	if request.PresencePenalty != nil {
+		payload["presence_penalty"] = *request.PresencePenalty
+	}
+	if request.Seed != nil {
+		payload["seed"] = *request.Seed
+	}
+	if request.ParallelToolCalls != nil {
+		payload["parallel_tool_calls"] = *request.ParallelToolCalls
+	}
 }
 
 func (p *Provider) addReasoningParams(payload map[string]any, request *types.TextRequest) {

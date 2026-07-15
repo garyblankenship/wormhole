@@ -13,6 +13,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/garyblankenship/wormhole/v2/types"
+	"github.com/garyblankenship/wormhole/v2/wormholetest"
 )
 
 func TestEmbeddingsRequestBuilder(t *testing.T) {
@@ -36,6 +37,10 @@ func TestEmbeddingsRequestBuilder(t *testing.T) {
 
 		result = builder.Dimensions(512)
 		assert.Equal(t, builder, result, "Dimensions() should return the same builder instance")
+
+		result = builder.EncodingFormat(types.EmbeddingEncodingBase64)
+		assert.Equal(t, builder, result, "EncodingFormat() should return the same builder instance")
+		assert.Equal(t, types.EmbeddingEncodingBase64, builder.request.EncodingFormat)
 
 		result = builder.Using("openai")
 		assert.Equal(t, builder, result, "Using() should return the same builder instance")
@@ -203,6 +208,8 @@ func TestEmbeddingsRequestBuilder(t *testing.T) {
 			assert.Empty(t, builder2.request.Model, "Builder2 should start with empty model")
 			assert.Nil(t, builder1.request.Dimensions, "Builder1 should start with nil dimensions")
 			assert.Nil(t, builder2.request.Dimensions, "Builder2 should start with nil dimensions")
+			assert.Empty(t, builder1.request.EncodingFormat, "Builder1 should start with default encoding")
+			assert.Empty(t, builder2.request.EncodingFormat, "Builder2 should start with default encoding")
 			assert.Nil(t, builder1.request.ProviderOptions, "Builder1 should start with nil options")
 			assert.Nil(t, builder2.request.ProviderOptions, "Builder2 should start with nil options")
 		})
@@ -210,9 +217,10 @@ func TestEmbeddingsRequestBuilder(t *testing.T) {
 		t.Run("request reset after pool retrieval", func(t *testing.T) {
 			t.Parallel()
 			// First builder sets some values
-			builder1 := client.Embeddings().Model("test-model").Input("test")
+			builder1 := client.Embeddings().Model("test-model").Input("test").EncodingFormat(types.EmbeddingEncodingBase64)
 			assert.Equal(t, "test-model", builder1.request.Model)
 			assert.Equal(t, []string{"test"}, builder1.request.Input)
+			assert.Equal(t, types.EmbeddingEncodingBase64, builder1.request.EncodingFormat)
 
 			// Force pool return by triggering GC behavior simulation
 			// (In real usage, this happens in Generate() method)
@@ -222,6 +230,7 @@ func TestEmbeddingsRequestBuilder(t *testing.T) {
 			builder2 := client.Embeddings()
 			assert.Empty(t, builder2.request.Model, "New builder should have empty model")
 			assert.Empty(t, builder2.request.Input, "New builder should have empty input")
+			assert.Empty(t, builder2.request.EncodingFormat, "New builder should use the default encoding")
 		})
 	})
 
@@ -245,6 +254,44 @@ func TestEmbeddingsRequestBuilder(t *testing.T) {
 		assert.Len(t, builder.request.Input, 4)
 		assert.Equal(t, []string{"input1", "input2", "input3", "input4"}, builder.request.Input)
 	})
+}
+
+func TestEmbeddingsRequestBuilderBase64Encoding(t *testing.T) {
+	t.Parallel()
+
+	mock := wormholetest.NewMockProvider("openai").WithEmbeddings([]types.Embedding{{
+		Index:     0,
+		Embedding: []float64{1, -2.5},
+	}})
+	client := New(
+		WithCustomProvider("openai", wormholetest.MockProviderFactory(mock)),
+		WithProviderConfig("openai", types.ProviderConfig{}),
+		WithDefaultProvider("openai"),
+		WithModelValidation(false),
+		WithDiscovery(false),
+	)
+
+	response, err := client.Embeddings().
+		Model("embed-test").
+		Input("hello").
+		EncodingFormat(types.EmbeddingEncodingBase64).
+		Generate(context.Background())
+	require.NoError(t, err)
+	require.Len(t, response.Embeddings, 1)
+	assert.Empty(t, response.Embeddings[0].Embedding)
+	assert.Equal(t, "AACAPwAAIMA=", response.Embeddings[0].Base64)
+
+	invalid := client.Embeddings().Model("embed-test").Input("hello").EncodingFormat("hex")
+	require.Error(t, invalid.Validate())
+
+	alreadyEncoded := &types.EmbeddingsResponse{Embeddings: []types.Embedding{{
+		Index:     0,
+		Embedding: []float64{1},
+		Base64:    "provider-encoded",
+	}}}
+	encoded := encodeEmbeddingsResponse(alreadyEncoded, types.EmbeddingEncodingBase64)
+	assert.Empty(t, encoded.Embeddings[0].Embedding)
+	assert.Equal(t, "provider-encoded", encoded.Embeddings[0].Base64)
 }
 
 func TestEmbeddingsRequestBuilderGenerateBatched(t *testing.T) {

@@ -54,6 +54,9 @@ func (p *Provider) SupportedCapabilities() []types.ModelCapability {
 
 // Text generates a text response using Ollama's chat API
 func (p *Provider) Text(ctx context.Context, request types.TextRequest) (*types.TextResponse, error) {
+	if request.ParallelToolCalls != nil {
+		return nil, p.ValidationError("parallel_tool_calls is not supported by Ollama")
+	}
 	if _, _, err := providers.PrepareMessages(request.Messages); err != nil {
 		return nil, err
 	}
@@ -94,6 +97,9 @@ func (p *Provider) stampProvider(ctx context.Context, in <-chan types.TextChunk)
 
 // Stream generates a streaming text response using Ollama's streaming chat API
 func (p *Provider) Stream(ctx context.Context, request types.TextRequest) (<-chan types.TextChunk, error) {
+	if request.ParallelToolCalls != nil {
+		return nil, p.ValidationError("parallel_tool_calls is not supported by Ollama")
+	}
 	if _, _, err := providers.PrepareMessages(request.Messages); err != nil {
 		return nil, err
 	}

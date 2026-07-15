@@ -319,6 +319,62 @@ func TestProxyChatCompletions(t *testing.T) {
 	assert.Equal(t, 7, out.Usage.TotalTokens)
 }
 
+func TestProxyChatSamplingControlsReachSDKRequest(t *testing.T) {
+	t.Parallel()
+
+	provider := newCapturingTextProvider("openai")
+	p := newCapturingTestProxy(provider)
+	rec := performRequest(p, http.MethodPost, "/v1/chat/completions", `{
+		"model":"openai/gpt-test",
+		"messages":[{"role":"user","content":"hello"}],
+		"frequency_penalty":0.4,
+		"presence_penalty":-0.3,
+		"seed":42,
+		"n":1,
+		"parallel_tool_calls":false
+	}`)
+
+	require.Equal(t, http.StatusOK, rec.Code)
+	request := provider.lastRequest()
+	require.NotNil(t, request.FrequencyPenalty)
+	require.NotNil(t, request.PresencePenalty)
+	require.NotNil(t, request.Seed)
+	require.NotNil(t, request.ParallelToolCalls)
+	assert.InDelta(t, 0.4, *request.FrequencyPenalty, 0.00001)
+	assert.InDelta(t, -0.3, *request.PresencePenalty, 0.00001)
+	assert.Equal(t, 42, *request.Seed)
+	assert.False(t, *request.ParallelToolCalls)
+}
+
+func TestProxyRejectsUnsupportedSamplingControls(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		body string
+	}{
+		{name: "multiple choices", body: `{"model":"gpt-test","messages":[{"role":"user","content":"hi"}],"n":2}`},
+		{name: "zero choices", body: `{"model":"gpt-test","messages":[{"role":"user","content":"hi"}],"n":0}`},
+		{name: "frequency range", body: `{"model":"gpt-test","messages":[{"role":"user","content":"hi"}],"frequency_penalty":2.1}`},
+		{name: "presence range", body: `{"model":"gpt-test","messages":[{"role":"user","content":"hi"}],"presence_penalty":-2.1}`},
+		{name: "anthropic seed", body: `{"model":"anthropic/claude-test","messages":[{"role":"user","content":"hi"}],"seed":1}`},
+		{name: "gemini parallel", body: `{"model":"gemini/gemini-test","messages":[{"role":"user","content":"hi"}],"parallel_tool_calls":false}`},
+		{name: "ollama parallel", body: `{"model":"ollama/llama-test","messages":[{"role":"user","content":"hi"}],"parallel_tool_calls":true}`},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			p := newTestProxy(wmtest.NewMockProvider("openai"))
+			rec := performRequest(p, http.MethodPost, "/v1/chat/completions", tt.body)
+			require.Equal(t, http.StatusBadRequest, rec.Code)
+			var out ErrorResponse
+			require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &out))
+			assert.Equal(t, "unsupported_parameter", out.Error.Code)
+		})
+	}
+}
+
 func TestProxyChatContentStringStillBuildsTextMessage(t *testing.T) {
 	t.Parallel()
 
@@ -600,7 +656,35 @@ func TestProxyEmbeddings(t *testing.T) {
 	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &out))
 	assert.Equal(t, "text-embedding-test", out.Model)
 	require.Len(t, out.Data, 2)
-	assert.Equal(t, []float64{0.1, 0.2}, out.Data[0].Embedding)
+	assert.Equal(t, []any{0.1, 0.2}, out.Data[0].Embedding)
+}
+
+func TestProxyEmbeddingsBase64Encoding(t *testing.T) {
+	t.Parallel()
+
+	mock := wmtest.NewMockProvider("openai").WithEmbeddings([]types.Embedding{{
+		Index:     0,
+		Embedding: []float64{1, -2.5},
+	}})
+	p := newTestProxy(mock)
+
+	rec := performRequest(p, http.MethodPost, "/v1/embeddings", `{
+		"model":"openai/text-embedding-test",
+		"input":"one",
+		"encoding_format":"base64"
+	}`)
+	require.Equal(t, http.StatusOK, rec.Code)
+	var out EmbeddingResponse
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &out))
+	require.Len(t, out.Data, 1)
+	assert.Equal(t, "AACAPwAAIMA=", out.Data[0].Embedding)
+
+	bad := performRequest(p, http.MethodPost, "/v1/embeddings", `{
+		"model":"openai/text-embedding-test",
+		"input":"one",
+		"encoding_format":"hex"
+	}`)
+	require.Equal(t, http.StatusBadRequest, bad.Code)
 }
 
 func TestProxyEmbeddingsAcceptsSingleStringInput(t *testing.T) {

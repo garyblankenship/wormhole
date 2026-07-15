@@ -102,6 +102,10 @@ func cloneBaseRequestFields(dst, src *types.BaseRequest) {
 		seed := *src.Seed
 		dst.Seed = &seed
 	}
+	if src.ParallelToolCalls != nil {
+		parallelToolCalls := *src.ParallelToolCalls
+		dst.ParallelToolCalls = &parallelToolCalls
+	}
 	if src.Reasoning != nil {
 		reasoning := *src.Reasoning
 		if src.Reasoning.Enabled != nil {

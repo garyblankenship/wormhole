@@ -17,6 +17,11 @@ type ChatCompletionRequest struct {
 	MaxTokens           *int                           `json:"max_tokens,omitempty"`
 	MaxCompletionTokens *int                           `json:"max_completion_tokens,omitempty"`
 	TopP                *float64                       `json:"top_p,omitempty"`
+	FrequencyPenalty    *float64                       `json:"frequency_penalty,omitempty"`
+	PresencePenalty     *float64                       `json:"presence_penalty,omitempty"`
+	Seed                *int                           `json:"seed,omitempty"`
+	N                   *int                           `json:"n,omitempty"`
+	ParallelToolCalls   *bool                          `json:"parallel_tool_calls,omitempty"`
 	Stop                []string                       `json:"stop,omitempty"`
 	Stream              bool                           `json:"stream,omitempty"`
 	Tools               []ChatTool                     `json:"tools,omitempty"`
@@ -181,9 +186,10 @@ type ChatCompletionTokenDetails struct {
 
 // EmbeddingRequest is the OpenAI-compatible embeddings request.
 type EmbeddingRequest struct {
-	Model      string         `json:"model"`
-	Input      EmbeddingInput `json:"input"`
-	Dimensions *int           `json:"dimensions,omitempty"`
+	Model          string         `json:"model"`
+	Input          EmbeddingInput `json:"input"`
+	Dimensions     *int           `json:"dimensions,omitempty"`
+	EncodingFormat string         `json:"encoding_format,omitempty"`
 }
 
 // EmbeddingInput accepts the OpenAI-compatible string-or-array input shape.
@@ -215,9 +221,9 @@ type EmbeddingResponse struct {
 
 // EmbeddingData is a single embedding vector.
 type EmbeddingData struct {
-	Object    string    `json:"object"`
-	Index     int       `json:"index"`
-	Embedding []float64 `json:"embedding"`
+	Object    string `json:"object"`
+	Index     int    `json:"index"`
+	Embedding any    `json:"embedding"`
 }
 
 // EmbeddingUsage is token usage for embeddings.

@@ -100,6 +100,14 @@ func (p *proxy) handleChatCompletions(w http.ResponseWriter, r *http.Request) {
 	configuredProviders := p.wh.ConfiguredProviders()
 	effDefaultProvider := effectiveDefaultProvider(p.defaultProvider, configuredProviders)
 	provider, model := parseModelRoute(req.Model, effDefaultProvider, configuredProviders)
+	effProvider := provider
+	if effProvider == "" {
+		effProvider = effDefaultProvider
+	}
+	if err := validateChatControls(req, effProvider); err != nil {
+		writeError(w, http.StatusBadRequest, "unsupported_parameter", err.Error(), "invalid_request_error")
+		return
+	}
 
 	msgs, err := parseChatMessages(req.Messages)
 	if err != nil {
@@ -116,20 +124,7 @@ func (p *proxy) handleChatCompletions(w http.ResponseWriter, r *http.Request) {
 	if provider != "" {
 		builder = builder.Using(provider)
 	}
-	if req.Temperature != nil {
-		builder = builder.Temperature(float32(*req.Temperature))
-	}
-	if req.MaxCompletionTokens != nil {
-		builder = builder.MaxTokens(*req.MaxCompletionTokens)
-	} else if req.MaxTokens != nil {
-		builder = builder.MaxTokens(*req.MaxTokens)
-	}
-	if req.TopP != nil {
-		builder = builder.TopP(float32(*req.TopP))
-	}
-	if len(req.Stop) > 0 {
-		builder = builder.Stop(req.Stop...)
-	}
+	builder = applyChatGenerationControls(builder, req)
 	if len(req.Tools) > 0 {
 		builder = builder.Tools(tools...)
 	}
@@ -191,6 +186,55 @@ func (p *proxy) handleChatCompletions(w http.ResponseWriter, r *http.Request) {
 		out.Usage = toChatUsage(resp.Usage)
 	}
 	writeJSON(w, http.StatusOK, out)
+}
+
+func applyChatGenerationControls(builder *wormhole.TextRequestBuilder, req ChatCompletionRequest) *wormhole.TextRequestBuilder {
+	if req.Temperature != nil {
+		builder = builder.Temperature(float32(*req.Temperature))
+	}
+	if req.MaxCompletionTokens != nil {
+		builder = builder.MaxTokens(*req.MaxCompletionTokens)
+	} else if req.MaxTokens != nil {
+		builder = builder.MaxTokens(*req.MaxTokens)
+	}
+	if req.TopP != nil {
+		builder = builder.TopP(float32(*req.TopP))
+	}
+	if req.FrequencyPenalty != nil {
+		builder = builder.FrequencyPenalty(float32(*req.FrequencyPenalty))
+	}
+	if req.PresencePenalty != nil {
+		builder = builder.PresencePenalty(float32(*req.PresencePenalty))
+	}
+	if req.Seed != nil {
+		builder = builder.Seed(*req.Seed)
+	}
+	if req.ParallelToolCalls != nil {
+		builder = builder.ParallelToolCalls(*req.ParallelToolCalls)
+	}
+	if len(req.Stop) > 0 {
+		builder = builder.Stop(req.Stop...)
+	}
+	return builder
+}
+
+func validateChatControls(req ChatCompletionRequest, provider string) error {
+	if req.N != nil && *req.N != 1 {
+		return fmt.Errorf("n=%d is unsupported; the proxy currently returns exactly one choice", *req.N)
+	}
+	if req.FrequencyPenalty != nil && (*req.FrequencyPenalty < -2 || *req.FrequencyPenalty > 2) {
+		return fmt.Errorf("frequency_penalty must be between -2.0 and 2.0")
+	}
+	if req.PresencePenalty != nil && (*req.PresencePenalty < -2 || *req.PresencePenalty > 2) {
+		return fmt.Errorf("presence_penalty must be between -2.0 and 2.0")
+	}
+	if provider == "anthropic" && (req.FrequencyPenalty != nil || req.PresencePenalty != nil || req.Seed != nil) {
+		return fmt.Errorf("frequency_penalty, presence_penalty, and seed are unsupported for Anthropic")
+	}
+	if (provider == "gemini" || provider == "ollama") && req.ParallelToolCalls != nil {
+		return fmt.Errorf("parallel_tool_calls is unsupported for %s", provider)
+	}
+	return nil
 }
 
 func chatMessageErrorCode(err error) string {
@@ -372,6 +416,15 @@ func (p *proxy) handleEmbeddings(w http.ResponseWriter, r *http.Request) {
 	if req.Dimensions != nil {
 		builder = builder.Dimensions(*req.Dimensions)
 	}
+	format := types.EmbeddingEncodingFormat(req.EncodingFormat)
+	if format != "" && format != types.EmbeddingEncodingFloat && format != types.EmbeddingEncodingBase64 {
+		writeError(w, http.StatusBadRequest, "invalid_encoding_format",
+			"encoding_format must be float or base64", "invalid_request_error")
+		return
+	}
+	if format != "" {
+		builder = builder.EncodingFormat(format)
+	}
 
 	resp, err := builder.Generate(r.Context())
 	if err != nil {
@@ -383,10 +436,14 @@ func (p *proxy) handleEmbeddings(w http.ResponseWriter, r *http.Request) {
 
 	data := make([]EmbeddingData, 0, len(resp.Embeddings))
 	for _, emb := range resp.Embeddings {
+		var value any = emb.Embedding
+		if emb.Base64 != "" {
+			value = emb.Base64
+		}
 		data = append(data, EmbeddingData{
 			Object:    "embedding",
 			Index:     emb.Index,
-			Embedding: emb.Embedding,
+			Embedding: value,
 		})
 	}
 

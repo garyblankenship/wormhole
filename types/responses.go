@@ -244,6 +244,7 @@ func (r *EmbeddingsResponse) Count() int {
 type Embedding struct {
 	Index     int       `json:"index"`
 	Embedding []float64 `json:"embedding"`
+	Base64    string    `json:"base64,omitempty"`
 }
 
 // ImagesResponse represents an image generation response
