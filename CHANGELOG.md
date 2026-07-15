@@ -1,5 +1,19 @@
 # Changelog
 
+## v2.1.0 (2026-07-14)
+
+### Features
+- Text generation: add typed frequency-penalty, presence-penalty, seed, and parallel-tool-call controls with explicit provider compatibility checks.
+- Embeddings: add float and OpenAI-compatible base64 response encodings to the SDK, batched path, and proxy.
+- Proxy: accept the matching OpenAI chat controls, validate single-choice requests, and document the existing `/v1/rerank` endpoint.
+
+### Fixes
+- Anthropic: reject `parallel_tool_calls` when `tool_choice` is `none` instead of emitting an invalid wire payload.
+- Gemini: surface prompt block reasons across text, structured, image, and streaming responses.
+
+### Other
+- Align the documented Go requirement with `go.mod` and replace stale generated-release marketing with the provider-bridge scope and blocking lint checks.
+
 ## v2.0.0 (2026-07-14)
 
 ### Breaking changes
