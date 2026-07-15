@@ -588,12 +588,38 @@ Applied per-request, override client defaults:
 
 ```go
 resp, err := client.Text().
-    Using("anthropic").      // Override provider
-    Model("claude-sonnet-4-5").  // Set model
-    Temperature(0.7).        // Set temperature
-    Prompt("Hello").         // Set prompt
+    Using("openai").             // Override provider
+    Model("gpt-5.2").            // Set model
+    Temperature(0.7).             // Set temperature
+    FrequencyPenalty(0.2).        // Penalize repeated tokens
+    PresencePenalty(0.1).         // Encourage new tokens
+    Seed(42).                     // Request repeatable sampling
+    ParallelToolCalls(false).     // Request at most one tool call
+    Prompt("Hello").              // Set prompt
     Generate(ctx)
 ```
+
+Frequency and presence penalties accept values from `-2.0` to `2.0`. Provider
+support differs: Anthropic rejects both penalties and seed; Gemini and Ollama
+reject `ParallelToolCalls`; OpenAI Responses rejects both penalties and seed.
+Wormhole returns a validation error for these unsupported combinations rather
+than dropping the fields.
+
+Embedding requests can choose their response representation:
+
+```go
+resp, err := client.Embeddings().
+    Model("text-embedding-3-small").
+    Input("hello").
+    EncodingFormat(types.EmbeddingEncodingBase64).
+    Generate(ctx)
+
+encoded := resp.Embeddings[0].Base64
+```
+
+The default format is `types.EmbeddingEncodingFloat`, exposed through
+`Embedding.Embedding`. Base64 format exposes little-endian float32 bytes through
+`Embedding.Base64` and leaves the numeric slice empty.
 
 **Key differences:**
 
@@ -602,7 +628,7 @@ resp, err := client.Text().
 | **Pattern** | Functional options | Builder pattern |
 | **Scope** | All requests | Single request |
 | **Override** | Later options win | Builder methods chain |
-| **Examples** | `WithOpenAI()`, `WithTimeout()` | `.Model()`, `.Temperature()` |
+| **Examples** | `WithOpenAI()`, `WithTimeout()` | `.Model()`, `.Temperature()`, `.EncodingFormat()` |
 
 ## Custom Options
 

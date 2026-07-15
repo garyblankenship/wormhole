@@ -4,8 +4,8 @@ before:
   hooks:
     - go mod tidy
     - go test ./...
-    - make fmt
-    - make lint || true  # Don't fail release for minor linting issues
+    - go vet ./...
+    - golangci-lint run ./...
 
 builds:
   - skip: true  # This is a library, not a binary
@@ -50,34 +50,22 @@ release:
   mode: append
   
   header: |
-    # 🚀 Wormhole {{ .Tag }} - Ultra-Fast LLM SDK
-    
-    **The fastest Go SDK for LLM integration with sub-microsecond performance**
-    
-    ## 🏆 Performance Highlights
-    - **67 nanoseconds** core overhead (165x faster than competitors)
-    - **Linear scaling** under concurrent load
-    - **Minimal memory allocations** (256-272 B/op average)
-    
-    ## 🌐 Multi-Provider Support
-    - **6+ LLM Providers**: OpenAI, Anthropic, Gemini, Groq, Mistral, Ollama
-    - **Universal Compatibility**: LMStudio, vLLM, FastChat, and any OpenAI-compatible API
-    - **Production Middleware**: Circuit breakers, rate limiting, retry logic, metrics
-    
-    ## ⚡ Key Features
-    - Laravel-inspired SimpleFactory design
-    - Native Go streaming with channels
-    - Comprehensive tool/function calling
-    - Structured output with JSON schema validation
-    - Advanced middleware stack for enterprise reliability
+    # Wormhole {{ .Tag }}
+
+    Wormhole is a Go provider bridge for app-facing LLM workflows: text,
+    streaming, structured output, embeddings, reranking, tool calling, media,
+    and an OpenAI-compatible proxy.
+
+    It keeps provider administration such as files, fine-tuning, batches,
+    assistants, vector stores, and realtime APIs in the official provider SDKs.
   
   footer: |
-    ## 📦 Installation
+    ## Installation
     ```bash
     go get github.com/garyblankenship/wormhole/v2@{{ .Tag }}
     ```
     
-    ## 🚀 Quick Start
+    ## Quick Start
     ```go
     client := wormhole.New(
         wormhole.WithOpenAI("your-api-key"),
@@ -90,19 +78,10 @@ release:
         Generate(context.Background())
     ```
     
-    ## 📚 Resources
-    - [📖 **Documentation**](https://pkg.go.dev/github.com/garyblankenship/wormhole/v2@{{ .Tag }})
-    - [🚀 **Examples**](https://github.com/garyblankenship/wormhole/tree/{{ .Tag }}/examples)
-    - [📋 **Changelog**](https://github.com/garyblankenship/wormhole/blob/{{ .Tag }}/CHANGELOG.md)
-    
-    ## 🆚 Performance Comparison
-    | SDK | Core Latency | Memory Usage | Providers |
-    |-----|--------------|--------------|-----------|
-    | **Wormhole** | **67 ns** | **256 B/op** | **6+** |
-    | Competitor A | 11,000 ns | Not disclosed | 3-4 |
-    | Competitor B | Not disclosed | Not disclosed | 2-3 |
-    
-    **Experience the difference - 165x faster than industry standard!** 🚀
+    ## Resources
+    - [Documentation](https://pkg.go.dev/github.com/garyblankenship/wormhole/v2@{{ .Tag }})
+    - [Examples](https://github.com/garyblankenship/wormhole/tree/{{ .Tag }}/examples)
+    - [Changelog](https://github.com/garyblankenship/wormhole/blob/{{ .Tag }}/CHANGELOG.md)
 
 env:
   - GO111MODULE=on

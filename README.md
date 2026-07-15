@@ -20,7 +20,7 @@ three colors. Wormhole handles the app-facing path. If you need provider-admin
 resources like files, batches, fine-tuning, vector stores, assistants, or
 realtime APIs, use the provider SDKs or REST APIs directly.
 
-[![Go](https://img.shields.io/badge/Go-1.23+-blue.svg)](https://golang.org)
+[![Go](https://img.shields.io/badge/Go-1.25+-blue.svg)](https://go.dev)
 [![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
 Upgrading from v1? See the [v2 migration guide](docs/v2-migration.md) for the
@@ -242,8 +242,22 @@ resp, err := client.Text().
 	Prompt("Summarize Go interfaces.").
 	MaxTokens(200).
 	Temperature(0.2).
+	FrequencyPenalty(0.1).
+	PresencePenalty(0.1).
+	Seed(42).
 	Generate(ctx)
 ```
+
+Portable sampling controls use typed builder methods. `FrequencyPenalty()` and
+`PresencePenalty()` accept values from `-2.0` to `2.0`; `Seed()` requests
+repeatable sampling where the selected provider supports it.
+
+Use `ParallelToolCalls(false)` to request at most one tool call in a model turn.
+OpenAI Chat Completions supports all four controls. Anthropic rejects frequency
+penalty, presence penalty, and seed; Gemini and Ollama reject
+`ParallelToolCalls`; OpenAI Responses rejects frequency penalty, presence
+penalty, and seed. Unsupported combinations fail before provider I/O instead of
+being silently dropped.
 
 ```go
 stream, err := client.Text().
@@ -306,6 +320,21 @@ resp, err := client.Embeddings().
 for _, emb := range resp.Embeddings {
 	fmt.Println(emb.Index, len(emb.Embedding))
 }
+```
+
+For an OpenAI-compatible base64 representation, request
+`EncodingFormat(types.EmbeddingEncodingBase64)`. Each result then uses
+`Embedding.Base64`, containing little-endian float32 bytes, and leaves
+`Embedding.Embedding` empty:
+
+```go
+resp, err := client.Embeddings().
+	Model("text-embedding-3-small").
+	Input("first document").
+	EncodingFormat(types.EmbeddingEncodingBase64).
+	Generate(ctx)
+
+encoded := resp.Embeddings[0].Base64
 ```
 
 Provider notes:
@@ -548,8 +577,14 @@ Supported proxy endpoints:
 | `POST` | `/v1/chat/completions` |
 | `POST` | `/v1/responses` |
 | `POST` | `/v1/embeddings` |
+| `POST` | `/v1/rerank` |
 | `GET` | `/v1/models` |
 | `GET` | `/health` |
+
+`/v1/chat/completions` accepts `frequency_penalty`, `presence_penalty`, `seed`,
+`n` (currently only `1`), and `parallel_tool_calls`, subject to the provider
+support rules above. `/v1/embeddings` accepts `encoding_format` as `float`
+(default) or `base64`.
 
 The Responses bridge translates function and custom tools to Chat Completions.
 Tool types without a portable bridge, including `namespace` and `web_search`,
