@@ -235,3 +235,14 @@ func TestComplexSchemaExample(t *testing.T) {
 	t.Parallel()
 	t.Skip("Schema builders tested via RegisterTool integration")
 }
+
+func TestToolExecutor_Stop(t *testing.T) {
+	t.Parallel()
+	exec := NewToolExecutorWithConfig(NewToolRegistry(), ToolSafetyConfig{
+		EnableAdaptiveConcurrency: true,
+	})
+	assert.NotNil(t, exec)
+	assert.NotPanics(t, func() {
+		exec.Stop()
+	})
+}

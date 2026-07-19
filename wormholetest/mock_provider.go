@@ -22,6 +22,8 @@ type MockProvider struct {
 	embeddings     []types.Embedding
 	shouldError    bool
 	errorMessage   string
+	rerankResponse *types.RerankResponse
+	imageResponse  *types.ImageResponse
 }
 
 // NewMockProvider creates a new mock provider
@@ -30,6 +32,22 @@ func NewMockProvider(name string) *MockProvider {
 		BaseProvider: types.NewBaseProvider(name),
 		name:         name,
 	}
+}
+
+// WithRerankResponse sets the rerank response to return
+func (m *MockProvider) WithRerankResponse(resp types.RerankResponse) *MockProvider {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.rerankResponse = &resp
+	return m
+}
+
+// WithImageResponse sets the image response to return
+func (m *MockProvider) WithImageResponse(resp types.ImageResponse) *MockProvider {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.imageResponse = &resp
+	return m
 }
 
 // WithTextResponse adds a text response to return
@@ -261,6 +279,64 @@ func (m *MockProvider) Images(ctx context.Context, request types.ImagesRequest) 
 		Model: request.Model,
 		Images: []types.GeneratedImage{
 			{URL: "https://example.com/mock-image.png"},
+		},
+		Created: time.Now(),
+	}, nil
+}
+
+// Rerank returns a mocked rerank response
+func (m *MockProvider) Rerank(ctx context.Context, request types.RerankRequest) (*types.RerankResponse, error) {
+	m.mu.Lock()
+	shouldError := m.shouldError
+	errorMessage := m.errorMessage
+	resp := m.rerankResponse
+	m.mu.Unlock()
+
+	if shouldError {
+		return nil, errors.New(errorMessage)
+	}
+
+	if resp != nil {
+		return resp, nil
+	}
+
+	results := make([]types.RerankResult, len(request.Documents))
+	for i, doc := range request.Documents {
+		results[i] = types.RerankResult{
+			Index:          i,
+			RelevanceScore: 1.0 - float64(i)*0.1,
+			Document:       doc,
+		}
+	}
+
+	return &types.RerankResponse{
+		ID:      "mock-rerank",
+		Model:   request.Model,
+		Results: results,
+	}, nil
+}
+
+// GenerateImage returns a mocked single image response
+func (m *MockProvider) GenerateImage(ctx context.Context, request types.ImageRequest) (*types.ImageResponse, error) {
+	m.mu.Lock()
+	shouldError := m.shouldError
+	errorMessage := m.errorMessage
+	resp := m.imageResponse
+	m.mu.Unlock()
+
+	if shouldError {
+		return nil, errors.New(errorMessage)
+	}
+
+	if resp != nil {
+		return resp, nil
+	}
+
+	return &types.ImageResponse{
+		ID:    "mock-image",
+		Model: request.Model,
+		Images: []types.GeneratedImage{
+			{URL: "https://example.com/generated-image.png"},
 		},
 		Created: time.Now(),
 	}, nil

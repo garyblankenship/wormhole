@@ -27,6 +27,7 @@ func TestTextRequestBuilderConfiguration(t *testing.T) {
 		Seed(42).
 		ParallelToolCalls(false).
 		MaxTokens(128).
+		Reasoning(types.Reasoning{Effort: "high"}).
 		Stop("END").
 		Tools(tool).
 		ToolChoice("auto").
@@ -323,4 +324,16 @@ func assertPanics(t *testing.T, fn func()) {
 		}
 	}()
 	fn()
+}
+
+func TestWithOpenAIResponses(t *testing.T) {
+	t.Parallel()
+	client := New(WithOpenAIResponses("test-key"))
+	cfg, ok := client.config.Providers["openai"]
+	if !ok {
+		t.Fatal("expected openai provider config")
+	}
+	if !cfg.UseResponsesAPI {
+		t.Fatal("expected UseResponsesAPI to be true")
+	}
 }

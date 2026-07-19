@@ -367,3 +367,14 @@ func TestEnhancedAdaptiveLimiterEvictsIdleModelStates(t *testing.T) {
 	assert.Nil(t, limiter.getState("openai", "gpt-4"))
 	assert.NotNil(t, limiter.getState("anthropic", "claude-3"))
 }
+
+func TestEnhancedAdaptiveLimiter_RecordLatency(t *testing.T) {
+	t.Parallel()
+	config := DefaultEnhancedAdaptiveConfig()
+	limiter := NewEnhancedAdaptiveLimiter(config)
+	defer limiter.Stop()
+
+	assert.NotPanics(t, func() {
+		limiter.RecordLatency(50 * time.Millisecond)
+	})
+}

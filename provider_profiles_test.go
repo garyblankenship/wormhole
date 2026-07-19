@@ -8,6 +8,10 @@ import (
 
 func TestProviderProfilesExposeKnownProviders(t *testing.T) {
 	t.Parallel()
+	names := KnownProviderNames()
+	if len(names) == 0 {
+		t.Fatal("expected known provider names")
+	}
 	profiles := KnownProviderProfiles()
 	if len(profiles) == 0 {
 		t.Fatal("expected provider profiles")

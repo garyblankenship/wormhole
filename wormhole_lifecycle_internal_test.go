@@ -34,3 +34,22 @@ func TestRequestAdmissionIsClosedBeforeShutdownWaits(t *testing.T) {
 		t.Fatal("request admitted after shutdown")
 	}
 }
+
+func TestSweepIdempotencyCache(t *testing.T) {
+	client := New(WithDiscovery(false))
+	client.idempotencyMu.Lock()
+	if client.idempotencyCache == nil {
+		client.idempotencyCache = make(map[string]*idempotencyEntry)
+	}
+	client.idempotencyCache["expired-key"] = &idempotencyEntry{}
+	client.idempotencyMu.Unlock()
+
+	client.sweepIdempotencyCache()
+
+	client.idempotencyMu.Lock()
+	_, exists := client.idempotencyCache["expired-key"]
+	client.idempotencyMu.Unlock()
+	if exists {
+		t.Fatal("expired-key was not swept from cache")
+	}
+}

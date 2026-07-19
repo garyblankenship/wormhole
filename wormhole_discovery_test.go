@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/garyblankenship/wormhole/v2/discovery"
@@ -19,8 +20,14 @@ func (contextProbeFetcher) Name() string {
 }
 
 func (contextProbeFetcher) FetchModels(ctx context.Context) ([]*types.ModelInfo, error) {
-	<-ctx.Done()
-	return nil, ctx.Err()
+	select {
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	default:
+		return []*types.ModelInfo{
+			{ID: "ctxprobe-model-1", Provider: "ctxprobe"},
+		}, nil
+	}
 }
 
 func TestListAvailableModelsWithContextPropagatesCancellation(t *testing.T) {
@@ -101,4 +108,37 @@ func TestInitializeDiscoveryServiceUsesAPIKeysFallback(t *testing.T) {
 	providers := client.ModelDiscoveryProviders()
 	require.Contains(t, providers, "openai")
 	require.Contains(t, providers, "gemini")
+}
+
+func TestDiscoveryConvenienceMethodsAndLifecycle(t *testing.T) {
+	t.Parallel()
+
+	client := New(
+		WithDiscoveryConfig(discovery.DiscoveryConfig{
+			DisableFileCache:         true,
+			DisableBackgroundRefresh: true,
+		}),
+		WithProviderConfig("mock", types.ProviderConfig{}),
+	)
+	require.NotNil(t, client.discoveryService)
+	client.discoveryService.RegisterFetcher(contextProbeFetcher{})
+
+	// Test ConfiguredProviders
+	configured := client.ConfiguredProviders()
+	assert.Contains(t, configured, "mock")
+
+	// Test ListAvailableModels wrapper
+	models, err := client.ListAvailableModels("ctxprobe")
+	require.NoError(t, err)
+	assert.Len(t, models, 1)
+
+	// Test RefreshModels wrapper
+	err = client.RefreshModels()
+	require.NoError(t, err)
+
+	// Test ClearModelCache
+	client.ClearModelCache()
+
+	// Test StopModelDiscovery
+	client.StopModelDiscovery()
 }
