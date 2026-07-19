@@ -184,7 +184,9 @@ func New(opts ...Option) *Wormhole {
 func (p *Wormhole) Text() *TextRequestBuilder {
 	return &TextRequestBuilder{
 		CommonBuilder: newCommonBuilder(p),
-		request:       getTextRequest(),
+		request: &types.TextRequest{
+			Messages: make([]types.Message, 0, 4),
+		},
 	}
 }
 
@@ -192,7 +194,9 @@ func (p *Wormhole) Text() *TextRequestBuilder {
 func (p *Wormhole) Structured() *StructuredRequestBuilder {
 	return &StructuredRequestBuilder{
 		CommonBuilder: newCommonBuilder(p),
-		request:       getStructuredRequest(),
+		request: &types.StructuredRequest{
+			Messages: make([]types.Message, 0, 4),
+		},
 	}
 }
 
@@ -216,7 +220,7 @@ func (p *Wormhole) Rerank() *RerankRequestBuilder {
 func (p *Wormhole) Image() *ImageRequestBuilder {
 	return &ImageRequestBuilder{
 		CommonBuilder: newCommonBuilder(p),
-		request:       getImageRequest(),
+		request:       &types.ImageRequest{},
 	}
 }
 
