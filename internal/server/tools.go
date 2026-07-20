@@ -13,7 +13,10 @@ func toWormholeTools(in []ChatTool) ([]types.Tool, error) {
 	out := make([]types.Tool, 0, len(in))
 	for _, t := range in {
 		if t.Type != "function" {
-			return nil, fmt.Errorf("unsupported tool type %q", t.Type)
+			// Non-portable grouping tools (e.g. codex "namespace" containers) have
+			// no Chat Completions equivalent; skip them rather than failing the
+			// whole request.
+			continue
 		}
 		if strings.TrimSpace(t.Function.Name) == "" {
 			return nil, fmt.Errorf("function tool name is required")

@@ -149,7 +149,6 @@ func TestProxyResponsesRejectsUnsupportedToolsAndChoices(t *testing.T) {
 	t.Parallel()
 
 	tests := []string{
-		`{"model":"glm-5.2","input":"search","tools":[{"type":"web_search","name":"search"}]}`,
 		`{"model":"glm-5.2","input":"call","tools":[{"type":"function","name":""}]}`,
 		`{"model":"glm-5.2","input":"call","tools":[{"type":"function","name":"declared"}],"tool_choice":{"type":"function","name":"missing"}}`,
 		`{"model":"glm-5.2","input":"call","tool_choice":"sometimes"}`,

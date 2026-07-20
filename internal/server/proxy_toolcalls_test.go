@@ -77,6 +77,20 @@ func TestProxyToolChoiceAndToolsAccepted(t *testing.T) {
 	require.Equal(t, http.StatusOK, rec.Code)
 }
 
+func TestProxyDropsNonPortableToolTypes(t *testing.T) {
+	t.Parallel()
+
+	provider := newCapturingTextProvider("openai")
+	p := newCapturingTestProxy(provider)
+	body := `{"model":"gpt-test","messages":[{"role":"user","content":"hi"}],"tools":[{"type":"namespace","name":"multi_agent_v1"},{"type":"web_search"},{"type":"function","function":{"name":"get_weather","parameters":{"type":"object"}}}]}`
+
+	rec := performRequest(p, http.MethodPost, "/v1/chat/completions", body)
+
+	require.Equal(t, http.StatusOK, rec.Code)
+	require.Len(t, provider.lastRequest().Tools, 1)
+	assert.Equal(t, "get_weather", provider.lastRequest().Tools[0].Name)
+}
+
 func TestProxyRejectsInvalidToolRequestsBeforeProvider(t *testing.T) {
 	t.Parallel()
 
@@ -84,7 +98,6 @@ func TestProxyRejectsInvalidToolRequestsBeforeProvider(t *testing.T) {
 		name string
 		body string
 	}{
-		{name: "unsupported tool type", body: `{"model":"gpt-test","messages":[{"role":"user","content":"hi"}],"tools":[{"type":"web_search"}]}`},
 		{name: "empty tool name", body: `{"model":"gpt-test","messages":[{"role":"user","content":"hi"}],"tools":[{"type":"function","function":{"name":""}}]}`},
 		{name: "unknown tool choice", body: `{"model":"gpt-test","messages":[{"role":"user","content":"hi"}],"tool_choice":"sometimes"}`},
 		{name: "malformed tool choice", body: `{"model":"gpt-test","messages":[{"role":"user","content":"hi"}],"tool_choice":{"type":"function"}}`},

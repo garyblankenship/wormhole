@@ -14,7 +14,10 @@ func translateResponsesTools(input []responsesTool, selection responsesToolChoic
 	available := make(map[string]bool)
 	for _, tool := range input {
 		if tool.Type != "function" && tool.Type != "custom" {
-			return nil, nil, fmt.Errorf("unsupported tool type %q with name %q", tool.Type, tool.Name)
+			// Non-portable grouping tools (e.g. codex "namespace" containers for
+			// multi-agent / MCP servers) have no Chat Completions equivalent; skip
+			// them rather than failing the whole request.
+			continue
 		}
 		if tool.Name == "" {
 			return nil, nil, fmt.Errorf("%s tool name is required", tool.Type)
