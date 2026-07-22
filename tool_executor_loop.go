@@ -32,6 +32,18 @@ func (e *ToolExecutor) ExecuteWithTools(
 	provider types.Provider,
 	maxIterations int,
 ) (*types.TextResponse, error) {
+	return e.executeWithTools(ctx, request, provider.Text, maxIterations)
+}
+
+// executeWithTools runs the tool loop through the supplied text handler. This
+// lets builders apply provider middleware once and reuse the wrapped handler
+// for the initial request and every continuation turn.
+func (e *ToolExecutor) executeWithTools(
+	ctx context.Context,
+	request types.TextRequest,
+	handler types.TextHandler,
+	maxIterations int,
+) (*types.TextResponse, error) {
 	if maxIterations <= 0 {
 		maxIterations = 10 // Default safety limit
 	}
@@ -50,7 +62,7 @@ func (e *ToolExecutor) ExecuteWithTools(
 		iteration++
 
 		// Call the provider
-		response, err := provider.Text(ctx, currentRequest)
+		response, err := handler(ctx, currentRequest)
 		if err != nil {
 			return nil, fmt.Errorf("provider call failed (iteration %d): %w", iteration, err)
 		}

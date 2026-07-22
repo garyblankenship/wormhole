@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"sync"
-	"time"
 
 	"github.com/garyblankenship/wormhole/v2/internal/pool"
 	"github.com/garyblankenship/wormhole/v2/types"
@@ -57,47 +56,8 @@ func (e *ToolExecutor) ExecuteAll(ctx context.Context, toolCalls []types.ToolCal
 		go func(idx int, tc types.ToolCall) {
 			defer wg.Done()
 
-			// Apply concurrency limiting if configured
-			var startTime time.Time
-			if e.adaptiveLimiter != nil {
-				release, ok := e.adaptiveLimiter.AcquireToken(ctx)
-				if !ok {
-					// Context canceled or timeout while waiting for slot
-					resultChan <- resultWithIndex{
-						index: idx,
-						result: types.ToolResult{
-							ToolCallID: tc.ID,
-							Name:       tc.Name,
-							Error:      "concurrency limit exceeded or context canceled",
-						},
-					}
-					return
-				}
-				defer release()
-				startTime = time.Now()
-			} else if e.limiter != nil {
-				if !e.limiter.Acquire(ctx) {
-					// Context canceled or timeout while waiting for slot
-					resultChan <- resultWithIndex{
-						index: idx,
-						result: types.ToolResult{
-							ToolCallID: tc.ID,
-							Name:       tc.Name,
-							Error:      "concurrency limit exceeded or context canceled",
-						},
-					}
-					return
-				}
-				defer e.limiter.Release()
-			}
-
 			result := e.Execute(ctx, tc)
 			result.Name = tc.Name
-
-			// Record latency for adaptive concurrency control
-			if !startTime.IsZero() {
-				e.adaptiveLimiter.RecordLatency(time.Since(startTime))
-			}
 
 			resultChan <- resultWithIndex{index: idx, result: result}
 		}(i, toolCall)

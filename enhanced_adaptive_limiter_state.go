@@ -6,18 +6,7 @@ import (
 
 // createProviderState creates a new provider-level state
 func (l *EnhancedAdaptiveLimiter) createProviderState(provider string) *ProviderAdaptiveState {
-	targetLatency, minCapacity, maxCapacity, initialCapacity, pidConfig := l.resolveProviderSettings(provider)
-
-	// Create new state
-	state := NewProviderAdaptiveState(
-		ProviderKey{Provider: provider},
-		targetLatency,
-		minCapacity,
-		maxCapacity,
-		initialCapacity,
-		l.config.LatencyWindowSize,
-	)
-	state.pidController = NewPIDController(pidConfig)
+	state := l.newProviderState(ProviderKey{Provider: provider})
 
 	// Double-checked locking: re-check under write lock before inserting
 	l.mu.Lock()

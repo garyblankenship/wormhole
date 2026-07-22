@@ -96,7 +96,7 @@ func (c *capacityManager) evictIdleStates() {
 		if _, pinned := c.config.ProviderSettings[provider]; pinned {
 			continue
 		}
-		if state.InUse() > 0 || state.LastSeen().After(cutoff) {
+		if state.pins > 0 || state.InUse() > 0 || state.LastSeen().After(cutoff) {
 			continue
 		}
 		delete(l.providerStates, provider)
@@ -107,7 +107,7 @@ func (c *capacityManager) evictIdleStates() {
 	}
 
 	for key, state := range l.modelStates {
-		if state.InUse() > 0 || state.LastSeen().After(cutoff) {
+		if state.pins > 0 || state.InUse() > 0 || state.LastSeen().After(cutoff) {
 			continue
 		}
 		delete(l.modelStates, key)
@@ -124,7 +124,7 @@ func (c *capacityManager) evictIdleStates() {
 
 	candidates := make([]stateInfo, 0, len(l.modelStates))
 	for key, state := range l.modelStates {
-		if state.InUse() > 0 {
+		if state.pins > 0 || state.InUse() > 0 {
 			continue
 		}
 		candidates = append(candidates, stateInfo{key: key, lastSeen: state.LastSeen()})

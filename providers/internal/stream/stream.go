@@ -3,6 +3,7 @@ package stream
 import (
 	"bufio"
 	"bytes"
+	"errors"
 	"fmt"
 	"io"
 	"sync"
@@ -25,11 +26,10 @@ type SSEParser struct {
 	reader *bufio.Reader
 }
 
-// sseReaderBufferSize sizes the SSE line buffer. Large single frames are routine
-// (OpenAI Responses `response.completed` objects, big tool-call argument deltas,
-// gateway-batched deltas), so the default 4KB bufio buffer would otherwise force
-// the ErrBufferFull path on real traffic.
-const sseReaderBufferSize = 1 << 20 // 1 MiB
+// sseReaderBufferSize keeps common lines in the reader without eagerly reserving
+// a large frame-sized allocation for every stream. readLine assembles larger
+// frames from bounded fragments up to maxSSEBufferBytes.
+const sseReaderBufferSize = 64 << 10 // 64 KiB
 
 // NewSSEParser creates a new SSE parser
 func NewSSEParser(r io.Reader) *SSEParser {
@@ -75,6 +75,9 @@ func (p *SSEParser) Parse() (*SSEEvent, error) {
 		// Parse and apply field to event
 		if err := p.parseField(line, event); err != nil {
 			p.returnToPool(line)
+			if errors.Is(err, errSSEFrameTooLarge) {
+				return nil, err
+			}
 			continue // Invalid field format, skip
 		}
 		p.returnToPool(line)
@@ -88,65 +91,50 @@ func (p *SSEParser) Parse() (*SSEEvent, error) {
 
 // readLine reads next line and handles EOF
 func (p *SSEParser) readLine() ([]byte, bool, error) {
-	// Use ReadSlice to avoid allocation, then copy to pooled buffer
-	slice, err := p.reader.ReadSlice('\n')
-
-	// Helper to trim trailing newline characters
-	trimNewline := func(s []byte) []byte {
-		if len(s) > 0 && s[len(s)-1] == '\n' {
-			s = s[:len(s)-1]
-			if len(s) > 0 && s[len(s)-1] == '\r' {
-				s = s[:len(s)-1]
-			}
-		}
-		return s
-	}
-
-	// Check if we need to handle EOF
-	if err == io.EOF {
-		if len(slice) == 0 {
-			return nil, true, io.EOF
-		}
-		// Have data before EOF, process it
-		trimmed := trimNewline(slice)
-		line := p.copyToPooledBuffer(trimmed)
-		return line, true, nil
-	}
-
-	// Handle other errors (buffer too small)
-	if err != nil && err != bufio.ErrBufferFull {
-		return nil, false, err
-	}
-
-	// Line exceeds the (already large) bufio buffer. slice holds the consumed
-	// prefix and is valid only until the next read, so copy it, then read the
-	// remainder and concatenate. The previous code discarded the prefix, silently
-	// dropping the first buffer-size bytes — and thus the whole frame's `data:` field.
-	if err == bufio.ErrBufferFull {
-		prefix := append([]byte(nil), slice...)
-		rest, err2 := p.reader.ReadString('\n')
-		if err2 != nil && err2 != io.EOF {
-			return nil, false, err2
-		}
-		full := append(prefix, rest...)
-		trimmed := trimNewline(full)
-		line := p.copyToPooledBuffer(trimmed)
-		return line, err2 == io.EOF, nil
-	}
-
-	// Normal case: successful read
-	trimmed := trimNewline(slice)
-	line := p.copyToPooledBuffer(trimmed)
-	return line, false, nil
-}
-
-// copyToPooledBuffer copies a byte slice to a pooled buffer
-// Caller must return the buffer to pool after use
-func (p *SSEParser) copyToPooledBuffer(slice []byte) []byte {
 	bufPtr := lineBufferPool.Get().(*[]byte)
-	buf := (*bufPtr)[:0] // reset length
-	buf = append(buf, slice...)
-	return buf
+	line := (*bufPtr)[:0]
+	release := func() {
+		line = line[:0]
+		*bufPtr = line
+		lineBufferPool.Put(bufPtr)
+	}
+
+	for {
+		fragment, err := p.reader.ReadSlice('\n')
+		// Permit the maximum line content plus CRLF while ensuring an upstream
+		// peer can never make this buffer grow without bound.
+		if len(line)+len(fragment) > maxSSEBufferBytes+2 {
+			release()
+			return nil, false, errSSEFrameTooLarge
+		}
+		line = append(line, fragment...)
+
+		switch err {
+		case bufio.ErrBufferFull:
+			continue
+		case io.EOF:
+			if len(line) == 0 {
+				release()
+				return nil, true, io.EOF
+			}
+		case nil:
+		default:
+			release()
+			return nil, false, err
+		}
+
+		if len(line) > 0 && line[len(line)-1] == '\n' {
+			line = line[:len(line)-1]
+		}
+		if len(line) > 0 && line[len(line)-1] == '\r' {
+			line = line[:len(line)-1]
+		}
+		if len(line) > maxSSEBufferBytes {
+			release()
+			return nil, false, errSSEFrameTooLarge
+		}
+		return line, err == io.EOF, nil
+	}
 }
 
 // returnToPool returns a buffer to the pool
@@ -192,6 +180,5 @@ func (p *SSEParser) parseField(line []byte, event *SSEEvent) error {
 		return fmt.Errorf("invalid field format")
 	}
 
-	parseSSEField(string(line), event)
-	return nil
+	return parseSSEField(string(line), event)
 }

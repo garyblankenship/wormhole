@@ -2,9 +2,24 @@ package server
 
 import (
 	"net/http"
+	"strconv"
+	"time"
 
 	"github.com/garyblankenship/wormhole/v2/types"
 )
+
+func writeUpstreamError(w http.ResponseWriter, err error) {
+	status, errType, clientMsg := upstreamErrorStatus(err)
+	w.Header().Del("Retry-After")
+	if whErr, ok := types.AsWormholeError(err); ok && whErr.RetryAfter > 0 {
+		seconds := whErr.RetryAfter / time.Second
+		if whErr.RetryAfter%time.Second != 0 {
+			seconds++
+		}
+		w.Header().Set("Retry-After", strconv.FormatInt(int64(seconds), 10))
+	}
+	writeError(w, status, "upstream_error", clientMsg, errType)
+}
 
 // responseFormatUnsupported reports whether the proxy must reject response_format
 // for a provider rather than pass it through. Anthropic and Gemini never read

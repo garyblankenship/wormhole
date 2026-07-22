@@ -75,6 +75,7 @@ func TestModelCapability_Constants(t *testing.T) {
 		CapabilityVision,
 		CapabilityFunctions,
 		CapabilityStream,
+		CapabilityRerank,
 	}
 
 	expected := []string{
@@ -87,11 +88,21 @@ func TestModelCapability_Constants(t *testing.T) {
 		"vision",
 		"functions",
 		"stream",
+		"rerank",
 	}
 
 	for i, cap := range capabilities {
 		assert.Equal(t, expected[i], string(cap))
 	}
+}
+
+func TestModelRegistry_Count(t *testing.T) {
+	registry := NewModelRegistry()
+	assert.Equal(t, 0, registry.Count())
+	registry.Register(&ModelInfo{ID: "one"})
+	registry.Register(&ModelInfo{ID: "two"})
+	registry.Register(&ModelInfo{ID: "one"})
+	assert.Equal(t, 2, registry.Count())
 }
 
 func TestModelRegistry_Creation(t *testing.T) {

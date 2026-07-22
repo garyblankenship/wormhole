@@ -131,7 +131,14 @@ func WithStreamTrace(trace StreamTraceFunc) Option {
 	}
 }
 
-// WithModelValidation enables or disables model validation against the registry.
+// WithModelValidation enables or disables model validation against the opt-in
+// global model registry. Validation runs only when enabled, the registry is
+// nonempty, and the selected provider is not configured with DynamicModels.
+// Each request must name a known, non-deprecated model supporting its operation.
+// Text and agents accept text or chat; streams additionally require stream,
+// tool-enabled requests require functions, and media-bearing text requires
+// vision. Structured, embeddings, images, audio, and rerank requests require
+// their matching capability. Fallback attempts are validated independently.
 func WithModelValidation(enabled bool) Option {
 	return func(c *Config) {
 		c.ModelValidation = enabled

@@ -19,6 +19,7 @@ type Wormhole struct {
 	config             Config
 	providerMiddleware *types.ProviderMiddlewareChain // Type-safe middleware chain
 	toolRegistry       *ToolRegistry                  // Registry of available tools for function calling
+	modelRegistry      *types.ModelRegistry           // Registry instance pinned at client construction
 	discoveryService   *discovery.DiscoveryService    // Dynamic model discovery service
 
 	// Cache metrics
@@ -126,6 +127,7 @@ func New(opts ...Option) *Wormhole {
 		providers:         make(map[string]*cachedProvider),
 		config:            config,
 		toolRegistry:      NewToolRegistry(),
+		modelRegistry:     types.DefaultModelRegistry,
 		shutdownChan:      make(chan struct{}),
 		idempotencyCache:  make(map[string]*idempotencyEntry),
 		closers:           config.Closers,

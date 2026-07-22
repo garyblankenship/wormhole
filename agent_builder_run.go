@@ -29,6 +29,9 @@ func (b *AgentBuilder) Run(ctx context.Context, prompt string) (*AgentResult, er
 	if providerName == "" {
 		providerName = b.wormhole.config.DefaultProvider
 	}
+	if err := b.wormhole.validateModelAttempt(providerName, b.model, textModelCapabilities, []types.ModelCapability{types.CapabilityFunctions}); err != nil {
+		return nil, fmt.Errorf("agent: %w", err)
+	}
 
 	provider, release, err := b.wormhole.leaseProvider(providerName)
 	if err != nil {

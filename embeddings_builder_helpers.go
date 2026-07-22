@@ -108,6 +108,14 @@ func mergeUsage(current, next *types.Usage) *types.Usage {
 }
 
 func cloneEmbeddingsRequest(src *types.EmbeddingsRequest) *types.EmbeddingsRequest {
+	cloned := cloneEmbeddingsRequestMetadata(src)
+	if src != nil && len(src.Input) > 0 {
+		cloned.Input = append([]string(nil), src.Input...)
+	}
+	return cloned
+}
+
+func cloneEmbeddingsRequestMetadata(src *types.EmbeddingsRequest) *types.EmbeddingsRequest {
 	if src == nil {
 		return &types.EmbeddingsRequest{}
 	}
@@ -119,10 +127,6 @@ func cloneEmbeddingsRequest(src *types.EmbeddingsRequest) *types.EmbeddingsReque
 	if src.Dimensions != nil {
 		dimensions := *src.Dimensions
 		cloned.Dimensions = &dimensions
-	}
-	if len(src.Input) > 0 {
-		cloned.Input = make([]string, len(src.Input))
-		copy(cloned.Input, src.Input)
 	}
 	cloned.ProviderOptions = cloneProviderOptions(src.ProviderOptions)
 	return cloned

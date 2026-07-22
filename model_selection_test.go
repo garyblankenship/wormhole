@@ -90,3 +90,38 @@ func TestSelectModelHonorsPreferredProvider(t *testing.T) {
 		t.Fatalf("selected model = %s", model.ID)
 	}
 }
+
+func TestSortModelsByNameIsDeterministic(t *testing.T) {
+	t.Parallel()
+	models := []*types.ModelInfo{
+		{ID: "z-fallback", Provider: "preferred"},
+		{ID: "id-2", Name: "alpha", Provider: "other"},
+		{ID: "id-1", Name: "Alpha", Provider: "other"},
+		{ID: "id-0", Name: "Alpha", Provider: "other"},
+		{ID: "alpha", Provider: "other"},
+		{ID: "beta", Name: "beta", Provider: "preferred"},
+	}
+
+	sortModels(models, ModelQuery{
+		PreferProviders: []string{"preferred"},
+		SortBy:          ModelSortName,
+	})
+
+	got := make([]string, len(models))
+	for i, model := range models {
+		got[i] = model.Provider + "/" + model.ID
+	}
+	want := []string{
+		"preferred/beta",
+		"preferred/z-fallback",
+		"other/alpha",
+		"other/id-0",
+		"other/id-1",
+		"other/id-2",
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("order = %v, want %v", got, want)
+		}
+	}
+}

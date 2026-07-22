@@ -121,6 +121,9 @@ func (b *StructuredRequestBuilder) Generate(ctx context.Context) (*types.Structu
 	if request.Schema == nil {
 		return nil, fmt.Errorf("no schema provided")
 	}
+	if err := b.getWormhole().validateModelAttempt(b.getProvider(), request.Model, nil, []types.ModelCapability{types.CapabilityStructured}); err != nil {
+		return nil, err
+	}
 
 	return executeTrackedRequest(ctx, b.getWormhole(), b.idempotencyScope("structured.generate"), request, func(ctx context.Context) (*types.StructuredResponse, error) {
 		provider, release, err := b.getProviderWithBaseURL()

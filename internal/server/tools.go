@@ -12,11 +12,13 @@ import (
 func toWormholeTools(in []ChatTool) ([]types.Tool, error) {
 	out := make([]types.Tool, 0, len(in))
 	for _, t := range in {
-		if t.Type != "function" {
-			// Non-portable grouping tools (e.g. codex "namespace" containers) have
-			// no Chat Completions equivalent; skip them rather than failing the
-			// whole request.
+		if isMetadataToolContainer(t.Type) {
+			// Namespace containers group tools for clients but carry no callable
+			// behavior for the provider bridge.
 			continue
+		}
+		if t.Type != "function" {
+			return nil, unsupportedToolTypeError(t.Type)
 		}
 		if strings.TrimSpace(t.Function.Name) == "" {
 			return nil, fmt.Errorf("function tool name is required")
@@ -29,6 +31,14 @@ func toWormholeTools(in []ChatTool) ([]types.Tool, error) {
 		})
 	}
 	return out, nil
+}
+
+func isMetadataToolContainer(toolType string) bool {
+	return toolType == "namespace"
+}
+
+func unsupportedToolTypeError(toolType string) error {
+	return fmt.Errorf("unsupported tool type %q", toolType)
 }
 
 // parseToolChoice maps an OpenAI tool_choice (string or object form) to a

@@ -155,12 +155,28 @@ func sortModels(models []*types.ModelInfo, query ModelQuery) {
 			if left.ContextLength != right.ContextLength {
 				return left.ContextLength > right.ContextLength
 			}
+		case ModelSortName:
+			leftName := effectiveModelName(left)
+			rightName := effectiveModelName(right)
+			if foldedLeft, foldedRight := strings.ToLower(leftName), strings.ToLower(rightName); foldedLeft != foldedRight {
+				return foldedLeft < foldedRight
+			}
+			if left.Name != right.Name {
+				return left.Name < right.Name
+			}
 		}
 		if left.Provider != right.Provider {
 			return left.Provider < right.Provider
 		}
 		return left.ID < right.ID
 	})
+}
+
+func effectiveModelName(model *types.ModelInfo) string {
+	if model.Name != "" {
+		return model.Name
+	}
+	return model.ID
 }
 
 func rankLess(left, right string, ranks map[string]int) bool {

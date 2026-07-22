@@ -3,6 +3,7 @@ package wormhole
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/garyblankenship/wormhole/v2/internal/schemavalidation"
 	"github.com/garyblankenship/wormhole/v2/types"
@@ -88,8 +89,12 @@ func (e *ToolExecutor) Execute(ctx context.Context, toolCall types.ToolCall) typ
 		}
 	}
 
+	if result, rejected := e.rejectMalformedArguments(toolCall); rejected {
+		return result
+	}
+
 	// Get tool definition from registry
-	definition := e.registry.Get(toolCall.Name)
+	definition := e.registry.getStored(toolCall.Name)
 	if definition == nil {
 		// Record failure for circuit breaker
 		if e.circuitBreaker != nil {
@@ -118,9 +123,21 @@ func (e *ToolExecutor) Execute(ctx context.Context, toolCall types.ToolCall) typ
 		}
 	}
 
-	// Apply timeout if configured
-	var cancel context.CancelFunc
+	// Acquire capacity immediately before starting user code. The permit is
+	// released by the execution goroutine, not by this caller, because a handler
+	// may ignore cancellation and continue after Execute returns.
+	releasePermit, ok := e.acquirePermit(ctx)
+	if !ok {
+		return types.ToolResult{
+			ToolCallID: toolCall.ID,
+			Error:      "concurrency limit exceeded or context canceled",
+		}
+	}
+
+	// ToolTimeout bounds handler execution, not time spent waiting for capacity.
+	// Derive it only after a permit is held, while preserving caller cancellation.
 	if e.safetyConfig.HasTimeout() {
+		var cancel context.CancelFunc
 		ctx, cancel = context.WithTimeout(ctx, e.safetyConfig.ToolTimeout)
 		defer cancel()
 	}
@@ -168,6 +185,7 @@ func (e *ToolExecutor) Execute(ctx context.Context, toolCall types.ToolCall) typ
 	}
 	done := make(chan outcome, 1)
 	go func() {
+		defer releasePermit()
 		r, e := execute()
 		done <- outcome{result: r, err: e}
 	}()
@@ -212,4 +230,44 @@ func (e *ToolExecutor) Execute(ctx context.Context, toolCall types.ToolCall) typ
 		ToolCallID: toolCall.ID,
 		Result:     result, // Result is any, not string
 	}
+}
+
+func (e *ToolExecutor) rejectMalformedArguments(toolCall types.ToolCall) (types.ToolResult, bool) {
+	if !toolCall.ArgsInvalid {
+		return types.ToolResult{}, false
+	}
+	if e.circuitBreaker != nil {
+		e.circuitBreaker.RecordFailure()
+	}
+	parseError := toolCall.ArgsParseError
+	if parseError == "" {
+		parseError = "provider could not parse the arguments as JSON"
+	}
+	return types.ToolResult{
+		ToolCallID: toolCall.ID,
+		Error:      fmt.Sprintf("tool %q has malformed arguments: %s", toolCall.Name, parseError),
+	}, true
+}
+
+func (e *ToolExecutor) acquirePermit(ctx context.Context) (release func(), ok bool) {
+	if e.adaptiveLimiter != nil {
+		release, ok := e.adaptiveLimiter.AcquireToken(ctx)
+		if !ok {
+			return nil, false
+		}
+		started := time.Now()
+		return func() {
+			e.adaptiveLimiter.RecordLatency(time.Since(started))
+			release()
+		}, true
+	}
+
+	if e.limiter != nil {
+		if !e.limiter.Acquire(ctx) {
+			return nil, false
+		}
+		return e.limiter.Release, true
+	}
+
+	return func() {}, true
 }

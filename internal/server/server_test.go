@@ -12,6 +12,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -573,7 +574,8 @@ func TestProxyChatStreamingErrorBeforeCommitReturnsHTTPError(t *testing.T) {
 	t.Parallel()
 
 	upstreamErr := types.NewWormholeError(types.ErrorCodeRateLimit, "quota bucket team-alpha exhausted", true).
-		WithStatusCode(http.StatusTooManyRequests)
+		WithStatusCode(http.StatusTooManyRequests).
+		WithRetryAfter(1500 * time.Millisecond)
 	mock := wmtest.NewMockProvider("openai").WithStreamChunks([]types.TextChunk{{Error: upstreamErr}})
 	p := newTestProxy(mock)
 
@@ -592,13 +594,15 @@ func TestProxyChatStreamingErrorBeforeCommitReturnsHTTPError(t *testing.T) {
 	assert.Equal(t, "upstream_error", out.Error.Code)
 	assert.Equal(t, "upstream rate limit exceeded", out.Error.Message)
 	assert.NotContains(t, out.Error.Message, "team-alpha")
+	assert.Equal(t, "2", rec.Header().Get("Retry-After"))
 }
 
 func TestProxyChatStreamingErrorAfterCommitEmitsSSEError(t *testing.T) {
 	t.Parallel()
 
 	upstreamErr := types.NewWormholeError(types.ErrorCodeRateLimit, "quota bucket team-alpha exhausted", true).
-		WithStatusCode(http.StatusTooManyRequests)
+		WithStatusCode(http.StatusTooManyRequests).
+		WithRetryAfter(1500 * time.Millisecond)
 	mock := wmtest.NewMockProvider("openai").WithStreamChunks([]types.TextChunk{
 		{Text: "partial"},
 		{Error: upstreamErr},
@@ -621,6 +625,7 @@ func TestProxyChatStreamingErrorAfterCommitEmitsSSEError(t *testing.T) {
 	assert.Contains(t, body, `"message":"upstream rate limit exceeded"`)
 	assert.NotContains(t, body, "team-alpha")
 	assert.NotContains(t, body, "data: [DONE]")
+	assert.Empty(t, rec.Header().Get("Retry-After"), "post-commit SSE failures cannot add HTTP headers")
 }
 
 func TestProxyRejectsMultipleJSONValues(t *testing.T) {

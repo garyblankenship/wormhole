@@ -84,6 +84,9 @@ func (b *ImageRequestBuilder) Generate(ctx context.Context) (*types.ImageRespons
 	if request.Model == "" {
 		return nil, fmt.Errorf("no model specified")
 	}
+	if err := b.getWormhole().validateModelAttempt(b.getProvider(), request.Model, nil, []types.ModelCapability{types.CapabilityImages}); err != nil {
+		return nil, err
+	}
 
 	// Set defaults
 	if request.N == 0 {

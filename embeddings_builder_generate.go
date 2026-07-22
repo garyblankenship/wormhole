@@ -31,6 +31,9 @@ func (b *EmbeddingsRequestBuilder) Generate(ctx context.Context) (*types.Embeddi
 	if !validEmbeddingEncodingFormat(request.EncodingFormat) {
 		return nil, types.NewValidationError("encoding_format", "enum", request.EncodingFormat, "must be float or base64")
 	}
+	if err := b.getWormhole().validateModelAttempt(b.getProvider(), request.Model, nil, []types.ModelCapability{types.CapabilityEmbeddings}); err != nil {
+		return nil, err
+	}
 
 	response, err := executeTrackedRequest(ctx, b.getWormhole(), b.idempotencyScope("embeddings.generate"), request, func(ctx context.Context) (*types.EmbeddingsResponse, error) {
 		return b.executeEmbeddings(ctx, request)
@@ -68,6 +71,9 @@ func (b *EmbeddingsRequestBuilder) GenerateBatched(ctx context.Context, batchSiz
 	if !validEmbeddingEncodingFormat(request.EncodingFormat) {
 		return nil, types.NewValidationError("encoding_format", "enum", request.EncodingFormat, "must be float or base64")
 	}
+	if err := b.getWormhole().validateModelAttempt(b.getProvider(), request.Model, nil, []types.ModelCapability{types.CapabilityEmbeddings}); err != nil {
+		return nil, err
+	}
 
 	response, err := executeTrackedRequest(ctx, b.getWormhole(), b.idempotencyScope("embeddings.generate_batched"), request, func(ctx context.Context) (*types.EmbeddingsResponse, error) {
 		out := make([]types.Embedding, len(request.Input))
@@ -79,7 +85,7 @@ func (b *EmbeddingsRequestBuilder) GenerateBatched(ctx context.Context, batchSiz
 			if end > len(request.Input) {
 				end = len(request.Input)
 			}
-			batchRequest := cloneEmbeddingsRequest(request)
+			batchRequest := cloneEmbeddingsRequestMetadata(request)
 			batchRequest.Input = append([]string(nil), request.Input[start:end]...)
 
 			resp, err := b.executeEmbeddings(ctx, batchRequest)

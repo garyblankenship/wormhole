@@ -116,8 +116,11 @@ func (l *EnhancedAdaptiveLimiter) Acquire(ctx context.Context) bool {
 // This method now delegates to AcquireToken internally for safety, but
 // callers must still pair with ReleaseWithProvider() which may hit a different limiter.
 func (l *EnhancedAdaptiveLimiter) AcquireWithProvider(ctx context.Context, provider, model string) bool {
-	state := l.getOrCreateState(provider, model)
+	state := l.pinState(provider, model)
 	_, ok := state.AcquireToken(ctx)
+	if !ok {
+		l.unpinState(state)
+	}
 	return ok
 }
 
@@ -135,6 +138,7 @@ func (l *EnhancedAdaptiveLimiter) ReleaseWithProvider(provider, model string) {
 	state := l.getState(provider, model)
 	if state != nil {
 		state.Limiter().Release()
+		l.unpinState(state)
 	} else {
 		l.globalState.Limiter().Release()
 	}
@@ -151,8 +155,20 @@ func (l *EnhancedAdaptiveLimiter) AcquireToken(ctx context.Context) (release fun
 // a release function. The release function captures the specific limiter instance,
 // preventing race conditions if capacity adjustment swaps the limiter.
 func (l *EnhancedAdaptiveLimiter) AcquireTokenWithProvider(ctx context.Context, provider, model string) (release func(), ok bool) {
-	state := l.getOrCreateState(provider, model)
-	return state.AcquireToken(ctx)
+	state := l.pinState(provider, model)
+	releaseToken, ok := state.AcquireToken(ctx)
+	if !ok {
+		l.unpinState(state)
+		return nil, false
+	}
+
+	var once sync.Once
+	return func() {
+		once.Do(func() {
+			releaseToken()
+			l.unpinState(state)
+		})
+	}, true
 }
 
 // RecordLatency records latency for global limiter
@@ -164,11 +180,66 @@ func (l *EnhancedAdaptiveLimiter) RecordLatency(latency time.Duration) {
 func (l *EnhancedAdaptiveLimiter) RecordLatencyWithProvider(latency time.Duration,
 	provider, model string, err error) {
 
-	state := l.getOrCreateState(provider, model)
+	state := l.pinState(provider, model)
+	defer l.unpinState(state)
 	state.RecordLatency(latency, err)
 
 	// Also update global state for backward compatibility
 	l.globalState.RecordLatency(latency, err)
+}
+
+// pinState returns the canonical map-owned state and prevents its eviction
+// until the caller invokes unpinState.
+func (l *EnhancedAdaptiveLimiter) pinState(provider, model string) *ProviderAdaptiveState {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+
+	state := l.getOrCreateStateLocked(provider, model)
+	state.pins++
+	return state
+}
+
+func (l *EnhancedAdaptiveLimiter) unpinState(state *ProviderAdaptiveState) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	if state.pins > 0 {
+		state.pins--
+	}
+}
+
+// getOrCreateStateLocked requires l.mu to be held for writing.
+func (l *EnhancedAdaptiveLimiter) getOrCreateStateLocked(provider, model string) *ProviderAdaptiveState {
+	if !l.config.EnableModelLevel && model != "" {
+		if state := l.providerStates[provider]; state != nil {
+			return state
+		}
+		state := l.newProviderState(ProviderKey{Provider: provider})
+		l.providerStates[provider] = state
+		return state
+	}
+
+	key := ProviderKey{Provider: provider, Model: model}
+	mapKey := key.String()
+	if state := l.modelStates[mapKey]; state != nil {
+		return state
+	}
+	state := l.newProviderState(key)
+	l.modelStates[mapKey] = state
+	return state
+}
+
+func (l *EnhancedAdaptiveLimiter) newProviderState(key ProviderKey) *ProviderAdaptiveState {
+	targetLatency, minCapacity, maxCapacity, initialCapacity, pidConfig := l.resolveProviderSettings(key.Provider)
+	state := NewProviderAdaptiveState(
+		key,
+		targetLatency,
+		minCapacity,
+		maxCapacity,
+		initialCapacity,
+		l.config.LatencyWindowSize,
+	)
+	state.pidController = NewPIDController(pidConfig)
+	return state
 }
 
 // getOrCreateState gets or creates state for provider/model.
@@ -201,19 +272,8 @@ func (l *EnhancedAdaptiveLimiter) getOrCreateState(provider, model string) *Prov
 		return state
 	}
 
-	// Resolve settings outside the lock (config is immutable after init)
-	targetLatency, minCapacity, maxCapacity, initialCapacity, pidConfig := l.resolveProviderSettings(provider)
-
-	// Create new state
-	newState := NewProviderAdaptiveState(
-		key,
-		targetLatency,
-		minCapacity,
-		maxCapacity,
-		initialCapacity,
-		l.config.LatencyWindowSize,
-	)
-	newState.pidController = NewPIDController(pidConfig)
+	// Construct outside the lock; config is immutable after initialization.
+	newState := l.newProviderState(key)
 
 	// Double-checked locking: re-check under write lock before inserting
 	l.mu.Lock()

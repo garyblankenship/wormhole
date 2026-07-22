@@ -100,28 +100,29 @@ func (r *retryableHTTPClient) Do(req *http.Request) (*http.Response, error) {
 	var previousRequest *http.Request
 
 	for attempt := 0; attempt <= r.Config.MaxRetries; attempt++ {
-		// Clone request for retry attempts
-		reqClone := req.Clone(req.Context())
-		if req.Body != nil {
-			if req.GetBody != nil {
+		requestForAttempt := req
+		if attempt > 0 {
+			requestForAttempt = req.Clone(req.Context())
+			if req.Body != nil {
+				if req.GetBody == nil {
+					return nil, fmt.Errorf("request body is not replayable for retry attempt %d", attempt+1)
+				}
 				body, err := req.GetBody()
 				if err != nil {
 					return nil, fmt.Errorf("recreate request body: %w", err)
 				}
-				reqClone.Body = body
-			} else if attempt > 0 {
-				return nil, fmt.Errorf("request body is not replayable for retry attempt %d", attempt+1)
+				requestForAttempt.Body = body
+			}
+
+			// Rotate credentials on retries (e.g. next API key after a 429).
+			if r.OnRetry != nil {
+				r.OnRetry(requestForAttempt, attempt, lastRetryErr, previousRequest)
 			}
 		}
 
-		// Rotate credentials on retries (e.g. next API key after a 429).
-		if attempt > 0 && r.OnRetry != nil {
-			r.OnRetry(reqClone, attempt, lastRetryErr, previousRequest)
-		}
-
 		// Execute request
-		resp, err := r.Client.Do(reqClone)
-		previousRequest = reqClone
+		resp, err := r.Client.Do(requestForAttempt)
+		previousRequest = requestForAttempt
 
 		// If no error and successful status, return immediately
 		if err == nil && !isRetryableStatusCode(resp.StatusCode) {

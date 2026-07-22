@@ -41,28 +41,32 @@ func NewToolRegistry() *ToolRegistry {
 //	    Handler: weatherHandler,
 //	})
 func (r *ToolRegistry) Register(name string, definition *types.ToolDefinition) {
+	stored := cloneToolDefinition(definition)
+
+	// Normalize only the registry-owned copy so callers cannot mutate registry
+	// state through the definition they supplied.
+	stored.Tool.Name = name
+	if stored.Tool.Type == "" {
+		stored.Tool.Type = "function"
+	}
+
 	r.mu.Lock()
 	defer r.mu.Unlock()
-
-	// Ensure the tool name matches
-	if definition.Tool.Name == "" {
-		definition.Tool.Name = name
-	} else if definition.Tool.Name != name {
-		// If name mismatch, use the provided name
-		definition.Tool.Name = name
-	}
-
-	// Ensure tool type is set
-	if definition.Tool.Type == "" {
-		definition.Tool.Type = "function"
-	}
-
-	r.tools[name] = definition
+	r.tools[name] = stored
 }
 
 // Get retrieves a tool definition by name.
 // Returns nil if the tool is not found.
 func (r *ToolRegistry) Get(name string) *types.ToolDefinition {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	return cloneToolDefinition(r.tools[name])
+}
+
+// getStored retrieves the immutable registry-owned definition for execution.
+// Callers must not mutate the returned definition or its nested metadata.
+func (r *ToolRegistry) getStored(name string) *types.ToolDefinition {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
@@ -100,10 +104,20 @@ func (r *ToolRegistry) List() []types.Tool {
 
 	tools := make([]types.Tool, 0, len(r.tools))
 	for _, def := range r.tools {
-		tools = append(tools, def.Tool)
+		tools = append(tools, types.CloneTool(def.Tool))
 	}
 
 	return tools
+}
+
+func cloneToolDefinition(definition *types.ToolDefinition) *types.ToolDefinition {
+	if definition == nil {
+		return nil
+	}
+	return &types.ToolDefinition{
+		Tool:    types.CloneTool(definition.Tool),
+		Handler: definition.Handler,
+	}
 }
 
 // ListNames returns the names of all registered tools.

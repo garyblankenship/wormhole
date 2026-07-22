@@ -148,17 +148,41 @@ func TestProxyResponsesCustomToolChoice(t *testing.T) {
 func TestProxyResponsesRejectsUnsupportedToolsAndChoices(t *testing.T) {
 	t.Parallel()
 
-	tests := []string{
-		`{"model":"glm-5.2","input":"call","tools":[{"type":"function","name":""}]}`,
-		`{"model":"glm-5.2","input":"call","tools":[{"type":"function","name":"declared"}],"tool_choice":{"type":"function","name":"missing"}}`,
-		`{"model":"glm-5.2","input":"call","tool_choice":"sometimes"}`,
+	tests := []struct {
+		name        string
+		body        string
+		messagePart string
+	}{
+		{name: "empty function name", body: `{"model":"glm-5.2","input":"call","tools":[{"type":"function","name":""}]}`},
+		{name: "undeclared selected tool", body: `{"model":"glm-5.2","input":"call","tools":[{"type":"function","name":"declared"}],"tool_choice":{"type":"function","name":"missing"}}`},
+		{name: "unknown tool choice", body: `{"model":"glm-5.2","input":"call","tool_choice":"sometimes"}`},
+		{name: "web search", body: `{"model":"glm-5.2","input":"call","tools":[{"type":"web_search"}]}`, messagePart: `unsupported tool type "web_search"`},
+		{name: "unknown tool type", body: `{"model":"glm-5.2","input":"call","tools":[{"type":"computer_use_preview"}]}`, messagePart: `unsupported tool type "computer_use_preview"`},
 	}
-	for _, body := range tests {
-		provider := newCapturingTextProvider("openai")
-		rec := performRequest(newCapturingTestProxy(provider), http.MethodPost, "/v1/responses", body)
-		require.Equal(t, http.StatusBadRequest, rec.Code)
-		assert.Empty(t, provider.lastRequest().Model)
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			provider := newCapturingTextProvider("openai")
+			rec := performRequest(newCapturingTestProxy(provider), http.MethodPost, "/v1/responses", test.body)
+			require.Equal(t, http.StatusBadRequest, rec.Code)
+			if test.messagePart != "" {
+				var response ErrorResponse
+				require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &response))
+				assert.Contains(t, response.Error.Message, test.messagePart)
+			}
+			assert.Empty(t, provider.lastRequest().Model)
+		})
 	}
+}
+
+func TestProxyResponsesSkipsMetadataToolContainers(t *testing.T) {
+	t.Parallel()
+
+	provider := newCapturingTextProvider("openai")
+	rec := performRequest(newCapturingTestProxy(provider), http.MethodPost, "/v1/responses", `{"model":"glm-5.2","input":"call","tools":[{"type":"namespace","name":"multi_agent_v1"},{"type":"function","name":"read_file"}]}`)
+
+	require.Equal(t, http.StatusOK, rec.Code)
+	require.Len(t, provider.lastRequest().Tools, 1)
+	assert.Equal(t, "read_file", provider.lastRequest().Tools[0].Name)
 }
 
 func TestProxyResponsesFailureEventIsSequenced(t *testing.T) {

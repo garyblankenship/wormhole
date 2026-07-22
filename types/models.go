@@ -42,6 +42,7 @@ const (
 	CapabilityVision     ModelCapability = "vision"
 	CapabilityFunctions  ModelCapability = "functions"
 	CapabilityStream     ModelCapability = "stream"
+	CapabilityRerank     ModelCapability = "rerank"
 )
 
 // ModelRegistry manages available models across providers.
@@ -51,6 +52,13 @@ type ModelRegistry struct {
 	mu         sync.RWMutex
 	models     map[string]*ModelInfo
 	byProvider map[string][]*ModelInfo
+}
+
+// Count returns the number of registered models.
+func (r *ModelRegistry) Count() int {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return len(r.models)
 }
 
 // NewModelRegistry creates a new empty model registry

@@ -3,13 +3,13 @@ package providers
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"net/http"
 	"time"
 
-	"github.com/garyblankenship/wormhole/v2/internal/pool"
 	"github.com/garyblankenship/wormhole/v2/types"
 )
 
@@ -88,15 +88,11 @@ func (w *HTTPClientWrapper) marshalRequestBody(body any) ([]byte, error) {
 		return nil, nil
 	}
 
-	pooledBytes, err := pool.Marshal(body)
+	payload, err := json.Marshal(body)
 	if err != nil {
 		return nil, types.Errorf("marshal request body", err)
 	}
-	defer pool.Return(pooledBytes)
-
-	owned := make([]byte, len(pooledBytes))
-	copy(owned, pooledBytes)
-	return owned, nil
+	return payload, nil
 }
 
 func (w *HTTPClientWrapper) setRequestHeaders(req *http.Request) error {

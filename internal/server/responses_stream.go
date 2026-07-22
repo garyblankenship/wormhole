@@ -18,8 +18,7 @@ func (p *proxy) streamResponses(w http.ResponseWriter, r *http.Request, executio
 	}
 	stream, err := execution.builder.Stream(r.Context())
 	if err != nil {
-		status, errType, clientMsg := upstreamErrorStatus(err)
-		writeError(w, status, "upstream_error", clientMsg, errType)
+		writeUpstreamError(w, err)
 		return
 	}
 

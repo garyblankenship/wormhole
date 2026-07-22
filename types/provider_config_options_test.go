@@ -16,11 +16,11 @@ func TestProviderConfigFluentOptions(t *testing.T) {
 		WithHeaders(map[string]string{"X-Test": "1"}).
 		WithHeader("X-Custom", "2").
 		WithTimeout(30).
-		WithTimeoutDuration(45 * time.Second).
+		WithTimeoutDuration(45*time.Second).
 		WithRetries(3, 200*time.Millisecond).
 		WithNoRetries().
-		WithMaxRetryDelay(5 * time.Second).
-		WithHTTPTimeout(10 * time.Second).
+		WithMaxRetryDelay(5*time.Second).
+		WithHTTPTimeout(10*time.Second).
 		WithDynamicModels().
 		WithParam("custom_param", "value1").
 		WithParams(map[string]any{"param2": 123})

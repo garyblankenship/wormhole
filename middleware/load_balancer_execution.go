@@ -50,6 +50,9 @@ func (lb *LoadBalancer) updateProviderMetrics(provider *ProviderHandler, latency
 
 // StartHealthChecks starts background health checking
 func (lb *LoadBalancer) StartHealthChecks(checkFunc func(Handler) error) {
+	lb.lifecycleMu.Lock()
+	defer lb.lifecycleMu.Unlock()
+
 	lb.mu.Lock()
 	if lb.stopHealthCheck != nil {
 		lb.healthCheckFunc = checkFunc
@@ -67,6 +70,9 @@ func (lb *LoadBalancer) StartHealthChecks(checkFunc func(Handler) error) {
 
 // StopHealthChecks stops background health checking
 func (lb *LoadBalancer) StopHealthChecks() {
+	lb.lifecycleMu.Lock()
+	defer lb.lifecycleMu.Unlock()
+
 	lb.mu.Lock()
 	stopCh := lb.stopHealthCheck
 	lb.stopHealthCheck = nil

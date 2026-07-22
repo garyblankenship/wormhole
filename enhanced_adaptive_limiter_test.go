@@ -3,6 +3,7 @@ package wormhole
 import (
 	"context"
 	"fmt"
+	"sync"
 	"testing"
 	"time"
 
@@ -366,6 +367,102 @@ func TestEnhancedAdaptiveLimiterEvictsIdleModelStates(t *testing.T) {
 
 	assert.Nil(t, limiter.getState("openai", "gpt-4"))
 	assert.NotNil(t, limiter.getState("anthropic", "claude-3"))
+}
+
+func TestEnhancedAdaptiveLimiterPinnedStateSurvivesEviction(t *testing.T) {
+	config := DefaultEnhancedAdaptiveConfig()
+	config.EnableModelLevel = true
+	config.QueryInterval = 0
+	config.AdjustmentInterval = time.Hour
+	config.IdleStateTTL = time.Nanosecond
+
+	limiter := NewEnhancedAdaptiveLimiter(config)
+	defer limiter.Stop()
+
+	state := limiter.pinState("openai", "gpt-4")
+	state.mu.Lock()
+	state.lastSeen = time.Time{}
+	state.mu.Unlock()
+
+	manager := &capacityManager{config: config, limiter: limiter}
+	manager.evictIdleStates()
+	assert.Same(t, state, limiter.getState("openai", "gpt-4"))
+
+	limiter.unpinState(state)
+	manager.evictIdleStates()
+	assert.Nil(t, limiter.getState("openai", "gpt-4"))
+}
+
+func TestEnhancedAdaptiveLimiterTokenPinsStateUntilIdempotentRelease(t *testing.T) {
+	config := DefaultEnhancedAdaptiveConfig()
+	config.EnableModelLevel = true
+	config.QueryInterval = 0
+	config.AdjustmentInterval = time.Hour
+	config.IdleStateTTL = time.Nanosecond
+
+	limiter := NewEnhancedAdaptiveLimiter(config)
+	defer limiter.Stop()
+
+	release, ok := limiter.AcquireTokenWithProvider(context.Background(), "openai", "gpt-4")
+	if !ok {
+		t.Fatal("expected token acquisition")
+	}
+	state := limiter.getState("openai", "gpt-4")
+	limiter.mu.RLock()
+	pins := state.pins
+	limiter.mu.RUnlock()
+	assert.Equal(t, 1, pins)
+
+	// Simulate a capacity rollover: the token is held by the captured old
+	// limiter, so only the state pin can prevent split admission via eviction.
+	state.mu.Lock()
+	state.limiter = NewConcurrencyLimiter(1)
+	state.lastSeen = time.Time{}
+	state.mu.Unlock()
+	manager := &capacityManager{config: config, limiter: limiter}
+	manager.evictIdleStates()
+	assert.Same(t, state, limiter.getState("openai", "gpt-4"))
+
+	release()
+	release()
+	limiter.mu.RLock()
+	pins = state.pins
+	limiter.mu.RUnlock()
+	assert.Equal(t, 0, pins)
+
+	manager.evictIdleStates()
+	assert.Nil(t, limiter.getState("openai", "gpt-4"))
+}
+
+func TestEnhancedAdaptiveLimiterLatencyMutationPinsState(t *testing.T) {
+	config := DefaultEnhancedAdaptiveConfig()
+	config.EnableModelLevel = true
+	config.QueryInterval = 0
+	config.AdjustmentInterval = time.Hour
+
+	limiter := NewEnhancedAdaptiveLimiter(config)
+	defer limiter.Stop()
+
+	const workers = 64
+	var wg sync.WaitGroup
+	wg.Add(workers)
+	for i := 0; i < workers; i++ {
+		go func() {
+			defer wg.Done()
+			limiter.RecordLatencyWithProvider(time.Millisecond, "openai", "gpt-4", nil)
+		}()
+	}
+	wg.Wait()
+
+	state := limiter.getState("openai", "gpt-4")
+	if state == nil {
+		t.Fatal("latency mutation lost its state")
+	}
+	_, _, _, _, _ = state.GetMetrics()
+	limiter.mu.RLock()
+	pins := state.pins
+	limiter.mu.RUnlock()
+	assert.Equal(t, 0, pins)
 }
 
 func TestEnhancedAdaptiveLimiter_RecordLatency(t *testing.T) {

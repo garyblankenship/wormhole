@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"net/http"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -23,6 +24,15 @@ import (
 type erroringTextProvider struct {
 	*wmtest.MockProvider
 	err error
+}
+
+type erroringStreamProvider struct {
+	*wmtest.MockProvider
+	err error
+}
+
+func (p *erroringStreamProvider) Stream(_ context.Context, _ types.TextRequest) (<-chan types.TextChunk, error) {
+	return nil, p.err
 }
 
 func (p *erroringTextProvider) Text(_ context.Context, _ types.TextRequest) (*types.TextResponse, error) {
@@ -42,6 +52,85 @@ func newErroringProxy(err error) *proxy {
 		},
 		Logger: slog.New(slog.NewTextHandler(io.Discard, nil)),
 	})
+}
+
+func newErroringStreamProxy(err error) *proxy {
+	prov := &erroringStreamProvider{MockProvider: wmtest.NewMockProvider("openai"), err: err}
+	return New(Config{
+		WormholeOpts: []wormhole.Option{
+			wormhole.WithCustomProvider("openai", func(types.ProviderConfig) (types.Provider, error) {
+				return prov, nil
+			}),
+			wormhole.WithProviderConfig("openai", types.ProviderConfig{}),
+			wormhole.WithDefaultProvider("openai"),
+			wormhole.WithDiscovery(false),
+		},
+		Logger: slog.New(slog.NewTextHandler(io.Discard, nil)),
+	})
+}
+
+func TestProxyUpstreamRetryAfterHeader(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name       string
+		err        error
+		wantStatus int
+		wantHeader string
+	}{
+		{
+			name: "exact seconds and upstream status preserved",
+			err: types.NewWormholeError(types.ErrorCodeProvider, "unavailable", true).
+				WithStatusCode(http.StatusServiceUnavailable).
+				WithRetryAfter(3 * time.Second),
+			wantStatus: http.StatusServiceUnavailable,
+			wantHeader: "3",
+		},
+		{
+			name: "fractional duration rounds up",
+			err: types.NewWormholeError(types.ErrorCodeRateLimit, "limited", true).
+				WithStatusCode(http.StatusTooManyRequests).
+				WithRetryAfter(1500 * time.Millisecond),
+			wantStatus: http.StatusTooManyRequests,
+			wantHeader: "2",
+		},
+		{
+			name:       "code default does not synthesize header",
+			err:        types.NewWormholeError(types.ErrorCodeRateLimit, "limited", true),
+			wantStatus: http.StatusTooManyRequests,
+		},
+		{
+			name:       "plain error omits header",
+			err:        errors.New("unavailable"),
+			wantStatus: http.StatusBadGateway,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			p := newErroringProxy(tt.err)
+			rec := performRequest(p, http.MethodPost, "/v1/chat/completions",
+				`{"model":"gpt-test","messages":[{"role":"user","content":"hi"}]}`)
+
+			assert.Equal(t, tt.wantStatus, rec.Code)
+			assert.Equal(t, tt.wantHeader, rec.Header().Get("Retry-After"))
+		})
+	}
+}
+
+func TestProxyStreamingCreationErrorPreservesRetryAfter(t *testing.T) {
+	t.Parallel()
+
+	err := types.NewWormholeError(types.ErrorCodeProvider, "unavailable", true).
+		WithStatusCode(http.StatusServiceUnavailable).
+		WithRetryAfter(2500 * time.Millisecond)
+	p := newErroringStreamProxy(err)
+	rec := performRequest(p, http.MethodPost, "/v1/chat/completions",
+		`{"model":"gpt-test","stream":true,"messages":[{"role":"user","content":"hi"}]}`)
+
+	assert.Equal(t, http.StatusServiceUnavailable, rec.Code)
+	assert.Equal(t, "3", rec.Header().Get("Retry-After"))
 }
 
 func TestProxyMapsUpstreamErrorStatus(t *testing.T) {

@@ -13,11 +13,13 @@ func translateResponsesTools(input []responsesTool, selection responsesToolChoic
 	customTools := make(map[string]bool)
 	available := make(map[string]bool)
 	for _, tool := range input {
-		if tool.Type != "function" && tool.Type != "custom" {
-			// Non-portable grouping tools (e.g. codex "namespace" containers for
-			// multi-agent / MCP servers) have no Chat Completions equivalent; skip
-			// them rather than failing the whole request.
+		if isMetadataToolContainer(tool.Type) {
+			// Namespace containers group tools for clients but carry no callable
+			// behavior for the provider bridge.
 			continue
+		}
+		if tool.Type != "function" && tool.Type != "custom" {
+			return nil, nil, unsupportedToolTypeError(tool.Type)
 		}
 		if tool.Name == "" {
 			return nil, nil, fmt.Errorf("%s tool name is required", tool.Type)

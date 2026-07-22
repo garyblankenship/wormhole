@@ -21,8 +21,7 @@ func (p *proxy) streamChat(w http.ResponseWriter, r *http.Request, builder *worm
 	stream, err := builder.Stream(r.Context())
 	if err != nil {
 		p.logger.Error("stream creation failed", "error", types.SafeErrorValue(err), "model", types.SafeLogString(model))
-		status, errType, clientMsg := upstreamErrorStatus(err)
-		writeError(w, status, "upstream_error", clientMsg, errType)
+		writeUpstreamError(w, err)
 		return
 	}
 
@@ -34,8 +33,7 @@ func (p *proxy) streamChat(w http.ResponseWriter, r *http.Request, builder *worm
 		if chunk.Error != nil {
 			p.logger.Error("stream chunk error", "error", types.SafeErrorValue(chunk.Error))
 			if !committed {
-				status, errType, clientMsg := upstreamErrorStatus(chunk.Error)
-				writeError(w, status, "upstream_error", clientMsg, errType)
+				writeUpstreamError(w, chunk.Error)
 				return
 			}
 			writeStreamError(w, flusher, chunk.Error)

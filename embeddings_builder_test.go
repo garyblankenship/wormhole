@@ -324,6 +324,55 @@ func TestEmbeddingsRequestBuilderGenerateBatched(t *testing.T) {
 		}
 	})
 
+	t.Run("preserves metadata and isolates provider mutations", func(t *testing.T) {
+		t.Parallel()
+		provider := &mutatingBatchedEmbeddingProvider{}
+		client := New(
+			WithCustomProvider("mutating-batch", func(types.ProviderConfig) (types.Provider, error) {
+				return provider, nil
+			}),
+			WithDefaultProvider("mutating-batch"),
+		)
+		inputs := []string{"input-0", "input-1", "input-2", "input-3"}
+		options := map[string]any{
+			"top": "caller",
+			"nested": map[string]any{
+				"state": "caller",
+				"items": []any{map[string]any{"value": "caller"}},
+			},
+		}
+
+		_, err := client.Embeddings().
+			Model("embed-metadata").
+			Input(inputs...).
+			Dimensions(384).
+			EncodingFormat(types.EmbeddingEncodingFloat).
+			ProviderOptions(options).
+			GenerateBatched(context.Background(), 2)
+
+		require.NoError(t, err)
+		require.Len(t, provider.requests, 2)
+		assert.Equal(t, []string{"input-0", "input-1"}, provider.requests[0].Input)
+		assert.Equal(t, []string{"input-2", "input-3"}, provider.requests[1].Input)
+		for _, request := range provider.requests {
+			assert.Equal(t, "embed-metadata", request.Model)
+			assert.Equal(t, types.EmbeddingEncodingFloat, request.EncodingFormat)
+			require.NotNil(t, request.Dimensions)
+			assert.Equal(t, 384, *request.Dimensions)
+			assert.Equal(t, "caller", request.ProviderOptions["top"])
+			nested := request.ProviderOptions["nested"].(map[string]any)
+			assert.Equal(t, "caller", nested["state"])
+			items := nested["items"].([]any)
+			assert.Equal(t, "caller", items[0].(map[string]any)["value"])
+		}
+		assert.Equal(t, []string{"input-0", "input-1", "input-2", "input-3"}, inputs)
+		assert.Equal(t, "caller", options["top"])
+		nested := options["nested"].(map[string]any)
+		assert.Equal(t, "caller", nested["state"])
+		items := nested["items"].([]any)
+		assert.Equal(t, "caller", items[0].(map[string]any)["value"])
+	})
+
 	t.Run("rejects duplicate provider indexes", func(t *testing.T) {
 		t.Parallel()
 		provider := &batchedEmbeddingProvider{duplicateIndex: true}
@@ -362,6 +411,37 @@ type batchedEmbeddingProvider struct {
 	mu             sync.Mutex
 	calls          [][]string
 	duplicateIndex bool
+}
+
+type mutatingBatchedEmbeddingProvider struct {
+	*types.BaseProvider
+	requests []types.EmbeddingsRequest
+}
+
+func (p *mutatingBatchedEmbeddingProvider) Name() string {
+	return "mutating-batch"
+}
+
+func (p *mutatingBatchedEmbeddingProvider) SupportedCapabilities() []types.ModelCapability {
+	return []types.ModelCapability{types.CapabilityEmbeddings}
+}
+
+func (p *mutatingBatchedEmbeddingProvider) Embeddings(_ context.Context, request types.EmbeddingsRequest) (*types.EmbeddingsResponse, error) {
+	p.requests = append(p.requests, *cloneEmbeddingsRequest(&request))
+
+	request.Input[0] = "provider-mutated"
+	*request.Dimensions = -1
+	request.ProviderOptions["top"] = "provider-mutated"
+	nested := request.ProviderOptions["nested"].(map[string]any)
+	nested["state"] = "provider-mutated"
+	items := nested["items"].([]any)
+	items[0].(map[string]any)["value"] = "provider-mutated"
+
+	embeddings := make([]types.Embedding, len(request.Input))
+	for i := range embeddings {
+		embeddings[i] = types.Embedding{Index: i, Embedding: []float64{float64(i)}}
+	}
+	return &types.EmbeddingsResponse{Model: request.Model, Embeddings: embeddings}, nil
 }
 
 func (p *batchedEmbeddingProvider) Name() string {

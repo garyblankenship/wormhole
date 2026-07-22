@@ -157,8 +157,7 @@ func (p *proxy) handleChatCompletions(w http.ResponseWriter, r *http.Request) {
 	resp, err := builder.Generate(r.Context())
 	if err != nil {
 		p.logger.Error("text generation failed", "error", types.SafeErrorValue(err), "model", types.SafeLogString(req.Model))
-		status, errType, clientMsg := upstreamErrorStatus(err)
-		writeError(w, status, "upstream_error", clientMsg, errType)
+		writeUpstreamError(w, err)
 		return
 	}
 

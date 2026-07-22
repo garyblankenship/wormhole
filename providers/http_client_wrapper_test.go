@@ -3,6 +3,7 @@ package providers
 import (
 	"context"
 	"errors"
+	"io"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -88,7 +89,15 @@ func TestHTTPClientWrapperBuildRequestAndParseResponse(t *testing.T) {
 		Headers: map[string]string{"x-custom": "value"},
 	}, nil, &BearerAuthStrategy{}, nil)
 
-	req, err := wrapper.buildRequest(context.Background(), http.MethodPost, "https://example.test", map[string]string{"hello": "world"})
+	type requestBody struct {
+		HTML  string `json:"html"`
+		Hello string `json:"hello"`
+	}
+	wantBody := []byte(`{"html":"\u003c\u0026\u003e","hello":"world"}`)
+	req, err := wrapper.buildRequest(context.Background(), http.MethodPost, "https://example.test", requestBody{
+		HTML:  "<&>",
+		Hello: "world",
+	})
 	if err != nil {
 		t.Fatalf("buildRequest returned error: %v", err)
 	}
@@ -101,8 +110,57 @@ func TestHTTPClientWrapperBuildRequestAndParseResponse(t *testing.T) {
 	if req.Header.Get("x-custom") != "value" {
 		t.Fatalf("x-custom = %q, want value", req.Header.Get("x-custom"))
 	}
-	if req.GetBody == nil || req.ContentLength == 0 {
+	if req.ContentLength != int64(len(wantBody)) {
+		t.Fatalf("ContentLength = %d, want %d", req.ContentLength, len(wantBody))
+	}
+	gotBody, err := io.ReadAll(req.Body)
+	if err != nil {
+		t.Fatalf("read request body: %v", err)
+	}
+	if string(gotBody) != string(wantBody) {
+		t.Fatalf("request body = %q, want %q", gotBody, wantBody)
+	}
+	if req.GetBody == nil {
 		t.Fatal("request body was not made replayable")
+	}
+	for replay := 1; replay <= 2; replay++ {
+		body, err := req.GetBody()
+		if err != nil {
+			t.Fatalf("GetBody replay %d returned error: %v", replay, err)
+		}
+		gotReplay, readErr := io.ReadAll(body)
+		closeErr := body.Close()
+		if readErr != nil {
+			t.Fatalf("read GetBody replay %d: %v", replay, readErr)
+		}
+		if closeErr != nil {
+			t.Fatalf("close GetBody replay %d: %v", replay, closeErr)
+		}
+		if string(gotReplay) != string(wantBody) {
+			t.Fatalf("GetBody replay %d = %q, want %q", replay, gotReplay, wantBody)
+		}
+	}
+
+	nilReq, err := wrapper.buildRequest(context.Background(), http.MethodPost, "https://example.test", nil)
+	if err != nil {
+		t.Fatalf("buildRequest with nil body returned error: %v", err)
+	}
+	if nilReq.Body != nil {
+		t.Fatalf("nil request Body = %T, want nil", nilReq.Body)
+	}
+	if nilReq.GetBody != nil {
+		t.Fatal("nil request GetBody was non-nil")
+	}
+	if nilReq.ContentLength != 0 {
+		t.Fatalf("nil request ContentLength = %d, want 0", nilReq.ContentLength)
+	}
+
+	_, err = wrapper.buildRequest(context.Background(), http.MethodPost, "https://example.test", make(chan int))
+	if err == nil {
+		t.Fatal("buildRequest with unmarshalable body returned nil error")
+	}
+	if !strings.Contains(err.Error(), "marshal request body") {
+		t.Fatalf("unmarshalable body error = %v, want marshal request body context", err)
 	}
 
 	var decoded map[string]string

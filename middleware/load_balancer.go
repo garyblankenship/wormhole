@@ -69,8 +69,9 @@ type ProviderHandler struct {
 type LoadBalancer struct {
 	providers       []*ProviderHandler
 	strategy        LoadBalanceStrategy
-	currentIndex    int32
+	currentIndex    atomic.Uint64
 	mu              sync.RWMutex
+	lifecycleMu     sync.Mutex
 	healthCheckFunc func(Handler) error
 	healthInterval  time.Duration
 	stopHealthCheck chan struct{}
@@ -143,8 +144,8 @@ func (lb *LoadBalancer) getHealthyProviders() []*ProviderHandler {
 }
 
 func (lb *LoadBalancer) selectRoundRobin(providers []*ProviderHandler) *ProviderHandler {
-	index := atomic.AddInt32(&lb.currentIndex, 1)
-	return providers[int(index)%len(providers)]
+	index := lb.currentIndex.Add(1)
+	return providers[index%uint64(len(providers))]
 }
 
 func (lb *LoadBalancer) selectRandom(providers []*ProviderHandler) *ProviderHandler {
@@ -177,8 +178,10 @@ func (lb *LoadBalancer) selectWeightedRoundRobin(providers []*ProviderHandler) *
 		return lb.selectRoundRobin(providers)
 	}
 
-	index := atomic.AddInt32(&lb.currentIndex, 1)
-	target := int(index) % totalWeight
+	index := lb.currentIndex.Add(1)
+	// The modulo result is strictly less than positive totalWeight, so it fits int.
+	//nolint:gosec // G115: bounded by the source int value totalWeight.
+	target := int(index % uint64(totalWeight))
 
 	current := 0
 	for _, p := range providers {

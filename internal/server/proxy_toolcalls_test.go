@@ -77,18 +77,38 @@ func TestProxyToolChoiceAndToolsAccepted(t *testing.T) {
 	require.Equal(t, http.StatusOK, rec.Code)
 }
 
-func TestProxyDropsNonPortableToolTypes(t *testing.T) {
+func TestProxySkipsMetadataToolContainers(t *testing.T) {
 	t.Parallel()
 
 	provider := newCapturingTextProvider("openai")
 	p := newCapturingTestProxy(provider)
-	body := `{"model":"gpt-test","messages":[{"role":"user","content":"hi"}],"tools":[{"type":"namespace","name":"multi_agent_v1"},{"type":"web_search"},{"type":"function","function":{"name":"get_weather","parameters":{"type":"object"}}}]}`
+	body := `{"model":"gpt-test","messages":[{"role":"user","content":"hi"}],"tools":[{"type":"namespace","name":"multi_agent_v1"},{"type":"function","function":{"name":"get_weather","parameters":{"type":"object"}}}]}`
 
 	rec := performRequest(p, http.MethodPost, "/v1/chat/completions", body)
 
 	require.Equal(t, http.StatusOK, rec.Code)
 	require.Len(t, provider.lastRequest().Tools, 1)
 	assert.Equal(t, "get_weather", provider.lastRequest().Tools[0].Name)
+}
+
+func TestProxyRejectsUnsupportedToolTypesBeforeProvider(t *testing.T) {
+	t.Parallel()
+
+	for _, toolType := range []string{"web_search", "computer_use_preview"} {
+		t.Run(toolType, func(t *testing.T) {
+			provider := newCapturingTextProvider("openai")
+			p := newCapturingTestProxy(provider)
+			body := `{"model":"gpt-test","messages":[{"role":"user","content":"hi"}],"tools":[{"type":"` + toolType + `"}]}`
+
+			rec := performRequest(p, http.MethodPost, "/v1/chat/completions", body)
+
+			require.Equal(t, http.StatusBadRequest, rec.Code)
+			var response ErrorResponse
+			require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &response))
+			assert.Contains(t, response.Error.Message, `unsupported tool type "`+toolType+`"`)
+			assert.Empty(t, provider.lastRequest().Model, "provider must not be invoked")
+		})
+	}
 }
 
 func TestProxyRejectsInvalidToolRequestsBeforeProvider(t *testing.T) {

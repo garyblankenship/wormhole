@@ -91,6 +91,9 @@ func (b *RerankRequestBuilder) Generate(ctx context.Context) (*types.RerankRespo
 	}
 
 	request := b.request
+	if err := b.getWormhole().validateModelAttempt(b.getProvider(), request.Model, nil, []types.ModelCapability{types.CapabilityRerank}); err != nil {
+		return nil, err
+	}
 	return executeTrackedRequest(ctx, b.getWormhole(), b.idempotencyScope("rerank.generate"), request, func(ctx context.Context) (*types.RerankResponse, error) {
 		return b.executeRerank(ctx, request)
 	})

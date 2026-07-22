@@ -49,6 +49,9 @@ func executeAudioProviderRequest[T any](
 	audioRequest types.AudioRequest,
 	convert func(types.AudioResponse) *T,
 ) (*T, error) {
+	if err := w.validateModelAttempt(providerName, audioRequest.Model, nil, []types.ModelCapability{types.CapabilityAudio}); err != nil {
+		return nil, err
+	}
 	return executeTrackedRequest(ctx, w, trackingName, audioRequest, func(ctx context.Context) (*T, error) {
 		provider, release, err := w.leaseProvider(providerName)
 		if err != nil {

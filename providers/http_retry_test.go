@@ -1,6 +1,7 @@
 package providers
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"io"
@@ -15,6 +16,31 @@ import (
 
 	"github.com/garyblankenship/wormhole/v2/config"
 )
+
+type recordingHTTPClient struct {
+	requests []*http.Request
+	bodies   [][]byte
+}
+
+func (c *recordingHTTPClient) Do(req *http.Request) (*http.Response, error) {
+	body, err := io.ReadAll(req.Body)
+	if err != nil {
+		return nil, err
+	}
+	c.requests = append(c.requests, req)
+	c.bodies = append(c.bodies, append([]byte(nil), body...))
+
+	status := http.StatusServiceUnavailable
+	if len(c.requests) == 3 {
+		status = http.StatusOK
+	}
+	return &http.Response{
+		StatusCode: status,
+		Header:     make(http.Header),
+		Body:       io.NopCloser(bytes.NewReader(nil)),
+		Request:    req,
+	}, nil
+}
 
 func TestRetryConfig_Defaults(t *testing.T) {
 	retryConfig := defaultRetryConfig()
@@ -494,6 +520,66 @@ func TestRetryableHTTPClient_RequestCloning(t *testing.T) {
 	for _, body := range requestBodies {
 		assert.Equal(t, requestBody, body)
 	}
+}
+
+func TestRetryableHTTPClient_Do_UsesOriginalThenIsolatedRetryClones(t *testing.T) {
+	t.Parallel()
+
+	transport := &recordingHTTPClient{}
+	client := newRetryableHTTPClient(transport, retryConfig{
+		MaxRetries:      2,
+		InitialDelay:    time.Nanosecond,
+		MaxDelay:        time.Nanosecond,
+		BackoffMultiple: 1,
+	})
+
+	wantBody := []byte(`{"message":"hello"}`)
+	template, err := http.NewRequest(http.MethodPost, "https://example.test/v1/messages?api_key=original", bytes.NewReader(wantBody))
+	require.NoError(t, err)
+	template.Header.Set("Authorization", "Bearer original")
+	template.Header.Set("X-Template", "unchanged")
+
+	var retryRequests []*http.Request
+	var retryHeadersBeforeMutation []http.Header
+	var retryQueriesBeforeMutation []string
+	client.OnRetry = func(reqClone *http.Request, attempt int, _ *retryableError, previousRequest *http.Request) {
+		require.Equal(t, attempt, len(transport.requests))
+		require.Same(t, transport.requests[attempt-1], previousRequest, "previousRequest must be the exact dispatched request")
+		retryRequests = append(retryRequests, reqClone)
+		retryHeadersBeforeMutation = append(retryHeadersBeforeMutation, reqClone.Header.Clone())
+		retryQueriesBeforeMutation = append(retryQueriesBeforeMutation, reqClone.URL.RawQuery)
+		reqClone.Header.Set("Authorization", "Bearer retry")
+		reqClone.Header.Set("X-Retry", "set")
+		query := reqClone.URL.Query()
+		query.Set("api_key", "retry")
+		reqClone.URL.RawQuery = query.Encode()
+	}
+
+	resp, err := client.Do(template)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = resp.Body.Close() })
+	require.Len(t, transport.requests, 3)
+	require.Len(t, retryRequests, 2)
+
+	assert.Same(t, template, transport.requests[0], "attempt zero must dispatch the original request")
+	assert.NotSame(t, template, transport.requests[1])
+	assert.NotSame(t, template, transport.requests[2])
+	assert.NotSame(t, transport.requests[1], transport.requests[2])
+	assert.Same(t, retryRequests[0], transport.requests[1])
+	assert.Same(t, retryRequests[1], transport.requests[2])
+	for retry := range retryHeadersBeforeMutation {
+		assert.Equal(t, "Bearer original", retryHeadersBeforeMutation[retry].Get("Authorization"))
+		assert.Empty(t, retryHeadersBeforeMutation[retry].Get("X-Retry"))
+		assert.Equal(t, "api_key=original", retryQueriesBeforeMutation[retry])
+	}
+	for attempt, body := range transport.bodies {
+		assert.Equalf(t, wantBody, body, "attempt %d body", attempt)
+	}
+
+	assert.Equal(t, "Bearer original", template.Header.Get("Authorization"))
+	assert.Equal(t, "unchanged", template.Header.Get("X-Template"))
+	assert.Empty(t, template.Header.Get("X-Retry"))
+	assert.Equal(t, "original", template.URL.Query().Get("api_key"))
 }
 
 func TestRetryableHTTPClient_Do_NonReplayableBodyFailsOnRetry(t *testing.T) {

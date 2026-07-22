@@ -24,6 +24,9 @@ func (k ProviderKey) String() string {
 // ProviderAdaptiveState tracks adaptive control state for a provider/model
 type ProviderAdaptiveState struct {
 	mu sync.RWMutex
+	// pins is protected by the owning EnhancedAdaptiveLimiter.mu. It keeps a
+	// state map-owned while admission, release, or latency mutation is active.
+	pins int
 
 	key ProviderKey
 

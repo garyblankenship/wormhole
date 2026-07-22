@@ -49,8 +49,7 @@ func (p *proxy) handleEmbeddings(w http.ResponseWriter, r *http.Request) {
 	resp, err := builder.Generate(r.Context())
 	if err != nil {
 		p.logger.Error("embeddings failed", "error", types.SafeErrorValue(err), "model", types.SafeLogString(req.Model))
-		status, errType, clientMsg := upstreamErrorStatus(err)
-		writeError(w, status, "upstream_error", clientMsg, errType)
+		writeUpstreamError(w, err)
 		return
 	}
 
@@ -119,8 +118,7 @@ func (p *proxy) handleRerank(w http.ResponseWriter, r *http.Request) {
 	resp, err := builder.Generate(r.Context())
 	if err != nil {
 		p.logger.Error("rerank failed", "error", types.SafeErrorValue(err), "model", types.SafeLogString(req.Model))
-		status, errType, clientMsg := upstreamErrorStatus(err)
-		writeError(w, status, "upstream_error", clientMsg, errType)
+		writeUpstreamError(w, err)
 		return
 	}
 

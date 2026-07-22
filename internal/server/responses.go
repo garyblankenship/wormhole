@@ -38,8 +38,7 @@ func (p *proxy) handleResponses(w http.ResponseWriter, r *http.Request) {
 	resp, err := execution.builder.Generate(r.Context())
 	if err != nil {
 		p.logger.Error("responses generation failed", "error", types.SafeErrorValue(err), "model", types.SafeLogString(req.Model))
-		status, errType, clientMsg := upstreamErrorStatus(err)
-		writeError(w, status, "upstream_error", clientMsg, errType)
+		writeUpstreamError(w, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, completedResponsesEnvelope(resp, execution.model, execution.customTools))

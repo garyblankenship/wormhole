@@ -269,8 +269,6 @@ func TestDiscoveryConfigExplicitDisableOptions(t *testing.T) {
 }
 
 func TestWithModels_PopulatesRegistry(t *testing.T) {
-	t.Parallel()
-
 	original := types.DefaultModelRegistry
 	types.DefaultModelRegistry = types.NewModelRegistry()
 	t.Cleanup(func() { types.DefaultModelRegistry = original })
