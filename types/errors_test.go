@@ -277,6 +277,62 @@ func TestErrorTypeChecking(t *testing.T) {
 		assert.False(t, IsRetryableError(regularErr))
 		assert.False(t, IsRetryableError(nil))
 	})
+
+	t.Run("validation errors retain WormholeError classification", func(t *testing.T) {
+		t.Parallel()
+		validationErr := NewValidationError("model", "required", nil, "model is required")
+
+		for name, err := range map[string]error{
+			"direct":  validationErr,
+			"wrapped": fmt.Errorf("validate request: %w", validationErr),
+		} {
+			t.Run(name, func(t *testing.T) {
+				t.Parallel()
+
+				assert.True(t, IsWormholeError(err))
+				assert.False(t, IsRetryableError(err))
+
+				wormholeErr, ok := AsWormholeError(err)
+				require.True(t, ok)
+				assert.Same(t, validationErr.WormholeError, wormholeErr)
+
+				gotValidation, ok := AsValidationError(err)
+				require.True(t, ok)
+				assert.Same(t, validationErr, gotValidation)
+
+				var viaErrorsAs *ValidationError
+				require.True(t, errors.As(err, &viaErrorsAs))
+				assert.Same(t, validationErr, viaErrorsAs)
+			})
+		}
+
+		assert.Same(t, validationErr.WormholeError, validationErr.Unwrap())
+	})
+
+	t.Run("model constraint and plain errors remain classified correctly", func(t *testing.T) {
+		t.Parallel()
+		modelConstraintErr := NewModelConstraintError("gpt-5", "temperature", 1.0, 0.5)
+		wrappedConstraintErr := fmt.Errorf("validate model: %w", modelConstraintErr)
+		plainErr := errors.New("plain error")
+
+		for name, err := range map[string]error{
+			"model constraint":         modelConstraintErr,
+			"wrapped model constraint": wrappedConstraintErr,
+		} {
+			t.Run(name, func(t *testing.T) {
+				t.Parallel()
+				assert.True(t, IsWormholeError(err))
+				got, ok := AsWormholeError(err)
+				require.True(t, ok)
+				assert.Same(t, modelConstraintErr.WormholeError, got)
+			})
+		}
+
+		assert.False(t, IsWormholeError(plainErr))
+		got, ok := AsWormholeError(plainErr)
+		assert.False(t, ok)
+		assert.Nil(t, got)
+	})
 }
 
 func TestModelConstraintError(t *testing.T) {

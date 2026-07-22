@@ -368,3 +368,38 @@ func TestMiddlewareCoreHelpers(t *testing.T) {
 	assert.Contains(t, noCause.Error(), "test middleware")
 	assert.Nil(t, noCause.Unwrap())
 }
+
+func TestRetryMiddlewarePreservesValidationErrorClassification(t *testing.T) {
+	t.Parallel()
+	validationErr := types.NewValidationError("model", "required", nil, "model is required")
+
+	for name, wantErr := range map[string]error{
+		"direct":  validationErr,
+		"wrapped": fmt.Errorf("validate request: %w", validationErr),
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			attempts := 0
+			handler := RetryMiddleware(RetryConfig{
+				MaxRetries:      3,
+				InitialDelay:    time.Nanosecond,
+				MaxDelay:        time.Millisecond,
+				BackoffMultiple: 2,
+				Jitter:          false,
+			})(func(context.Context, any) (any, error) {
+				attempts++
+				return nil, wantErr
+			})
+
+			_, err := handler(context.Background(), "request")
+			require.Error(t, err)
+			assert.Equal(t, 1, attempts)
+			assert.Same(t, wantErr, err)
+			assert.True(t, types.IsWormholeError(err))
+
+			gotValidation, ok := types.AsValidationError(err)
+			require.True(t, ok)
+			assert.Same(t, validationErr, gotValidation)
+		})
+	}
+}

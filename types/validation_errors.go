@@ -1,6 +1,7 @@
 package types
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 )
@@ -60,6 +61,12 @@ func NewValidationError(field, constraint string, value any, message string) *Va
 	}
 }
 
+// Unwrap returns the embedded WormholeError so its classification remains
+// available through ValidationError wrappers.
+func (e *ValidationError) Unwrap() error {
+	return e.WormholeError
+}
+
 // AsValidationError extracts a ValidationError from an error if present.
 //
 // Example:
@@ -68,8 +75,9 @@ func NewValidationError(field, constraint string, value any, message string) *Va
 //	    log.Printf("Validation failed for field: %s", vErr.Field)
 //	}
 func AsValidationError(err error) (*ValidationError, bool) {
-	if vErr, ok := err.(*ValidationError); ok {
-		return vErr, true
+	var validationErr *ValidationError
+	if errors.As(err, &validationErr) {
+		return validationErr, true
 	}
 	return nil, false
 }

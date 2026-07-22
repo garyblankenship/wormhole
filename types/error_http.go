@@ -45,17 +45,8 @@ func HTTPStatusToError(statusCode int, body string) *WormholeError {
 
 // IsWormholeError checks if an error is a WormholeError or contains one
 func IsWormholeError(err error) bool {
-	// Direct WormholeError
-	if _, ok := err.(*WormholeError); ok {
-		return true
-	}
-
-	// ModelConstraintError embeds WormholeError
-	if _, ok := err.(*ModelConstraintError); ok {
-		return true
-	}
-
-	return false
+	_, ok := AsWormholeError(err)
+	return ok
 }
 
 // AsWormholeError extracts a WormholeError from an error

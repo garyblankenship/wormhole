@@ -52,8 +52,8 @@ func wrapIfNotWormholeError(middlewareName string, err error) error {
 	if err == nil {
 		return nil
 	}
-	// Check if already a WormholeError
-	if _, ok := err.(*types.WormholeError); ok {
+	// Keep classified errors intact, including wrapped specialized errors.
+	if types.IsWormholeError(err) {
 		return err
 	}
 	// Check if already a MiddlewareError
