@@ -1,5 +1,13 @@
 # Changelog
 
+## v2.3.0 (2026-07-22)
+
+### Features
+- Anthropic: add opt-in typed cache control for native tool definitions, including default and one-hour TTLs, explicit marker placement, and pre-request validation.
+
+### Fixes
+- Errors: preserve direct and wrapped validation-error classification through middleware and default retry handling.
+
 ## v2.2.0 (2026-07-22)
 
 ### Features
