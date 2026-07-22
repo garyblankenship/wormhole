@@ -1,5 +1,20 @@
 # Changelog
 
+## v2.2.0 (2026-07-22)
+
+### Features
+- Model validation: enforce provider ownership and operation capabilities across text, streaming, agents, structured output, embeddings, reranking, image, and audio requests while validating fallback attempts independently.
+- Model selection: add deterministic name sorting and expose reranking as a first-class model capability.
+
+### Fixes
+- Runtime concurrency: keep adaptive-limiter states pinned while tokens are active, serialize load-balancer health-check lifecycle changes, and exclude queue wait from per-tool execution timeouts.
+- Provider transport: preserve original requests across retries, safely replay request bodies, and reject oversized SSE lines and accumulated frames with explicit errors.
+- Proxy and tools: preserve upstream `Retry-After`, reject unsupported semantic tool types before provider calls, reject malformed tool arguments, and isolate registry-owned tool definitions from caller mutation.
+- Builders: detach batched embedding inputs and validate models before leasing or invoking providers.
+
+### Other
+- Split oversized source files, remove unused request pools, add hardened local-daemon deployment guidance, and expand concurrency, performance, boundary, and regression coverage.
+
 ## v2.1.0 (2026-07-14)
 
 ### Features
