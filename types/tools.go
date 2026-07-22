@@ -23,6 +23,30 @@ type ToolChoice struct {
 	ToolName string         `json:"tool_name,omitempty"`
 }
 
+// CacheControlType identifies a provider cache-control mode.
+type CacheControlType string
+
+const (
+	// CacheControlTypeEphemeral enables Anthropic's ephemeral prompt cache.
+	CacheControlTypeEphemeral CacheControlType = "ephemeral"
+)
+
+// CacheTTL identifies the lifetime of an Anthropic cache entry.
+type CacheTTL string
+
+const (
+	// CacheTTLDefault omits the TTL and uses Anthropic's default lifetime.
+	CacheTTLDefault CacheTTL = ""
+	// CacheTTL1Hour requests Anthropic's one-hour cache lifetime.
+	CacheTTL1Hour CacheTTL = "1h"
+)
+
+// CacheControl marks a native Anthropic tool-definition cache boundary.
+type CacheControl struct {
+	Type CacheControlType `json:"type"`
+	TTL  CacheTTL         `json:"ttl,omitempty"`
+}
+
 func (tc *ToolChoice) MarshalJSON() ([]byte, error) {
 	// If it's a simple type without a specific tool name, serialize as a string
 	if tc.ToolName == "" && (tc.Type == ToolChoiceTypeAuto || tc.Type == ToolChoiceTypeNone || tc.Type == ToolChoiceTypeAny) {
@@ -40,11 +64,12 @@ func (tc *ToolChoice) MarshalJSON() ([]byte, error) {
 
 // Tool represents a function that can be called by the model
 type Tool struct {
-	Type        string         `json:"type,omitempty"` // For OpenAI compatibility ("function")
-	Name        string         `json:"name"`
-	Description string         `json:"description"`
-	InputSchema map[string]any `json:"input_schema"`
-	Function    *ToolFunction  `json:"function,omitempty"` // For OpenAI compatibility
+	Type         string         `json:"type,omitempty"` // For OpenAI compatibility ("function")
+	Name         string         `json:"name"`
+	Description  string         `json:"description"`
+	InputSchema  map[string]any `json:"input_schema"`
+	Function     *ToolFunction  `json:"function,omitempty"` // For OpenAI compatibility
+	CacheControl *CacheControl  `json:"cache_control,omitempty"`
 }
 
 // ToolFunction represents the function definition for OpenAI tools

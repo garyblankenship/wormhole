@@ -2,12 +2,35 @@ package anthropic
 
 import (
 	"encoding/json"
+	"fmt"
 
 	"github.com/garyblankenship/wormhole/v2/types"
 )
 
-// transformTools converts internal tools to Anthropic format
-func (p *Provider) transformTools(tools []types.Tool) []map[string]any {
+// transformTools converts internal tools to Anthropic format.
+func (p *Provider) transformTools(tools []types.Tool) ([]map[string]any, error) {
+	for i, tool := range tools {
+		if tool.CacheControl == nil {
+			continue
+		}
+		if tool.CacheControl.Type != types.CacheControlTypeEphemeral {
+			return nil, types.NewValidationError(
+				fmt.Sprintf("tools[%d].cache_control.type", i),
+				"supported_value",
+				tool.CacheControl.Type,
+				"must be ephemeral",
+			)
+		}
+		if tool.CacheControl.TTL != types.CacheTTLDefault && tool.CacheControl.TTL != types.CacheTTL1Hour {
+			return nil, types.NewValidationError(
+				fmt.Sprintf("tools[%d].cache_control.ttl", i),
+				"supported_value",
+				tool.CacheControl.TTL,
+				"must be empty or 1h",
+			)
+		}
+	}
+
 	result := make([]map[string]any, len(tools))
 
 	for i, tool := range tools {
@@ -19,15 +42,22 @@ func (p *Provider) transformTools(tools []types.Tool) []map[string]any {
 			description = tool.Function.Description
 			schema = tool.Function.Parameters
 		}
-		parameters, _ := json.Marshal(schema)
+		parameters, err := json.Marshal(schema)
+		if err != nil {
+			return nil, fmt.Errorf("marshal tools[%d].input_schema: %w", i, err)
+		}
 		result[i] = map[string]any{
 			"name":         name,
 			"description":  description,
 			"input_schema": json.RawMessage(parameters),
 		}
+		if tool.CacheControl != nil {
+			cacheControl := *tool.CacheControl
+			result[i]["cache_control"] = &cacheControl
+		}
 	}
 
-	return result
+	return result, nil
 }
 
 // transformToolChoice converts the internal tool choice to Anthropic's wire format.

@@ -78,6 +78,24 @@ func TestCloneMessageDetachesNestedState(t *testing.T) {
 	assert.Equal(t, true, assistant.ToolCalls[0].Arguments["nested"].(map[string]any)["value"])
 }
 
+func TestCloneToolsDetachCacheControl(t *testing.T) {
+	t.Parallel()
+
+	original := Tool{
+		Name:         "lookup",
+		InputSchema:  map[string]any{"type": "object"},
+		CacheControl: &CacheControl{Type: CacheControlTypeEphemeral, TTL: CacheTTL1Hour},
+	}
+
+	clone := CloneTool(original)
+	clone.CacheControl.TTL = CacheTTLDefault
+	assert.Equal(t, CacheTTL1Hour, original.CacheControl.TTL)
+
+	clones := CloneTools([]Tool{original})
+	clones[0].CacheControl.Type = "changed"
+	assert.Equal(t, CacheControlTypeEphemeral, original.CacheControl.Type)
+}
+
 func TestCloneValueDetachesTypedMapsAndSlices(t *testing.T) {
 	t.Parallel()
 

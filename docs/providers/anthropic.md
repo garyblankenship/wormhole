@@ -146,6 +146,46 @@ if len(response.ToolCalls) > 0 {
 }
 ```
 
+#### Tool Definition Caching
+
+Native Anthropic requests can opt a tool-definition prefix into prompt caching
+by setting `CacheControl` on the tool that ends the stable prefix. Wormhole
+preserves tool order and sends a marker only where you set one; it never adds or
+moves markers automatically.
+
+```go
+tools := []types.Tool{
+    {
+        Name:        "lookup_customer",
+        Description: "Find a customer by ID",
+        InputSchema: customerSchema,
+    },
+    {
+        Name:        "lookup_orders",
+        Description: "List a customer's recent orders",
+        InputSchema: orderSchema,
+        CacheControl: &types.CacheControl{
+            Type: types.CacheControlTypeEphemeral,
+            TTL:  types.CacheTTL1Hour,
+        },
+    },
+}
+```
+
+`CacheTTLDefault` omits `ttl` and selects Anthropic's current five-minute
+default. `CacheTTL1Hour` sends `"ttl":"1h"`. Only
+`CacheControlTypeEphemeral` is supported.
+
+This field affects native Anthropic tool definitions only. OpenAI Chat
+Completions, OpenAI Responses, Gemini, OpenRouter translation, Bedrock, proxy
+extensions, messages, system prompts, tool results, and Wormhole's synthetic
+structured-output tool are unchanged. Invalid values fail before the HTTP
+request with a `types.ValidationError` whose field is
+`tools[N].cache_control.type` or `tools[N].cache_control.ttl` (zero-based).
+
+See Anthropic's [tool caching placement contract](https://platform.claude.com/docs/en/agents-and-tools/tool-use/tool-use-with-prompt-caching)
+and [prompt caching TTL documentation](https://platform.claude.com/docs/en/build-with-claude/prompt-caching).
+
 ### Structured Output
 
 Use the `Structured()` method for type-safe structured responses:

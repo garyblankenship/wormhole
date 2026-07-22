@@ -59,12 +59,15 @@ func (p *Provider) Text(ctx context.Context, request types.TextRequest) (*types.
 	if _, _, err := providers.PrepareMessages(request.Messages); err != nil {
 		return nil, err
 	}
-	payload := p.buildMessagePayload(&request)
+	payload, err := p.buildMessagePayload(&request)
+	if err != nil {
+		return nil, err
+	}
 
 	url := p.GetBaseURL() + "/messages"
 
 	var response messageResponse
-	err := p.DoRequest(ctx, http.MethodPost, url, payload, &response)
+	err = p.DoRequest(ctx, http.MethodPost, url, payload, &response)
 	if err != nil {
 		return nil, err
 	}
@@ -102,7 +105,10 @@ func (p *Provider) Stream(ctx context.Context, request types.TextRequest) (<-cha
 	if _, _, err := providers.PrepareMessages(request.Messages); err != nil {
 		return nil, err
 	}
-	payload := p.buildMessagePayload(&request)
+	payload, err := p.buildMessagePayload(&request)
+	if err != nil {
+		return nil, err
+	}
 	payload["stream"] = true
 
 	url := p.GetBaseURL() + "/messages"

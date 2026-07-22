@@ -18,8 +18,8 @@ const (
 // Role constant
 const roleUser = "user"
 
-// buildMessagePayload builds the Anthropic messages API payload
-func (p *Provider) buildMessagePayload(request *types.TextRequest) map[string]any {
+// buildMessagePayload builds the Anthropic messages API payload.
+func (p *Provider) buildMessagePayload(request *types.TextRequest) (map[string]any, error) {
 	prepared, _, err := providers.PrepareMessages(request.Messages)
 	if err != nil {
 		prepared = request.Messages
@@ -58,7 +58,11 @@ func (p *Provider) buildMessagePayload(request *types.TextRequest) map[string]an
 
 	// Tools
 	if len(request.Tools) > 0 {
-		payload["tools"] = p.transformTools(request.Tools)
+		tools, err := p.transformTools(request.Tools)
+		if err != nil {
+			return nil, err
+		}
+		payload["tools"] = tools
 		var toolChoice map[string]any
 		if request.ToolChoice != nil {
 			toolChoice = p.transformToolChoice(request.ToolChoice)
@@ -79,7 +83,7 @@ func (p *Provider) buildMessagePayload(request *types.TextRequest) map[string]an
 		payload[k] = v
 	}
 
-	return payload
+	return payload, nil
 }
 
 func anthropicThinkingPayload(reasoning *types.Reasoning) map[string]any {

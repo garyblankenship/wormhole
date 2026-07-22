@@ -39,6 +39,10 @@ func CloneToolCalls(src []ToolCall) []ToolCall {
 func CloneTool(src Tool) Tool {
 	dst := src
 	dst.InputSchema = CloneMap(src.InputSchema)
+	if src.CacheControl != nil {
+		cacheControl := *src.CacheControl
+		dst.CacheControl = &cacheControl
+	}
 	if src.Function != nil {
 		function := *src.Function
 		function.Parameters = CloneMap(src.Function.Parameters)
