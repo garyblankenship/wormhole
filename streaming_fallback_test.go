@@ -303,6 +303,84 @@ func TestTextRequestBuilderStreamAllAttemptsFailBeforeEmission(t *testing.T) {
 	}
 }
 
+func TestTextRequestBuilderStreamAggregatesFailedAttemptsWithoutExposingDetails(t *testing.T) {
+	t.Parallel()
+	rateLimitErr := types.ErrRateLimited.WithDetails("api_key=secret-rate-limit-detail")
+	fallbackErr := errors.New("fallback secret detail")
+	provider := newFallbackStreamProvider(map[string]func() (<-chan types.TextChunk, error){
+		"primary-secret-model":  streamChunks(types.TextChunk{Error: rateLimitErr}),
+		"fallback-secret-model": streamChunks(types.TextChunk{Error: fallbackErr}),
+	})
+
+	var streamEvents []StreamEvent
+	client := New(
+		WithDiscovery(false),
+		WithDefaultProvider("mock"),
+		WithCustomProvider("mock", func(types.ProviderConfig) (types.Provider, error) {
+			return provider, nil
+		}),
+		WithProviderConfig("mock", types.ProviderConfig{}),
+		WithStreamTrace(func(_ context.Context, event StreamEvent) {
+			streamEvents = append(streamEvents, event)
+		}),
+	)
+
+	stream, err := client.Text().
+		Model("primary-secret-model").
+		Prompt("hi").
+		WithFallback("fallback-secret-model").
+		Stream(context.Background())
+	if err != nil {
+		t.Fatalf("Stream returned error: %v", err)
+	}
+	chunks := collectStreamChunks(t, stream)
+	if len(chunks) != 1 || chunks[0].Error == nil {
+		t.Fatalf("chunks = %#v, want one aggregate error chunk", chunks)
+	}
+	if len(streamEvents) != 3 || streamEvents[2].Type != StreamError {
+		t.Fatalf("stream events = %#v, want started events followed by one terminal error", streamEvents)
+	}
+	if chunks[0].Error != streamEvents[2].Error {
+		t.Fatal("final stream chunk and terminal event must share the same aggregate error")
+	}
+
+	aggregate, ok := chunks[0].Error.(*streamAttemptsError)
+	if !ok {
+		t.Fatalf("chunk error type = %T, want *streamAttemptsError", chunks[0].Error)
+	}
+	if got, want := aggregate.Error(), streamAttemptsErrorMessage; got != want {
+		t.Errorf("aggregate error = %q, want %q", got, want)
+	}
+	if strings.Contains(aggregate.Error(), "secret") || strings.Contains(aggregate.Error(), "primary-secret-model") {
+		t.Errorf("aggregate error leaked attempt detail: %q", aggregate.Error())
+	}
+	if !errors.Is(aggregate, fallbackErr) {
+		t.Fatal("errors.Is did not reach the fallback attempt")
+	}
+	if !types.IsRateLimitError(aggregate) {
+		t.Fatal("aggregate did not preserve rate-limit classification")
+	}
+	var wormholeErr *types.WormholeError
+	if !errors.As(aggregate, &wormholeErr) || wormholeErr != rateLimitErr {
+		t.Fatalf("errors.As aggregate = %#v, want primary rate-limit error", wormholeErr)
+	}
+
+	unwrapped := aggregate.Unwrap()
+	if len(unwrapped) != 2 || unwrapped[0] != rateLimitErr || unwrapped[1] != fallbackErr {
+		t.Fatalf("aggregate unwrap = %#v, want chronological attempt errors", unwrapped)
+	}
+	unwrapped[0] = fallbackErr
+	if aggregate.Unwrap()[0] != rateLimitErr {
+		t.Fatal("aggregate Unwrap exposed mutable internal attempt order")
+	}
+	input := []error{rateLimitErr, fallbackErr}
+	immutable := newStreamAttemptsError(input)
+	input[0] = fallbackErr
+	if immutable.Unwrap()[0] != rateLimitErr {
+		t.Fatal("aggregate retained a mutable input slice")
+	}
+}
+
 func TestTextRequestBuilderStreamContextCancellationClosesStream(t *testing.T) {
 	t.Parallel()
 	blocked := make(chan types.TextChunk)

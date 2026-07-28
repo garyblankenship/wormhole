@@ -18,55 +18,60 @@ func (p *Wormhole) Close() error {
 func (p *Wormhole) Shutdown(ctx context.Context) error {
 	p.shutdownOnce.Do(func() {
 		p.signalShutdown()
-
-		// Wait for idempotency cache sweeper to exit
-		p.idempotencySweepWg.Wait()
-
-		done := make(chan struct{})
-		go func() {
-			p.activeRequests.Wait()
-			close(done)
-		}()
-
-		select {
-		case <-done:
-		case <-ctx.Done():
-			p.shutdownErr = errors.Join(p.shutdownErr, fmt.Errorf("shutdown timeout: %w", ctx.Err()))
-		}
-
-		var errs []error
-
-		p.providersMutex.Lock()
-		for name, cp := range p.providers {
-			if err := cp.provider.Close(); err != nil {
-				errs = append(errs, fmt.Errorf("provider %s: %w", name, err))
-			}
-			delete(p.providers, name)
-		}
-		p.providersMutex.Unlock()
-
-		if p.discoveryService != nil {
-			if err := p.discoveryService.Stop(); err != nil {
-				errs = append(errs, fmt.Errorf("discovery service: %w", err))
-			}
-		}
-
-		if limiter := p.adaptiveLimiter.Load(); limiter != nil {
-			limiter.Stop()
-		}
-
-		for _, c := range p.closers {
-			if err := c.Close(); err != nil {
-				errs = append(errs, err)
-			}
-		}
-
-		if len(errs) > 0 {
-			p.shutdownErr = errors.Join(p.shutdownErr, fmt.Errorf("errors during shutdown cleanup: %w", errors.Join(errs...)))
-		}
+		go p.runShutdown()
 	})
 
-	return p.shutdownErr
+	select {
+	case <-p.shutdownDone:
+		return p.shutdownErr
+	default:
+	}
+
+	select {
+	case <-p.shutdownDone:
+		return p.shutdownErr
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+}
+
+func (p *Wormhole) runShutdown() {
+	defer close(p.shutdownDone)
+
+	p.idempotencySweepWg.Wait()
+	p.activeRequests.Wait()
+	p.providerAcquisitionWg.Wait()
+
+	var errs []error
+
+	p.providersMutex.Lock()
+	for name, cp := range p.providers {
+		if err := cp.provider.Close(); err != nil {
+			errs = append(errs, fmt.Errorf("provider %s: %w", name, err))
+		}
+		delete(p.providers, name)
+	}
+	p.providersMutex.Unlock()
+
+	if p.discoveryService != nil {
+		if err := p.discoveryService.Stop(); err != nil {
+			errs = append(errs, fmt.Errorf("discovery service: %w", err))
+		}
+	}
+
+	if limiter := p.adaptiveLimiter.Load(); limiter != nil {
+		limiter.Stop()
+	}
+
+	for _, c := range p.closers {
+		if err := c.Close(); err != nil {
+			errs = append(errs, err)
+		}
+	}
+
+	if len(errs) > 0 {
+		p.shutdownErr = fmt.Errorf("errors during shutdown cleanup: %w", errors.Join(errs...))
+	}
 }
 
 func (p *Wormhole) signalShutdown() {
@@ -100,6 +105,24 @@ func (p *Wormhole) trackRequest() bool {
 
 func (p *Wormhole) untrackRequest() {
 	p.activeRequests.Done()
+}
+
+func (p *Wormhole) beginProviderAcquisition() bool {
+	p.requestAdmissionMu.Lock()
+	defer p.requestAdmissionMu.Unlock()
+
+	if p.shuttingDown.Load() {
+		return false
+	}
+	p.providerAcquisitionWg.Add(1)
+	return true
+}
+
+func (p *Wormhole) finishProviderAcquisition() bool {
+	p.requestAdmissionMu.Lock()
+	defer p.requestAdmissionMu.Unlock()
+
+	return p.shuttingDown.Load()
 }
 
 // ClearIdempotencyCache clears all cached idempotent responses.

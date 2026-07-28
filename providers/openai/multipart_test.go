@@ -1,7 +1,7 @@
 package openai
 
 import (
-	"io"
+	"bytes"
 	"mime/multipart"
 	"strings"
 	"testing"
@@ -14,7 +14,7 @@ func TestBuildAudioFormPreservesWireFormat(t *testing.T) {
 	t.Parallel()
 
 	temperature := float32(0.25)
-	reader, contentType, err := buildAudioForm(audioFormData{
+	body, contentType, err := buildAudioForm(audioFormData{
 		audio:       []byte("audio bytes"),
 		filename:    "speech.wav",
 		model:       "whisper-1",
@@ -25,7 +25,7 @@ func TestBuildAudioFormPreservesWireFormat(t *testing.T) {
 	require.NoError(t, err)
 	assert.True(t, strings.HasPrefix(contentType, "multipart/form-data; boundary="))
 
-	form := readAudioForm(t, reader, contentType)
+	form := readAudioForm(t, body, contentType)
 	assert.Equal(t, []string{"whisper-1"}, form.Value["model"])
 	assert.Equal(t, []string{"en"}, form.Value["language"])
 	assert.Equal(t, []string{"transcribe"}, form.Value["prompt"])
@@ -40,9 +40,9 @@ func TestBuildAudioFormPreservesWireFormat(t *testing.T) {
 func TestBuildAudioFormDefaultsAndOmitsOptionalFields(t *testing.T) {
 	t.Parallel()
 
-	reader, contentType, err := buildAudioForm(audioFormData{audio: []byte("audio")})
+	body, contentType, err := buildAudioForm(audioFormData{audio: []byte("audio")})
 	require.NoError(t, err)
-	form := readAudioForm(t, reader, contentType)
+	form := readAudioForm(t, body, contentType)
 	require.Len(t, form.File["file"], 1)
 	file := form.File["file"][0]
 	assert.Equal(t, "audio.wav", file.Filename)
@@ -74,12 +74,10 @@ func TestAudioContentType(t *testing.T) {
 	}
 }
 
-func readAudioForm(t *testing.T, reader io.Reader, contentType string) *multipart.Form {
+func readAudioForm(t *testing.T, data []byte, contentType string) *multipart.Form {
 	t.Helper()
-	data, err := io.ReadAll(reader)
-	require.NoError(t, err)
 	boundary := strings.TrimPrefix(contentType, "multipart/form-data; boundary=")
-	form, err := multipart.NewReader(strings.NewReader(string(data)), boundary).ReadForm(2048)
+	form, err := multipart.NewReader(bytes.NewReader(data), boundary).ReadForm(2048)
 	require.NoError(t, err)
 	t.Cleanup(func() { require.NoError(t, form.RemoveAll()) })
 	return form

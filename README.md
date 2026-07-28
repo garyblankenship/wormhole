@@ -509,13 +509,18 @@ client.EnableAdaptiveConcurrency(&wormhole.EnhancedAdaptiveConfig{
 })
 ```
 
-Graceful shutdown drains in-flight requests:
+Graceful shutdown closes request and provider admission immediately, then drains
+in-flight requests and provider construction before cleaning up shared resources:
 
 ```go
 ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 defer cancel()
 _ = client.Shutdown(ctx)
 ```
+
+A shutdown timeout applies only to that caller. Cleanup keeps draining once in
+the background, and a later `Shutdown` call can wait for the same lifecycle and
+receive its eventual cleanup result. `Close` waits without a deadline.
 
 Idempotency caches duplicate requests with the same key for the configured TTL:
 

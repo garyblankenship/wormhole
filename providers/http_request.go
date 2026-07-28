@@ -23,24 +23,49 @@ func (w *HTTPClientWrapper) StreamRequest(ctx context.Context, method, url strin
 	req.Header.Set(types.HeaderAccept, types.ContentTypeEventStream)
 	req.Header.Set(types.HeaderCacheControl, "no-cache")
 
-	resp, err := w.retryClient.Do(req)
+	return w.doRawRequest(ctx, url, cancel, req)
+}
+
+// DoRawRequest sends an already-encoded request body through the provider's
+// normal timeout, authentication, retry, and status-error handling path.
+// The supplied content type overrides configured Content-Type headers.
+func (w *HTTPClientWrapper) DoRawRequest(ctx context.Context, method, url, contentType string, body []byte) (io.ReadCloser, error) {
+	reqCtx, cancel := w.requestContext(ctx)
+	req, err := w.buildRawRequest(reqCtx, method, url, contentType, body)
+	if err != nil {
+		cancel()
+		return nil, err
+	}
+
+	return w.doRawRequest(ctx, url, cancel, req)
+}
+
+func (w *HTTPClientWrapper) doRawRequest(ctx context.Context, url string, cancel context.CancelFunc, req *http.Request) (io.ReadCloser, error) {
+	resp, err := w.retryClient.Do(req) //nolint:bodyclose // Successful response body ownership is returned to the caller.
 	if err != nil {
 		cancel()
 		return nil, w.handleRequestError(ctx, err)
 	}
 
 	if resp.StatusCode >= 400 {
-		defer cancel()
-		defer func() { _ = resp.Body.Close() }()
-		respBody, err := readResponseBodyLimited(resp.Body)
-		if err != nil {
-			return nil, types.Errorf("read response body", err)
-		}
-		defer returnResponseBuf(respBody)
-		return nil, w.buildErrorResponse(resp.StatusCode, resp.Status, url, resp.Header, respBody)
+		err := w.rawResponseError(resp, url)
+		cancel()
+		return nil, err
 	}
 
 	return &cancelOnCloseReadCloser{ReadCloser: resp.Body, cancel: cancel}, nil
+}
+
+func (w *HTTPClientWrapper) rawResponseError(resp *http.Response, url string) error {
+	defer func() { _ = resp.Body.Close() }()
+
+	respBody, err := readResponseBodyLimited(resp.Body)
+	if err != nil {
+		return types.Errorf("read response body", err)
+	}
+	defer returnResponseBuf(respBody)
+
+	return w.buildErrorResponse(resp.StatusCode, resp.Status, url, resp.Header, respBody)
 }
 
 type cancelOnCloseReadCloser struct {
@@ -78,6 +103,27 @@ func (w *HTTPClientWrapper) buildRequest(ctx context.Context, method, url string
 
 	if err := w.setRequestHeaders(req); err != nil {
 		return nil, err
+	}
+
+	return req, nil
+}
+
+func (w *HTTPClientWrapper) buildRawRequest(ctx context.Context, method, url, contentType string, body []byte) (*http.Request, error) {
+	payload := bytes.Clone(body)
+	req, err := http.NewRequestWithContext(ctx, method, url, bytes.NewReader(payload))
+	if err != nil {
+		return nil, types.Errorf("create request", err)
+	}
+	req.GetBody = func() (io.ReadCloser, error) {
+		return io.NopCloser(bytes.NewReader(payload)), nil
+	}
+	req.ContentLength = int64(len(payload))
+
+	if err := w.setRequestHeaders(req); err != nil {
+		return nil, err
+	}
+	if contentType != "" {
+		req.Header.Set(types.HeaderContentType, contentType)
 	}
 
 	return req, nil

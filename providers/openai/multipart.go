@@ -3,7 +3,6 @@ package openai
 import (
 	"bytes"
 	"fmt"
-	"io"
 	"mime/multipart"
 	"net/textproto"
 	"path/filepath"
@@ -18,7 +17,7 @@ type audioFormData struct {
 	temperature *float32
 }
 
-func buildAudioForm(data audioFormData) (io.Reader, string, error) {
+func buildAudioForm(data audioFormData) ([]byte, string, error) {
 	if len(data.audio) == 0 {
 		return nil, "", fmt.Errorf("no audio data provided")
 	}
@@ -66,7 +65,7 @@ func buildAudioForm(data audioFormData) (io.Reader, string, error) {
 	if err := writer.Close(); err != nil {
 		return nil, "", fmt.Errorf("failed to close multipart writer: %w", err)
 	}
-	return bytes.NewReader(body.Bytes()), writer.FormDataContentType(), nil
+	return body.Bytes(), writer.FormDataContentType(), nil
 }
 
 func audioContentType(filename string) string {

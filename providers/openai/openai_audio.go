@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"log/slog"
 	"net/http"
 
 	"github.com/garyblankenship/wormhole/v2/types"
@@ -82,46 +81,24 @@ func (p *Provider) handleSpeechToText(ctx context.Context, request types.AudioRe
 		temperature: request.Temperature,
 	}
 
-	reader, contentType, err := buildAudioForm(formData)
+	formBody, contentType, err := buildAudioForm(formData)
 	if err != nil {
 		return nil, p.RequestError("failed to build audio form", err)
 	}
 
-	// Make request to OpenAI Whisper API
-	url := fmt.Sprintf("%s/audio/transcriptions", p.Config.BaseURL)
-	reqCtx, cancel := p.RequestContext(ctx)
-	defer cancel()
-
-	req, err := http.NewRequestWithContext(reqCtx, "POST", url, reader)
+	url := p.GetBaseURL() + "/audio/transcriptions"
+	resp, err := p.DoRawRequest(ctx, http.MethodPost, url, contentType, formBody)
 	if err != nil {
-		return nil, p.RequestError("failed to create request", err)
-	}
-
-	// Set headers
-	req.Header.Set(types.HeaderAuthorization, "Bearer "+p.Config.APIKey)
-	req.Header.Set(types.HeaderContentType, contentType)
-
-	// Execute request
-	resp, err := p.GetHTTPClient().Do(req)
-	if err != nil {
-		return nil, p.WrapError(types.ErrorCodeNetwork, "request failed", err)
+		return nil, err
 	}
 	defer func() {
-		if err := resp.Body.Close(); err != nil {
-			slog.Warn("failed to close response body", "error", err)
-		}
+		_ = resp.Close()
 	}()
 
 	// Parse response
-	body, err := readLimited(resp.Body, maxSpeechToTextJSONBytes)
+	body, err := readLimited(resp, maxSpeechToTextJSONBytes)
 	if err != nil {
 		return nil, types.Errorf("read response", err)
-	}
-
-	if resp.StatusCode != http.StatusOK {
-		err := types.HTTPStatusToError(resp.StatusCode, string(body))
-		err.Provider = p.Name()
-		return nil, err
 	}
 
 	var sttResponse struct {

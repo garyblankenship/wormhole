@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -252,14 +253,24 @@ func TestParseStreamChunkFallback(t *testing.T) {
 func TestHandleSpeechToTextStatusError(t *testing.T) {
 	t.Parallel()
 
-	provider, _ := newOpenAITestProvider(t, func(w http.ResponseWriter, r *http.Request) {
+	noRetries := 0
+	provider, _ := newOpenAITestProviderWithConfig(t, types.ProviderConfig{
+		APIKey:     "test-key",
+		MaxRetries: &noRetries,
+	}, func(w http.ResponseWriter, r *http.Request) {
 		assert.Equal(t, http.MethodPost, r.Method)
 		assert.Equal(t, "/audio/transcriptions", r.URL.Path)
 		assert.Equal(t, "Bearer test-key", r.Header.Get(types.HeaderAuthorization))
 		assert.Contains(t, r.Header.Get(types.HeaderContentType), "multipart/form-data")
 
+		w.Header().Set("Retry-After", "3")
 		w.WriteHeader(http.StatusTooManyRequests)
-		require.NoError(t, json.NewEncoder(w).Encode(map[string]string{"error": "slow down"}))
+		require.NoError(t, json.NewEncoder(w).Encode(map[string]any{
+			"error": map[string]string{
+				"message": "slow down",
+				"type":    "rate_limit_error",
+			},
+		}))
 	})
 
 	_, err := provider.handleSpeechToText(context.Background(), types.AudioRequest{
@@ -269,6 +280,58 @@ func TestHandleSpeechToTextStatusError(t *testing.T) {
 	})
 	require.Error(t, err)
 	assert.True(t, types.IsRateLimitError(err))
+	wormholeErr, ok := types.AsWormholeError(err)
+	require.True(t, ok)
+	assert.Equal(t, http.StatusTooManyRequests, wormholeErr.StatusCode)
+	assert.Equal(t, 3*time.Second, wormholeErr.RetryAfter)
+	assert.Contains(t, wormholeErr.Details, "type=rate_limit_error")
+}
+
+func TestHandleSpeechToTextRetriesBufferedMultipartWithRotatedKey(t *testing.T) {
+	t.Parallel()
+
+	var mu sync.Mutex
+	var authHeaders, requestBodies []string
+	attempts := 0
+	maxRetries := 1
+	retryDelay := time.Millisecond
+	provider, _ := newOpenAITestProviderWithConfig(t, types.ProviderConfig{
+		APIKeys:    []string{"key-A", "key-B"},
+		MaxRetries: &maxRetries,
+		RetryDelay: &retryDelay,
+	}, func(w http.ResponseWriter, r *http.Request) {
+		body, err := io.ReadAll(r.Body)
+		require.NoError(t, err)
+		mu.Lock()
+		attempts++
+		authHeaders = append(authHeaders, r.Header.Get(types.HeaderAuthorization))
+		requestBodies = append(requestBodies, string(body))
+		attempt := attempts
+		mu.Unlock()
+
+		assert.Equal(t, http.MethodPost, r.Method)
+		assert.Equal(t, "/audio/transcriptions", r.URL.Path)
+		assert.Contains(t, r.Header.Get(types.HeaderContentType), "multipart/form-data")
+		if attempt == 1 {
+			w.WriteHeader(http.StatusTooManyRequests)
+			return
+		}
+		require.NoError(t, json.NewEncoder(w).Encode(map[string]string{"text": "transcribed"}))
+	})
+
+	response, err := provider.handleSpeechToText(context.Background(), types.AudioRequest{
+		Type:  types.AudioRequestTypeSTT,
+		Model: "whisper-1",
+		Input: []byte("audio"),
+	})
+	require.NoError(t, err)
+	assert.Equal(t, "transcribed", response.Text)
+
+	mu.Lock()
+	defer mu.Unlock()
+	assert.Equal(t, []string{"Bearer key-A", "Bearer key-B"}, authHeaders)
+	require.Len(t, requestBodies, 2)
+	assert.Equal(t, requestBodies[0], requestBodies[1])
 }
 
 func TestHandleSpeechToTextValidatesAudioInput(t *testing.T) {

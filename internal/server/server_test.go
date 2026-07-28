@@ -11,6 +11,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -27,6 +28,41 @@ type shutdownErrorCloser struct {
 }
 
 func (c shutdownErrorCloser) Close() error { return c.err }
+
+type shutdownBlockingProvider struct {
+	*types.BaseProvider
+	started    chan struct{}
+	unblock    chan struct{}
+	startOnce  sync.Once
+	closeCount atomic.Int32
+}
+
+func newShutdownBlockingProvider() *shutdownBlockingProvider {
+	return &shutdownBlockingProvider{
+		BaseProvider: types.NewBaseProvider("openai"),
+		started:      make(chan struct{}),
+		unblock:      make(chan struct{}),
+	}
+}
+
+func (p *shutdownBlockingProvider) SupportedCapabilities() []types.ModelCapability {
+	return []types.ModelCapability{types.CapabilityText}
+}
+
+func (p *shutdownBlockingProvider) Text(_ context.Context, request types.TextRequest) (*types.TextResponse, error) {
+	p.startOnce.Do(func() { close(p.started) })
+	<-p.unblock
+	return &types.TextResponse{
+		Model:        request.Model,
+		Text:         "done",
+		FinishReason: types.FinishReasonStop,
+	}, nil
+}
+
+func (p *shutdownBlockingProvider) Close() error {
+	p.closeCount.Add(1)
+	return nil
+}
 
 func newTestProxy(mock *wmtest.MockProvider, opts ...wormhole.Option) *proxy {
 	baseOpts := make([]wormhole.Option, 0, 4+len(opts))
@@ -73,6 +109,40 @@ func TestProxyShutdownPropagatesWormholeError(t *testing.T) {
 	})
 
 	require.ErrorIs(t, p.Shutdown(context.Background()), wantErr)
+}
+
+func TestProxyShutdownTimeoutKeepsDrainingWormhole(t *testing.T) {
+	t.Parallel()
+
+	provider := newShutdownBlockingProvider()
+	p := New(Config{
+		WormholeOpts: []wormhole.Option{
+			wormhole.WithCustomProvider("openai", func(types.ProviderConfig) (types.Provider, error) {
+				return provider, nil
+			}),
+			wormhole.WithProviderConfig("openai", types.ProviderConfig{}),
+			wormhole.WithDefaultProvider("openai"),
+			wormhole.WithDiscovery(false),
+		},
+		Logger: slog.New(slog.NewTextHandler(io.Discard, nil)),
+	})
+
+	requestDone := make(chan error, 1)
+	go func() {
+		_, err := p.wh.Text().Model("test-model").Prompt("hello").Generate(context.Background())
+		requestDone <- err
+	}()
+	<-provider.started
+
+	shutdownCtx, cancelShutdown := context.WithCancel(context.Background())
+	cancelShutdown()
+	require.ErrorIs(t, p.Shutdown(shutdownCtx), context.Canceled)
+	assert.Equal(t, int32(0), provider.closeCount.Load())
+
+	close(provider.unblock)
+	require.NoError(t, <-requestDone)
+	require.NoError(t, p.Shutdown(context.Background()))
+	assert.Equal(t, int32(1), provider.closeCount.Load())
 }
 
 type capturingTextProvider struct {

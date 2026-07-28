@@ -33,12 +33,14 @@ type Wormhole struct {
 	adaptiveLimiter atomic.Pointer[EnhancedAdaptiveLimiter]
 
 	// Shutdown management
-	shutdownOnce       sync.Once
-	shutdownErr        error
-	shutdownChan       chan struct{}  // Signal for graceful shutdown
-	requestAdmissionMu sync.Mutex     // Serializes request admission with shutdown
-	activeRequests     sync.WaitGroup // Track in-flight requests
-	shuttingDown       atomic.Bool    // Atomic flag for shutdown state
+	shutdownOnce          sync.Once
+	shutdownErr           error
+	shutdownDone          chan struct{}
+	shutdownChan          chan struct{}  // Signal for graceful shutdown
+	requestAdmissionMu    sync.Mutex     // Serializes request and provider admission with shutdown
+	activeRequests        sync.WaitGroup // Track in-flight requests
+	providerAcquisitionWg sync.WaitGroup // Track provider constructions admitted before shutdown
+	shuttingDown          atomic.Bool    // Atomic flag for shutdown state
 
 	// Idempotency cache
 	idempotencyMu      sync.Mutex
@@ -128,6 +130,7 @@ func New(opts ...Option) *Wormhole {
 		config:            config,
 		toolRegistry:      NewToolRegistry(),
 		modelRegistry:     types.DefaultModelRegistry,
+		shutdownDone:      make(chan struct{}),
 		shutdownChan:      make(chan struct{}),
 		idempotencyCache:  make(map[string]*idempotencyEntry),
 		closers:           config.Closers,

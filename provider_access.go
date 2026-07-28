@@ -9,10 +9,19 @@ import (
 
 // Provider returns a specific provider instance.
 func (p *Wormhole) Provider(name string) (types.Provider, error) {
-	if p.shuttingDown.Load() {
+	if !p.beginProviderAcquisition() {
 		return nil, fmt.Errorf("client is shutting down")
 	}
-	return p.getOrCreateCachedProvider(name, false)
+	defer p.providerAcquisitionWg.Done()
+
+	provider, err := p.getOrCreateCachedProvider(name, false)
+	if err != nil {
+		return nil, err
+	}
+	if p.finishProviderAcquisition() {
+		return nil, fmt.Errorf("client is shutting down")
+	}
+	return provider, nil
 }
 
 func (p *Wormhole) releaseProvider(name string) {
@@ -27,6 +36,11 @@ func (p *Wormhole) releaseProvider(name string) {
 
 // ProviderWithHandle returns a provider wrapped in a handle that must be closed.
 func (p *Wormhole) ProviderWithHandle(name string) (*ProviderHandle, error) {
+	if !p.beginProviderAcquisition() {
+		return nil, fmt.Errorf("client is shutting down")
+	}
+	defer p.providerAcquisitionWg.Done()
+
 	providerName, err := p.resolveProviderName(name)
 	if err != nil {
 		return nil, err
@@ -35,6 +49,10 @@ func (p *Wormhole) ProviderWithHandle(name string) (*ProviderHandle, error) {
 	provider, err := p.getOrCreateCachedProvider(providerName, true)
 	if err != nil {
 		return nil, err
+	}
+	if p.finishProviderAcquisition() {
+		p.releaseProvider(providerName)
+		return nil, fmt.Errorf("client is shutting down")
 	}
 
 	return &ProviderHandle{

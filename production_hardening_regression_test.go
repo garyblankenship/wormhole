@@ -2,6 +2,7 @@ package wormhole_test
 
 import (
 	"context"
+	"errors"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -17,10 +18,17 @@ import (
 
 type blockingTextProvider struct {
 	*types.BaseProvider
-	started   chan struct{}
-	unblock   chan struct{}
-	startOnce sync.Once
-	callCount atomic.Int32
+	started    chan struct{}
+	unblock    chan struct{}
+	startOnce  sync.Once
+	callCount  atomic.Int32
+	closeCount atomic.Int32
+	closeErr   error
+}
+
+func (p *blockingTextProvider) Close() error {
+	p.closeCount.Add(1)
+	return p.closeErr
 }
 
 func newBlockingTextProvider(name string) *blockingTextProvider {
@@ -139,6 +147,142 @@ func TestShutdownWaitsForInflightRequest(t *testing.T) {
 	_, err := client.Text().Model("test-model").Prompt("after shutdown").Generate(context.Background())
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "shutting down")
+}
+
+func TestShutdownTimeoutIsCallerLocalAndCleanupContinues(t *testing.T) {
+	t.Parallel()
+
+	wantCleanupErr := errors.New("provider cleanup failed")
+	provider := newBlockingTextProvider("blocking")
+	provider.closeErr = wantCleanupErr
+	client := wormhole.New(
+		wormhole.WithDiscovery(false),
+		wormhole.WithDefaultProvider("blocking"),
+		wormhole.WithCustomProvider("blocking", func(cfg types.ProviderConfig) (types.Provider, error) {
+			return provider, nil
+		}),
+		wormhole.WithProviderConfig("blocking", types.ProviderConfig{}),
+	)
+
+	requestDone := make(chan error, 1)
+	go func() {
+		_, err := client.Text().Model("test-model").Prompt("hello").Generate(context.Background())
+		requestDone <- err
+	}()
+	<-provider.started
+
+	shutdownCtx, cancelShutdown := context.WithCancel(context.Background())
+	cancelShutdown()
+	require.ErrorIs(t, client.Shutdown(shutdownCtx), context.Canceled)
+	assert.True(t, client.IsShuttingDown())
+	assert.Equal(t, int32(0), provider.closeCount.Load())
+
+	close(provider.unblock)
+	require.NoError(t, <-requestDone)
+	require.ErrorIs(t, client.Shutdown(context.Background()), wantCleanupErr)
+	assert.Equal(t, int32(1), provider.closeCount.Load())
+
+	require.ErrorIs(t, client.Shutdown(context.Background()), wantCleanupErr)
+	assert.Equal(t, int32(1), provider.closeCount.Load())
+}
+
+func TestProviderMethodsRejectAfterShutdownWithoutFactory(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		call func(*wormhole.Wormhole) error
+	}{
+		{
+			name: "Provider",
+			call: func(client *wormhole.Wormhole) error {
+				_, err := client.Provider("custom")
+				return err
+			},
+		},
+		{
+			name: "ProviderWithHandle",
+			call: func(client *wormhole.Wormhole) error {
+				_, err := client.ProviderWithHandle("custom")
+				return err
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var factoryCalls atomic.Int32
+			client := wormhole.New(
+				wormhole.WithDiscovery(false),
+				wormhole.WithCustomProvider("custom", func(types.ProviderConfig) (types.Provider, error) {
+					factoryCalls.Add(1)
+					return newCountingTextProvider("custom"), nil
+				}),
+				wormhole.WithProviderConfig("custom", types.ProviderConfig{}),
+			)
+
+			require.NoError(t, client.Shutdown(context.Background()))
+			err := tt.call(client)
+			require.ErrorContains(t, err, "client is shutting down")
+			assert.Equal(t, int32(0), factoryCalls.Load())
+		})
+	}
+}
+
+func TestProviderCreationRejectedWhenShutdownWins(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		call func(*wormhole.Wormhole) error
+	}{
+		{
+			name: "Provider",
+			call: func(client *wormhole.Wormhole) error {
+				_, err := client.Provider("custom")
+				return err
+			},
+		},
+		{
+			name: "ProviderWithHandle",
+			call: func(client *wormhole.Wormhole) error {
+				_, err := client.ProviderWithHandle("custom")
+				return err
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			factoryStarted := make(chan struct{})
+			releaseFactory := make(chan struct{})
+			provider := newBlockingTextProvider("custom")
+			client := wormhole.New(
+				wormhole.WithDiscovery(false),
+				wormhole.WithCustomProvider("custom", func(types.ProviderConfig) (types.Provider, error) {
+					close(factoryStarted)
+					<-releaseFactory
+					return provider, nil
+				}),
+				wormhole.WithProviderConfig("custom", types.ProviderConfig{}),
+			)
+
+			acquireDone := make(chan error, 1)
+			go func() {
+				acquireDone <- tt.call(client)
+			}()
+			<-factoryStarted
+
+			shutdownCtx, cancelShutdown := context.WithCancel(context.Background())
+			cancelShutdown()
+			require.ErrorIs(t, client.Shutdown(shutdownCtx), context.Canceled)
+			close(releaseFactory)
+
+			require.ErrorContains(t, <-acquireDone, "client is shutting down")
+			require.NoError(t, client.Shutdown(context.Background()))
+			assert.Equal(t, int32(1), provider.closeCount.Load())
+		})
+	}
 }
 
 func TestIdempotencyDeduplicatesRepeatedRequests(t *testing.T) {

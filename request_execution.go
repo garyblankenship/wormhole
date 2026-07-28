@@ -61,13 +61,22 @@ func executeTrackedRequest[T any](ctx context.Context, p *Wormhole, operation st
 	}
 	close(entry.ready)
 
-	p.idempotencyMu.Lock()
 	if entry.err != nil {
-		delete(p.idempotencyCache, cacheKey)
+		p.removeIdempotencyEntry(cacheKey, entry)
 	}
-	p.idempotencyMu.Unlock()
 
 	return result, err
+}
+
+// removeIdempotencyEntry removes entry only when it remains the cache's current
+// value. A completed request must not delete a newer replacement entry.
+func (p *Wormhole) removeIdempotencyEntry(cacheKey string, entry *idempotencyEntry) {
+	p.idempotencyMu.Lock()
+	defer p.idempotencyMu.Unlock()
+
+	if p.idempotencyCache[cacheKey] == entry {
+		delete(p.idempotencyCache, cacheKey)
+	}
 }
 
 func cachedIdempotentValue[T any](entry *idempotencyEntry) (T, error) {

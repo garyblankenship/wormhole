@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -176,6 +177,230 @@ func TestHTTPClientWrapperBuildRequestAndParseResponse(t *testing.T) {
 	if err := wrapper.parseResponse([]byte(`{`), &decoded); err == nil {
 		t.Fatal("parseResponse with invalid JSON returned nil error")
 	}
+}
+
+func TestHTTPClientWrapperBuildRawRequestPreservesBodyAndHeaders(t *testing.T) {
+	t.Parallel()
+
+	wrapper := NewHTTPClientWrapper("test", types.ProviderConfig{
+		APIKeys: []string{"first", "second"},
+		Headers: map[string]string{
+			types.HeaderContentType: "application/configured",
+			"x-custom":              "value",
+		},
+	}, nil, &BearerAuthStrategy{}, nil)
+	payload := []byte("raw payload")
+	req, err := wrapper.buildRawRequest(context.Background(), http.MethodPost, "https://example.test", "multipart/form-data; boundary=abc", payload)
+	if err != nil {
+		t.Fatalf("buildRawRequest returned error: %v", err)
+	}
+	payload[0] = 'X'
+
+	if got := req.Header.Get(types.HeaderContentType); got != "multipart/form-data; boundary=abc" {
+		t.Fatalf("Content-Type = %q, want explicit multipart content type", got)
+	}
+	if got := req.Header.Get(types.HeaderAuthorization); got != "Bearer first" {
+		t.Fatalf("Authorization = %q, want effective first key", got)
+	}
+	if got := req.Header.Get("x-custom"); got != "value" {
+		t.Fatalf("x-custom = %q, want value", got)
+	}
+	if got := req.ContentLength; got != int64(len("raw payload")) {
+		t.Fatalf("ContentLength = %d, want %d", got, len("raw payload"))
+	}
+	if req.GetBody == nil {
+		t.Fatal("raw request body was not made replayable")
+	}
+	for replay := 0; replay < 2; replay++ {
+		body, err := req.GetBody()
+		if err != nil {
+			t.Fatalf("GetBody replay %d returned error: %v", replay+1, err)
+		}
+		got, readErr := io.ReadAll(body)
+		closeErr := body.Close()
+		if readErr != nil {
+			t.Fatalf("read GetBody replay %d: %v", replay+1, readErr)
+		}
+		if closeErr != nil {
+			t.Fatalf("close GetBody replay %d: %v", replay+1, closeErr)
+		}
+		if string(got) != "raw payload" {
+			t.Fatalf("GetBody replay %d = %q, want raw payload", replay+1, got)
+		}
+	}
+
+	noAuth := NewHTTPClientWrapper("test", types.ProviderConfig{}, nil, &NoAuthStrategy{}, nil)
+	noAuthReq, err := noAuth.buildRawRequest(context.Background(), http.MethodPost, "https://example.test", "application/octet-stream", nil)
+	if err != nil {
+		t.Fatalf("buildRawRequest without auth returned error: %v", err)
+	}
+	if got := noAuthReq.Header.Get(types.HeaderAuthorization); got != "" {
+		t.Fatalf("NoAuth Authorization = %q, want empty", got)
+	}
+}
+
+func TestHTTPClientWrapperDoRawRequestReplaysBodyAndRotatesKeys(t *testing.T) {
+	t.Parallel()
+
+	var mu sync.Mutex
+	var bodies, authHeaders []string
+	var attempts int
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, err := io.ReadAll(r.Body)
+		if err != nil {
+			t.Errorf("read raw request body: %v", err)
+		}
+		mu.Lock()
+		attempts++
+		bodies = append(bodies, string(body))
+		authHeaders = append(authHeaders, r.Header.Get(types.HeaderAuthorization))
+		attempt := attempts
+		mu.Unlock()
+
+		if got := r.Header.Get(types.HeaderContentType); got != "multipart/form-data; boundary=raw" {
+			t.Errorf("Content-Type = %q, want explicit multipart content type", got)
+		}
+		if got := r.Header.Get("x-custom"); got != "value" {
+			t.Errorf("x-custom = %q, want value", got)
+		}
+		if attempt == 1 {
+			w.WriteHeader(http.StatusTooManyRequests)
+			return
+		}
+		_, _ = w.Write([]byte("ok"))
+	}))
+	t.Cleanup(server.Close)
+
+	maxRetries := 1
+	retryDelay := time.Millisecond
+	wrapper := NewHTTPClientWrapper("test", types.ProviderConfig{
+		APIKeys:    []string{"key-A", "key-B"},
+		MaxRetries: &maxRetries,
+		RetryDelay: &retryDelay,
+		Headers:    map[string]string{"x-custom": "value"},
+	}, nil, &BearerAuthStrategy{}, server.Client())
+
+	response, err := wrapper.DoRawRequest(context.Background(), http.MethodPost, server.URL, "multipart/form-data; boundary=raw", []byte("multipart bytes"))
+	if err != nil {
+		t.Fatalf("DoRawRequest returned error: %v", err)
+	}
+	t.Cleanup(func() { _ = response.Close() })
+	got, err := io.ReadAll(response)
+	if err != nil {
+		t.Fatalf("read raw response: %v", err)
+	}
+	if string(got) != "ok" {
+		t.Fatalf("raw response = %q, want ok", got)
+	}
+
+	mu.Lock()
+	defer mu.Unlock()
+	if got := bodies; !equalStrings(got, []string{"multipart bytes", "multipart bytes"}) {
+		t.Fatalf("request bodies = %q, want body replayed", got)
+	}
+	if got := authHeaders; !equalStrings(got, []string{"Bearer key-A", "Bearer key-B"}) {
+		t.Fatalf("Authorization headers = %q, want rotated keys", got)
+	}
+}
+
+func TestHTTPClientWrapperDoRawRequestCancelsContextOnClose(t *testing.T) {
+	t.Parallel()
+
+	requestCanceled := make(chan struct{})
+	releaseHandler := make(chan struct{})
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		w.(http.Flusher).Flush()
+		select {
+		case <-r.Context().Done():
+			close(requestCanceled)
+		case <-releaseHandler:
+		}
+	}))
+	t.Cleanup(func() {
+		close(releaseHandler)
+		server.Close()
+	})
+
+	wrapper := NewHTTPClientWrapper("test", types.ProviderConfig{}, nil, &NoAuthStrategy{}, server.Client())
+	response, err := wrapper.DoRawRequest(context.Background(), http.MethodPost, server.URL, "application/octet-stream", []byte("raw"))
+	if err != nil {
+		t.Fatalf("DoRawRequest returned error: %v", err)
+	}
+	if err := response.Close(); err != nil {
+		t.Fatalf("close raw response: %v", err)
+	}
+
+	select {
+	case <-requestCanceled:
+	case <-time.After(time.Second):
+		t.Fatal("closing raw response did not cancel its request context")
+	}
+}
+
+func TestHTTPClientWrapperDoRawRequestStatusAndBoundedErrorBody(t *testing.T) {
+	t.Parallel()
+
+	t.Run("structured status includes retry after", func(t *testing.T) {
+		t.Parallel()
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			w.Header().Set("Retry-After", "5")
+			w.WriteHeader(http.StatusTooManyRequests)
+			_, _ = w.Write([]byte(`{"error":{"message":"slow down","type":"rate_limit_error","code":"rate_limit"}}`))
+		}))
+		t.Cleanup(server.Close)
+
+		noRetries := 0
+		wrapper := NewHTTPClientWrapper("test", types.ProviderConfig{MaxRetries: &noRetries}, nil, &NoAuthStrategy{}, server.Client())
+		_, err := wrapper.DoRawRequest(context.Background(), http.MethodPost, server.URL, "application/octet-stream", []byte("raw"))
+		if err == nil {
+			t.Fatal("DoRawRequest returned nil error for 429")
+		}
+		wormholeErr, ok := types.AsWormholeError(err)
+		if !ok {
+			t.Fatalf("DoRawRequest error = %T, want WormholeError", err)
+		}
+		if wormholeErr.StatusCode != http.StatusTooManyRequests {
+			t.Fatalf("status code = %d, want 429", wormholeErr.StatusCode)
+		}
+		if wormholeErr.RetryAfter != 5*time.Second {
+			t.Fatalf("RetryAfter = %s, want 5s", wormholeErr.RetryAfter)
+		}
+		if !strings.Contains(wormholeErr.Details, "type=rate_limit_error") {
+			t.Fatalf("error details = %q, want structured type", wormholeErr.Details)
+		}
+	})
+
+	t.Run("error response body is bounded", func(t *testing.T) {
+		t.Parallel()
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			w.WriteHeader(http.StatusBadRequest)
+			_, _ = w.Write([]byte(strings.Repeat("x", maxProviderResponseBodyBytes+1)))
+		}))
+		t.Cleanup(server.Close)
+
+		noRetries := 0
+		wrapper := NewHTTPClientWrapper("test", types.ProviderConfig{MaxRetries: &noRetries}, nil, &NoAuthStrategy{}, server.Client())
+		_, err := wrapper.DoRawRequest(context.Background(), http.MethodPost, server.URL, "application/octet-stream", nil)
+		if err == nil {
+			t.Fatal("DoRawRequest returned nil error for oversized error response")
+		}
+		if !strings.Contains(err.Error(), "provider response body exceeded") {
+			t.Fatalf("DoRawRequest error = %v, want response body limit", err)
+		}
+	})
+}
+
+func equalStrings(got, want []string) bool {
+	if len(got) != len(want) {
+		return false
+	}
+	for i := range got {
+		if got[i] != want[i] {
+			return false
+		}
+	}
+	return true
 }
 
 func TestHTTPClientWrapperLimitsProviderResponseBodies(t *testing.T) {

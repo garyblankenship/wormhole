@@ -3,11 +3,34 @@ package wormhole
 import (
 	"context"
 	"fmt"
-	"strings"
 	"sync"
 
 	"github.com/garyblankenship/wormhole/v2/types"
 )
+
+const streamAttemptsErrorMessage = "all stream attempts failed before emitting a chunk"
+
+// streamAttemptsError retains each failed stream attempt for errors.Is and
+// errors.As without exposing provider-controlled error text in Error.
+type streamAttemptsError struct {
+	attempts []error
+}
+
+func newStreamAttemptsError(attempts []error) *streamAttemptsError {
+	return &streamAttemptsError{attempts: append([]error(nil), attempts...)}
+}
+
+func (e *streamAttemptsError) Error() string {
+	return streamAttemptsErrorMessage
+}
+
+// Unwrap returns a copy so callers cannot modify the aggregate's attempt order.
+func (e *streamAttemptsError) Unwrap() []error {
+	if e == nil {
+		return nil
+	}
+	return append([]error(nil), e.attempts...)
+}
 
 // Stream executes the request and returns a streaming response
 func (b *TextRequestBuilder) Stream(ctx context.Context) (<-chan types.StreamChunk, error) {
@@ -58,7 +81,7 @@ func (b *TextRequestBuilder) streamWithFallback(ctx context.Context, provider ty
 	release = sync.OnceFunc(release)
 	defer release()
 
-	var failures []string
+	var attemptErrors []error
 	var lastErr error
 	wormhole := b.getWormhole()
 	tryStream := func(provider types.Provider, validationProvider, traceProvider, model string, attempt int, fallback bool) (bool, bool, error) {
@@ -162,7 +185,7 @@ func (b *TextRequestBuilder) streamWithFallback(ctx context.Context, provider ty
 		emitted, retry, err := tryStream(provider, primaryProviderName, provider.Name(), model, attempt, attempt > 1)
 		if err != nil {
 			lastErr = err
-			failures = append(failures, fmt.Sprintf("%s: %v", model, err))
+			attemptErrors = append(attemptErrors, err)
 		}
 		if emitted || !retry || ctx.Err() != nil {
 			emitFinalStreamError(provider.Name(), model, attempt, err)
@@ -177,7 +200,7 @@ func (b *TextRequestBuilder) streamWithFallback(ctx context.Context, provider ty
 		validationRequest.Model = route.Model
 		if err := wormhole.validateModelAttempt(route.Provider, route.Model, textModelCapabilities, textRequiredCapabilities(validationRequest, false, true)); err != nil {
 			lastErr = err
-			failures = append(failures, fmt.Sprintf("%s/%s: %v", route.Provider, route.Model, err))
+			attemptErrors = append(attemptErrors, err)
 			wormhole.emitAttempt(ctx, AttemptEvent{
 				Operation: "text.stream",
 				Phase:     AttemptStarted,
@@ -202,7 +225,7 @@ func (b *TextRequestBuilder) streamWithFallback(ctx context.Context, provider ty
 		fallbackProvider, fallbackRelease, err := wormhole.leaseProvider(route.Provider)
 		if err != nil {
 			lastErr = err
-			failures = append(failures, fmt.Sprintf("%s/%s: %v", route.Provider, route.Model, err))
+			attemptErrors = append(attemptErrors, err)
 			wormhole.emitAttempt(ctx, AttemptEvent{
 				Operation: "text.stream",
 				Phase:     AttemptStarted,
@@ -234,7 +257,7 @@ func (b *TextRequestBuilder) streamWithFallback(ctx context.Context, provider ty
 		}()
 		if attemptErr != nil {
 			lastErr = attemptErr
-			failures = append(failures, fmt.Sprintf("%s/%s: %v", route.Provider, route.Model, attemptErr))
+			attemptErrors = append(attemptErrors, attemptErr)
 		}
 		if emitted || !retry || ctx.Err() != nil {
 			emitFinalStreamError(route.Provider, route.Model, attempt, attemptErr)
@@ -253,11 +276,10 @@ func (b *TextRequestBuilder) streamWithFallback(ctx context.Context, provider ty
 		})
 		return
 	}
-	sendStreamChunk(ctx, out, types.StreamChunk{
-		Error: fmt.Errorf("all stream attempts failed before emitting a chunk: %s", strings.Join(failures, "; ")),
-	})
+	aggregateErr := newStreamAttemptsError(attemptErrors)
+	sendStreamChunk(ctx, out, types.StreamChunk{Error: aggregateErr})
 	wormhole.emitStreamEvent(ctx, StreamEvent{
 		Type:  StreamError,
-		Error: fmt.Errorf("all stream attempts failed: %s", strings.Join(failures, "; ")),
+		Error: aggregateErr,
 	})
 }

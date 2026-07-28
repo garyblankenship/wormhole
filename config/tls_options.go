@@ -79,7 +79,8 @@ func rootCAPoolFingerprint(pool *x509.CertPool) string {
 	}
 	// CertPool has no other public deterministic iteration surface suitable for
 	// deriving a transport-cache identity.
-	subjects := pool.Subjects() //nolint:staticcheck
+	//lint:ignore SA1019 CertPool.Subjects is the only public deterministic certificate identity surface.
+	subjects := pool.Subjects() //nolint:staticcheck // Required for golangci-lint; standalone staticcheck uses lint:ignore above.
 	if len(subjects) == 0 {
 		return "empty"
 	}
