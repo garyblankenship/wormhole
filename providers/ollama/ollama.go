@@ -18,7 +18,6 @@ import (
 type Provider struct {
 	*providers.BaseProvider
 	requestBuilder       *providers.RequestBuilder
-	responseTransform    *transform.ResponseTransform
 	streamingTransformer *transform.StreamingTransformer
 }
 
@@ -36,7 +35,6 @@ func New(config types.ProviderConfig) (*Provider, error) {
 	return &Provider{
 		BaseProvider:         providers.NewBaseProviderWithAuth("ollama", config, nil, &providers.NoAuthStrategy{}, nil),
 		requestBuilder:       providers.NewRequestBuilder(),
-		responseTransform:    transform.NewResponseTransform(),
 		streamingTransformer: transform.NewOllamaStreamingTransformer(),
 	}, nil
 }

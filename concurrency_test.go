@@ -187,12 +187,17 @@ func TestRaceConditionScenario(t *testing.T) {
 				return
 			}
 
-			// Try to get the provider (this is where the race condition occurred)
-			provider, err := w.getProvider("")
+			// Acquire through the same leased provider path used by requests.
+			provider, release, err := builder.getProviderWithBaseURL()
 			if err != nil {
 				errChan <- err
 				return
 			}
+			if release == nil {
+				errChan <- errors.New("provider release is nil")
+				return
+			}
+			defer release()
 			if provider == nil {
 				errChan <- errors.New("provider is nil")
 				return

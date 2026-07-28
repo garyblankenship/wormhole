@@ -17,7 +17,6 @@ const defaultBaseURL = "https://api.anthropic.com/v1"
 type Provider struct {
 	*providers.BaseProvider
 	requestBuilder       *providers.RequestBuilder
-	responseTransform    *transform.ResponseTransform
 	streamingTransformer *transform.StreamingTransformer
 }
 
@@ -35,7 +34,6 @@ func New(config types.ProviderConfig) *Provider {
 	return &Provider{
 		BaseProvider:         providers.NewBaseProviderWithAuth("anthropic", config, nil, authStrategy, nil),
 		requestBuilder:       providers.NewRequestBuilder(),
-		responseTransform:    transform.NewResponseTransform(),
 		streamingTransformer: transform.NewAnthropicStreamingTransformer(),
 	}
 }

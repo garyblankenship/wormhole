@@ -15,14 +15,6 @@ func (p *Wormhole) Provider(name string) (types.Provider, error) {
 	return p.getOrCreateCachedProvider(name, false)
 }
 
-func (p *Wormhole) getProvider(override string) (types.Provider, error) {
-	providerName, err := p.resolveProviderName(override)
-	if err != nil {
-		return nil, err
-	}
-	return p.Provider(providerName)
-}
-
 func (p *Wormhole) releaseProvider(name string) {
 	p.providersMutex.RLock()
 	cp, exists := p.providers[name]

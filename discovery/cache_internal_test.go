@@ -151,19 +151,12 @@ func TestModelCacheExpiredInvalidAndFallbackPaths(t *testing.T) {
 	assert.Nil(t, missing)
 }
 
-func TestModelCacheProviderPathsJournalAndCleanup(t *testing.T) {
+func TestModelCacheProviderPathsAndCleanup(t *testing.T) {
 	t.Parallel()
 	cache := newFileBackedCache(t)
 	assert.Contains(t, cache.getProviderFilePath("openrouter/../model"), "openrouter____model-")
 	assert.NotEqual(t, cache.getProviderFilePath("a/b"), cache.getProviderFilePath("a_b"))
 	assert.Same(t, cache.getProviderLock("openai"), cache.getProviderLock("openai"))
-
-	models := testModels("journal")
-	require.NoError(t, cache.appendToJournal("journal/provider", models))
-	journalPath := cache.filePath + ".journal_provider.journal"
-	data, err := os.ReadFile(journalPath)
-	require.NoError(t, err)
-	assert.Contains(t, string(data), computeChecksum(models))
 
 	cache.memory["fresh"] = &CacheEntry{Timestamp: time.Now(), Provider: "fresh"}
 	cache.memory["expired"] = &CacheEntry{Timestamp: time.Now().Add(-2 * time.Hour), Provider: "expired"}

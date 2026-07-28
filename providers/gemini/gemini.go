@@ -17,7 +17,6 @@ const (
 type Gemini struct {
 	*providers.BaseProvider
 	requestBuilder       *providers.RequestBuilder
-	responseTransform    *transform.ResponseTransform
 	streamingTransformer *transform.StreamingTransformer
 }
 
@@ -48,7 +47,6 @@ func New(apiKey string, config types.ProviderConfig) *Gemini {
 	return &Gemini{
 		BaseProvider:         providers.NewBaseProviderWithAuth("gemini", config, nil, authStrategy, nil),
 		requestBuilder:       providers.NewRequestBuilder(),
-		responseTransform:    transform.NewResponseTransform(),
 		streamingTransformer: nil,
 	}
 }

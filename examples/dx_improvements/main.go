@@ -137,24 +137,3 @@ func main() {
 
 	_ = productionClient // Suppress unused variable
 }
-
-// DemonstratePainPoints shows the BEFORE vs AFTER
-func DemonstratePainPoints() {
-	fmt.Println("=== Before vs After Comparison ===")
-
-	fmt.Println("\n❌ BEFORE (Confusing):")
-	fmt.Printf("  middleware.CacheMiddleware(cache, ttl) // Wrong - doesn't exist\n")
-	fmt.Printf("  middleware.RetryConfig{} // How do I configure this?\n")
-	fmt.Printf("  // Had to dive into source code to find DefaultRetryConfig()\n")
-
-	fmt.Println("\n✅ AFTER (Clear):")
-	fmt.Printf("  middleware.AvailableMiddleware() // Discover all options\n")
-	fmt.Printf("  middleware.CacheMiddleware(middleware.CacheConfig{...}) // Clear signature\n")
-	fmt.Printf("  middleware.DefaultRetryConfig() // Well-documented default\n")
-
-	fmt.Println("\n📈 Impact:")
-	fmt.Printf("  - No more source diving\n")
-	fmt.Printf("  - Clear examples in GoDoc\n")
-	fmt.Printf("  - Discovery API for all middleware\n")
-	fmt.Printf("  - Better error messages with context\n")
-}

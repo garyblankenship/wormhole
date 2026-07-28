@@ -17,17 +17,16 @@ import (
 
 // ModelCache implements 3-tier caching: memory -> file -> fallback
 type ModelCache struct {
-	memory              map[string]*CacheEntry // provider -> *CacheEntry
-	memoryMu            sync.RWMutex           // Protects memory map
-	filePath            string
-	memoryTTL           time.Duration
-	fileTTL             time.Duration
-	enableFileCache     bool
-	enableAppendJournal bool // Experimental: use append-based journaling
-	fallback            map[string][]*types.ModelInfo
-	mu                  sync.RWMutex             // Protects file operations
-	fileLocks           map[string]*sync.RWMutex // Per-provider file locks
-	fileLocksMu         sync.RWMutex             // Protects fileLocks map
+	memory          map[string]*CacheEntry // provider -> *CacheEntry
+	memoryMu        sync.RWMutex           // Protects memory map
+	filePath        string
+	memoryTTL       time.Duration
+	fileTTL         time.Duration
+	enableFileCache bool
+	fallback        map[string][]*types.ModelInfo
+	mu              sync.RWMutex             // Protects file operations
+	fileLocks       map[string]*sync.RWMutex // Per-provider file locks
+	fileLocksMu     sync.RWMutex             // Protects fileLocks map
 
 	// Goroutine lifecycle management
 	stopCh   chan struct{}
@@ -48,15 +47,14 @@ func NewModelCache(config DiscoveryConfig) *ModelCache {
 	}
 
 	return &ModelCache{
-		memory:              make(map[string]*CacheEntry),
-		filePath:            filePath,
-		memoryTTL:           config.CacheTTL,
-		fileTTL:             config.FileCacheTTL,
-		enableFileCache:     config.EnableFileCache,
-		enableAppendJournal: false, // Disabled by default for compatibility
-		fallback:            getFallbackModels(),
-		fileLocks:           make(map[string]*sync.RWMutex),
-		stopCh:              make(chan struct{}),
+		memory:          make(map[string]*CacheEntry),
+		filePath:        filePath,
+		memoryTTL:       config.CacheTTL,
+		fileTTL:         config.FileCacheTTL,
+		enableFileCache: config.EnableFileCache,
+		fallback:        getFallbackModels(),
+		fileLocks:       make(map[string]*sync.RWMutex),
+		stopCh:          make(chan struct{}),
 	}
 }
 

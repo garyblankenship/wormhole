@@ -85,7 +85,9 @@ type FileCache struct {
 	Entries map[string]*CacheEntry `json:"entries"` // provider -> CacheEntry
 }
 
-// JournalEntry represents an append-only journal entry for cache updates
+// JournalEntry represents an append-only journal entry for cache updates.
+//
+// Deprecated: ModelCache no longer writes append journals.
 type JournalEntry struct {
 	Provider  string             `json:"provider"`
 	Models    []*types.ModelInfo `json:"models"`

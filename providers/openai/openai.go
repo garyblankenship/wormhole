@@ -18,7 +18,6 @@ const (
 type Provider struct {
 	*providers.BaseProvider
 	requestBuilder       *providers.RequestBuilder
-	responseTransform    *transform.ResponseTransform
 	streamingTransformer *transform.StreamingTransformer
 }
 
@@ -38,7 +37,6 @@ func NewWithName(name string, config types.ProviderConfig) *Provider {
 	return &Provider{
 		BaseProvider:         providers.NewBaseProvider(name, config),
 		requestBuilder:       providers.NewRequestBuilder(),
-		responseTransform:    transform.NewResponseTransform(),
 		streamingTransformer: transform.NewOpenAIStreamingTransformer(),
 	}
 }
