@@ -73,7 +73,7 @@ release:
     )
     
     response, err := client.Text().
-        Model("gpt-5").
+        Model("gpt-5.6").
         Prompt("Hello, Wormhole!").
         Generate(context.Background())
     ```

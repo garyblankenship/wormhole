@@ -1,5 +1,39 @@
 # Changelog
 
+## v2.4.0 (2026-07-30)
+
+### Features
+- Metrics: expose typed rerank statistics through `GetRerankStats()` and
+  include rerank in aggregate snapshots and reset behavior.
+
+### Fixes
+- Request lifecycle: begin idempotency response TTLs at owner completion and
+  keep matching in-flight requests coalesced; deprecate raw `Provider()` access
+  in favor of releasable `ProviderWithHandle()` ownership.
+- Shutdown and transport: keep cleanup draining after a caller-local shutdown
+  timeout, reject late provider construction, preserve raw-request replay and
+  cancellation, and rebuild multipart bodies independently for retries.
+- Streaming fallback: preserve the underlying attempt errors for inspection
+  while keeping provider details out of the public aggregate message.
+- Metrics: make token and concurrency controls behavioral, preserve the live
+  in-flight gauge across reset, use canonical structured label identity with
+  valid escaped Prometheus labels, and return detached provider snapshots.
+  `GetAllStats()` and `JSONExporter()` per-label keys now use canonical named
+  labels instead of the collision-prone colon-delimited v2 format; consumers
+  should treat keys as opaque or read the embedded identity fields.
+- Provider requests: prepare repaired messages once before payload selection,
+  remove the unused OpenAI Responses raw decode, and bound pooled response
+  buffers while preserving the 32 MiB response limit.
+
+### Performance
+- Metrics: avoid constructing an unused label bucket on steady-state
+  label-aggregation hits.
+
+### Documentation
+- Refresh current provider examples to OpenAI `gpt-5.6`, Anthropic
+  `claude-sonnet-5`, Gemini `gemini-3.6-flash`, and the corresponding
+  OpenRouter route IDs.
+
 ## v2.3.0 (2026-07-22)
 
 ### Features
