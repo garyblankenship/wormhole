@@ -12,7 +12,7 @@ Wormhole is a **provider bridge / gateway** — a unified façade over LLM provi
 - Tool calling
 - Embeddings
 - Reranking (OpenAI-compatible `/rerank`, e.g. OpenRouter `cohere/rerank-v3.5`)
-- The standalone OpenAI-compatible **proxy** form (`provider/model` prefix routing, e.g. `anthropic/claude-sonnet-4-5`)
+- The standalone OpenAI-compatible **proxy** form (`provider/model` prefix routing, e.g. `anthropic/claude-sonnet-5`)
 
 **Out of scope — platform administration** (point users to the official provider SDK/REST API; do NOT rebuild it here):
 - OpenAI Vector Stores, Assistants, files, fine-tuning
@@ -33,7 +33,25 @@ Wormhole is a **provider bridge / gateway** — a unified façade over LLM provi
 
 ---
 
-## Current Models (January 2026)
+## Current model guidance (verified 2026-07-30)
+
+Use these IDs for current, first-run examples. They are pass-through model
+identifiers; check the linked provider catalogs before choosing a model for a
+new deployment.
+
+| Route | Current example model |
+|---|---|
+| OpenAI | `gpt-5.6` |
+| Anthropic | `claude-sonnet-5` |
+| Gemini | `gemini-3.6-flash` |
+| OpenRouter / OpenAI | `openai/gpt-5.6-sol` |
+| OpenRouter / Anthropic | `anthropic/claude-sonnet-5` |
+| OpenRouter / Gemini | `google/gemini-3.6-flash` |
+
+## Historical model snapshot (January 2026)
+
+The lists below are retained as a dated compatibility reference, not current
+recommendations.
 
 ### OpenAI
 
@@ -160,8 +178,10 @@ Wormhole is a **provider bridge / gateway** — a unified façade over LLM provi
 
 - Use `go build ./...` to verify changes
 - Run `go test . -short` for quick root-package validation
-- Model names in README.md examples should use current stable versions
-- Prefer aliases (e.g., `claude-sonnet-4-5`) over dated versions for examples
+- Model names in README.md examples should use the current stable versions
+  above: `gpt-5.6`, `claude-sonnet-5`, and `gemini-3.6-flash`.
+- Prefer current aliases (for example, `claude-sonnet-5`) over dated versions
+  for examples.
 - Proxy server lives in `internal/server/` (types, router, server, handler) + `cmd/wormhole/` (CLI)
 - Model prefix routing: `provider/model` in the request → strips prefix, routes to that provider; unprefixed → default provider
 - Zero new dependencies: proxy uses stdlib only (`net/http`, `encoding/json`, `log/slog`)

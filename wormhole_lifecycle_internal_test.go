@@ -41,7 +41,7 @@ func TestSweepIdempotencyCache(t *testing.T) {
 	if client.idempotencyCache == nil {
 		client.idempotencyCache = make(map[string]*idempotencyEntry)
 	}
-	client.idempotencyCache["expired-key"] = &idempotencyEntry{}
+	client.idempotencyCache["expired-key"] = &idempotencyEntry{state: idempotencyCompleted}
 	client.idempotencyMu.Unlock()
 
 	client.sweepIdempotencyCache()

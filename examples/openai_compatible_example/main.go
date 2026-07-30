@@ -70,7 +70,7 @@ func main() {
 	fmt.Println("--- Example 4: OpenRouter (cloud) ---")
 	_, err = client.Text().
 		BaseURL("https://openrouter.ai/api/v1"). // ✨ That's it!
-		Model("anthropic/claude-sonnet-4-5").
+		Model("anthropic/claude-sonnet-5").
 		Prompt("Hello from OpenRouter!").
 		MaxTokens(50).
 		Generate(ctx)

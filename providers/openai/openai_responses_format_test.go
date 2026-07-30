@@ -49,7 +49,7 @@ func TestBuildResponsesPayloadFlattensJSONSchema(t *testing.T) {
 		_ = json.NewEncoder(w).Encode(map[string]any{})
 	})
 
-	payload := provider.buildResponsesPayload(&types.TextRequest{
+	request := &types.TextRequest{
 		BaseRequest: types.BaseRequest{
 			Model: "gpt-4o",
 		},
@@ -61,7 +61,8 @@ func TestBuildResponsesPayloadFlattensJSONSchema(t *testing.T) {
 				"schema": map[string]any{"type": "object"},
 			},
 		},
-	})
+	}
+	payload := provider.buildResponsesPayload(request, request.Messages)
 
 	text, ok := payload["text"].(map[string]any)
 	require.True(t, ok)

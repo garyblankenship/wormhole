@@ -440,13 +440,13 @@ func executeBenchmark(ctx context.Context, client *wormhole.Wormhole, config CLI
 func getDefaultModel(provider string) string {
 	switch provider {
 	case "openai":
-		return "gpt-5"
+		return "gpt-5.6"
 	case "anthropic":
-		return "claude-sonnet-4-5"
+		return "claude-sonnet-5"
 	case "gemini":
-		return "gemini-pro"
+		return "gemini-3.6-flash"
 	default:
-		return "gpt-5"
+		return "gpt-5.6"
 	}
 }
 

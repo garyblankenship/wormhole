@@ -54,10 +54,11 @@ func (p *Provider) Text(ctx context.Context, request types.TextRequest) (*types.
 	if err := p.validateSamplingControls(request); err != nil {
 		return nil, err
 	}
-	if _, _, err := providers.PrepareMessages(request.Messages); err != nil {
+	prepared, _, err := providers.PrepareMessages(request.Messages)
+	if err != nil {
 		return nil, err
 	}
-	payload, err := p.buildMessagePayload(&request)
+	payload, err := p.buildMessagePayload(&request, prepared)
 	if err != nil {
 		return nil, err
 	}
@@ -100,10 +101,11 @@ func (p *Provider) Stream(ctx context.Context, request types.TextRequest) (<-cha
 	if err := p.validateSamplingControls(request); err != nil {
 		return nil, err
 	}
-	if _, _, err := providers.PrepareMessages(request.Messages); err != nil {
+	prepared, _, err := providers.PrepareMessages(request.Messages)
+	if err != nil {
 		return nil, err
 	}
-	payload, err := p.buildMessagePayload(&request)
+	payload, err := p.buildMessagePayload(&request, prepared)
 	if err != nil {
 		return nil, err
 	}

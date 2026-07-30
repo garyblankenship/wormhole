@@ -92,6 +92,32 @@ func TestProviderTextAndEmptyResponse(t *testing.T) {
 	})
 }
 
+func TestPrepareMessagesHardErrorPreventsOpenAIHTTP(t *testing.T) {
+	t.Parallel()
+	for _, useResponses := range []bool{false, true} {
+		t.Run(map[bool]string{false: "chat", true: "responses"}[useResponses], func(t *testing.T) {
+			t.Parallel()
+			var calls atomic.Int32
+			provider, _ := newOpenAITestProviderWithConfig(t, types.ProviderConfig{APIKey: "test-key", UseResponsesAPI: useResponses}, func(http.ResponseWriter, *http.Request) {
+				calls.Add(1)
+			})
+			_, err := provider.Text(context.Background(), types.TextRequest{
+				BaseRequest: types.BaseRequest{Model: "gpt-5.6"},
+				Messages: []types.Message{&types.AssistantMessage{ToolCalls: []types.ToolCall{
+					{ID: "duplicate", Name: "one"},
+					{ID: "duplicate", Name: "two"},
+				}}},
+			})
+			if err == nil {
+				t.Fatal("Text accepted duplicate normalized tool-call IDs")
+			}
+			if got := calls.Load(); got != 0 {
+				t.Fatalf("HTTP calls after preparation error = %d, want 0", got)
+			}
+		})
+	}
+}
+
 func TestProviderRejectsMalformedToolHistoryBeforeHTTP(t *testing.T) {
 	t.Parallel()
 

@@ -34,6 +34,7 @@ type EnhancedAdaptiveLimiter struct {
 
 // NewEnhancedAdaptiveLimiter creates a new provider-aware adaptive limiter
 func NewEnhancedAdaptiveLimiter(config EnhancedAdaptiveConfig) *EnhancedAdaptiveLimiter {
+	config = normalizeEnhancedAdaptiveConfig(config)
 	if config.MetricsCollector == nil {
 		// Create a default metrics collector if none provided
 		config.MetricsCollector = middleware.NewEnhancedMetricsCollector(nil)
@@ -59,11 +60,6 @@ func NewEnhancedAdaptiveLimiter(config EnhancedAdaptiveConfig) *EnhancedAdaptive
 
 	// Initialize provider-specific settings
 	for provider, setting := range config.ProviderSettings {
-		pidConfig := config.PIDConfig
-		if setting.PIDConfig != nil {
-			pidConfig = *setting.PIDConfig
-		}
-
 		state := NewProviderAdaptiveState(
 			ProviderKey{Provider: provider},
 			setting.TargetLatency,
@@ -72,7 +68,7 @@ func NewEnhancedAdaptiveLimiter(config EnhancedAdaptiveConfig) *EnhancedAdaptive
 			setting.InitialCapacity,
 			config.LatencyWindowSize,
 		)
-		state.pidController = NewPIDController(pidConfig)
+		state.pidController = NewPIDController(*setting.PIDConfig)
 		limiter.providerStates[provider] = state
 	}
 

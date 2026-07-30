@@ -18,7 +18,7 @@ func main() {
     )
     defer client.Close()
 
-    resp, err := client.Text().Model("gpt-5").Prompt("Say hello.").Generate(context.Background())
+    resp, err := client.Text().Model("gpt-5.6").Prompt("Say hello.").Generate(context.Background())
     if err != nil { panic(err) }
     fmt.Println(resp.Content())
 }
@@ -51,7 +51,7 @@ func main() {
     defer client.Close()
 
     resp, err := client.Text().
-        Model("gpt-5").
+        Model("gpt-5.6").
         Prompt("Write one sentence about Go interfaces.").
         Generate(context.Background())
     if err != nil {
@@ -78,7 +78,7 @@ The same `Text()` builder still drives the request:
 
 ```go
 resp, err := client.Text().
-    Model("gpt-5").
+    Model("gpt-5.6").
     SystemPrompt("Answer tersely.").
     Prompt("What is a type parameter?").
     MaxTokens(128).
@@ -134,7 +134,7 @@ client := wormhole.New(
 
 ```go
 resp, err := client.Text().
-    Model("gpt-5").
+    Model("gpt-5.6").
     Prompt("Return JSON for Ada Lovelace with name and role.").
     ResponseFormat(map[string]any{"type": "json_object"}).
     Generate(ctx)
@@ -159,7 +159,7 @@ tool := types.NewTool("lookup", "Lookup a record", map[string]any{
 })
 
 resp, err := client.Text().
-    Model("gpt-5").
+    Model("gpt-5.6").
     Prompt("Look up Ada Lovelace.").
     Tools(*tool).
     Generate(ctx)
@@ -176,7 +176,7 @@ Streaming works through the same builder. In Responses mode, OpenAI
 
 ```go
 stream, err := client.Text().
-    Model("gpt-5").
+    Model("gpt-5.6").
     Prompt("Count to three.").
     Stream(ctx)
 if err != nil {

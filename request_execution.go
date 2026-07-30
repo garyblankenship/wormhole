@@ -14,8 +14,16 @@ const (
 	idempotencySweepInterval = 5 * time.Minute
 )
 
+type idempotencyState uint8
+
+const (
+	idempotencyInFlight idempotencyState = iota
+	idempotencyCompleted
+)
+
 type idempotencyEntry struct {
 	ready     chan struct{}
+	state     idempotencyState
 	expiresAt time.Time
 	payload   []byte
 	value     any
@@ -41,7 +49,7 @@ func executeTrackedRequest[T any](ctx context.Context, p *Wormhole, operation st
 	ttl := p.idempotencyTTL()
 	now := time.Now()
 
-	entry, created := p.loadOrCreateIdempotencyEntry(cacheKey, now, ttl)
+	entry, created := p.loadOrCreateIdempotencyEntry(cacheKey, now)
 	if !created {
 		select {
 		case <-entry.ready:
@@ -58,14 +66,25 @@ func executeTrackedRequest[T any](ctx context.Context, p *Wormhole, operation st
 		if payload, marshalErr := json.Marshal(result); marshalErr == nil {
 			entry.payload = payload
 		}
+		p.completeIdempotencyEntry(entry, time.Now(), ttl)
+	} else {
+		p.removeIdempotencyEntry(cacheKey, entry)
 	}
 	close(entry.ready)
 
-	if entry.err != nil {
-		p.removeIdempotencyEntry(cacheKey, entry)
-	}
-
 	return result, err
+}
+
+// completeIdempotencyEntry starts the response cache TTL after a successful
+// provider result is available. It deliberately updates the entry even if an
+// operator cleared the cache: existing duplicate waiters still own this entry
+// and must be released, while the cache map remains untouched.
+func (p *Wormhole) completeIdempotencyEntry(entry *idempotencyEntry, now time.Time, ttl time.Duration) {
+	p.idempotencyMu.Lock()
+	defer p.idempotencyMu.Unlock()
+
+	entry.state = idempotencyCompleted
+	entry.expiresAt = now.Add(ttl)
 }
 
 // removeIdempotencyEntry removes entry only when it remains the cache's current
@@ -136,20 +155,20 @@ func (p *Wormhole) idempotencyCacheKey(operation string, request any) (string, b
 	return p.config.Idempotency.Key + ":" + operation + ":" + hex.EncodeToString(h.Sum(nil)), true
 }
 
-func (p *Wormhole) loadOrCreateIdempotencyEntry(cacheKey string, now time.Time, ttl time.Duration) (*idempotencyEntry, bool) {
+func (p *Wormhole) loadOrCreateIdempotencyEntry(cacheKey string, now time.Time) (*idempotencyEntry, bool) {
 	p.idempotencyMu.Lock()
 	defer p.idempotencyMu.Unlock()
 
 	if entry, exists := p.idempotencyCache[cacheKey]; exists {
-		if now.Before(entry.expiresAt) {
+		if entry.state == idempotencyInFlight || now.Before(entry.expiresAt) {
 			return entry, false
 		}
 		delete(p.idempotencyCache, cacheKey)
 	}
 
 	entry := &idempotencyEntry{
-		ready:     make(chan struct{}),
-		expiresAt: now.Add(ttl),
+		ready: make(chan struct{}),
+		state: idempotencyInFlight,
 	}
 	p.idempotencyCache[cacheKey] = entry
 	return entry, true
@@ -174,13 +193,14 @@ func (p *Wormhole) startIdempotencySweeper() {
 	}()
 }
 
-// sweepIdempotencyCache evicts idempotency entries whose TTL has expired.
+// sweepIdempotencyCache evicts completed idempotency entries whose response TTL
+// has expired. In-flight requests do not have a response TTL.
 func (p *Wormhole) sweepIdempotencyCache() {
 	p.idempotencyMu.Lock()
 	defer p.idempotencyMu.Unlock()
 	now := time.Now()
 	for key, entry := range p.idempotencyCache {
-		if now.After(entry.expiresAt) {
+		if entry.state == idempotencyCompleted && now.After(entry.expiresAt) {
 			delete(p.idempotencyCache, key)
 		}
 	}

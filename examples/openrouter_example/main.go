@@ -47,10 +47,10 @@ func main() {
 	// Example 1: Basic text generation with different models
 	fmt.Println("\n1. 🚀 Basic Text Generation (Multiple Models)")
 	models := []string{
-		"openai/gpt-5-mini",                // OpenAI via OpenRouter
-		"anthropic/claude-sonnet-4-5",      // Anthropic via OpenRouter
+		"openai/gpt-5.6-sol",               // OpenAI via OpenRouter
+		"anthropic/claude-sonnet-5",        // Anthropic via OpenRouter
 		"meta-llama/llama-3.1-8b-instruct", // Meta via OpenRouter
-		"google/gemini-pro",                // Google via OpenRouter
+		"google/gemini-3.6-flash",          // Google via OpenRouter
 		"mistralai/mixtral-8x7b-instruct",  // Mistral via OpenRouter
 	}
 
@@ -76,10 +76,10 @@ func main() {
 
 	// Example 2: Streaming with OpenRouter
 	fmt.Println("\n\n2. 📡 Streaming Response")
-	fmt.Printf("🧠 Model: openai/gpt-5-mini (streaming)\n")
+	fmt.Printf("🧠 Model: openai/gpt-5.6-sol (streaming)\n")
 
 	stream, err := legacyClient.Text().
-		Model("openai/gpt-5-mini").
+		Model("openai/gpt-5.6-sol").
 		Prompt("Write a haiku about dimensional travel").
 		MaxTokens(100).
 		Temperature(0.8).
@@ -128,7 +128,7 @@ func main() {
 	}
 
 	response, err := legacyClient.Text().
-		Model("openai/gpt-5-mini"). // Use model that supports function calling
+		Model("openai/gpt-5.6-sol"). // Use model that supports function calling
 		Messages(messages...).
 		Tools(*weatherTool).
 		MaxTokens(200).
@@ -137,7 +137,7 @@ func main() {
 	if err != nil {
 		log.Printf("Function calling error: %v", err)
 	} else {
-		fmt.Printf("🧠 Model: openai/gpt-5-mini\n")
+		fmt.Printf("🧠 Model: openai/gpt-5.6-sol\n")
 		fmt.Printf("✅ Response: %s\n", response.Text)
 
 		if len(response.ToolCalls) > 0 {
@@ -174,7 +174,7 @@ func main() {
 	}
 
 	structuredResponse, err := legacyClient.Structured().
-		Model("openai/gpt-5-mini").
+		Model("openai/gpt-5.6-sol").
 		Prompt("Explain machine learning").
 		Schema(jsonSchema).
 		MaxTokens(300).
@@ -183,7 +183,7 @@ func main() {
 	if err != nil {
 		log.Printf("Structured output error: %v", err)
 	} else {
-		fmt.Printf("🧠 Model: openai/gpt-5-mini\n")
+		fmt.Printf("🧠 Model: openai/gpt-5.6-sol\n")
 		fmt.Printf("✅ JSON Response: %s\n", structuredResponse.Raw)
 	}
 
@@ -208,7 +208,7 @@ func main() {
 
 	// OpenRouter provides detailed usage info in response headers
 	costResponse, err := legacyClient.Text().
-		Model("anthropic/claude-sonnet-4-5").
+		Model("anthropic/claude-sonnet-5").
 		Prompt("Write a short story about parallel universes").
 		MaxTokens(200).
 		Generate(ctx)
@@ -216,7 +216,7 @@ func main() {
 	if err != nil {
 		log.Printf("Cost tracking error: %v", err)
 	} else {
-		fmt.Printf("🧠 Model: anthropic/claude-sonnet-4-5\n")
+		fmt.Printf("🧠 Model: anthropic/claude-sonnet-5\n")
 		fmt.Printf("✅ Response length: %d characters\n", len(costResponse.Text))
 		fmt.Println("💰 Check OpenRouter dashboard for detailed cost breakdown")
 	}
@@ -226,9 +226,9 @@ func main() {
 
 	prompt := "Explain the concept of emergence in complex systems"
 	comparisonModels := []string{
-		"openai/gpt-5-mini",
-		"anthropic/claude-sonnet-4-5",
-		"google/gemini-pro",
+		"openai/gpt-5.6-sol",
+		"anthropic/claude-sonnet-5",
+		"google/gemini-3.6-flash",
 	}
 
 	for i, model := range comparisonModels {

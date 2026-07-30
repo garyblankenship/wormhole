@@ -4,7 +4,9 @@ import (
 	"bytes"
 	"io"
 	"net/http"
+	"runtime"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/garyblankenship/wormhole/v2/types"
@@ -84,8 +86,68 @@ func BenchmarkRetryableHTTPClientSuccessfulFirstAttempt(b *testing.B) {
 	}
 }
 
+// BenchmarkReadResponseBodyLimitedSizeTiers tracks the bounded response-body
+// path at the small and medium tiers used by the retention-candidate gate.
+// It deliberately returns every successful buffer so the benchmark observes
+// the production ownership contract rather than accumulating benchmark data.
+func BenchmarkReadResponseBodyLimitedSizeTiers(b *testing.B) {
+	for _, size := range []int{4 << 10, 64 << 10, 1 << 20} {
+		b.Run(benchmarkSizeName(size), func(b *testing.B) {
+			body := bytes.Repeat([]byte("x"), size)
+			b.ReportAllocs()
+			b.ResetTimer()
+			for range b.N {
+				got, err := readResponseBodyLimited(bytes.NewReader(body))
+				if err != nil {
+					b.Fatal(err)
+				}
+				if len(got) != len(body) {
+					b.Fatalf("body length = %d, want %d", len(got), len(body))
+				}
+				returnResponseBuf(got)
+			}
+		})
+	}
+}
+
+// BenchmarkResponseBodyPoolRetentionProbe is an eligibility probe, not a
+// throughput result. The Phase-A command runs it as twenty one-iteration
+// samples and takes the lower median of retained-after-gc-B.
+func BenchmarkResponseBodyPoolRetentionProbe(b *testing.B) {
+	if b.N != 1 {
+		b.Fatalf("BenchmarkResponseBodyPoolRetentionProbe requires -benchtime=1x; got %dx", b.N)
+	}
+	responseBodyPool = sync.Pool{
+		New: func() any {
+			buf := make([]byte, 0, 4<<10)
+			return &buf
+		},
+	}
+	large := bytes.Repeat([]byte("x"), 8<<20)
+	b.ResetTimer()
+	got, err := readResponseBodyLimited(bytes.NewReader(large))
+	if err != nil {
+		b.Fatal(err)
+	}
+	returnResponseBuf(got)
+	runtime.GC()
+
+	drained := make([]*[]byte, 32)
+	maxRetained := 0
+	for i := range drained {
+		drained[i] = responseBodyPool.Get().(*[]byte)
+		if capacity := cap(*drained[i]); capacity > maxRetained {
+			maxRetained = capacity
+		}
+	}
+	runtime.KeepAlive(drained)
+	b.ReportMetric(float64(maxRetained), "max-retained-after-gc-B")
+}
+
 func benchmarkSizeName(size int) string {
 	switch size {
+	case 4 << 10:
+		return "4KiB"
 	case 1 << 10:
 		return "1KiB"
 	case 64 << 10:

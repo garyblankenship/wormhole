@@ -28,7 +28,7 @@ func main() {
 
     // Simple text generation
     response, err := client.Text().
-        Model("gemini-2.5-flash").
+        Model("gemini-3.6-flash").
         Prompt("Hello, Gemini!").
         Generate(ctx)
 
@@ -57,7 +57,7 @@ provider := gemini.New(os.Getenv("GEMINI_API_KEY"), types.ProviderConfig{
 Google's model catalog and preview lifecycle change independently of Wormhole.
 Use the [official Gemini models reference](https://ai.google.dev/gemini-api/docs/models)
 for current IDs and availability. Prefer a stable model ID, such as
-`gemini-2.5-flash`, when a preview-specific feature is not required.
+`gemini-3.6-flash`, when a preview-specific feature is not required.
 
 ## Capabilities
 
@@ -89,7 +89,7 @@ Gemini supports system instructions via the `systemInstruction` field:
 
 ```go
 response, err := client.Text().
-    Model("gemini-2.5-flash").
+    Model("gemini-3.6-flash").
     SystemPrompt("You are a helpful assistant specializing in Go programming.").
     Prompt("Explain goroutines").
     Generate(ctx)
@@ -204,7 +204,7 @@ tools := []types.Tool{
 }
 
 response, err := client.Text().
-    Model("gemini-2.5-flash").
+    Model("gemini-3.6-flash").
     Prompt("What's the weather in Tokyo?").
     Tools(tools...).
     ToolChoice(&types.ToolChoice{Type: types.ToolChoiceTypeAuto}).
@@ -231,7 +231,7 @@ type Person struct {
 
 var result Person
 err := client.Structured().
-    Model("gemini-2.5-flash").
+    Model("gemini-3.6-flash").
     Prompt("Extract: John is 30 years old, can be reached at john@example.com, and knows Go and Python").
     SchemaName("person").
     GenerateAs(ctx, &result)
@@ -246,7 +246,7 @@ inside `generationConfig`, not as top-level OpenAI `response_format`:
 
 ```go
 response, err := client.Text().
-    Model("gemini-2.5-flash").
+    Model("gemini-3.6-flash").
     Prompt("Return exactly one JSON object with key ok=true.").
     MaxTokens(64).
     ProviderOptions(map[string]any{
@@ -286,7 +286,7 @@ Stream responses in real-time:
 
 ```go
 chunks, err := client.Text().
-    Model("gemini-2.5-flash").
+    Model("gemini-3.6-flash").
     Prompt("Tell me a short story").
     Stream(ctx)
 
@@ -314,7 +314,7 @@ Example:
 
 ```go
 response, err := client.Text().
-    Model("gemini-2.5-flash").
+    Model("gemini-3.6-flash").
     Prompt("Summarize this text").
     MaxTokens(1024).
     Temperature(0.7).
@@ -329,7 +329,7 @@ The provider returns typed errors for common issues:
 
 ```go
 response, err := client.Text().
-    Model("gemini-2.5-flash").
+    Model("gemini-3.6-flash").
     Prompt("Hello").
     Generate(ctx)
 
@@ -393,7 +393,7 @@ required image response modalities and pass other Gemini fields through:
 
 ```go
 response, err := client.Text().
-    Model("gemini-2.5-flash").
+    Model("gemini-3.6-flash").
     Prompt("Hello").
     ProviderOptions(map[string]any{
         "generationConfig": map[string]any{

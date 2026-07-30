@@ -55,15 +55,16 @@ func (p *Provider) Text(ctx context.Context, request types.TextRequest) (*types.
 	if request.ParallelToolCalls != nil {
 		return nil, p.ValidationError("parallel_tool_calls is not supported by Ollama")
 	}
-	if _, _, err := providers.PrepareMessages(request.Messages); err != nil {
+	prepared, _, err := providers.PrepareMessages(request.Messages)
+	if err != nil {
 		return nil, err
 	}
-	payload := p.buildChatPayload(&request)
+	payload := p.buildChatPayload(&request, prepared)
 
 	url := p.GetBaseURL() + "/api/chat"
 
 	var response chatResponse
-	err := p.DoRequest(ctx, http.MethodPost, url, payload, &response)
+	err = p.DoRequest(ctx, http.MethodPost, url, payload, &response)
 	if err != nil {
 		return nil, err
 	}
@@ -98,10 +99,11 @@ func (p *Provider) Stream(ctx context.Context, request types.TextRequest) (<-cha
 	if request.ParallelToolCalls != nil {
 		return nil, p.ValidationError("parallel_tool_calls is not supported by Ollama")
 	}
-	if _, _, err := providers.PrepareMessages(request.Messages); err != nil {
+	prepared, _, err := providers.PrepareMessages(request.Messages)
+	if err != nil {
 		return nil, err
 	}
-	payload := p.buildChatPayload(&request)
+	payload := p.buildChatPayload(&request, prepared)
 	payload.Stream = true
 
 	url := p.GetBaseURL() + "/api/chat"

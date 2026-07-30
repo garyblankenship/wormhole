@@ -1,7 +1,5 @@
 package openai
 
-import "encoding/json"
-
 // OpenAI API response types
 
 type chatCompletionResponse struct {
@@ -83,21 +81,6 @@ type responsesOutputItem struct {
 	CallID    string                 `json:"call_id,omitempty"`
 	Name      string                 `json:"name,omitempty"`
 	Arguments string                 `json:"arguments,omitempty"`
-	Raw       map[string]any         `json:"-"`
-}
-
-func (i *responsesOutputItem) UnmarshalJSON(data []byte) error {
-	type alias responsesOutputItem
-	var item alias
-	if err := json.Unmarshal(data, &item); err != nil {
-		return err
-	}
-	var raw map[string]any
-	if err := json.Unmarshal(data, &raw); err == nil {
-		item.Raw = raw
-	}
-	*i = responsesOutputItem(item)
-	return nil
 }
 
 type responsesContentPart struct {

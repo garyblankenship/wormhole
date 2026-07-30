@@ -4,7 +4,6 @@ import (
 	"context"
 	"net/http"
 
-	"github.com/garyblankenship/wormhole/v2/providers"
 	providerstream "github.com/garyblankenship/wormhole/v2/providers/internal/stream"
 	"github.com/garyblankenship/wormhole/v2/types"
 )
@@ -27,11 +26,11 @@ const (
 	responsesEventIncomplete        = "response.incomplete"
 )
 
-func (p *Provider) responsesText(ctx context.Context, request types.TextRequest) (*types.TextResponse, error) {
+func (p *Provider) responsesText(ctx context.Context, request types.TextRequest, prepared []types.Message) (*types.TextResponse, error) {
 	if err := p.validateResponsesSampling(request); err != nil {
 		return nil, err
 	}
-	payload := p.buildResponsesPayload(&request)
+	payload := p.buildResponsesPayload(&request, prepared)
 
 	var response responsesResponse
 	if err := p.DoRequest(ctx, http.MethodPost, p.responsesURL(), payload, &response); err != nil {
@@ -51,11 +50,11 @@ func (p *Provider) responsesText(ctx context.Context, request types.TextRequest)
 	return textResponse, nil
 }
 
-func (p *Provider) responsesStream(ctx context.Context, request types.TextRequest) (<-chan types.TextChunk, error) {
+func (p *Provider) responsesStream(ctx context.Context, request types.TextRequest, prepared []types.Message) (<-chan types.TextChunk, error) {
 	if err := p.validateResponsesSampling(request); err != nil {
 		return nil, err
 	}
-	payload := p.buildResponsesPayload(&request)
+	payload := p.buildResponsesPayload(&request, prepared)
 	payload["stream"] = true
 
 	body, err := p.StreamRequest(ctx, http.MethodPost, p.responsesURL(), payload)
@@ -90,11 +89,7 @@ func normalizeResponsesFormat(rf any) any {
 	return flat
 }
 
-func (p *Provider) buildResponsesPayload(request *types.TextRequest) map[string]any {
-	messages, _, err := providers.PrepareMessages(request.Messages)
-	if err != nil {
-		messages = request.Messages // fall through; provider will surface the issue
-	}
+func (p *Provider) buildResponsesPayload(request *types.TextRequest, messages []types.Message) map[string]any {
 	payload := map[string]any{
 		"model": request.Model,
 		"input": p.transformResponsesInput(messages),

@@ -12,13 +12,14 @@ func TestProviderOptionsMergedIntoChatPayload(t *testing.T) {
 		WithDefaultProviderOptions(map[string]any{"service_tier": "default", "store": false}).
 		WithProviderOptionsForModel("gpt-test", map[string]any{"service_tier": "model"}))
 
-	payload := provider.buildChatPayload(&types.TextRequest{
+	request := &types.TextRequest{
 		BaseRequest: types.BaseRequest{
 			Model:           "gpt-test",
 			ProviderOptions: map[string]any{"service_tier": "request"},
 		},
 		Messages: []types.Message{types.NewUserMessage("hi")},
-	})
+	}
+	payload := provider.buildChatPayload(request, request.Messages)
 
 	if payload["service_tier"] != "request" {
 		t.Fatalf("service_tier = %v, want request", payload["service_tier"])
@@ -46,12 +47,12 @@ func TestTypedSamplingControlsReachOpenAIPayloads(t *testing.T) {
 		Messages: []types.Message{types.NewUserMessage("hi")},
 	}
 
-	chat := provider.buildChatPayload(request)
+	chat := provider.buildChatPayload(request, request.Messages)
 	if chat["frequency_penalty"] != frequency || chat["presence_penalty"] != presence || chat["seed"] != seed || chat["parallel_tool_calls"] != parallel {
 		t.Fatalf("chat sampling controls = %#v", chat)
 	}
 
-	responses := provider.buildResponsesPayload(request)
+	responses := provider.buildResponsesPayload(request, request.Messages)
 	if responses["parallel_tool_calls"] != parallel {
 		t.Fatalf("responses parallel_tool_calls = %v, want false", responses["parallel_tool_calls"])
 	}
@@ -66,13 +67,14 @@ func TestProviderOptionsMergedIntoResponsesPayload(t *testing.T) {
 		WithDefaultProviderOptions(map[string]any{"parallel_tool_calls": false}).
 		WithProviderOptionsForModel("gpt-test", map[string]any{"reasoning": map[string]any{"effort": "low"}}))
 
-	payload := provider.buildResponsesPayload(&types.TextRequest{
+	request := &types.TextRequest{
 		BaseRequest: types.BaseRequest{
 			Model:           "gpt-test",
 			ProviderOptions: map[string]any{"parallel_tool_calls": true},
 		},
 		Messages: []types.Message{types.NewUserMessage("hi")},
-	})
+	}
+	payload := provider.buildResponsesPayload(request, request.Messages)
 
 	if payload["parallel_tool_calls"] != true {
 		t.Fatalf("parallel_tool_calls = %v, want true", payload["parallel_tool_calls"])
@@ -87,7 +89,7 @@ func TestTypedReasoningMergedIntoPayloads(t *testing.T) {
 	enabled := true
 	provider := New(types.NewProviderConfig("key"))
 
-	chatPayload := provider.buildChatPayload(&types.TextRequest{
+	chatRequest := &types.TextRequest{
 		BaseRequest: types.BaseRequest{
 			Model: "gpt-test",
 			Reasoning: &types.Reasoning{
@@ -97,7 +99,8 @@ func TestTypedReasoningMergedIntoPayloads(t *testing.T) {
 			},
 		},
 		Messages: []types.Message{types.NewUserMessage("hi")},
-	})
+	}
+	chatPayload := provider.buildChatPayload(chatRequest, chatRequest.Messages)
 
 	reasoning, ok := chatPayload["reasoning"].(map[string]any)
 	if !ok {
@@ -107,13 +110,14 @@ func TestTypedReasoningMergedIntoPayloads(t *testing.T) {
 		t.Fatalf("chat reasoning = %#v", reasoning)
 	}
 
-	responsesPayload := provider.buildResponsesPayload(&types.TextRequest{
+	responsesRequest := &types.TextRequest{
 		BaseRequest: types.BaseRequest{
 			Model:     "gpt-test",
 			Reasoning: &types.Reasoning{Effort: types.ReasoningEffortHigh},
 		},
 		Messages: []types.Message{types.NewUserMessage("hi")},
-	})
+	}
+	responsesPayload := provider.buildResponsesPayload(responsesRequest, responsesRequest.Messages)
 	reasoning, ok = responsesPayload["reasoning"].(map[string]any)
 	if !ok || reasoning["effort"] != "high" {
 		t.Fatalf("responses reasoning = %#v", responsesPayload["reasoning"])

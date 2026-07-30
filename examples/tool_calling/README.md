@@ -197,7 +197,8 @@ User: "What's the weather in the city where it's 3pm right now?"
 
 - Check tool descriptions are clear
 - Verify schema matches expected input
-- Ensure model supports function calling (gpt-5+, claude-sonnet-4-5+, gemini-2.5+)
+- Ensure the selected model supports function calling; the current examples use
+  gpt-5.6, claude-sonnet-5, and gemini-3.6-flash.
 
 ### Infinite Loops
 

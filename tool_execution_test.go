@@ -2,7 +2,10 @@ package wormhole
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
 	"fmt"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -11,6 +14,22 @@ import (
 
 	"github.com/garyblankenship/wormhole/v2/types"
 )
+
+type countedToolResult struct{ calls atomic.Int32 }
+
+func (r *countedToolResult) MarshalJSON() ([]byte, error) {
+	call := r.calls.Add(1)
+	return json.Marshal(map[string]string{"value": fmt.Sprintf("serialized-%d", call)})
+}
+
+type retrySerializedToolResult struct{ calls atomic.Int32 }
+
+func (r *retrySerializedToolResult) MarshalJSON() ([]byte, error) {
+	if r.calls.Add(1) == 1 {
+		return nil, errors.New("first marshal failed")
+	}
+	return json.Marshal(map[string]string{"value": "second attempt"})
+}
 
 // Test constants
 const testResultKey = "result"
@@ -264,6 +283,92 @@ func TestToolExecutor_BuildToolResultMessages(t *testing.T) {
 	assert.Equal(t, "call_2", messages[1].ToolCallID)
 	assert.Equal(t, "second", messages[1].FunctionName)
 	assert.Contains(t, messages[1].Content, "failed")
+}
+
+// TestToolLoopResultSerializationCount preserves the v2 behavior in which the
+// output-size check and continuation message serialize independently. Custom
+// marshalers may be stateful, so the message must contain the second result.
+func TestToolLoopResultSerializationCount(t *testing.T) {
+	t.Parallel()
+
+	t.Run("executor loop", func(t *testing.T) {
+		t.Parallel()
+		result := &countedToolResult{}
+		registry := NewToolRegistry()
+		registry.Register("tool", types.NewToolDefinition(types.Tool{Name: "tool", InputSchema: map[string]any{"type": "object"}}, func(context.Context, map[string]any) (any, error) {
+			return result, nil
+		}))
+		provider := &mockToolProvider{responses: []*types.TextResponse{
+			{ToolCalls: []types.ToolCall{{ID: "call", Name: "tool", Arguments: map[string]any{}}}},
+			{Text: "done"},
+		}}
+		_, err := NewToolExecutor(registry).ExecuteWithTools(context.Background(), types.TextRequest{
+			BaseRequest: types.BaseRequest{Model: "test"},
+			Messages:    []types.Message{types.NewUserMessage("go")},
+		}, provider, 2)
+		if err != nil {
+			t.Fatalf("ExecuteWithTools: %v", err)
+		}
+		if got := result.calls.Load(); got != 2 {
+			t.Fatalf("executor loop result marshal calls = %d, want 2", got)
+		}
+		require.Len(t, provider.requests, 2)
+		message, ok := provider.requests[1].Messages[2].(*types.ToolResultMessage)
+		require.True(t, ok)
+		assert.Contains(t, message.Content, "serialized-2")
+	})
+
+	t.Run("agent loop", func(t *testing.T) {
+		t.Parallel()
+		result := &countedToolResult{}
+		provider := &mockToolProvider{responses: []*types.TextResponse{
+			{ToolCalls: []types.ToolCall{{ID: "call", Name: "tool", Arguments: map[string]any{}}}},
+			{Text: "done"},
+		}}
+		client := New(
+			WithDefaultProvider("mock"),
+			WithCustomProvider("mock", func(types.ProviderConfig) (types.Provider, error) { return provider, nil }),
+			WithProviderConfig("mock", types.ProviderConfig{}),
+			WithDiscovery(false),
+		)
+		_, err := client.Agent().Using("mock").Model("test").AddTool("tool", "tool", map[string]any{"type": "object"}, func(context.Context, map[string]any) (any, error) {
+			return result, nil
+		}).Run(context.Background(), "go")
+		if err != nil {
+			t.Fatalf("agent Run: %v", err)
+		}
+		if got := result.calls.Load(); got != 2 {
+			t.Fatalf("agent loop result marshal calls = %d, want 2", got)
+		}
+		require.Len(t, provider.requests, 2)
+		message, ok := provider.requests[1].Messages[2].(*types.ToolResultMessage)
+		require.True(t, ok)
+		assert.Contains(t, message.Content, "serialized-2")
+	})
+}
+
+func TestToolLoopMarshalFailureUsesMessageBuilderRetry(t *testing.T) {
+	t.Parallel()
+	result := &retrySerializedToolResult{}
+	registry := NewToolRegistry()
+	registry.Register("tool", types.NewToolDefinition(types.Tool{Name: "tool", InputSchema: map[string]any{"type": "object"}}, func(context.Context, map[string]any) (any, error) {
+		return result, nil
+	}))
+	provider := &mockToolProvider{responses: []*types.TextResponse{
+		{ToolCalls: []types.ToolCall{{ID: "call", Name: "tool", Arguments: map[string]any{}}}},
+		{Text: "done"},
+	}}
+
+	_, err := NewToolExecutor(registry).ExecuteWithTools(context.Background(), types.TextRequest{
+		BaseRequest: types.BaseRequest{Model: "test"},
+		Messages:    []types.Message{types.NewUserMessage("go")},
+	}, provider, 2)
+	require.NoError(t, err)
+	require.Len(t, provider.requests, 2)
+	message, ok := provider.requests[1].Messages[2].(*types.ToolResultMessage)
+	require.True(t, ok)
+	assert.Contains(t, message.Content, `"second attempt"`)
+	assert.Equal(t, int32(2), result.calls.Load())
 }
 
 func TestToolExecutor_ExecuteWithTools_SingleRound(t *testing.T) {

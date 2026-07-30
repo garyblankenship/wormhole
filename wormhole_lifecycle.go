@@ -142,7 +142,7 @@ func (p *Wormhole) CleanupStaleProviders(maxAge time.Duration, maxCount int) {
 	for name, cp := range p.providers {
 		refCount := atomic.LoadInt32(&cp.refCount)
 		lastUsed := atomic.LoadInt64(&cp.lastUsed)
-		if refCount == 0 && now.Sub(time.Unix(0, lastUsed)) > maxAge {
+		if !cp.pinned && refCount == 0 && (maxAge <= 0 || now.Sub(time.Unix(0, lastUsed)) > maxAge) {
 			staleKeys = append(staleKeys, name)
 		}
 	}
@@ -165,7 +165,7 @@ func (p *Wormhole) CleanupStaleProviders(maxAge time.Duration, maxCount int) {
 		unusedProviders := make([]providerInfo, 0, len(p.providers))
 
 		for name, cp := range p.providers {
-			if atomic.LoadInt32(&cp.refCount) == 0 {
+			if !cp.pinned && atomic.LoadInt32(&cp.refCount) == 0 {
 				unusedProviders = append(unusedProviders, providerInfo{
 					name:     name,
 					lastUsed: atomic.LoadInt64(&cp.lastUsed),

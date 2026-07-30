@@ -3,7 +3,6 @@ package wormhole
 import (
 	"log"
 	"sort"
-	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -194,33 +193,29 @@ func (m *metricsObserver) queryExternalMetrics() {
 
 	// Extract per-provider metrics if available
 	if perLabelStats, ok := allStats["per_label"].(map[string]interface{}); ok {
-		for labelKey, stats := range perLabelStats {
-			// Parse provider and model from label key
-			// Label format: "provider:model:method:errorType"
-			parts := splitLabelKey(labelKey)
-			if len(parts) >= 2 {
-				provider := parts[0]
-				model := parts[1]
-
-				// Get state for this provider/model
-				state := m.limiter.getState(provider, model)
-				if state == nil {
-					continue
-				}
-
-				// Extract metrics and potentially adjust PID parameters
-				if statsMap, ok := stats.(map[string]interface{}); ok {
-					m.enhanceControlWithMetrics(state, statsMap)
-				}
+		for _, stats := range perLabelStats {
+			statsMap, ok := stats.(map[string]interface{})
+			if !ok {
+				continue
 			}
+			provider, model, ok := metricsLabelIdentity(statsMap)
+			if !ok {
+				continue
+			}
+
+			state := m.limiter.getState(provider, model)
+			if state == nil {
+				continue
+			}
+			m.enhanceControlWithMetrics(state, statsMap)
 		}
 	}
 }
 
-// splitLabelKey splits a label key into its components
-func splitLabelKey(key string) []string {
-	// Format: "provider:model:method:errorType"
-	return strings.SplitN(key, ":", 4)
+func metricsLabelIdentity(stats map[string]interface{}) (provider, model string, ok bool) {
+	provider, providerOK := stats["provider"].(string)
+	model, modelOK := stats["model"].(string)
+	return provider, model, providerOK && modelOK
 }
 
 // enhanceControlWithMetrics enhances control with external metrics

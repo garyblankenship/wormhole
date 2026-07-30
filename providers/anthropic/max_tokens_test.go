@@ -11,10 +11,11 @@ func TestBuildMessagePayloadDefaultMaxTokens(t *testing.T) {
 	t.Parallel()
 	provider := New(types.NewProviderConfig("key"))
 
-	payload, err := provider.buildMessagePayload(&types.TextRequest{
+	request := &types.TextRequest{
 		BaseRequest: types.BaseRequest{Model: "claude-test"},
 		Messages:    []types.Message{types.NewUserMessage("hi")},
-	})
+	}
+	payload, err := provider.buildMessagePayload(request, request.Messages)
 	if err != nil {
 		t.Fatalf("buildMessagePayload() error = %v", err)
 	}
@@ -29,10 +30,11 @@ func TestBuildMessagePayloadExplicitMaxTokensWins(t *testing.T) {
 	provider := New(types.NewProviderConfig("key"))
 	mt := 1000
 
-	payload, err := provider.buildMessagePayload(&types.TextRequest{
+	request := &types.TextRequest{
 		BaseRequest: types.BaseRequest{Model: "claude-test", MaxTokens: &mt},
 		Messages:    []types.Message{types.NewUserMessage("hi")},
-	})
+	}
+	payload, err := provider.buildMessagePayload(request, request.Messages)
 	if err != nil {
 		t.Fatalf("buildMessagePayload() error = %v", err)
 	}

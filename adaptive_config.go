@@ -59,39 +59,84 @@ func DefaultEnhancedAdaptiveConfig() EnhancedAdaptiveConfig {
 	}
 }
 
-// normalizeEnhancedAdaptiveConfig fills zero-valued tuning fields with safe
-// defaults. A caller who partially populates EnhancedAdaptiveConfig (leaving
-// AdjustmentInterval unset, for example) would otherwise panic in
-// capacityManager.Start's time.NewTicker, or silently fall back to
-// ConcurrencyLimiter's 1024-permit unlimited default via a zero capacity.
-func normalizeEnhancedAdaptiveConfig(config EnhancedAdaptiveConfig) EnhancedAdaptiveConfig {
-	defaults := DefaultEnhancedAdaptiveConfig()
-	if config.TargetLatency == 0 {
+// normalizeAdaptiveConfig resolves an AdaptiveConfig into a safe capacity
+// range. Exported constructors use it so their zero values have the same
+// behavior as the configuration path on Wormhole.
+func normalizeAdaptiveConfig(config AdaptiveConfig) AdaptiveConfig {
+	defaults := DefaultAdaptiveConfig()
+	if config.TargetLatency <= 0 {
 		config.TargetLatency = defaults.TargetLatency
 	}
-	if config.MinCapacity == 0 {
+	if config.MinCapacity <= 0 {
 		config.MinCapacity = defaults.MinCapacity
 	}
-	if config.MaxCapacity == 0 {
+	if config.MaxCapacity <= 0 {
 		config.MaxCapacity = defaults.MaxCapacity
 	}
-	if config.InitialCapacity == 0 {
+	if config.InitialCapacity <= 0 {
 		config.InitialCapacity = defaults.InitialCapacity
 	}
-	if config.AdjustmentInterval == 0 {
+	if config.AdjustmentInterval <= 0 {
 		config.AdjustmentInterval = defaults.AdjustmentInterval
 	}
-	if config.LatencyWindowSize == 0 {
+	if config.LatencyWindowSize <= 0 {
 		config.LatencyWindowSize = defaults.LatencyWindowSize
 	}
-	config.PIDConfig = mergePIDConfig(defaults.PIDConfig, config.PIDConfig)
-	for provider, setting := range config.ProviderSettings {
-		if setting.PIDConfig != nil {
-			merged := mergePIDConfig(config.PIDConfig, *setting.PIDConfig)
-			setting.PIDConfig = &merged
-			config.ProviderSettings[provider] = setting
-		}
+	if config.MaxCapacity < config.MinCapacity {
+		config.MaxCapacity = config.MinCapacity
 	}
+	if config.InitialCapacity < config.MinCapacity {
+		config.InitialCapacity = config.MinCapacity
+	}
+	if config.InitialCapacity > config.MaxCapacity {
+		config.InitialCapacity = config.MaxCapacity
+	}
+	return config
+}
+
+// normalizeEnhancedAdaptiveConfig resolves the base configuration and every
+// provider setting into safe values. It copies ProviderSettings before writing
+// resolved entries so callers can reuse their input configuration.
+func normalizeEnhancedAdaptiveConfig(config EnhancedAdaptiveConfig) EnhancedAdaptiveConfig {
+	config.AdaptiveConfig = normalizeAdaptiveConfig(config.AdaptiveConfig)
+	defaults := DefaultEnhancedAdaptiveConfig()
+	config.PIDConfig = mergePIDConfig(defaults.PIDConfig, config.PIDConfig)
+	if config.ProviderSettings == nil {
+		return config
+	}
+
+	providerSettings := make(map[string]ProviderSetting, len(config.ProviderSettings))
+	for provider, setting := range config.ProviderSettings {
+		if setting.TargetLatency <= 0 {
+			setting.TargetLatency = config.TargetLatency
+		}
+		if setting.MinCapacity <= 0 {
+			setting.MinCapacity = config.MinCapacity
+		}
+		if setting.MaxCapacity <= 0 {
+			setting.MaxCapacity = config.MaxCapacity
+		}
+		if setting.InitialCapacity <= 0 {
+			setting.InitialCapacity = config.InitialCapacity
+		}
+		if setting.MaxCapacity < setting.MinCapacity {
+			setting.MaxCapacity = setting.MinCapacity
+		}
+		if setting.InitialCapacity < setting.MinCapacity {
+			setting.InitialCapacity = setting.MinCapacity
+		}
+		if setting.InitialCapacity > setting.MaxCapacity {
+			setting.InitialCapacity = setting.MaxCapacity
+		}
+
+		pidConfig := config.PIDConfig
+		if setting.PIDConfig != nil {
+			pidConfig = mergePIDConfig(pidConfig, *setting.PIDConfig)
+		}
+		setting.PIDConfig = &pidConfig
+		providerSettings[provider] = setting
+	}
+	config.ProviderSettings = providerSettings
 	return config
 }
 

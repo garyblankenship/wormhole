@@ -81,6 +81,58 @@ func TestProviderAdaptiveState(t *testing.T) {
 	}
 }
 
+func TestProviderAdaptiveStateDirectConstructorNormalizesInputs(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		name                                    string
+		target                                  time.Duration
+		min, max, initial, window, wantCapacity int
+	}{
+		{"zero", 0, 0, 0, 0, 0, DefaultAdaptiveConfig().InitialCapacity},
+		{"negative", -time.Second, -1, -2, -3, -4, DefaultAdaptiveConfig().InitialCapacity},
+		{"conflicting", time.Millisecond, 7, 3, 99, 1, 7},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			state := NewProviderAdaptiveState(ProviderKey{Provider: tc.name}, tc.target, tc.min, tc.max, tc.initial, tc.window)
+			if got := state.Capacity(); got != tc.wantCapacity {
+				t.Fatalf("state capacity = %d, want %d", got, tc.wantCapacity)
+			}
+			if got := state.Limiter().Capacity(); got != tc.wantCapacity {
+				t.Fatalf("limiter capacity = %d, want %d", got, tc.wantCapacity)
+			}
+			state.RecordLatency(time.Millisecond, nil)
+		})
+	}
+}
+
+func TestEnhancedAdaptiveLimiterNormalizesZeroAndPartialConfig(t *testing.T) {
+	t.Parallel()
+
+	limiter := NewEnhancedAdaptiveLimiter(EnhancedAdaptiveConfig{
+		ProviderSettings: map[string]ProviderSetting{
+			"partial": {PIDConfig: &PIDConfig{Kp: 2}},
+		},
+		QueryInterval: 0,
+	})
+	t.Cleanup(limiter.Stop)
+
+	if limiter.globalState.Capacity() <= 0 || limiter.globalState.Limiter().Capacity() != limiter.globalState.Capacity() {
+		t.Fatalf("global state capacity mismatch: state=%d limiter=%d", limiter.globalState.Capacity(), limiter.globalState.Limiter().Capacity())
+	}
+	release, ok := limiter.AcquireTokenWithProvider(context.Background(), "partial", "model")
+	if !ok {
+		t.Fatal("AcquireTokenWithProvider failed")
+	}
+	release()
+	limiter.RecordLatencyWithProvider(time.Millisecond, "partial", "model", nil)
+	setting := limiter.config.ProviderSettings["partial"]
+	if setting.TargetLatency <= 0 || setting.MinCapacity <= 0 || setting.MaxCapacity < setting.MinCapacity || setting.InitialCapacity < setting.MinCapacity || setting.InitialCapacity > setting.MaxCapacity {
+		t.Fatalf("partial provider setting was not resolved: %#v", setting)
+	}
+}
+
 func TestEnhancedAdaptiveLimiterBasic(t *testing.T) {
 	t.Parallel()
 	config := DefaultEnhancedAdaptiveConfig()

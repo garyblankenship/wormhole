@@ -61,25 +61,25 @@ type ProviderAdaptiveState struct {
 // NewProviderAdaptiveState creates a new state tracker
 func NewProviderAdaptiveState(key ProviderKey, targetLatency time.Duration,
 	minCapacity, maxCapacity, initialCapacity, windowSize int) *ProviderAdaptiveState {
-
-	if initialCapacity < minCapacity {
-		initialCapacity = minCapacity
-	}
-	if initialCapacity > maxCapacity {
-		initialCapacity = maxCapacity
-	}
+	config := normalizeAdaptiveConfig(AdaptiveConfig{
+		TargetLatency:     targetLatency,
+		MinCapacity:       minCapacity,
+		MaxCapacity:       maxCapacity,
+		InitialCapacity:   initialCapacity,
+		LatencyWindowSize: windowSize,
+	})
 
 	return &ProviderAdaptiveState{
 		key:             key,
-		limiter:         NewConcurrencyLimiter(initialCapacity),
-		currentCapacity: initialCapacity,
-		latencies:       make([]time.Duration, 0, windowSize),
-		latencyRing:     ring.New(windowSize),
-		errorRates:      ring.New(windowSize),
+		limiter:         NewConcurrencyLimiter(config.InitialCapacity),
+		currentCapacity: config.InitialCapacity,
+		latencies:       make([]time.Duration, 0, config.LatencyWindowSize),
+		latencyRing:     ring.New(config.LatencyWindowSize),
+		errorRates:      ring.New(config.LatencyWindowSize),
 		pidController:   NewPIDController(DefaultPIDConfig()),
-		targetLatency:   targetLatency,
-		minCapacity:     minCapacity,
-		maxCapacity:     maxCapacity,
+		targetLatency:   config.TargetLatency,
+		minCapacity:     config.MinCapacity,
+		maxCapacity:     config.MaxCapacity,
 		lastSeen:        time.Now(),
 	}
 }

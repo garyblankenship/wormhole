@@ -221,8 +221,12 @@ func TestAdaptiveLimiter(t *testing.T) {
 func TestAdaptiveCapacityHelpers(t *testing.T) {
 	t.Parallel()
 
-	if got := splitLabelKey("provider:model:text:timeout"); len(got) != 4 || got[0] != "provider" || got[3] != "timeout" {
-		t.Fatalf("splitLabelKey = %#v", got)
+	provider, model, ok := metricsLabelIdentity(map[string]interface{}{
+		"provider": "provider:with:colon",
+		"model":    `model"quoted`,
+	})
+	if !ok || provider != "provider:with:colon" || model != `model"quoted` {
+		t.Fatalf("metricsLabelIdentity = %q, %q, %t", provider, model, ok)
 	}
 
 	observer := &metricsObserver{config: EnhancedAdaptiveConfig{ErrorRateThreshold: 0.1}}

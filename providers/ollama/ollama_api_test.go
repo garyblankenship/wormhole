@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/garyblankenship/wormhole/v2/providers"
 	"github.com/garyblankenship/wormhole/v2/types"
 )
 
@@ -58,6 +59,27 @@ func TestProviderText(t *testing.T) {
 	assert.Equal(t, "hello", resp.Text)
 	require.NotNil(t, resp.Usage)
 	assert.Equal(t, 7, resp.Usage.TotalTokens)
+}
+
+func TestPrepareMessagesHardErrorPreventsOllamaHTTP(t *testing.T) {
+	t.Parallel()
+	var calls atomic.Int32
+	provider, _ := newOllamaTestProvider(t, func(http.ResponseWriter, *http.Request) {
+		calls.Add(1)
+	})
+	_, err := provider.Text(context.Background(), types.TextRequest{
+		BaseRequest: types.BaseRequest{Model: "llama3"},
+		Messages: []types.Message{&types.AssistantMessage{ToolCalls: []types.ToolCall{
+			{ID: "duplicate", Name: "one"},
+			{ID: "duplicate", Name: "two"},
+		}}},
+	})
+	if err == nil {
+		t.Fatal("Text accepted duplicate normalized tool-call IDs")
+	}
+	if got := calls.Load(); got != 0 {
+		t.Fatalf("HTTP calls after preparation error = %d, want 0", got)
+	}
 }
 
 func TestProviderStructured(t *testing.T) {
@@ -260,7 +282,9 @@ func TestTransformHelpers(t *testing.T) {
 		},
 	}
 
-	payload := provider.buildChatPayload(req)
+	prepared, _, err := providers.PrepareMessages(req.Messages)
+	require.NoError(t, err)
+	payload := provider.buildChatPayload(req, prepared)
 	require.NotNil(t, payload.Options)
 	assert.Equal(t, topK, *payload.Options.TopK)
 	assert.Equal(t, repeatPenalty, *payload.Options.RepeatPenalty)

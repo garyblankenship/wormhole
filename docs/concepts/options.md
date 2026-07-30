@@ -106,7 +106,7 @@ not have first-class builder methods:
 
 ```go
 resp, err := client.Text().
-    Model("gpt-5").
+    Model("gpt-5.6").
     Prompt("Summarize this").
     ProviderOptions(map[string]any{
         "store": false,
@@ -263,10 +263,10 @@ client := wormhole.New(
 )
 
 // Uses "openai" by default
-resp, _ := client.Text().Model("gpt-5.2").Prompt("Hello").Generate(ctx)
+resp, _ := client.Text().Model("gpt-5.6").Prompt("Hello").Generate(ctx)
 
 // Override for specific request
-resp, _ := client.Text().Using("anthropic").Model("claude-sonnet-4-5").Prompt("Hello").Generate(ctx)
+resp, _ := client.Text().Using("anthropic").Model("claude-sonnet-5").Prompt("Hello").Generate(ctx)
 ```
 
 #### WithTimeout
@@ -471,7 +471,10 @@ client := wormhole.New(
 )
 ```
 
-**How it works**: The SDK caches responses keyed by the idempotency key. If the same key is used again, the cached response is returned instead of making a new request.
+**How it works**: The SDK coalesces matching requests while the owner request is
+still running. After completion, it caches that response for the configured
+TTL; the TTL begins at completion, not request start. A later matching request
+returns the completed cached response while that TTL remains valid.
 
 **Use cases**:
 
@@ -589,7 +592,7 @@ Applied per-request, override client defaults:
 ```go
 resp, err := client.Text().
     Using("openai").             // Override provider
-    Model("gpt-5.2").            // Set model
+    Model("gpt-5.6").            // Set model
     Temperature(0.7).             // Set temperature
     FrequencyPenalty(0.2).        // Penalize repeated tokens
     PresencePenalty(0.1).         // Encourage new tokens

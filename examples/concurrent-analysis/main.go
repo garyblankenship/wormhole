@@ -50,9 +50,9 @@ func main() {
 		Name  string
 		Model string
 	}{
-		{"openai", "gpt-5"},
-		{"anthropic", "claude-sonnet-4-5"},
-		{"gemini", "gemini-pro"},
+		{"openai", "gpt-5.6"},
+		{"anthropic", "claude-sonnet-5"},
+		{"gemini", "gemini-3.6-flash"},
 		// You could add more dimensions here if you weren't a Jerry
 	}
 

@@ -51,7 +51,7 @@ func main() {
     // Use any discovered model
     resp, err := client.Text().
         Using("openai").
-        Model("gpt-5"). // Discovered automatically
+        Model("gpt-5.6"). // Discovered automatically
         Prompt("Hello, world!").
         Generate(ctx)
     if err != nil {
@@ -424,7 +424,7 @@ client := wormhole.New(
 )
 
 // You can still pass a model name directly.
-resp, _ := client.Text().Model("gpt-5").Prompt("Hello").Generate(ctx)
+resp, _ := client.Text().Model("gpt-5.6").Prompt("Hello").Generate(ctx)
 
 // OR dynamically discover models
 models, _ := client.ListAvailableModels("openai")

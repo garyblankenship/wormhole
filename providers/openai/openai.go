@@ -87,19 +87,20 @@ func (p *Provider) SupportedCapabilities() []types.ModelCapability {
 
 // Text generates a text response
 func (p *Provider) Text(ctx context.Context, request types.TextRequest) (*types.TextResponse, error) {
-	if _, _, err := providers.PrepareMessages(request.Messages); err != nil {
+	prepared, _, err := providers.PrepareMessages(request.Messages)
+	if err != nil {
 		return nil, err
 	}
 	if p.Config.UseResponsesAPI {
-		return p.responsesText(ctx, request)
+		return p.responsesText(ctx, request, prepared)
 	}
 
-	payload := p.buildChatPayload(&request)
+	payload := p.buildChatPayload(&request, prepared)
 
 	url := p.chatCompletionsURL()
 
 	var response chatCompletionResponse
-	err := p.DoRequest(ctx, http.MethodPost, url, payload, &response)
+	err = p.DoRequest(ctx, http.MethodPost, url, payload, &response)
 	if err != nil {
 		return nil, err
 	}
@@ -117,14 +118,15 @@ func (p *Provider) Text(ctx context.Context, request types.TextRequest) (*types.
 
 // Stream generates a streaming text response
 func (p *Provider) Stream(ctx context.Context, request types.TextRequest) (<-chan types.TextChunk, error) {
-	if _, _, err := providers.PrepareMessages(request.Messages); err != nil {
+	prepared, _, err := providers.PrepareMessages(request.Messages)
+	if err != nil {
 		return nil, err
 	}
 	if p.Config.UseResponsesAPI {
-		return p.responsesStream(ctx, request)
+		return p.responsesStream(ctx, request, prepared)
 	}
 
-	payload := p.buildChatPayload(&request)
+	payload := p.buildChatPayload(&request, prepared)
 	payload["stream"] = true
 	// Ask OpenAI to emit a final usage-bearing chunk on streamed responses;
 	// without this, streamed Usage is always nil.

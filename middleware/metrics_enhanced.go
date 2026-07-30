@@ -45,7 +45,29 @@ type RequestLabels struct {
 	ErrorType string // auth, rate_limit, timeout, provider, network, unknown
 }
 
-// String returns a string representation of the labels for use as map key
+// requestLabelKey is the comparable identity used for per-label metrics.
+// RequestLabels.String remains a compatibility display helper only.
+type requestLabelKey struct {
+	Provider  string
+	Model     string
+	Method    string
+	ErrorType string
+}
+
+func requestLabelKeyFromLabels(labels *RequestLabels, errorType string) requestLabelKey {
+	if labels == nil {
+		return requestLabelKey{}
+	}
+	return requestLabelKey{
+		Provider:  labels.Provider,
+		Model:     labels.Model,
+		Method:    labels.Method,
+		ErrorType: errorType,
+	}
+}
+
+// String returns the legacy compatibility display form. It is not a
+// collision-free label identity; collector storage uses requestLabelKey.
 func (l *RequestLabels) String() string {
 	if l == nil {
 		return ""
@@ -55,19 +77,24 @@ func (l *RequestLabels) String() string {
 
 // EnhancedMetricsCollector collects enhanced metrics with labels and histograms
 type EnhancedMetricsCollector struct {
-	config *EnhancedMetricsConfig
+	config  *EnhancedMetricsConfig
+	stateMu sync.RWMutex
 
 	// Global metrics (if LabelAggregation is false or as fallback)
 	global *enhancedMetricsBucket
 
 	// Per-label metrics (if LabelAggregation is true)
-	perLabel *sync.Map // map[string]*enhancedMetricsBucket
+	perLabel sync.Map // map[requestLabelKey]*enhancedMetricsBucket
 
 	// Histogram buckets (shared across all metrics)
 	buckets []float64
 
 	// Error type detection helper
 	errorDetector *ErrorTypeDetector
+
+	// inFlightRequests tracks active middleware handler invocations. It is live
+	// state rather than a cumulative counter, so Reset deliberately preserves it.
+	inFlightRequests int64
 }
 
 // enhancedMetricsBucket holds metrics for a specific label combination
@@ -124,12 +151,13 @@ func NewEnhancedMetricsCollector(config *EnhancedMetricsConfig) *EnhancedMetrics
 	if config == nil {
 		config = DefaultEnhancedMetricsConfig()
 	}
+	configCopy := *config
+	configCopy.DefaultHistogramBuckets = append([]float64(nil), config.DefaultHistogramBuckets...)
 
 	return &EnhancedMetricsCollector{
-		config:        config,
-		global:        newEnhancedMetricsBucket(config.DefaultHistogramBuckets),
-		perLabel:      &sync.Map{},
-		buckets:       config.DefaultHistogramBuckets,
+		config:        &configCopy,
+		global:        newEnhancedMetricsBucket(configCopy.DefaultHistogramBuckets),
+		buckets:       configCopy.DefaultHistogramBuckets,
 		errorDetector: &ErrorTypeDetector{},
 	}
 }
@@ -143,6 +171,9 @@ func newEnhancedMetricsBucket(buckets []float64) *enhancedMetricsBucket {
 
 // RecordRequest records a request with enhanced metrics
 func (c *EnhancedMetricsCollector) RecordRequest(labels *RequestLabels, duration time.Duration, err error, retries int, inputTokens, outputTokens int) {
+	c.stateMu.RLock()
+	defer c.stateMu.RUnlock()
+
 	// Update error type if error exists
 	errorType := ""
 	if err != nil {
@@ -150,30 +181,46 @@ func (c *EnhancedMetricsCollector) RecordRequest(labels *RequestLabels, duration
 	}
 
 	// Create or get labels if enabled
-	var bucketLabels *RequestLabels
+	var bucketKey requestLabelKey
+	useLabels := false
 	if c.config.EnableLabels && labels != nil {
-		bucketLabels = &RequestLabels{
-			Provider:  labels.Provider,
-			Model:     labels.Model,
-			Method:    labels.Method,
-			ErrorType: errorType,
-		}
+		bucketKey = requestLabelKeyFromLabels(labels, errorType)
+		useLabels = true
 	}
 
 	// Get the metrics bucket
 	var bucket *enhancedMetricsBucket
-	if c.config.LabelAggregation && bucketLabels != nil {
-		key := bucketLabels.String()
-		actual, _ := c.perLabel.LoadOrStore(key, newEnhancedMetricsBucket(c.buckets))
-		bucket = actual.(*enhancedMetricsBucket)
+	if c.config.LabelAggregation && useLabels {
+		if actual, ok := c.perLabel.Load(bucketKey); ok {
+			bucket = actual.(*enhancedMetricsBucket)
+		} else {
+			actual, _ := c.perLabel.LoadOrStore(bucketKey, newEnhancedMetricsBucket(c.buckets))
+			bucket = actual.(*enhancedMetricsBucket)
+		}
 	} else {
 		bucket = c.global
 	}
 
 	// Record metrics
+	if !c.config.EnableTokenTracking {
+		inputTokens = 0
+		outputTokens = 0
+	}
 	bucket.record(c.buckets, duration, err != nil, retries, inputTokens, outputTokens)
+}
 
-	// TODO: concurrency gauge tracking - increment at request start, decrement at request end
+func (c *EnhancedMetricsCollector) tokenTrackingEnabled() bool {
+	return c.config.EnableTokenTracking
+}
+
+// beginRequest records an active middleware handler invocation when enabled.
+// The returned function must be deferred by the middleware that owns it.
+func (c *EnhancedMetricsCollector) beginRequest() func() {
+	if !c.config.EnableConcurrencyTracking {
+		return func() {}
+	}
+	atomic.AddInt64(&c.inFlightRequests, 1)
+	return func() { atomic.AddInt64(&c.inFlightRequests, -1) }
 }
 
 // record updates a metrics bucket with a request
@@ -216,5 +263,17 @@ func (b *enhancedMetricsBucket) record(buckets []float64, duration time.Duration
 	// Increment the appropriate bucket count
 	if bucketIndex < len(b.histogramCounts) {
 		atomic.AddInt64(&b.histogramCounts[bucketIndex], 1)
+	}
+}
+
+func (b *enhancedMetricsBucket) reset() {
+	atomic.StoreInt64(&b.requests, 0)
+	atomic.StoreInt64(&b.errors, 0)
+	atomic.StoreInt64(&b.retries, 0)
+	atomic.StoreInt64(&b.totalDuration, 0)
+	atomic.StoreInt64(&b.inputTokens, 0)
+	atomic.StoreInt64(&b.outputTokens, 0)
+	for i := range b.histogramCounts {
+		atomic.StoreInt64(&b.histogramCounts[i], 0)
 	}
 }

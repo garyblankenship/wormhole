@@ -132,10 +132,10 @@ func main() {
 func getStreamingModel(provider string) string {
 	switch provider {
 	case "openai":
-		return "gpt-5"
+		return "gpt-5.6"
 	case "anthropic":
-		return "claude-sonnet-4-5"
+		return "claude-sonnet-5"
 	default:
-		return "gpt-5"
+		return "gpt-5.6"
 	}
 }

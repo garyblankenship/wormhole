@@ -162,13 +162,14 @@ func TestRequestPolicyCapsMaxTokens(t *testing.T) {
 		},
 	})
 	maxTokens := 128
-	payload := provider.buildChatPayload(&types.TextRequest{
+	request := &types.TextRequest{
 		BaseRequest: types.BaseRequest{
 			Model:     "gpt-4o-mini",
 			MaxTokens: &maxTokens,
 		},
 		Messages: []types.Message{types.NewUserMessage("hi")},
-	})
+	}
+	payload := provider.buildChatPayload(request, request.Messages)
 	assert.Equal(t, 64, payload["max_tokens"])
 }
 
@@ -403,7 +404,7 @@ func TestStreamPayloadSetsIncludeUsage(t *testing.T) {
 		Messages:    []types.Message{types.NewUserMessage("hi")},
 	}
 
-	payload := provider.buildChatPayload(&request)
+	payload := provider.buildChatPayload(&request, request.Messages)
 	payload["stream"] = true
 	payload["stream_options"] = map[string]any{"include_usage": true}
 

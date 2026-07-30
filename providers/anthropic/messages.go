@@ -4,7 +4,6 @@ import (
 	"fmt"
 
 	"github.com/garyblankenship/wormhole/v2/config"
-	"github.com/garyblankenship/wormhole/v2/providers"
 	"github.com/garyblankenship/wormhole/v2/types"
 )
 
@@ -19,11 +18,7 @@ const (
 const roleUser = "user"
 
 // buildMessagePayload builds the Anthropic messages API payload.
-func (p *Provider) buildMessagePayload(request *types.TextRequest) (map[string]any, error) {
-	prepared, _, err := providers.PrepareMessages(request.Messages)
-	if err != nil {
-		prepared = request.Messages
-	}
+func (p *Provider) buildMessagePayload(request *types.TextRequest, prepared []types.Message) (map[string]any, error) {
 	payload := map[string]any{
 		"model":    request.Model,
 		"messages": p.transformMessages(prepared),

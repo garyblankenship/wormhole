@@ -3,11 +3,80 @@ package middleware
 import (
 	"context"
 	"errors"
+	"sync"
 	"testing"
 	"time"
 
 	"github.com/garyblankenship/wormhole/v2/types"
 )
+
+func TestProviderMetricsGetMetricsReturnsIndependentSnapshot(t *testing.T) {
+	t.Parallel()
+	mw := NewProviderMetricsMiddleware("test")
+	_, err := mw.ApplyText(func(context.Context, types.TextRequest) (*types.TextResponse, error) {
+		return &types.TextResponse{Text: "ok"}, nil
+	})(context.Background(), types.TextRequest{})
+	if err != nil {
+		t.Fatalf("text handler: %v", err)
+	}
+
+	first := mw.GetMetrics()
+	first.TextRequests = 999
+	first.TotalErrors = 999
+	second := mw.GetMetrics()
+	if second == first {
+		t.Fatal("GetMetrics returned the live internal metrics pointer")
+	}
+	if second.TextRequests != 1 || second.TotalErrors != 0 {
+		t.Fatalf("caller mutation leaked into live metrics: %#v", second)
+	}
+
+	var wg sync.WaitGroup
+	for range 8 {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for range 100 {
+				_ = mw.GetMetrics()
+			}
+		}()
+	}
+	wg.Wait()
+}
+
+func TestTypedMetricsRerankGetterAggregateAndReset(t *testing.T) {
+	t.Parallel()
+	metrics := NewTypedMetrics()
+	mw := NewTypedMetricsMiddleware(metrics)
+	_, err := mw.ApplyRerank(func(context.Context, types.RerankRequest) (*types.RerankResponse, error) {
+		return &types.RerankResponse{}, nil
+	})(context.Background(), types.RerankRequest{})
+	if err != nil {
+		t.Fatalf("successful rerank: %v", err)
+	}
+	wantErr := errors.New("rerank failed")
+	_, err = mw.ApplyRerank(func(context.Context, types.RerankRequest) (*types.RerankResponse, error) {
+		return nil, wantErr
+	})(context.Background(), types.RerankRequest{})
+	if !errors.Is(err, wantErr) {
+		t.Fatalf("failed rerank error = %v, want %v", err, wantErr)
+	}
+
+	requests, failures, _ := metrics.GetRerankStats()
+	if requests != 2 || failures != 1 {
+		t.Fatalf("rerank stats = (%d, %d), want (2, 1)", requests, failures)
+	}
+	rerank, ok := metrics.GetAllStats()["rerank"].(map[string]interface{})
+	if !ok || rerank["requests"] != int64(2) || rerank["errors"] != int64(1) {
+		t.Fatalf("rerank aggregate = %#v", metrics.GetAllStats()["rerank"])
+	}
+
+	metrics.Reset()
+	requests, failures, _ = metrics.GetRerankStats()
+	if requests != 0 || failures != 0 {
+		t.Fatalf("rerank stats after Reset = (%d, %d), want (0, 0)", requests, failures)
+	}
+}
 
 func TestProviderMetricsMiddlewareRecordsAllHandlerTypes(t *testing.T) {
 	t.Parallel()
@@ -144,8 +213,8 @@ func TestTypedMetricsMiddlewareRecordsAllHandlerTypes(t *testing.T) {
 		t.Fatalf("structured stats = (%d, %d), want (1, 1)", req, errs)
 	}
 	all := metrics.GetAllStats()
-	if len(all) != 6 {
-		t.Fatalf("GetAllStats len = %d, want 6", len(all))
+	if len(all) != 7 {
+		t.Fatalf("GetAllStats len = %d, want 7", len(all))
 	}
 
 	metrics.Reset()

@@ -12,13 +12,14 @@ func TestProviderOptionsMergedIntoMessagePayload(t *testing.T) {
 		WithDefaultProviderOptions(map[string]any{"metadata": map[string]any{"source": "default"}, "thinking": false}).
 		WithProviderOptionsForModel("claude-test", map[string]any{"thinking": true}))
 
-	payload, err := provider.buildMessagePayload(&types.TextRequest{
+	request := &types.TextRequest{
 		BaseRequest: types.BaseRequest{
 			Model:           "claude-test",
 			ProviderOptions: map[string]any{"metadata": map[string]any{"source": "request"}},
 		},
 		Messages: []types.Message{types.NewUserMessage("hi")},
-	})
+	}
+	payload, err := provider.buildMessagePayload(request, request.Messages)
 	if err != nil {
 		t.Fatalf("buildMessagePayload() error = %v", err)
 	}
@@ -36,13 +37,14 @@ func TestTypedReasoningMergedIntoMessagePayload(t *testing.T) {
 	t.Parallel()
 	provider := New(types.NewProviderConfig("key"))
 
-	payload, err := provider.buildMessagePayload(&types.TextRequest{
+	request := &types.TextRequest{
 		BaseRequest: types.BaseRequest{
 			Model:     "claude-test",
 			Reasoning: &types.Reasoning{MaxTokens: 1024},
 		},
 		Messages: []types.Message{types.NewUserMessage("hi")},
-	})
+	}
+	payload, err := provider.buildMessagePayload(request, request.Messages)
 	if err != nil {
 		t.Fatalf("buildMessagePayload() error = %v", err)
 	}
@@ -60,11 +62,12 @@ func TestParallelToolCallsMapsToAnthropicToolChoice(t *testing.T) {
 	t.Parallel()
 	provider := New(types.NewProviderConfig("key"))
 	parallel := false
-	payload, err := provider.buildMessagePayload(&types.TextRequest{
+	request := &types.TextRequest{
 		BaseRequest: types.BaseRequest{Model: "claude-test", ParallelToolCalls: &parallel},
 		Messages:    []types.Message{types.NewUserMessage("hi")},
 		Tools:       []types.Tool{{Name: "lookup", InputSchema: map[string]any{"type": "object"}}},
-	})
+	}
+	payload, err := provider.buildMessagePayload(request, request.Messages)
 	if err != nil {
 		t.Fatalf("buildMessagePayload() error = %v", err)
 	}
@@ -79,16 +82,16 @@ func TestParallelToolCallsMapsToAnthropicToolChoice(t *testing.T) {
 	}
 
 	none := &types.ToolChoice{Type: types.ToolChoiceTypeNone}
-	request := types.TextRequest{
+	request = &types.TextRequest{
 		BaseRequest: types.BaseRequest{Model: "claude-test", ParallelToolCalls: &parallel},
 		Messages:    []types.Message{types.NewUserMessage("hi")},
 		Tools:       []types.Tool{{Name: "lookup", InputSchema: map[string]any{"type": "object"}}},
 		ToolChoice:  none,
 	}
-	if err := provider.validateSamplingControls(request); err == nil {
+	if err := provider.validateSamplingControls(*request); err == nil {
 		t.Fatal("Anthropic accepted parallel_tool_calls with tool_choice none")
 	}
-	payload, err = provider.buildMessagePayload(&request)
+	payload, err = provider.buildMessagePayload(request, request.Messages)
 	if err != nil {
 		t.Fatalf("buildMessagePayload() error = %v", err)
 	}

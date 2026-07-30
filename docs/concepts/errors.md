@@ -19,7 +19,7 @@ type WormholeError struct {
     Retryable  bool          // Can this error be retried?
     StatusCode int           // HTTP status code (if applicable)
     Provider   string        // Provider name (e.g., "openai", "gemini")
-    Model      string        // Model name (e.g., "gpt-5.2")
+    Model      string        // Model name (e.g., "gpt-5.6")
     Details    string        // Additional context
     Cause      error         // Underlying error
 }
@@ -210,7 +210,7 @@ err := types.Errorff("auth for %s failed", originalErr, userID)
 // Wrap existing error with context
 err := types.WrapError(types.ErrorCodeProvider, "provider unavailable", true, originalErr).
     WithProvider("openai").
-    WithModel("gpt-5.2").
+    WithModel("gpt-5.6").
     WithStatusCode(503)
 ```
 
@@ -221,7 +221,7 @@ Add context to WormholeError:
 ```go
 err := types.NewWormholeError(types.ErrorCodeModel, "model error", false).
     WithProvider("anthropic").
-    WithModel("claude-sonnet-4-5").
+    WithModel("claude-sonnet-5").
     WithDetails("temperature out of range").
     WithStatusCode(400)
 ```

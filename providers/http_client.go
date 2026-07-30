@@ -24,7 +24,10 @@ var responseBodyPool = sync.Pool{
 	},
 }
 
-const maxProviderResponseBodyBytes = 32 << 20
+const (
+	maxProviderResponseBodyBytes = 32 << 20
+	maxPooledResponseBodyBytes   = 1 << 20
+)
 
 func readResponseBodyLimited(r io.Reader) ([]byte, error) {
 	respBody, err := readAllPooled(io.LimitReader(r, maxProviderResponseBodyBytes+1))
@@ -67,8 +70,7 @@ func readAllPooled(r io.Reader) ([]byte, error) {
 				newBuf := make([]byte, len(buf), newCap)
 				copy(newBuf, buf)
 				// Return old buffer to pool
-				old := buf[:0]
-				responseBodyPool.Put(&old)
+				returnResponseBuf(buf)
 				buf = newBuf
 			}
 			buf = append(buf, scratch[:n]...)
@@ -78,8 +80,7 @@ func readAllPooled(r io.Reader) ([]byte, error) {
 				break
 			}
 			// On error, return buffer to pool
-			errBuf := buf[:0]
-			responseBodyPool.Put(&errBuf)
+			returnResponseBuf(buf)
 			return nil, err
 		}
 	}
@@ -88,6 +89,9 @@ func readAllPooled(r io.Reader) ([]byte, error) {
 
 // returnResponseBuf returns a response buffer to the pool.
 func returnResponseBuf(buf []byte) {
+	if cap(buf) > maxPooledResponseBodyBytes {
+		return
+	}
 	buf = buf[:0]
 	responseBodyPool.Put(&buf)
 }

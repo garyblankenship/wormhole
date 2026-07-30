@@ -197,6 +197,11 @@ func (m *TypedMetrics) GetEmbeddingsStats() (requests int64, errors int64, avgDu
 	return getStats(&m.embeddingsRequests, &m.embeddingsErrors, &m.embeddingsDuration)
 }
 
+// GetRerankStats returns current reranking metrics.
+func (m *TypedMetrics) GetRerankStats() (requests int64, errors int64, avgDuration time.Duration) {
+	return getStats(&m.rerankRequests, &m.rerankErrors, &m.rerankDuration)
+}
+
 // GetAudioStats returns current audio metrics
 func (m *TypedMetrics) GetAudioStats() (requests int64, errors int64, avgDuration time.Duration) {
 	return getStats(&m.audioRequests, &m.audioErrors, &m.audioDuration)
@@ -213,6 +218,7 @@ func (m *TypedMetrics) GetAllStats() map[string]interface{} {
 	streamReq, streamErr, streamAvg := m.GetStreamStats()
 	structuredReq, structuredErr, structuredAvg := m.GetStructuredStats()
 	embeddingsReq, embeddingsErr, embeddingsAvg := m.GetEmbeddingsStats()
+	rerankReq, rerankErr, rerankAvg := m.GetRerankStats()
 	audioReq, audioErr, audioAvg := m.GetAudioStats()
 	imageReq, imageErr, imageAvg := m.GetImageStats()
 
@@ -237,6 +243,11 @@ func (m *TypedMetrics) GetAllStats() map[string]interface{} {
 			"errors":       embeddingsErr,
 			"avg_duration": embeddingsAvg,
 		},
+		"rerank": map[string]interface{}{
+			"requests":     rerankReq,
+			"errors":       rerankErr,
+			"avg_duration": rerankAvg,
+		},
 		"audio": map[string]interface{}{
 			"requests":     audioReq,
 			"errors":       audioErr,
@@ -257,6 +268,7 @@ func (m *TypedMetrics) Reset() {
 		&m.streamRequests, &m.streamErrors, &m.streamDuration,
 		&m.structuredRequests, &m.structuredErrors, &m.structuredDuration,
 		&m.embeddingsRequests, &m.embeddingsErrors, &m.embeddingsDuration,
+		&m.rerankRequests, &m.rerankErrors, &m.rerankDuration,
 		&m.audioRequests, &m.audioErrors, &m.audioDuration,
 		&m.imageRequests, &m.imageErrors, &m.imageDuration,
 	}

@@ -22,9 +22,15 @@ func NewTypedEnhancedMetricsMiddleware(collector *EnhancedMetricsCollector) *Typ
 // ApplyText wraps text generation calls with enhanced metrics collection
 func (m *TypedEnhancedMetricsMiddleware) ApplyText(next types.TextHandler) types.TextHandler {
 	return func(ctx context.Context, request types.TextRequest) (*types.TextResponse, error) {
+		end := m.collector.beginRequest()
+		defer end()
 		return withMeasuredRequest(ctx, request, next, func(resp *types.TextResponse, err error, duration time.Duration) {
 			outputTokens := 0
-			if resp != nil {
+			inputTokens := 0
+			if m.collector.tokenTrackingEnabled() {
+				inputTokens = estimateInputTokens(request.Messages)
+			}
+			if m.collector.tokenTrackingEnabled() && resp != nil {
 				outputTokens = estimateTextTokens(resp.Text)
 			}
 			m.collector.RecordRequest(
@@ -32,7 +38,7 @@ func (m *TypedEnhancedMetricsMiddleware) ApplyText(next types.TextHandler) types
 				duration,
 				err,
 				0,
-				estimateInputTokens(request.Messages),
+				inputTokens,
 				outputTokens,
 			)
 		})
@@ -42,13 +48,19 @@ func (m *TypedEnhancedMetricsMiddleware) ApplyText(next types.TextHandler) types
 // ApplyStream wraps streaming calls with enhanced metrics collection
 func (m *TypedEnhancedMetricsMiddleware) ApplyStream(next types.StreamHandler) types.StreamHandler {
 	return func(ctx context.Context, request types.TextRequest) (<-chan types.TextChunk, error) {
+		end := m.collector.beginRequest()
+		defer end()
 		return withMeasuredRequest(ctx, request, next, func(_ <-chan types.TextChunk, err error, duration time.Duration) {
+			inputTokens := 0
+			if m.collector.tokenTrackingEnabled() {
+				inputTokens = estimateInputTokens(request.Messages)
+			}
 			m.collector.RecordRequest(
 				requestLabelsFromContext(ctx, "stream", request.Model),
 				duration,
 				err,
 				0,
-				estimateInputTokens(request.Messages),
+				inputTokens,
 				0,
 			)
 		})
@@ -58,9 +70,15 @@ func (m *TypedEnhancedMetricsMiddleware) ApplyStream(next types.StreamHandler) t
 // ApplyStructured wraps structured output calls with enhanced metrics collection
 func (m *TypedEnhancedMetricsMiddleware) ApplyStructured(next types.StructuredHandler) types.StructuredHandler {
 	return func(ctx context.Context, request types.StructuredRequest) (*types.StructuredResponse, error) {
+		end := m.collector.beginRequest()
+		defer end()
 		return withMeasuredRequest(ctx, request, next, func(resp *types.StructuredResponse, err error, duration time.Duration) {
 			outputTokens := 0
-			if resp != nil {
+			inputTokens := 0
+			if m.collector.tokenTrackingEnabled() {
+				inputTokens = estimateInputTokens(request.Messages)
+			}
+			if m.collector.tokenTrackingEnabled() && resp != nil {
 				outputTokens = estimateStructuredOutputTokens(resp.Content)
 			}
 			m.collector.RecordRequest(
@@ -68,7 +86,7 @@ func (m *TypedEnhancedMetricsMiddleware) ApplyStructured(next types.StructuredHa
 				duration,
 				err,
 				0,
-				estimateInputTokens(request.Messages),
+				inputTokens,
 				outputTokens,
 			)
 		})
@@ -79,9 +97,13 @@ func (m *TypedEnhancedMetricsMiddleware) ApplyStructured(next types.StructuredHa
 func (m *TypedEnhancedMetricsMiddleware) ApplyEmbeddings(next types.EmbeddingsHandler) types.EmbeddingsHandler {
 	return func(ctx context.Context, request types.EmbeddingsRequest) (*types.EmbeddingsResponse, error) {
 		inputTokens := 0
-		for _, text := range request.Input {
-			inputTokens += estimateTextTokens(text)
+		if m.collector.tokenTrackingEnabled() {
+			for _, text := range request.Input {
+				inputTokens += estimateTextTokens(text)
+			}
 		}
+		end := m.collector.beginRequest()
+		defer end()
 
 		return withMeasuredRequest(ctx, request, next, func(_ *types.EmbeddingsResponse, err error, duration time.Duration) {
 			m.collector.RecordRequest(
@@ -98,10 +120,15 @@ func (m *TypedEnhancedMetricsMiddleware) ApplyEmbeddings(next types.EmbeddingsHa
 
 func (m *TypedEnhancedMetricsMiddleware) ApplyRerank(next types.RerankHandler) types.RerankHandler {
 	return func(ctx context.Context, request types.RerankRequest) (*types.RerankResponse, error) {
-		inputTokens := estimateTextTokens(request.Query)
-		for _, doc := range request.Documents {
-			inputTokens += estimateTextTokens(doc)
+		inputTokens := 0
+		if m.collector.tokenTrackingEnabled() {
+			inputTokens = estimateTextTokens(request.Query)
+			for _, doc := range request.Documents {
+				inputTokens += estimateTextTokens(doc)
+			}
 		}
+		end := m.collector.beginRequest()
+		defer end()
 		return withMeasuredRequest(ctx, request, next, func(_ *types.RerankResponse, err error, duration time.Duration) {
 			m.collector.RecordRequest(
 				requestLabelsFromContext(ctx, "rerank", request.Model),
@@ -119,11 +146,13 @@ func (m *TypedEnhancedMetricsMiddleware) ApplyRerank(next types.RerankHandler) t
 func (m *TypedEnhancedMetricsMiddleware) ApplyAudio(next types.AudioHandler) types.AudioHandler {
 	return func(ctx context.Context, request types.AudioRequest) (*types.AudioResponse, error) {
 		inputTokens := 0
-		if request.Type == "tts" {
+		if m.collector.tokenTrackingEnabled() && request.Type == "tts" {
 			if text, ok := request.Input.(string); ok {
 				inputTokens = estimateTextTokens(text)
 			}
 		}
+		end := m.collector.beginRequest()
+		defer end()
 
 		return withMeasuredRequest(ctx, request, next, func(_ *types.AudioResponse, err error, duration time.Duration) {
 			m.collector.RecordRequest(
@@ -141,13 +170,19 @@ func (m *TypedEnhancedMetricsMiddleware) ApplyAudio(next types.AudioHandler) typ
 // ApplyImage wraps image generation calls with enhanced metrics collection
 func (m *TypedEnhancedMetricsMiddleware) ApplyImage(next types.ImageHandler) types.ImageHandler {
 	return func(ctx context.Context, request types.ImageRequest) (*types.ImageResponse, error) {
+		inputTokens := 0
+		if m.collector.tokenTrackingEnabled() {
+			inputTokens = estimateTextTokens(request.Prompt)
+		}
+		end := m.collector.beginRequest()
+		defer end()
 		return withMeasuredRequest(ctx, request, next, func(_ *types.ImageResponse, err error, duration time.Duration) {
 			m.collector.RecordRequest(
 				requestLabelsFromContext(ctx, "image", request.Model),
 				duration,
 				err,
 				0,
-				estimateTextTokens(request.Prompt),
+				inputTokens,
 				0,
 			)
 		})

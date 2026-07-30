@@ -33,7 +33,7 @@ func main() {
 
     // Simple text generation with any OpenRouter model
     response, err := client.Text().
-        Model("anthropic/claude-sonnet-4-5").
+        Model("anthropic/claude-sonnet-5").
         Prompt("Hello from OpenRouter!").
         Generate(ctx)
 
@@ -57,7 +57,7 @@ if err != nil {
 
 // Use any model ID available to your OpenRouter account.
 response, err := client.Text().
-    Model("openai/gpt-5-mini").
+    Model("openai/gpt-5.6-sol").
     Prompt("Explain quantum computing").
     Generate(context.Background())
 ```
@@ -72,9 +72,9 @@ All OpenRouter model IDs follow the format: `provider/model-name`
 
 | Provider | Model ID Pattern | Example |
 |----------|-----------------|---------|
-| OpenAI | `openai/*` | `openai/gpt-5-mini` |
-| Anthropic | `anthropic/*` | `anthropic/claude-sonnet-4-5` |
-| Google | `google/*` | `google/gemini-2.5-flash` |
+| OpenAI | `openai/*` | `openai/gpt-5.6-sol` |
+| Anthropic | `anthropic/*` | `anthropic/claude-sonnet-5` |
+| Google | `google/*` | `google/gemini-3.6-flash` |
 | Meta | `meta-llama/*` | `meta-llama/llama-3.1-70b-instruct` |
 | Mistral AI | `mistralai/*` | `mistralai/mixtral-8x7b-instruct` |
 | Cohere | `cohere/*` | `cohere/command-r-plus` |
@@ -164,7 +164,7 @@ pricing from the OpenRouter model directory when calculating cost:
 
 ```go
 response, err := client.Text().
-    Model("openai/gpt-5-mini").
+    Model("openai/gpt-5.6-sol").
     Prompt("Explain Go").
     Generate(ctx)
 
@@ -180,8 +180,8 @@ Stream responses in real-time with model comparison:
 
 ```go
 models := []string{
-    "openai/gpt-5-mini",
-    "anthropic/claude-sonnet-4-5",
+    "openai/gpt-5.6-sol",
+    "anthropic/claude-sonnet-5",
 }
 
 for _, model := range models {
@@ -230,7 +230,7 @@ tools := []types.Tool{
 }
 
 response, err := client.Text().
-    Model("anthropic/claude-sonnet-4-5").
+    Model("anthropic/claude-sonnet-5").
     Prompt("What's the weather in Tokyo?").
     Tools(tools...).
     Generate(ctx)
@@ -255,7 +255,7 @@ type Analysis struct {
 
 var result Analysis
 err := client.Structured().
-    Model("anthropic/claude-sonnet-4-5").
+    Model("anthropic/claude-sonnet-5").
     Prompt("Analyze: Go is an amazing language for concurrent programming").
     SchemaName("analysis").
     GenerateAs(ctx, &result)
@@ -335,7 +335,7 @@ for current rules. A `429` response remains the portable signal to back off.
 ```go
 // Handle rate limits gracefully
 response, err := client.Text().
-    Model("anthropic/claude-sonnet-4-5").
+    Model("anthropic/claude-sonnet-5").
     Prompt("Hello").
     Generate(ctx)
 
@@ -360,8 +360,8 @@ cheapModels := []string{
 
 // Use premium models for complex reasoning
 premiumModels := []string{
-    "anthropic/claude-opus-4-5",
-    "openai/gpt-5",
+    "anthropic/claude-sonnet-5",
+    "openai/gpt-5.6-sol",
 }
 ```
 
@@ -369,7 +369,7 @@ premiumModels := []string{
 
 ```go
 response, err := client.Text().
-    Model("openai/gpt-5-mini").
+    Model("openai/gpt-5.6-sol").
     Prompt("Hello").
     Generate(ctx)
 
@@ -428,9 +428,9 @@ client := wormhole.New(
 
 ```go
 models := []string{
-    "anthropic/claude-sonnet-4-5", // Primary
-    "openai/gpt-5-mini",           // Fallback 1
-    "google/gemini-2.5-flash",     // Fallback 2
+    "anthropic/claude-sonnet-5", // Primary
+    "openai/gpt-5.6-sol",         // Fallback 1
+    "google/gemini-3.6-flash",    // Fallback 2
 }
 
 var lastErr error
@@ -460,7 +460,7 @@ draft, _ := client.Text().
 
 // Refine with premium model
 final, _ := client.Text().
-    Model("anthropic/claude-sonnet-4-5").
+    Model("anthropic/claude-sonnet-5").
     Prompt(fmt.Sprintf("Improve: %s", draft.Content())).
     Generate(ctx)
 ```
@@ -470,9 +470,9 @@ final, _ := client.Text().
 ```go
 // Avoid vendor lock-in by testing across providers
 providers := map[string][]string{
-    "openai":     {"openai/gpt-5-mini", "openai/gpt-5.2"},
-    "anthropic":  {"anthropic/claude-sonnet-4-5", "anthropic/claude-haiku-4-5"},
-    "google":     {"google/gemini-2.5-flash", "google/gemini-2.5-pro"},
+    "openai":     {"openai/gpt-5.6-sol"},
+    "anthropic":  {"anthropic/claude-sonnet-5"},
+    "google":     {"google/gemini-3.6-flash"},
     "meta":       {"meta-llama/llama-3.1-70b-instruct"},
 }
 ```
@@ -488,13 +488,13 @@ This is the passthrough escape hatch — Wormhole does not add typed builder met
 ```go
 response, err := client.Text().
     Using("openrouter").
-    Model("anthropic/claude-sonnet-4-5").
+    Model("anthropic/claude-sonnet-5").
     Prompt("Explain context windows").
     ProviderOptions(map[string]any{
         // Sort candidate providers by throughput (or "price", "latency").
         "provider": map[string]any{"sort": "throughput"},
         // Try these models in order; fall back on error.
-        "models": []string{"anthropic/claude-sonnet-4-5", "openai/gpt-5-mini"},
+        "models": []string{"anthropic/claude-sonnet-5", "openai/gpt-5.6-sol"},
         "route":  "fallback",
     }).
     Generate(ctx)
@@ -505,7 +505,7 @@ response, err := client.Text().
 ```go
 response, err := client.Text().
     Using("openrouter").
-    Model("anthropic/claude-sonnet-4-5").
+    Model("anthropic/claude-sonnet-5").
     Prompt("Summarize the latest Go release notes").
     ProviderOptions(map[string]any{
         // OpenRouter plugins (e.g. web search).

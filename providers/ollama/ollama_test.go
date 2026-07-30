@@ -60,7 +60,7 @@ func TestBuildChatPayload(t *testing.T) {
 		SystemPrompt: "You are a helpful assistant.",
 	}
 
-	payload := provider.buildChatPayload(request)
+	payload := provider.buildChatPayload(request, request.Messages)
 
 	if payload.Model != "llama2" {
 		t.Errorf("Expected model to be 'llama2', got %s", payload.Model)

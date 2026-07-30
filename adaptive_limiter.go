@@ -59,19 +59,7 @@ type AdaptiveLimiter struct {
 
 // NewAdaptiveLimiter creates a new adaptive limiter with the given configuration.
 func NewAdaptiveLimiter(config AdaptiveConfig) *AdaptiveLimiter {
-	if config.InitialCapacity < config.MinCapacity {
-		config.InitialCapacity = config.MinCapacity
-	}
-	if config.InitialCapacity > config.MaxCapacity {
-		config.InitialCapacity = config.MaxCapacity
-	}
-	// adjustmentLoop calls time.NewTicker(config.AdjustmentInterval), which
-	// panics on a zero duration. Default it so a zero-value AdaptiveConfig
-	// (or any caller that omits the interval) is safe. Mirrors the guard in
-	// adaptive_config.go and adaptive_capacity.go.
-	if config.AdjustmentInterval <= 0 {
-		config.AdjustmentInterval = DefaultAdaptiveConfig().AdjustmentInterval
-	}
+	config = normalizeAdaptiveConfig(config)
 
 	al := &AdaptiveLimiter{
 		limiter:   NewConcurrencyLimiter(config.InitialCapacity),

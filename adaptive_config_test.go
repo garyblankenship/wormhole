@@ -70,3 +70,44 @@ func TestNormalizeEnhancedAdaptiveConfigFillsProviderPartialPIDDefaults(t *testi
 	assert.Equal(t, defaults.MaxOutput, providerConfig.MaxOutput)
 	assert.Equal(t, defaults.MinOutput, providerConfig.MinOutput)
 }
+
+func TestNormalizeEnhancedAdaptiveConfigResolvesProviderInheritanceAndClamps(t *testing.T) {
+	t.Parallel()
+
+	normalized := normalizeEnhancedAdaptiveConfig(EnhancedAdaptiveConfig{
+		AdaptiveConfig: AdaptiveConfig{
+			TargetLatency:      250 * time.Millisecond,
+			MinCapacity:        4,
+			MaxCapacity:        12,
+			InitialCapacity:    6,
+			AdjustmentInterval: time.Second,
+			LatencyWindowSize:  8,
+		},
+		PIDConfig: PIDConfig{Ki: 0.2},
+		ProviderSettings: map[string]ProviderSetting{
+			"pid-only": {PIDConfig: &PIDConfig{Kp: 3}},
+			"conflict": {MinCapacity: 9, MaxCapacity: 3, InitialCapacity: 99},
+			"explicit": {TargetLatency: 20 * time.Millisecond, MinCapacity: 2, MaxCapacity: 5, InitialCapacity: 3},
+		},
+	})
+
+	pidOnly := normalized.ProviderSettings["pid-only"]
+	assert.Equal(t, 250*time.Millisecond, pidOnly.TargetLatency)
+	assert.Equal(t, 4, pidOnly.MinCapacity)
+	assert.Equal(t, 12, pidOnly.MaxCapacity)
+	assert.Equal(t, 6, pidOnly.InitialCapacity)
+	require.NotNil(t, pidOnly.PIDConfig)
+	assert.Equal(t, 3.0, pidOnly.PIDConfig.Kp)
+	assert.Equal(t, 0.2, pidOnly.PIDConfig.Ki)
+
+	conflict := normalized.ProviderSettings["conflict"]
+	assert.Equal(t, 9, conflict.MinCapacity)
+	assert.Equal(t, 9, conflict.MaxCapacity)
+	assert.Equal(t, 9, conflict.InitialCapacity)
+
+	explicit := normalized.ProviderSettings["explicit"]
+	assert.Equal(t, 20*time.Millisecond, explicit.TargetLatency)
+	assert.Equal(t, 2, explicit.MinCapacity)
+	assert.Equal(t, 5, explicit.MaxCapacity)
+	assert.Equal(t, 3, explicit.InitialCapacity)
+}

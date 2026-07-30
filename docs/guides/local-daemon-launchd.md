@@ -161,9 +161,9 @@ placeholder. The proxy rejects `/v1/` requests whose `Authorization: Bearer
 
 | Application | Base URL | API key to use | Target model |
 | --- | --- | --- | --- |
-| **Cursor / VS Code (Continue, etc.)** | `http://127.0.0.1:4000/v1` | `wh-PROXY-SECRET-CHANGE-ME` | `claude-sonnet-4-5` |
+| **Cursor / VS Code (Continue, etc.)** | `http://127.0.0.1:4000/v1` | `wh-PROXY-SECRET-CHANGE-ME` | `claude-sonnet-5` |
 | **Open WebUI / Jan / custom OpenAI-compatible UIs** | `http://127.0.0.1:4000/v1` | `wh-PROXY-SECRET-CHANGE-ME` | Select from `/v1/models` dropdown |
-| **Custom scripts** | `http://127.0.0.1:4000/v1` | `Authorization: Bearer wh-PROXY-SECRET-CHANGE-ME` | Exact provider/model string, e.g. `anthropic/claude-sonnet-4-5` |
+| **Custom scripts** | `http://127.0.0.1:4000/v1` | `Authorization: Bearer wh-PROXY-SECRET-CHANGE-ME` | Exact provider/model string, e.g. `anthropic/claude-sonnet-5` |
 
 Example:
 
@@ -172,7 +172,7 @@ curl -s http://127.0.0.1:4000/v1/chat/completions \
   -H "Authorization: Bearer wh-PROXY-SECRET-CHANGE-ME" \
   -H "Content-Type: application/json" \
   -d '{
-    "model": "claude-sonnet-4-5",
+    "model": "claude-sonnet-5",
     "messages": [{"role":"user","content":"ping"}]
   }'
 ```
@@ -182,11 +182,11 @@ curl -s http://127.0.0.1:4000/v1/chat/completions \
 Wormhole's proxy strips a known provider prefix from the model string and
 routes to that provider. Unprefixed models go to `-default-provider`.
 
-- `claude-sonnet-4-5` → routes to the default provider (`anthropic`).
-- `anthropic/claude-sonnet-4-5` → routes to Anthropic explicitly.
-- `gemini-2.5-pro` → routes to default provider.
-- `gemini/gemini-2.5-pro` → routes to Gemini explicitly.
-- `openai/gpt-5.2` → routes to OpenAI explicitly.
+- `claude-sonnet-5` → routes to the default provider (`anthropic`).
+- `anthropic/claude-sonnet-5` → routes to Anthropic explicitly.
+- `gemini-3.6-flash` → routes to default provider.
+- `gemini/gemini-3.6-flash` → routes to Gemini explicitly.
+- `openai/gpt-5.6` → routes to OpenAI explicitly.
 
 ### Selecting providers and models
 
@@ -208,7 +208,7 @@ The same applies to OpenRouter if you set `OPENROUTER_API_KEY`:
 
 ```json
 { "model": "openrouter/deepseek/deepseek-chat" }
-{ "model": "openrouter/anthropic/claude-sonnet-4-5" }
+{ "model": "openrouter/anthropic/claude-sonnet-5" }
 ```
 
 To enumerate the providers actually wired into your running daemon, query the
@@ -278,7 +278,7 @@ reasons each change was made. They are grounded in the live proxy code:
    `/v1/rerank`, `/v1/models`) plus `/health`. It does not serve the
    Anthropic-native `/v1/messages` route that Claude Code CLI requires.
 
-4. **Updated target model to `claude-sonnet-4-5`.** `claude-3-5-sonnet` is
+4. **Updated target model to `claude-sonnet-5`.** `claude-3-5-sonnet` is
    legacy per the repo's model reference.
 
 5. **Switched to `launchctl bootstrap`/`bootout`.** `load`/`unload` are

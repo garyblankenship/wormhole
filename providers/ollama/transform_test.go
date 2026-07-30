@@ -6,6 +6,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/garyblankenship/wormhole/v2/providers"
 	"github.com/garyblankenship/wormhole/v2/types"
 )
 
@@ -27,7 +28,9 @@ func TestOllamaTransformMessages_CallsPrepareMessages(t *testing.T) {
 		},
 	}
 
-	payload := provider.buildChatPayload(request)
+	prepared, _, err := providers.PrepareMessages(request.Messages)
+	require.NoError(t, err)
+	payload := provider.buildChatPayload(request, prepared)
 
 	// No system prompt, so payload messages == prepared messages.
 	// The stranded tool result is dropped → only the user message remains.

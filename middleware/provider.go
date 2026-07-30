@@ -102,7 +102,17 @@ func NewProviderMetricsMiddleware(providerName string) *ProviderMetricsMiddlewar
 
 // GetMetrics returns current provider metrics
 func (m *ProviderMetricsMiddleware) GetMetrics() *ProviderMetrics {
-	return m.metrics
+	return &ProviderMetrics{
+		TextRequests:       atomic.LoadInt64(&m.metrics.TextRequests),
+		StreamRequests:     atomic.LoadInt64(&m.metrics.StreamRequests),
+		StructuredRequests: atomic.LoadInt64(&m.metrics.StructuredRequests),
+		EmbeddingsRequests: atomic.LoadInt64(&m.metrics.EmbeddingsRequests),
+		AudioRequests:      atomic.LoadInt64(&m.metrics.AudioRequests),
+		ImageRequests:      atomic.LoadInt64(&m.metrics.ImageRequests),
+		TotalErrors:        atomic.LoadInt64(&m.metrics.TotalErrors),
+		TotalLatencyMs:     atomic.LoadInt64(&m.metrics.TotalLatencyMs),
+		RerankRequests:     atomic.LoadInt64(&m.metrics.RerankRequests),
+	}
 }
 
 func (m *ProviderMetricsMiddleware) recordRequest(counter *int64, elapsed time.Duration, err error) {

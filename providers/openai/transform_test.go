@@ -189,12 +189,13 @@ func TestBuildChatPayloadKeepsTextOnlyUserContentString(t *testing.T) {
 	t.Parallel()
 
 	provider := New(types.ProviderConfig{APIKey: "test-key"})
-	payload := provider.buildChatPayload(&types.TextRequest{
+	request := &types.TextRequest{
 		BaseRequest: types.BaseRequest{Model: "gpt-4o-mini"},
 		Messages: []types.Message{
 			types.NewUserMessage("plain text"),
 		},
-	})
+	}
+	payload := provider.buildChatPayload(request, request.Messages)
 
 	messages := payload["messages"].([]map[string]any)
 	require.Len(t, messages, 1)
@@ -205,7 +206,7 @@ func TestBuildChatPayloadSerializesUserMediaAsImageURLParts(t *testing.T) {
 	t.Parallel()
 
 	provider := New(types.ProviderConfig{APIKey: "test-key"})
-	payload := provider.buildChatPayload(&types.TextRequest{
+	request := &types.TextRequest{
 		BaseRequest: types.BaseRequest{Model: "gpt-4o-mini"},
 		Messages: []types.Message{
 			&types.UserMessage{
@@ -216,7 +217,8 @@ func TestBuildChatPayloadSerializesUserMediaAsImageURLParts(t *testing.T) {
 				},
 			},
 		},
-	})
+	}
+	payload := provider.buildChatPayload(request, request.Messages)
 
 	messages := payload["messages"].([]map[string]any)
 	require.Len(t, messages, 1)

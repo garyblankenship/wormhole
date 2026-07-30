@@ -2,6 +2,7 @@ package wormhole
 
 import (
 	"context"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -32,6 +33,55 @@ func TestCapabilitiesFromConfiguredProvider(t *testing.T) {
 	assert.True(t, caps.SupportsStreaming())
 	assert.False(t, caps.SupportsToolCalling())
 	assert.NotEmpty(t, caps.All())
+}
+
+func TestProviderCapabilitiesUsesScopedLease(t *testing.T) {
+	t.Parallel()
+
+	for _, lookup := range []struct {
+		name string
+		run  func(*Wormhole) error
+	}{
+		{"provider", func(client *Wormhole) error {
+			_ = client.ProviderCapabilities("mock")
+			return nil
+		}},
+		{"model fallback", func(client *Wormhole) error {
+			_, err := client.ModelCapabilities("mock", "missing")
+			return err
+		}},
+	} {
+		for _, cleanup := range []string{"age", "max-count"} {
+			t.Run(lookup.name+"/"+cleanup, func(t *testing.T) {
+				t.Parallel()
+				provider := newLifecycleProvider("mock")
+				client := New(
+					WithCustomProvider("mock", func(types.ProviderConfig) (types.Provider, error) { return provider, nil }),
+					WithProviderConfig("mock", types.ProviderConfig{}),
+					WithDefaultProvider("mock"),
+					WithDiscovery(false),
+				)
+				defer func() { _ = client.Shutdown(context.Background()) }()
+
+				if err := lookup.run(client); err != nil {
+					t.Fatalf("capability lookup: %v", err)
+				}
+				if cleanup == "age" {
+					client.CleanupStaleProviders(0, 0)
+				} else {
+					other := newLifecycleProvider("other")
+					client.providerFactories["other"] = func(types.ProviderConfig) (types.Provider, error) { return other, nil }
+					client.config.Providers["other"] = types.ProviderConfig{}
+					_ = client.ProviderCapabilities("other")
+					atomic.StoreInt64(&client.providers["mock"].lastUsed, time.Now().Add(-time.Hour).UnixNano())
+					client.CleanupStaleProviders(24*time.Hour, 1)
+				}
+				if got := provider.closeCount.Load(); got != 1 {
+					t.Fatalf("capability lookup provider close count = %d, want 1", got)
+				}
+			})
+		}
+	}
 }
 
 func TestCapabilitiesHelperMethods(t *testing.T) {

@@ -28,8 +28,9 @@ func (p *Wormhole) ProviderCapabilities(provider string) *Capabilities {
 		provider = resolved
 	}
 
-	if configuredProvider, err := p.Provider(provider); err == nil {
-		return capabilitiesFromModelCapabilities(provider, configuredProvider.SupportedCapabilities())
+	if handle, err := p.ProviderWithHandle(provider); err == nil {
+		defer func() { _ = handle.Close() }()
+		return capabilitiesFromModelCapabilities(provider, handle.SupportedCapabilities())
 	}
 
 	return conservativeProviderCapabilities(provider)

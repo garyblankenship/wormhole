@@ -28,7 +28,7 @@ func main() {
 
     // Simple text generation
     response, err := client.Text().
-        Model("claude-sonnet-4-5").
+        Model("claude-sonnet-5").
         Prompt("Hello, Claude!").
         Generate(ctx)
 
@@ -58,7 +58,7 @@ provider := anthropic.New(types.ProviderConfig{
 Anthropic's catalog and aliases change independently of Wormhole. Use the
 [official Claude models reference](https://platform.claude.com/docs/en/about-claude/models/overview)
 for current IDs and lifecycle status. Prefer a stable alias, such as
-`claude-sonnet-4-5`, when you do not need a dated snapshot.
+`claude-sonnet-5`, when you do not need a dated snapshot.
 
 ## Capabilities
 
@@ -78,7 +78,7 @@ Anthropic requires system prompts to be in a separate field rather than as a mes
 
 ```go
 response, err := client.Text().
-    Model("claude-sonnet-4-5").
+    Model("claude-sonnet-5").
     SystemPrompt("You are a helpful assistant specializing in Go programming.").
     Prompt("Explain goroutines").
     Generate(ctx)
@@ -90,7 +90,7 @@ Anthropic requires the `max_tokens` field to be set. The SDK defaults to 4096 if
 
 ```go
 response, err := client.Text().
-    Model("claude-sonnet-4-5").
+    Model("claude-sonnet-5").
     Prompt("Summarize this text").
     MaxTokens(1024).
     Generate(ctx)
@@ -102,7 +102,7 @@ Anthropic uses `stop_sequences` instead of `stop`. The SDK automatically renames
 
 ```go
 response, err := client.Text().
-    Model("claude-sonnet-4-5").
+    Model("claude-sonnet-5").
     Prompt("Count from 1 to 10").
     Stop([]string{"\n\n"}...).
     Generate(ctx)
@@ -134,7 +134,7 @@ tools := []types.Tool{
 }
 
 response, err := client.Text().
-    Model("claude-sonnet-4-5").
+    Model("claude-sonnet-5").
     Prompt("What's the weather in Tokyo?").
     Tools(tools...).
     Generate(ctx)
@@ -199,7 +199,7 @@ type Person struct {
 
 var result Person
 err := client.Structured().
-    Model("claude-sonnet-4-5").
+    Model("claude-sonnet-5").
     Prompt("Extract: John is 30 years old and can be reached at john@example.com").
     SchemaName("person").
     GenerateAs(ctx, &result)
@@ -214,7 +214,7 @@ Stream responses in real-time:
 
 ```go
 chunks, err := client.Text().
-    Model("claude-sonnet-4-5").
+    Model("claude-sonnet-5").
     Prompt("Tell me a short story").
     Stream(ctx)
 
@@ -233,7 +233,7 @@ The provider returns typed errors for common issues:
 
 ```go
 response, err := client.Text().
-    Model("claude-sonnet-4-5").
+    Model("claude-sonnet-5").
     Prompt("Hello").
     Generate(ctx)
 
@@ -294,7 +294,7 @@ Pass Anthropic-specific options via `ProviderOptions`:
 
 ```go
 response, err := client.Text().
-    Model("claude-sonnet-4-5").
+    Model("claude-sonnet-5").
     Prompt("Hello").
     ProviderOptions(map[string]any{
         "top_k": 40,

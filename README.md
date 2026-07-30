@@ -53,7 +53,7 @@ func main() {
 	defer client.Close()
 
 	resp, err := client.Text().
-		Model("gpt-5.2").
+		Model("gpt-5.6").
 		Prompt("Explain wormholes in one sentence.").
 		Generate(ctx)
 	if err != nil {
@@ -68,7 +68,7 @@ For one-off experiments, `QuickText` opens a temporary portal, sends the prompt,
 and closes the blast door:
 
 ```go
-resp, err := wormhole.QuickText("gpt-5.2", "Hello", os.Getenv("OPENAI_API_KEY"))
+resp, err := wormhole.QuickText("gpt-5.6", "Hello", os.Getenv("OPENAI_API_KEY"))
 ```
 
 ## Dashboard In The Garage
@@ -78,18 +78,18 @@ this one special client" taped to the side of your service.
 
 | Workflow | API |
 | --- | --- |
-| Text generation | `client.Text().Model("gpt-5.2").Prompt("...").Generate(ctx)` |
-| Streaming | `client.Text().Model("gpt-5.2").Prompt("...").Stream(ctx)` |
+| Text generation | `client.Text().Model("gpt-5.6").Prompt("...").Generate(ctx)` |
+| Streaming | `client.Text().Model("gpt-5.6").Prompt("...").Stream(ctx)` |
 | Stream and collect | `chunks, fullText, err := builder.StreamAndAccumulate(ctx)` |
-| Structured output | `client.Structured().Model("gpt-5.2").Schema(schema).GenerateAs(ctx, &out)` |
+| Structured output | `client.Structured().Model("gpt-5.6").Schema(schema).GenerateAs(ctx, &out)` |
 | Embeddings | `client.Embeddings().Model("text-embedding-3-small").Input("...").Generate(ctx)` |
 | Image generation | `client.Image().Model("gpt-image-1").Prompt("...").Generate(ctx)` |
 | Speech to text | `client.Audio().SpeechToText().Model("whisper-1").Audio(data, "wav").Transcribe(ctx)` |
 | Text to speech | `client.Audio().TextToSpeech().Model("tts-1").Input("...").Voice("alloy").Generate(ctx)` |
 | Tool calling | `wormhole.RegisterTypedTool(client, name, desc, handler)` |
-| Agent loop | `client.Agent().Model("gpt-5.2").Run(ctx, "task")` |
-| Reasoning controls | `client.Text().Model("gpt-5.2").Reasoning(types.Reasoning{Effort: types.ReasoningEffortLow})` |
-| Model fallback | `client.Text().Model("gpt-5.2").WithFallback("gpt-5-mini").Generate(ctx)` |
+| Agent loop | `client.Agent().Model("gpt-5.6").Run(ctx, "task")` |
+| Reasoning controls | `client.Text().Model("gpt-5.6").Reasoning(types.Reasoning{Effort: types.ReasoningEffortLow})` |
+| Model fallback | `client.Text().Model("gpt-5.6").WithFallback("gpt-5-mini").Generate(ctx)` |
 | Model selection | `client.SelectModel(ctx, wormhole.ModelQuery{Capabilities: []types.ModelCapability{types.CapabilityText}})` |
 | Attempt tracing | `wormhole.WithAttemptTrace(func(ctx context.Context, e wormhole.AttemptEvent) { ... })` |
 | Batch execution | `client.Batch().Add(req1).Add(req2).Concurrency(5).Execute(ctx)` |
@@ -237,7 +237,7 @@ ways to ruin your week; leaked credentials do not need to audition.
 
 ```go
 resp, err := client.Text().
-	Model("gpt-5.2").
+	Model("gpt-5.6").
 	SystemPrompt("You are concise.").
 	Prompt("Summarize Go interfaces.").
 	MaxTokens(200).
@@ -261,7 +261,7 @@ being silently dropped.
 
 ```go
 stream, err := client.Text().
-	Model("gpt-5.2").
+	Model("gpt-5.6").
 	Prompt("Write a short haiku about latency.").
 	Stream(ctx)
 if err != nil {
@@ -283,7 +283,7 @@ conv := types.NewConversation().
 	Assistant("Paste the function.").
 	User("func add(a, b int) int { return a + b }")
 
-resp, err := client.Text().Conversation(conv).Model("gpt-5.2").Generate(ctx)
+resp, err := client.Text().Conversation(conv).Model("gpt-5.6").Generate(ctx)
 ```
 
 ## Structured Output: Make The Model Use The Measuring Cup
@@ -297,7 +297,7 @@ type Verdict struct {
 
 var out Verdict
 err := client.Structured().
-	Model("gpt-5.2").
+	Model("gpt-5.6").
 	Prompt("Classify this bug report as valid or invalid.").
 	Schema(wormhole.MustSchemaFromStruct(Verdict{})).
 	GenerateAs(ctx, &out)
@@ -433,7 +433,7 @@ if err != nil {
 }
 
 resp, err := client.Text().
-	Model("gpt-5.2").
+	Model("gpt-5.6").
 	Prompt("What is the weather in San Francisco?").
 	WithToolsEnabled().
 	Generate(ctx)
@@ -451,7 +451,7 @@ condition. The garage has rules now.
 
 ```go
 result, err := client.Agent().
-	Model("gpt-5.2").
+	Model("gpt-5.6").
 	System("You are a research assistant.").
 	MaxSteps(10).
 	OnStep(func(e wormhole.StepEvent) {
@@ -463,7 +463,7 @@ result, err := client.Agent().
 Agent-scoped tools are available through `AgentAddTool`:
 
 ```go
-builder := client.Agent().Model("gpt-5.2")
+builder := client.Agent().Model("gpt-5.6")
 err := wormhole.AgentAddTool(builder, "search", "Search local docs",
 	func(ctx context.Context, args SearchArgs) (string, error) {
 		return searchDocs(args.Query), nil
@@ -477,6 +477,28 @@ Wormhole has provider middleware for retrying, timeouts, metrics, logging,
 rate-limiting, circuit breaking, caching, and health-aware routing. This is the
 part where the prototype gets seatbelts, brakes, and a dashboard light that
 means something.
+
+For enhanced metrics, `EnableTokenTracking` controls whether middleware
+estimates and records input/output tokens, and `EnableConcurrencyTracking`
+controls the live `in_flight_requests` gauge. Both default to `true`.
+`in_flight_requests` counts active middleware handler invocations and is
+intentionally not reset by `Reset()`. Label aggregation is opt-in; when it is
+enabled, the collector uses the complete provider, model, method, and error
+type tuple as the metric identity, and Prometheus output emits those values as
+escaped named labels. `Reset()` synchronizes with recording, clears cumulative
+metrics, and retains the live gauge.
+
+Compatibility note: `GetAllStats()` and `JSONExporter()` now key `per_label`
+entries with canonical named labels such as
+`provider="openai",model="gpt-5.6",method="text",error_type=""`. Earlier v2
+releases used a collision-prone colon-delimited string. If you consume these
+maps, treat the key as opaque or read the embedded `provider`, `model`,
+`method`, and `error_type` fields instead of constructing the key yourself.
+
+`middleware.TypedMetrics` exposes `GetRerankStats()` alongside its other
+per-operation getters; rerank is also included in `GetAllStats()` and
+`Reset()`. For provider middleware, `GetMetrics()` returns a detached
+snapshot, so callers cannot mutate the live counters.
 
 Circuit-breaker state is isolated by provider and operation, so a failed text
 route cannot block a healthy fallback, another provider, or embeddings on the
@@ -522,7 +544,10 @@ A shutdown timeout applies only to that caller. Cleanup keeps draining once in
 the background, and a later `Shutdown` call can wait for the same lifecycle and
 receive its eventual cleanup result. `Close` waits without a deadline.
 
-Idempotency caches duplicate requests with the same key for the configured TTL:
+Idempotency coalesces duplicate in-flight requests with the same key, then
+caches a completed response for the configured TTL. The TTL starts only after
+the owner request completes, so it never permits a second in-flight provider
+call merely because the configured duration elapsed:
 
 ```go
 client := wormhole.New(
@@ -530,6 +555,11 @@ client := wormhole.New(
 	wormhole.WithIdempotencyKey("request-123", 5*time.Minute),
 )
 ```
+
+`Provider(name)` is deprecated. It returns a raw provider pinned until the
+client closes for compatibility. Prefer `ProviderWithHandle(name)` and close
+the returned handle when the provider is no longer in use, allowing cache
+cleanup to evict it safely.
 
 Attempt tracing is available when callers need to observe fallback behavior
 without storing a route ledger:
@@ -570,10 +600,10 @@ Model prefixes select a provider:
 
 | Request model | Provider | Sent model |
 | --- | --- | --- |
-| `anthropic/claude-sonnet-4-5` | Anthropic | `claude-sonnet-4-5` |
-| `gemini/gemini-2.5-pro` | Gemini | `gemini-2.5-pro` |
+| `anthropic/claude-sonnet-5` | Anthropic | `claude-sonnet-5` |
+| `gemini/gemini-3.6-flash` | Gemini | `gemini-3.6-flash` |
 | `ollama/llama3.2` | Ollama | `llama3.2` |
-| `gpt-5.2` | default provider | `gpt-5.2` |
+| `gpt-5.6` | default provider | `gpt-5.6` |
 
 Supported proxy endpoints:
 
@@ -648,7 +678,7 @@ the matching `tool` results on the next turn.
 curl -s http://localhost:8080/v1/chat/completions \
 	-H 'Content-Type: application/json' \
 	-d '{
-		"model": "anthropic/claude-sonnet-4-5",
+		"model": "anthropic/claude-sonnet-5",
 		"messages": [{"role": "user", "content": "What is the weather in SF?"}],
 		"tools": [{
 			"type": "function",

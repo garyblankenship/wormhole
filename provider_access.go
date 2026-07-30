@@ -8,13 +8,16 @@ import (
 )
 
 // Provider returns a specific provider instance.
+//
+// Deprecated: Use ProviderWithHandle instead. A raw provider is pinned until
+// the client closes, while a handle releases its provider for cache eviction.
 func (p *Wormhole) Provider(name string) (types.Provider, error) {
 	if !p.beginProviderAcquisition() {
 		return nil, fmt.Errorf("client is shutting down")
 	}
 	defer p.providerAcquisitionWg.Done()
 
-	provider, err := p.getOrCreateCachedProvider(name, false)
+	provider, err := p.getOrCreateCachedProvider(name, false, true)
 	if err != nil {
 		return nil, err
 	}
@@ -26,8 +29,8 @@ func (p *Wormhole) Provider(name string) (types.Provider, error) {
 
 func (p *Wormhole) releaseProvider(name string) {
 	p.providersMutex.RLock()
+	defer p.providersMutex.RUnlock()
 	cp, exists := p.providers[name]
-	p.providersMutex.RUnlock()
 
 	if exists && atomic.AddInt32(&cp.refCount, -1) < 0 {
 		atomic.StoreInt32(&cp.refCount, 0)
@@ -46,7 +49,7 @@ func (p *Wormhole) ProviderWithHandle(name string) (*ProviderHandle, error) {
 		return nil, err
 	}
 
-	provider, err := p.getOrCreateCachedProvider(providerName, true)
+	provider, err := p.getOrCreateCachedProvider(providerName, true, false)
 	if err != nil {
 		return nil, err
 	}

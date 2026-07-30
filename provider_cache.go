@@ -10,18 +10,32 @@ import (
 	"github.com/garyblankenship/wormhole/v2/types"
 )
 
-func (p *Wormhole) getOrCreateCachedProvider(name string, acquireRef bool) (types.Provider, error) {
+func (p *Wormhole) getOrCreateCachedProvider(name string, acquireRef, pin bool) (types.Provider, error) {
 	p.providersMutex.RLock()
 	if cp, exists := p.providers[name]; exists {
-		if acquireRef {
-			atomic.AddInt32(&cp.refCount, 1)
+		if !pin {
+			if acquireRef {
+				atomic.AddInt32(&cp.refCount, 1)
+			}
+			atomic.StoreInt64(&cp.lastUsed, time.Now().UnixNano())
+			p.cacheHits.Add(1)
+			p.providersMutex.RUnlock()
+			return cp.provider, nil
 		}
-		atomic.StoreInt64(&cp.lastUsed, time.Now().UnixNano())
-		p.cacheHits.Add(1)
-		p.providersMutex.RUnlock()
-		return cp.provider, nil
 	}
 	p.providersMutex.RUnlock()
+
+	if pin {
+		p.providersMutex.Lock()
+		if cp, exists := p.providers[name]; exists {
+			cp.pinned = true
+			atomic.StoreInt64(&cp.lastUsed, time.Now().UnixNano())
+			p.cacheHits.Add(1)
+			p.providersMutex.Unlock()
+			return cp.provider, nil
+		}
+		p.providersMutex.Unlock()
+	}
 
 	config, err := p.configuredProviderConfig(name)
 	if err != nil {
@@ -44,6 +58,9 @@ func (p *Wormhole) getOrCreateCachedProvider(name string, acquireRef bool) (type
 		if acquireRef {
 			atomic.AddInt32(&cp.refCount, 1)
 		}
+		if pin {
+			cp.pinned = true
+		}
 		atomic.StoreInt64(&cp.lastUsed, time.Now().UnixNano())
 		p.cacheHits.Add(1)
 		if err := provider.Close(); err != nil && p.config.Logger != nil {
@@ -56,6 +73,7 @@ func (p *Wormhole) getOrCreateCachedProvider(name string, acquireRef bool) (type
 		provider: provider,
 		lastUsed: time.Now().UnixNano(),
 		refCount: refCount,
+		pinned:   pin,
 	}
 	p.cacheMisses.Add(1)
 	return provider, nil

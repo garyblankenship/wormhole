@@ -105,6 +105,7 @@ type cachedProvider struct {
 	provider types.Provider
 	lastUsed int64
 	refCount int32
+	pinned   bool // protected by Wormhole.providersMutex
 }
 
 // ProviderHandle wraps a provider with automatic reference counting.

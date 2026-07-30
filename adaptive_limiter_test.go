@@ -17,6 +17,39 @@ func TestNewAdaptiveLimiter_ZeroAdjustmentIntervalDoesNotPanic(t *testing.T) {
 		"zero AdjustmentInterval must default to avoid time.NewTicker(0) panic")
 }
 
+func TestAdaptiveLimiterNormalizesZeroNegativeAndConflictingConfig(t *testing.T) {
+	t.Parallel()
+
+	defaults := DefaultAdaptiveConfig()
+	for _, tc := range []struct {
+		name string
+		cfg  AdaptiveConfig
+		want int
+	}{
+		{"zero", AdaptiveConfig{}, defaults.InitialCapacity},
+		{"negative", AdaptiveConfig{TargetLatency: -time.Second, MinCapacity: -1, MaxCapacity: -2, InitialCapacity: -3, AdjustmentInterval: -time.Second, LatencyWindowSize: -1}, defaults.InitialCapacity},
+		{"conflicting", AdaptiveConfig{TargetLatency: time.Millisecond, MinCapacity: 7, MaxCapacity: 3, InitialCapacity: 99, AdjustmentInterval: time.Hour, LatencyWindowSize: 1}, 7},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			limiter := NewAdaptiveLimiter(tc.cfg)
+			t.Cleanup(limiter.Stop)
+			if got := limiter.limiter.Capacity(); got != tc.want {
+				t.Fatalf("capacity = %d, want %d", got, tc.want)
+			}
+			if limiter.config.TargetLatency <= 0 || limiter.config.LatencyWindowSize <= 0 || limiter.config.AdjustmentInterval <= 0 {
+				t.Fatalf("unresolved config = %#v", limiter.config)
+			}
+			release, ok := limiter.AcquireToken(context.Background())
+			if !ok {
+				t.Fatal("AcquireToken failed")
+			}
+			release()
+			limiter.RecordLatency(time.Millisecond)
+		})
+	}
+}
+
 func TestAdaptiveLimiter_AcquireAndRelease(t *testing.T) {
 	t.Parallel()
 

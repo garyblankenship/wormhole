@@ -80,6 +80,8 @@ func MetricsMiddleware(metrics *Metrics) Middleware {
 func EnhancedMetricsMiddleware(collector *EnhancedMetricsCollector) Middleware {
 	return func(next Handler) Handler {
 		return func(ctx context.Context, req any) (any, error) {
+			end := collector.beginRequest()
+			defer end()
 			resp, err := withMeasuredRequest(ctx, req, next, func(resp any, err error, duration time.Duration) {
 				collector.RecordRequest(requestLabelsFromContext(ctx, "", ""), duration, err, 0, 0, 0)
 			})

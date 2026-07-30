@@ -319,6 +319,54 @@ func TestIdempotencyDeduplicatesRepeatedRequests(t *testing.T) {
 	assert.Equal(t, int32(3), provider.callCount.Load())
 }
 
+func TestIdempotencyElapsedTTLDoesNotDuplicateInFlightProviderCall(t *testing.T) {
+	t.Parallel()
+
+	provider := newBlockingTextProvider("blocking")
+	client := wormhole.New(
+		wormhole.WithDefaultProvider("blocking"),
+		wormhole.WithCustomProvider("blocking", func(cfg types.ProviderConfig) (types.Provider, error) {
+			return provider, nil
+		}),
+		wormhole.WithProviderConfig("blocking", types.ProviderConfig{}),
+		wormhole.WithIdempotencyKey("same-request", time.Millisecond),
+	)
+
+	firstDone := make(chan error, 1)
+	go func() {
+		_, err := client.Text().Model("test-model").Prompt("repeat me").Generate(context.Background())
+		firstDone <- err
+	}()
+
+	select {
+	case <-provider.started:
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for first request to start")
+	}
+	// Let the old, pre-remediation in-flight expiry elapse. The provider remains
+	// blocked, so the second caller must still wait on its original entry.
+	<-time.After(2 * time.Millisecond)
+
+	duplicateCtx, cancelDuplicate := context.WithCancel(context.Background())
+	duplicateDone := make(chan error, 1)
+	go func() {
+		_, err := client.Text().Model("test-model").Prompt("repeat me").Generate(duplicateCtx)
+		duplicateDone <- err
+	}()
+
+	select {
+	case err := <-duplicateDone:
+		t.Fatalf("duplicate returned before the original provider request completed: %v", err)
+	case <-time.After(25 * time.Millisecond):
+	}
+	assert.Equal(t, int32(1), provider.callCount.Load())
+
+	cancelDuplicate()
+	require.ErrorIs(t, <-duplicateDone, context.Canceled)
+	close(provider.unblock)
+	require.NoError(t, <-firstDone)
+}
+
 // Regression: two requests identical except for ProviderOptions must NOT collide on
 // the same idempotency key. Before folding GetProviderOptions() into the hash, the
 // key derived only from json.Marshal(request), and ProviderOptions carries json:"-"
