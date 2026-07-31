@@ -8,7 +8,7 @@ This example demonstrates the native tool use / function calling feature in Worm
 2. **Automatic Execution** - How tools are automatically executed when the model requests them
 3. **Multi-Turn Conversations** - How the SDK handles back-and-forth between model and tools
 4. **Multiple Tools** - Using several tools in a single conversation
-5. **Manual Mode** - How to opt-out of automatic execution for custom handling
+5. **Manual Mode** - How to own handlers and complete the tool-result continuation yourself
 
 ## Running the Example
 
@@ -51,7 +51,9 @@ go run main.go
 🔧 Model requested 1 tool call(s):
   - get_current_time with args: map[timezone:Asia/Tokyo]
 
-💡 In manual mode, you would execute these tools yourself and send results back.
+🔧 Executing get_current_time(timezone=Asia/Tokyo)
+
+📝 AI Response: It is currently ...
 ```
 
 ## How It Works
@@ -103,16 +105,70 @@ response, err := client.Text().
 
 ### 3. Manual Execution (Opt-In)
 
-Disable auto-execution to handle tool calls yourself:
+Keep a caller-owned handler map, explicitly send the registered tool schemas,
+execute the requested handlers, and continue with assistant and tool-result
+messages:
 
 ```go
+handlers := map[string]types.ToolHandler{
+    "get_weather": getWeather,
+}
+tools := client.ListTools()
+prompt := "What's the weather in SF?"
+
 response, err := client.Text().
-    Prompt("What's the weather in SF?").
+    Model("gpt-5.6").
+    Prompt(prompt).
+    Tools(tools...).
     WithToolsDisabled().
     Generate(ctx)
+if err != nil {
+    return err
+}
 
-// Check response.ToolCalls and execute manually
+normalizedCalls := make([]types.ToolCall, 0, len(response.ToolCalls))
+for _, call := range response.ToolCalls {
+    normalized, err := types.NormalizeToolCall(call)
+    if err != nil {
+        return err
+    }
+    normalizedCalls = append(normalizedCalls, normalized)
+}
+
+assistant := types.NewAssistantMessage(response.Text)
+assistant.ToolCalls = normalizedCalls
+assistant.Thinking = response.Thinking
+messages := []types.Message{types.NewUserMessage(prompt), assistant}
+
+for _, call := range normalizedCalls {
+    handler, ok := handlers[call.Name]
+    if !ok {
+        return fmt.Errorf("tool %q is not admitted", call.Name)
+    }
+    result, err := handler(ctx, call.Arguments)
+    if err != nil {
+        return err
+    }
+    content, err := json.Marshal(result)
+    if err != nil {
+        return err
+    }
+    message := types.NewToolResultMessage(call.ID, string(content))
+    message.FunctionName = call.Name
+    messages = append(messages, message)
+}
+
+continued, err := client.Text().
+    Model("gpt-5.6").
+    Messages(messages...).
+    Tools(tools...).
+    WithToolsDisabled().
+    Generate(ctx)
 ```
+
+Manual mode bypasses the SDK executor. The caller owns schema validation,
+admission limits, execution timeouts, and retries, in addition to deciding
+which handlers are allowed.
 
 ## Tool Handler Signature
 
@@ -144,7 +200,8 @@ client.Text().
 3. **Error Handling**: Return descriptive errors - they're sent to the model
 4. **Idempotency**: Tools may be called multiple times
 5. **Timeouts**: Use context for long-running operations
-6. **Security**: Validate and sanitize all inputs
+6. **Security**: Validate and sanitize all inputs; in manual mode, also enforce
+   admission, timeouts, and retry policy before invoking caller-owned handlers
 
 ## Advanced Usage
 

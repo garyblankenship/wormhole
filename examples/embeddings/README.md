@@ -62,33 +62,31 @@ go run ./batch
 ```
 
 ### [`providers/main.go`](./providers/main.go)
-**What it does:** Demonstrates how to use Groq, Mistral, and other OpenAI-compatible providers for embeddings without separate implementations.
+**What it does:** Configures Mistral through its built-in provider profile and generates an embedding with the OpenAI-compatible adapter.
 
 **Key features:**
-- BaseURL approach for any OpenAI-compatible API
-- Examples with Groq and Mistral
-- Provider fallback patterns
-- Popular service endpoints reference
+- `WithMistral(types.ProviderConfig{APIKey: ...})`
+- The profile-owned Mistral base URL
+- Disabled model discovery for a single embedding request
+- A private base-URL seam used only by the no-network test
 
 **Why this matters:**
-- No need for separate provider packages
-- Use ANY OpenAI-compatible service immediately
-- Consistent API across all providers
-- All Wormhole middleware features work
+- Credentials stay in provider configuration
+- Normal execution does not duplicate the provider endpoint
+- The example test verifies the request path, bearer credential, and decoded vector
 
 **Run it:**
 ```bash
-export MISTRAL_API_KEY="your-key"  # Optional
-export GROQ_API_KEY="your-key"    # Optional  
+export MISTRAL_API_KEY="your-key"
 go run ./providers
 ```
 
 ## 🚀 Getting Started
 
 1. **Set up API keys** for the providers you want to test
-2. **Start simple** with `basic_embeddings.go` to understand the API
-3. **Build semantic search** with `semantic_search.go` for real applications
-4. **Scale up** with `batch_processing.go` for production workloads
+2. **Start simple** with [`basic/main.go`](./basic/main.go) to understand the API
+3. **Build semantic search** with [`semantic/main.go`](./semantic/main.go) for real applications
+4. **Scale up** with [`batch/main.go`](./batch/main.go) for production workloads
 
 ## 🎯 Production Tips
 
@@ -110,5 +108,5 @@ For production applications, consider integrating with vector databases:
 ## 📚 Learn More
 
 - [Wormhole Documentation](../../docs/)
-- [Embeddings API Reference](../../embeddings_builder.go)
+- [Embeddings builder API](https://pkg.go.dev/github.com/garyblankenship/wormhole/v2#EmbeddingsRequestBuilder)
 - [Integration Tests](../../embeddings_integration_test.go)

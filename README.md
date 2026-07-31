@@ -113,7 +113,7 @@ does not need a second garage.
 | Z.AI | `WithProfiledOpenAICompatible("zai", config)` or `WithAllProvidersFromEnv()` | OpenAI-compatible text, streaming, structured output, tools, Codex through the proxy |
 | DeepSeek | `WithProfiledOpenAICompatible("deepseek", config)` | OpenAI-compatible text, streaming, structured output, tools, reasoning output |
 | Groq | `WithGroq(key)` | OpenAI-compatible text and streaming |
-| Mistral | `WithMistral(config)` | OpenAI-compatible text and streaming |
+| Mistral | `WithMistral(config)` | OpenAI-compatible text, streaming, structured output, tools, and embeddings |
 | LM Studio | `WithLMStudio(config)` | OpenAI-compatible local text and streaming |
 | vLLM | `WithVLLM(config)` | OpenAI-compatible local text and streaming |
 | Custom | `WithCustomProvider(name, factory)` | whatever your provider implements |
@@ -439,8 +439,71 @@ resp, err := client.Text().
 	Generate(ctx)
 ```
 
-For manual tool handling, call `WithToolsDisabled()` and inspect
-`resp.ToolCalls`.
+For manual tool handling, keep handlers in caller-owned storage, explicitly
+send `client.ListTools()`, and continue with exported message types:
+
+```go
+handlers := map[string]types.ToolHandler{"get_weather": getWeather}
+tools := client.ListTools()
+prompt := "What is the weather in San Francisco?"
+
+resp, err := client.Text().
+	Model("gpt-5.6").
+	Prompt(prompt).
+	Tools(tools...).
+	WithToolsDisabled().
+	Generate(ctx)
+if err != nil {
+	return err
+}
+
+normalizedCalls := make([]types.ToolCall, 0, len(resp.ToolCalls))
+for _, call := range resp.ToolCalls {
+	normalized, err := types.NormalizeToolCall(call)
+	if err != nil {
+		return err
+	}
+	normalizedCalls = append(normalizedCalls, normalized)
+}
+
+assistant := types.NewAssistantMessage(resp.Text)
+assistant.ToolCalls = normalizedCalls
+assistant.Thinking = resp.Thinking
+messages := []types.Message{types.NewUserMessage(prompt), assistant}
+for _, call := range normalizedCalls {
+	handler, ok := handlers[call.Name]
+	if !ok {
+		return fmt.Errorf("tool %q is not admitted", call.Name)
+	}
+	result, err := handler(ctx, call.Arguments)
+	if err != nil {
+		return err
+	}
+	content, err := json.Marshal(result)
+	if err != nil {
+		return err
+	}
+	message := types.NewToolResultMessage(call.ID, string(content))
+	message.FunctionName = call.Name
+	messages = append(messages, message)
+}
+
+continued, err := client.Text().
+	Model("gpt-5.6").
+	Messages(messages...).
+	Tools(tools...).
+	WithToolsDisabled().
+	Generate(ctx)
+```
+
+Manual mode bypasses the SDK executor, so the caller owns validation, handler
+admission, timeouts, and retries. For automatic execution, one client-wide
+admission budget covers text and agent handlers. The defaults reject more than
+32 calls in one provider response and allow a 30-second queue wait; configure
+them with `WithToolSafetyConfig`. The deprecated `MaxMemoryMB`, `MaxCPUTime`,
+and `EnableResourceIsolation` fields are unsupported and fail validation before
+SDK-managed handlers start. Process isolation belongs outside the provider
+bridge. See the [tool-calling guide](docs/tool-calling.md).
 
 ## Agent Loop
 
@@ -485,8 +548,12 @@ controls the live `in_flight_requests` gauge. Both default to `true`.
 intentionally not reset by `Reset()`. Label aggregation is opt-in; when it is
 enabled, the collector uses the complete provider, model, method, and error
 type tuple as the metric identity, and Prometheus output emits those values as
-escaped named labels. `Reset()` synchronizes with recording, clears cumulative
-metrics, and retains the live gauge.
+escaped named labels. `EnhancedMetricsConfig.MaxLabelSets` bounds retained
+per-label buckets and defaults to 1,000. Requests beyond the bound aggregate
+into global metrics and increment `label_overflow_requests`, exported as
+`wormhole_label_overflow_requests_total` in Prometheus output. `Reset()`
+synchronizes with recording, clears cumulative metrics and overflow telemetry,
+and retains the live gauge.
 
 Compatibility note: `GetAllStats()` and `JSONExporter()` now key `per_label`
 entries with canonical named labels such as
@@ -553,8 +620,15 @@ call merely because the configured duration elapsed:
 client := wormhole.New(
 	wormhole.WithOpenAI(os.Getenv("OPENAI_API_KEY")),
 	wormhole.WithIdempotencyKey("request-123", 5*time.Minute),
+	wormhole.WithIdempotencyMaxEntries(10_000),
 )
 ```
+
+The finite default is 10,000 retained entries. At capacity, the cache evicts
+the oldest completed entry but never an in-flight owner. If every entry is
+in-flight, a new distinct request fails before provider execution with a
+retryable HTTP 503-classified capacity error. `GetIdempotencyCacheStats()`
+reports current entries, capacity, evictions, and rejections.
 
 `Provider(name)` is deprecated. It returns a raw provider pinned until the
 client closes for compatibility. Prefer `ProviderWithHandle(name)` and close
@@ -736,10 +810,15 @@ provider contract:
 ```go
 func TestInternalProviderConformance(t *testing.T) {
 	wmtest.RunProviderConformance(t, wmtest.ProviderConformanceConfig{
-		Provider: NewInternalProviderForTest(),
+		Provider:                NewInternalProviderForTest(),
+		CheckStreamCancellation: true,
 	})
 }
 ```
+
+`CheckStreamCancellation` is opt-in because the harness passes a pre-canceled
+context to `Stream` and requires the provider to return `context.Canceled`,
+produce a cancellation chunk, or close promptly.
 
 ## Testing: Simulate The Universe First
 

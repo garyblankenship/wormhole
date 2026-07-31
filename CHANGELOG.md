@@ -1,5 +1,28 @@
 # Changelog
 
+## Unreleased
+
+### Features
+- Idempotency: expose `WithIdempotencyMaxEntries` and
+  `GetIdempotencyCacheStats` for the bounded cache, whose finite default remains
+  10,000 entries.
+- Metrics: bound enhanced per-label aggregation with `MaxLabelSets` (default
+  1,000), aggregate excess label sets into global metrics, and export overflow
+  telemetry.
+- Provider conformance: add opt-in stream-cancellation checks through
+  `CheckStreamCancellation`.
+
+### Fixes
+- Idempotency: evict only completed entries at capacity and return a retryable
+  HTTP 503-classified error before provider execution when all entries are
+  in-flight.
+- Tool execution: share one client-owned admission budget across text and agent
+  loops, reject more than 32 tool calls per provider response, and bound queue
+  admission with the existing 30-second default.
+- Provider ownership: keep deprecated raw `Provider` access pinned for
+  compatibility while directing callers to releasable `ProviderWithHandle`
+  ownership.
+
 ## v2.4.0 (2026-07-30)
 
 ### Features

@@ -67,14 +67,18 @@ type ToolSafetyConfig struct {
 	// Default: 1 minute
 	CircuitBreakerResetTimeout time.Duration `json:"circuit_breaker_reset_timeout" yaml:"circuit_breaker_reset_timeout"`
 
-	// MaxMemoryMB limits the memory usage of tool execution in megabytes
-	// 0 means unlimited (not recommended for untrusted tools)
-	// Default: 0 (unlimited)
+	// MaxMemoryMB is retained for compatibility but is not enforced.
+	// Positive values fail Validate and SDK-managed tool execution before a
+	// handler starts.
+	//
+	// Deprecated: Process memory limits are unsupported.
 	MaxMemoryMB int `json:"max_memory_mb" yaml:"max_memory_mb"`
 
-	// MaxCPUTime limits the CPU time for tool execution
-	// 0 means unlimited (not recommended for untrusted tools)
-	// Default: 0 (unlimited)
+	// MaxCPUTime is retained for compatibility but is not enforced.
+	// Positive values fail Validate and SDK-managed tool execution before a
+	// handler starts.
+	//
+	// Deprecated: Process CPU limits are unsupported.
 	MaxCPUTime time.Duration `json:"max_cpu_time" yaml:"max_cpu_time"`
 
 	// EnableInputValidation enables strict validation of tool arguments against schemas
@@ -82,9 +86,12 @@ type ToolSafetyConfig struct {
 	// Default: true (recommended for production)
 	EnableInputValidation bool `json:"enable_input_validation" yaml:"enable_input_validation"`
 
-	// EnableResourceIsolation enables basic resource isolation for tool execution
-	// This includes separate goroutine pools and memory tracking
-	// Default: false (enable only for untrusted tools)
+	// EnableResourceIsolation is retained for compatibility but is not
+	// implemented. Enabling it fails Validate and SDK-managed tool execution
+	// before a handler starts. Process isolation is outside this provider
+	// bridge's scope.
+	//
+	// Deprecated: Resource isolation is unsupported.
 	EnableResourceIsolation bool `json:"enable_resource_isolation" yaml:"enable_resource_isolation"`
 
 	// MaxToolOutputSize limits the size of tool output in bytes
@@ -208,12 +215,20 @@ func (c *ToolSafetyConfig) HasTimeout() bool {
 	return c.ToolTimeout > 0
 }
 
-// HasMemoryLimit returns true if a memory limit is configured
+// HasMemoryLimit reports whether the unsupported MaxMemoryMB compatibility
+// field is positive.
+//
+// Deprecated: Process memory limits are unsupported. Positive MaxMemoryMB
+// values fail Validate and SDK-managed tool execution before a handler starts.
 func (c *ToolSafetyConfig) HasMemoryLimit() bool {
 	return c.MaxMemoryMB > 0
 }
 
-// HasCPULimit returns true if a CPU time limit is configured
+// HasCPULimit reports whether the unsupported MaxCPUTime compatibility field is
+// positive.
+//
+// Deprecated: Process CPU limits are unsupported. Positive MaxCPUTime values
+// fail Validate and SDK-managed tool execution before a handler starts.
 func (c *ToolSafetyConfig) HasCPULimit() bool {
 	return c.MaxCPUTime > 0
 }

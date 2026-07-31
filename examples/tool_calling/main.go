@@ -2,12 +2,14 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log"
 	"os"
 	"time"
 
 	"github.com/garyblankenship/wormhole/v2"
+	"github.com/garyblankenship/wormhole/v2/types"
 )
 
 func main() {
@@ -22,9 +24,14 @@ func main() {
 		wormhole.WithOpenAI(apiKey),
 		wormhole.WithDefaultProvider("openai"),
 	)
+	defer func() {
+		if err := client.Close(); err != nil {
+			log.Printf("Close error: %v\n", err)
+		}
+	}()
 
 	// Register tools that the AI can call
-	registerTools(client)
+	handlers := registerTools(client)
 
 	// Example 1: Weather query (single tool call)
 	fmt.Println("=== Example 1: Weather Query ===")
@@ -40,11 +47,17 @@ func main() {
 
 	// Example 3: Manual tool execution (opt-out of auto-execution)
 	fmt.Println("=== Example 3: Manual Tool Execution ===")
-	runManualToolExample(client)
+	runManualToolExample(client, handlers)
 }
 
 // registerTools registers all available tools with the client
-func registerTools(client *wormhole.Wormhole) {
+func registerTools(client *wormhole.Wormhole) map[string]types.ToolHandler {
+	handlers := map[string]types.ToolHandler{
+		"get_weather":      getWeather,
+		"calculate":        calculate,
+		"get_current_time": getCurrentTime,
+	}
+
 	// Tool 1: Get Weather
 	client.RegisterTool(
 		"get_weather",
@@ -64,7 +77,7 @@ func registerTools(client *wormhole.Wormhole) {
 			},
 			"required": []string{"city"},
 		},
-		getWeather,
+		handlers["get_weather"],
 	)
 
 	// Tool 2: Calculator
@@ -81,7 +94,7 @@ func registerTools(client *wormhole.Wormhole) {
 			},
 			"required": []string{"expression"},
 		},
-		calculate,
+		handlers["calculate"],
 	)
 
 	// Tool 3: Get Current Time
@@ -98,15 +111,19 @@ func registerTools(client *wormhole.Wormhole) {
 			},
 			"required": []string{"timezone"},
 		},
-		getCurrentTime,
+		handlers["get_current_time"],
 	)
 
 	fmt.Printf("✓ Registered %d tools\n\n", client.ToolCount())
+	return handlers
 }
 
 // getWeather simulates fetching weather data
 func getWeather(ctx context.Context, args map[string]any) (any, error) {
-	city := args["city"].(string)
+	city, ok := args["city"].(string)
+	if !ok || city == "" {
+		return nil, fmt.Errorf("city must be a non-empty string")
+	}
 	unit := "fahrenheit"
 	if u, ok := args["unit"].(string); ok {
 		unit = u
@@ -155,7 +172,10 @@ func getWeather(ctx context.Context, args map[string]any) (any, error) {
 
 // calculate performs simple math calculations
 func calculate(ctx context.Context, args map[string]any) (any, error) {
-	expression := args["expression"].(string)
+	expression, ok := args["expression"].(string)
+	if !ok || expression == "" {
+		return nil, fmt.Errorf("expression must be a non-empty string")
+	}
 
 	fmt.Printf("🔧 Executing calculate(expression=%s)\n", expression)
 
@@ -172,7 +192,10 @@ func calculate(ctx context.Context, args map[string]any) (any, error) {
 
 // getCurrentTime returns the current time in a timezone
 func getCurrentTime(ctx context.Context, args map[string]any) (any, error) {
-	timezone := args["timezone"].(string)
+	timezone, ok := args["timezone"].(string)
+	if !ok || timezone == "" {
+		return nil, fmt.Errorf("timezone must be a non-empty string")
+	}
 
 	fmt.Printf("🔧 Executing get_current_time(timezone=%s)\n", timezone)
 
@@ -197,7 +220,7 @@ func runWeatherExample(client *wormhole.Wormhole) {
 	ctx := context.Background()
 
 	response, err := client.Text().
-		Model("gpt-5").
+		Model("gpt-5.6").
 		Prompt("What's the weather like in San Francisco?").
 		WithToolsEnabled().
 		Generate(ctx)
@@ -215,7 +238,7 @@ func runMultiToolExample(client *wormhole.Wormhole) {
 	ctx := context.Background()
 
 	response, err := client.Text().
-		Model("gpt-5").
+		Model("gpt-5.6").
 		Prompt("What's the weather in London? Also, what's 25 + 17?").
 		WithToolsEnabled().
 		Generate(ctx)
@@ -229,12 +252,15 @@ func runMultiToolExample(client *wormhole.Wormhole) {
 }
 
 // runManualToolExample demonstrates manual tool execution (no auto-execution)
-func runManualToolExample(client *wormhole.Wormhole) {
+func runManualToolExample(client *wormhole.Wormhole, handlers map[string]types.ToolHandler) {
 	ctx := context.Background()
+	prompt := "What time is it in Tokyo?"
+	tools := client.ListTools()
 
 	response, err := client.Text().
-		Model("gpt-5").
-		Prompt("What time is it in Tokyo?").
+		Model("gpt-5.6").
+		Prompt(prompt).
+		Tools(tools...).
 		WithToolsDisabled(). // Disable automatic execution
 		Generate(ctx)
 
@@ -243,14 +269,87 @@ func runManualToolExample(client *wormhole.Wormhole) {
 		return
 	}
 
-	// Check if model requested tools
-	if len(response.ToolCalls) > 0 {
-		fmt.Printf("\n🔧 Model requested %d tool call(s):\n", len(response.ToolCalls))
-		for _, toolCall := range response.ToolCalls {
-			fmt.Printf("  - %s with args: %v\n", toolCall.Name, toolCall.Arguments)
-		}
-		fmt.Println("\n💡 In manual mode, you would execute these tools yourself and send results back.")
-	} else {
+	if len(response.ToolCalls) == 0 {
 		fmt.Printf("\n📝 AI Response (no tools needed): %s\n", response.Text)
+		return
 	}
+
+	fmt.Printf("\n🔧 Model requested %d tool call(s):\n", len(response.ToolCalls))
+	for _, toolCall := range response.ToolCalls {
+		fmt.Printf("  - %s with args: %v\n", toolCall.Name, toolCall.Arguments)
+	}
+
+	continued, err := continueManualToolCalls(ctx, client, handlers, prompt, response)
+	if err != nil {
+		log.Printf("Continuation error: %v\n", err)
+		return
+	}
+
+	fmt.Printf("\n📝 AI Response: %s\n", continued.Text)
+}
+
+func continueManualToolCalls(
+	ctx context.Context,
+	client *wormhole.Wormhole,
+	handlers map[string]types.ToolHandler,
+	prompt string,
+	response *types.TextResponse,
+) (*types.TextResponse, error) {
+	normalizedCalls := make([]types.ToolCall, 0, len(response.ToolCalls))
+	for _, toolCall := range response.ToolCalls {
+		normalized, err := types.NormalizeToolCall(toolCall)
+		if err != nil {
+			return nil, fmt.Errorf("normalize tool call: %w", err)
+		}
+		normalizedCalls = append(normalizedCalls, normalized)
+	}
+
+	assistant := types.NewAssistantMessage(response.Text)
+	assistant.ToolCalls = normalizedCalls
+	assistant.Thinking = response.Thinking
+	messages := []types.Message{types.NewUserMessage(prompt), assistant}
+	for _, toolCall := range normalizedCalls {
+		messages = append(messages, executeManualTool(ctx, handlers, toolCall))
+	}
+
+	return client.Text().
+		Model("gpt-5.6").
+		Messages(messages...).
+		Tools(client.ListTools()...).
+		WithToolsDisabled().
+		Generate(ctx)
+}
+
+func executeManualTool(ctx context.Context, handlers map[string]types.ToolHandler, toolCall types.ToolCall) *types.ToolResultMessage {
+	normalized, err := types.NormalizeToolCall(toolCall)
+	if err != nil {
+		return manualToolResultMessage(toolCall, err.Error(), err.Error())
+	}
+	toolCall = normalized
+
+	handler, ok := handlers[toolCall.Name]
+	if !ok {
+		message := fmt.Sprintf("tool %q is not admitted", toolCall.Name)
+		return manualToolResultMessage(toolCall, message, message)
+	}
+
+	result, err := handler(ctx, toolCall.Arguments)
+	if err != nil {
+		return manualToolResultMessage(toolCall, err.Error(), err.Error())
+	}
+	content, err := json.Marshal(result)
+	if err != nil {
+		message := fmt.Sprintf("serialize %q result: %v", toolCall.Name, err)
+		return manualToolResultMessage(toolCall, message, message)
+	}
+	return manualToolResultMessage(toolCall, string(content), "")
+}
+
+func manualToolResultMessage(toolCall types.ToolCall, content, errorMessage string) *types.ToolResultMessage {
+	message := types.NewToolResultMessage(toolCall.ID, content)
+	message.FunctionName = toolCall.Name
+	if errorMessage != "" {
+		message.WithError(errorMessage)
+	}
+	return message
 }

@@ -12,30 +12,61 @@ import (
 
 func TestToolExecutor_UnsupportedSafetySettingsFailFast(t *testing.T) {
 	t.Parallel()
-	registry := NewToolRegistry()
-	called := false
 
-	registry.Register("test_tool", types.NewToolDefinition(types.Tool{
-		Type:        "function",
-		Name:        "test_tool",
-		InputSchema: map[string]any{},
-	}, func(ctx context.Context, args map[string]any) (any, error) {
-		called = true
-		return map[string]any{"ok": true}, nil
-	}))
+	tests := []struct {
+		name      string
+		configure func(*ToolSafetyConfig)
+	}{
+		{
+			name: "memory limit",
+			configure: func(config *ToolSafetyConfig) {
+				config.MaxMemoryMB = 128
+			},
+		},
+		{
+			name: "CPU limit",
+			configure: func(config *ToolSafetyConfig) {
+				config.MaxCPUTime = time.Second
+			},
+		},
+		{
+			name: "resource isolation",
+			configure: func(config *ToolSafetyConfig) {
+				config.EnableResourceIsolation = true
+			},
+		},
+	}
 
-	config := DefaultToolSafetyConfig()
-	config.MaxMemoryMB = 128
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
 
-	executor := NewToolExecutorWithConfig(registry, config)
-	result := executor.Execute(context.Background(), types.ToolCall{
-		ID:        "call_1",
-		Name:      "test_tool",
-		Arguments: map[string]any{},
-	})
+			called := false
+			config := DefaultToolSafetyConfig()
+			test.configure(&config)
+			client := New(WithToolSafetyConfig(config), WithDiscovery(false))
+			client.RegisterTool(
+				"test_tool",
+				"test unsupported safety configuration",
+				map[string]any{},
+				func(context.Context, map[string]any) (any, error) {
+					called = true
+					return map[string]any{"ok": true}, nil
+				},
+			)
 
-	assert.Contains(t, result.Error, "unsupported tool safety settings")
-	assert.False(t, called)
+			executor := client.newToolExecutor(client.toolRegistry)
+			result := executor.Execute(context.Background(), types.ToolCall{
+				ID:        "call_1",
+				Name:      "test_tool",
+				Arguments: map[string]any{},
+			})
+
+			assert.Contains(t, result.Error, "unsupported tool safety settings")
+			assert.False(t, called, "handler started for unsupported setting")
+			assert.NoError(t, client.Close(), "client cleanup failed for unsupported setting")
+		})
+	}
 }
 
 func TestToolExecutor_ToolTimeoutExcludesConcurrencyQueueWait(t *testing.T) {

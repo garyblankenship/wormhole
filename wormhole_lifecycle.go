@@ -40,7 +40,9 @@ func (p *Wormhole) runShutdown() {
 
 	p.idempotencySweepWg.Wait()
 	p.activeRequests.Wait()
-	p.toolBudget.Stop()
+	if p.toolBudget != nil {
+		p.toolBudget.Stop()
+	}
 	p.providerAcquisitionWg.Wait()
 
 	var errs []error

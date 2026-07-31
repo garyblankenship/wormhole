@@ -147,17 +147,65 @@ response, _ := client.Text().
     WithToolsEnabled().  // Explicit opt-in
     Generate(ctx)
 
-// Manual execution (you handle tool calls yourself)
-response, _ := client.Text().
-    Prompt("What's the weather?").
-    WithToolsDisabled().  // Opt-out
-    Generate(ctx)
+handlers := map[string]types.ToolHandler{"get_weather": getWeather}
+tools := client.ListTools()
+prompt := "What's the weather?"
 
-// Check what the model wanted to call
-for _, toolCall := range response.ToolCalls {
-    fmt.Printf("Model wants: %s(%v)\n", toolCall.Name, toolCall.Arguments)
+response, err := client.Text().
+    Model("gpt-5.6").
+    Prompt(prompt).
+    Tools(tools...).
+    WithToolsDisabled().
+    Generate(ctx)
+if err != nil {
+    return err
 }
+
+normalizedCalls := make([]types.ToolCall, 0, len(response.ToolCalls))
+for _, call := range response.ToolCalls {
+    normalized, err := types.NormalizeToolCall(call)
+    if err != nil {
+        return err
+    }
+    normalizedCalls = append(normalizedCalls, normalized)
+}
+
+assistant := types.NewAssistantMessage(response.Text)
+assistant.ToolCalls = normalizedCalls
+assistant.Thinking = response.Thinking
+messages := []types.Message{types.NewUserMessage(prompt), assistant}
+for _, call := range normalizedCalls {
+    handler, ok := handlers[call.Name]
+    if !ok {
+        return fmt.Errorf("tool %q is not admitted", call.Name)
+    }
+    result, err := handler(ctx, call.Arguments)
+    if err != nil {
+        return err
+    }
+    content, err := json.Marshal(result)
+    if err != nil {
+        return err
+    }
+    message := types.NewToolResultMessage(call.ID, string(content))
+    message.FunctionName = call.Name
+    messages = append(messages, message)
+}
+
+continued, err := client.Text().
+    Model("gpt-5.6").
+    Messages(messages...).
+    Tools(tools...).
+    WithToolsDisabled().
+    Generate(ctx)
 ```
+
+`WithToolsDisabled` disables SDK execution; it does not remove the need to send
+tool definitions. In manual mode, the caller-owned handler map is the admission
+boundary, and the caller owns schema validation, concurrency limits, timeouts,
+and retries. The executable
+[`examples/tool_calling`](../examples/tool_calling/main.go) example also turns
+handler failures into correlated tool-result messages before continuing.
 
 ### Max Iteration Limits
 
@@ -168,6 +216,43 @@ response, _ := client.Text().
     WithMaxToolIterations(5).  // Default is 10
     Generate(ctx)
 ```
+
+### Bound Automatic Tool Execution
+
+Start from the safe defaults, then override only the limits your handlers need:
+
+```go
+safety := wormhole.DefaultToolSafetyConfig()
+safety.MaxConcurrentTools = 4
+safety.ToolQueueTimeout = 5 * time.Second
+
+client := wormhole.New(
+    wormhole.WithOpenAI(apiKey),
+    wormhole.WithToolSafetyConfig(safety),
+)
+```
+
+The client shares this admission budget across automatic text and agent tool
+execution. A provider response with too many tool calls is rejected before any
+handler starts. Once the concurrency limit is full, `ToolQueueTimeout` bounds
+the wait for a permit; `ToolTimeout` starts only after admission.
+
+| Option | Go type | Default | Behavior | Source |
+|--------|---------|---------|----------|--------|
+| `MaxToolCallsPerRound` | `int` | `32` | Maximum tool calls accepted from one provider response; non-positive values use the default. | `tool_executor_config.go` |
+| `MaxConcurrentTools` | `int` | `10` | Maximum handlers running for one client; `0` is unlimited. | `tool_executor_config.go` |
+| `ToolQueueTimeout` | `time.Duration` | `30s` | Maximum wait for shared admission; non-positive values use the default. | `tool_executor_config.go` |
+| `ToolTimeout` | `time.Duration` | `30s` | Maximum handler execution time after admission; `0` disables it. | `tool_executor_config.go` |
+
+`WithToolSafetyConfig` is defined in `options_runtime.go`. Timed-out or canceled
+handlers must still return when their context is canceled; see
+[Handler Isolation](#handler-isolation).
+
+`MaxMemoryMB`, `MaxCPUTime`, and `EnableResourceIsolation` are deprecated
+compatibility fields, not isolation controls. Enabling any of them fails
+`ToolSafetyConfig.Validate` and SDK-managed tool execution before a handler
+starts. Run untrusted tools in a separately isolated process; process isolation
+is outside Wormhole's provider-bridge scope.
 
 ## Tool Registry API
 
@@ -474,26 +559,10 @@ for chunk := range stream {
 
 ### Manual Tool Execution
 
-For fine-grained control, disable automatic execution:
-
-```go
-response, _ := client.Text().
-    Prompt("What's the weather?").
-    WithToolsDisabled().
-    Generate(ctx)
-
-// Manually execute tools
-for _, toolCall := range response.ToolCalls {
-    // Look up tool in registry
-    definition := client.toolRegistry.Get(toolCall.Name)
-
-    // Execute with custom logic
-    result, err := definition.Handler(ctx, toolCall.Arguments)
-
-    // Build result message manually
-    // Send back to model for follow-up...
-}
-```
+Use the exported-only continuation under
+[Enable/Disable Automatic Execution](#enabledisable-automatic-execution). The
+caller-owned handler map deliberately replaces access to Wormhole's private
+registry.
 
 ## Troubleshooting
 
