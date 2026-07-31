@@ -9,9 +9,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/garyblankenship/wormhole/v2"
-	"github.com/garyblankenship/wormhole/v2/middleware"
-	"github.com/garyblankenship/wormhole/v2/types"
+	"github.com/garyblankenship/wormhole/v3"
+	"github.com/garyblankenship/wormhole/v3/middleware"
+	"github.com/garyblankenship/wormhole/v3/types"
 )
 
 // CLI Commands - Because even interdimensional travel needs structure
@@ -186,9 +186,9 @@ func initializeWormhole(config CLIConfig) *wormhole.Wormhole {
 			RetryDelay: &retryDelay,
 		}),
 		// Add production-grade middleware
-		wormhole.WithMiddleware(
-			middleware.TimeoutMiddleware(30*time.Second),
-			middleware.RateLimitMiddleware(100), // 100 requests per second
+		wormhole.WithProviderMiddleware(
+			middleware.NewTypedTimeoutMiddleware(30*time.Second),
+			middleware.NewTypedRateLimitMiddleware(100), // 100 requests per second
 		),
 	)
 

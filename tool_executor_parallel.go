@@ -6,9 +6,9 @@ import (
 	"sync"
 	"sync/atomic"
 
-	"github.com/garyblankenship/wormhole/v2/internal/pool"
-	"github.com/garyblankenship/wormhole/v2/providers"
-	"github.com/garyblankenship/wormhole/v2/types"
+	"github.com/garyblankenship/wormhole/v3/internal/pool"
+	"github.com/garyblankenship/wormhole/v3/providers"
+	"github.com/garyblankenship/wormhole/v3/types"
 )
 
 // validateOutputSize checks if the tool output exceeds configured size limits

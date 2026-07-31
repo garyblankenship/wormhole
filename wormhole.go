@@ -7,9 +7,9 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/garyblankenship/wormhole/v2/discovery"
-	"github.com/garyblankenship/wormhole/v2/middleware"
-	"github.com/garyblankenship/wormhole/v2/types"
+	"github.com/garyblankenship/wormhole/v3/discovery"
+	"github.com/garyblankenship/wormhole/v3/middleware"
+	"github.com/garyblankenship/wormhole/v3/types"
 )
 
 // Wormhole is the main client for interacting with LLM providers
@@ -75,7 +75,6 @@ type Config struct {
 	Providers            map[string]types.ProviderConfig
 	CustomFactories      map[string]types.ProviderFactory
 	ProviderMiddlewares  []types.ProviderMiddleware // Type-safe middleware
-	Middleware           []middleware.Middleware    // DEPRECATED: use ProviderMiddlewares instead
 	DebugLogging         bool
 	Logger               types.Logger
 	DefaultTimeout       time.Duration
@@ -194,11 +193,6 @@ func New(opts ...Option) *Wormhole {
 	if len(providerMiddlewares) > 0 {
 		p.providerMiddleware = types.NewProviderChain(providerMiddlewares...)
 	}
-
-	// Legacy middleware support (deprecated)
-	// Note: Legacy middleware is automatically converted to type-safe middleware
-	// via WithMiddleware() option. The middlewareChain is no longer created
-	// as all middleware execution happens through providerMiddleware.
 
 	return p
 }

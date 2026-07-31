@@ -1,8 +1,8 @@
 package openai
 
 import (
-	"github.com/garyblankenship/wormhole/v2/internal/pool"
-	"github.com/garyblankenship/wormhole/v2/types"
+	"github.com/garyblankenship/wormhole/v3/internal/pool"
+	"github.com/garyblankenship/wormhole/v3/types"
 )
 
 func (p *Provider) transformResponsesInput(messages []types.Message) []map[string]any {

@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/garyblankenship/wormhole/v2/types"
+	"github.com/garyblankenship/wormhole/v3/types"
 )
 
 // processEmbeddingsSequentially handles small batches sequentially

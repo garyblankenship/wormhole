@@ -30,7 +30,7 @@ func (s *ProviderAdaptiveState) AdjustCapacity() (newCapacity int, changed bool)
 	}
 
 	// Compute PID control signal based on latency
-	controlSignal := s.pidController.Compute(s.targetLatency, avgLatency, dt)
+	controlSignal := s.pidController.compute(s.targetLatency, avgLatency, dt)
 
 	// Apply error rate penalty if above threshold
 	const errorRateThreshold = 0.1  // 10%

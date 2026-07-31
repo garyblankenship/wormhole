@@ -13,7 +13,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/garyblankenship/wormhole/v2/config"
+	"github.com/garyblankenship/wormhole/v3/config"
 )
 
 // HTTPTransportConfig holds configuration for HTTP transport settings.

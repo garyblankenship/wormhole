@@ -8,9 +8,9 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/garyblankenship/wormhole/v2"
-	"github.com/garyblankenship/wormhole/v2/types"
-	mocktesting "github.com/garyblankenship/wormhole/v2/wormholetest"
+	"github.com/garyblankenship/wormhole/v3"
+	"github.com/garyblankenship/wormhole/v3/types"
+	mocktesting "github.com/garyblankenship/wormhole/v3/wormholetest"
 )
 
 func TestTextGeneration(t *testing.T) {

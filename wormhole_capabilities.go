@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/garyblankenship/wormhole/v2/types"
+	"github.com/garyblankenship/wormhole/v3/types"
 )
 
 // Capability represents a provider/model capability.

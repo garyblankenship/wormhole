@@ -3,7 +3,7 @@ package anthropic
 import (
 	"context"
 
-	"github.com/garyblankenship/wormhole/v2/types"
+	"github.com/garyblankenship/wormhole/v3/types"
 )
 
 // accumulatedToolCall buffers one in-flight Anthropic tool_use block.

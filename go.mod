@@ -1,4 +1,4 @@
-module github.com/garyblankenship/wormhole/v2
+module github.com/garyblankenship/wormhole/v3
 
 go 1.25
 

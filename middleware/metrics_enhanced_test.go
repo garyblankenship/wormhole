@@ -14,7 +14,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/garyblankenship/wormhole/v2/types"
+	"github.com/garyblankenship/wormhole/v3/types"
 )
 
 type countingMessage struct{ calls atomic.Int32 }
@@ -464,29 +464,6 @@ func TestEnhancedMetricsConcurrencyGauge(t *testing.T) {
 			EnableConcurrencyTracking: enabled,
 		})
 	}
-
-	t.Run("legacy", func(t *testing.T) {
-		collector := newCollector(true)
-		started := make(chan struct{})
-		release := make(chan struct{})
-		done := make(chan struct{})
-		handler := EnhancedMetricsMiddleware(collector)(func(context.Context, any) (any, error) {
-			close(started)
-			<-release
-			return "ok", nil
-		})
-		go func() {
-			_, _ = handler(context.Background(), nil)
-			close(done)
-		}()
-		<-started
-		assertActiveGauge(t, collector)
-		collector.Reset()
-		assertActiveGauge(t, collector)
-		close(release)
-		<-done
-		assert.Equal(t, int64(0), collector.GetStats(nil)["in_flight_requests"])
-	})
 
 	t.Run("typed", func(t *testing.T) {
 		collector := newCollector(true)

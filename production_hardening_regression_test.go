@@ -11,9 +11,9 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/garyblankenship/wormhole/v2"
-	"github.com/garyblankenship/wormhole/v2/middleware"
-	"github.com/garyblankenship/wormhole/v2/types"
+	"github.com/garyblankenship/wormhole/v3"
+	"github.com/garyblankenship/wormhole/v3/middleware"
+	"github.com/garyblankenship/wormhole/v3/types"
 )
 
 type blockingTextProvider struct {
@@ -196,7 +196,7 @@ func TestProviderMethodsRejectAfterShutdownWithoutFactory(t *testing.T) {
 		{
 			name: "Provider",
 			call: func(client *wormhole.Wormhole) error {
-				_, err := client.Provider("custom")
+				_, err := client.ProviderWithHandle("custom")
 				return err
 			},
 		},
@@ -239,7 +239,7 @@ func TestProviderCreationRejectedWhenShutdownWins(t *testing.T) {
 		{
 			name: "Provider",
 			call: func(client *wormhole.Wormhole) error {
-				_, err := client.Provider("custom")
+				_, err := client.ProviderWithHandle("custom")
 				return err
 			},
 		},
@@ -466,7 +466,7 @@ func TestLegacyCacheMiddlewareNamespacesByProvider(t *testing.T) {
 		}),
 		wormhole.WithProviderConfig("provider-a", types.ProviderConfig{}),
 		wormhole.WithProviderConfig("provider-b", types.ProviderConfig{}),
-		wormhole.WithMiddleware(middleware.CacheMiddleware(middleware.CacheConfig{
+		wormhole.WithProviderMiddleware(middleware.NewTypedCacheMiddleware(middleware.CacheConfig{
 			Cache: cache,
 			TTL:   time.Minute,
 		})),

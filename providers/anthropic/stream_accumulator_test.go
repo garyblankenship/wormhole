@@ -12,9 +12,9 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/garyblankenship/wormhole/v2/internal/testutil"
-	"github.com/garyblankenship/wormhole/v2/providers/anthropic"
-	"github.com/garyblankenship/wormhole/v2/types"
+	"github.com/garyblankenship/wormhole/v3/internal/testutil"
+	"github.com/garyblankenship/wormhole/v3/providers/anthropic"
+	"github.com/garyblankenship/wormhole/v3/types"
 )
 
 func TestAnthropicStreamToolCallAccumulation(t *testing.T) {

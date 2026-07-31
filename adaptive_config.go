@@ -3,7 +3,7 @@ package wormhole
 import (
 	"time"
 
-	"github.com/garyblankenship/wormhole/v2/middleware"
+	"github.com/garyblankenship/wormhole/v3/middleware"
 )
 
 // EnhancedAdaptiveConfig extends AdaptiveConfig with provider awareness
@@ -23,9 +23,6 @@ type EnhancedAdaptiveConfig struct {
 	MetricsCollector *middleware.EnhancedMetricsCollector
 	QueryInterval    time.Duration // How often to query external metrics
 
-	// PID tuning
-	PIDConfig PIDConfig
-
 	// State management
 	EnableModelLevel bool   // Track per-model vs per-provider only
 	PersistenceFile  string // Optional: save/load state
@@ -39,8 +36,6 @@ type ProviderSetting struct {
 	MinCapacity     int
 	MaxCapacity     int
 	InitialCapacity int
-	// Optional provider-specific PID tuning
-	PIDConfig *PIDConfig // nil = use global PIDConfig
 }
 
 // DefaultEnhancedAdaptiveConfig returns sensible defaults
@@ -52,7 +47,6 @@ func DefaultEnhancedAdaptiveConfig() EnhancedAdaptiveConfig {
 		ErrorRatePenalty:   2.0, // Double sensitivity
 		MinSamplesForError: 20,
 		QueryInterval:      15 * time.Second,
-		PIDConfig:          DefaultPIDConfig(),
 		EnableModelLevel:   false, // Start with provider-level only
 		IdleStateTTL:       time.Hour,
 		MaxModelStates:     1024,
@@ -99,8 +93,6 @@ func normalizeAdaptiveConfig(config AdaptiveConfig) AdaptiveConfig {
 // resolved entries so callers can reuse their input configuration.
 func normalizeEnhancedAdaptiveConfig(config EnhancedAdaptiveConfig) EnhancedAdaptiveConfig {
 	config.AdaptiveConfig = normalizeAdaptiveConfig(config.AdaptiveConfig)
-	defaults := DefaultEnhancedAdaptiveConfig()
-	config.PIDConfig = mergePIDConfig(defaults.PIDConfig, config.PIDConfig)
 	if config.ProviderSettings == nil {
 		return config
 	}
@@ -129,38 +121,8 @@ func normalizeEnhancedAdaptiveConfig(config EnhancedAdaptiveConfig) EnhancedAdap
 			setting.InitialCapacity = setting.MaxCapacity
 		}
 
-		pidConfig := config.PIDConfig
-		if setting.PIDConfig != nil {
-			pidConfig = mergePIDConfig(pidConfig, *setting.PIDConfig)
-		}
-		setting.PIDConfig = &pidConfig
 		providerSettings[provider] = setting
 	}
 	config.ProviderSettings = providerSettings
 	return config
-}
-
-func mergePIDConfig(base, override PIDConfig) PIDConfig {
-	if override.Kp != 0 {
-		base.Kp = override.Kp
-	}
-	if override.Ki != 0 {
-		base.Ki = override.Ki
-	}
-	if override.Kd != 0 {
-		base.Kd = override.Kd
-	}
-	if override.MaxIntegral != 0 {
-		base.MaxIntegral = override.MaxIntegral
-	}
-	if override.MinIntegral != 0 {
-		base.MinIntegral = override.MinIntegral
-	}
-	if override.MaxOutput != 0 {
-		base.MaxOutput = override.MaxOutput
-	}
-	if override.MinOutput != 0 {
-		base.MinOutput = override.MinOutput
-	}
-	return base
 }

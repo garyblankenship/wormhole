@@ -3,7 +3,7 @@ package wormhole
 import (
 	"sync"
 
-	"github.com/garyblankenship/wormhole/v2/types"
+	"github.com/garyblankenship/wormhole/v3/types"
 )
 
 var embeddingsRequestPool = sync.Pool{

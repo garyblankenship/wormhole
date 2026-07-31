@@ -1,11 +1,9 @@
 package middleware
 
 import (
-	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
-	"reflect"
 	"sync"
 	"time"
 )
@@ -153,9 +151,11 @@ func DefaultCacheKeyGenerator(req any) (string, error) {
 	h.Write(data)
 	if po, ok := req.(interface{ GetProviderOptions() map[string]any }); ok {
 		if opts := po.GetProviderOptions(); len(opts) > 0 {
-			if ob, err := json.Marshal(opts); err == nil {
-				h.Write(ob)
+			ob, err := json.Marshal(opts)
+			if err != nil {
+				return "", err
 			}
+			h.Write(ob)
 		}
 	}
 	return hex.EncodeToString(h.Sum(nil)), nil
@@ -167,83 +167,6 @@ type CacheConfig struct {
 	TTL           time.Duration
 	KeyGenerator  CacheKeyGenerator
 	CacheableFunc func(req any) bool
-}
-
-// CacheMiddleware implements response caching.
-//
-// Example usage:
-//
-//	cache := middleware.NewMemoryCache(100)
-//	config := middleware.CacheConfig{
-//	    Cache: cache,
-//	    TTL: 5 * time.Minute,
-//	}
-//	middleware.CacheMiddleware(config)
-//
-// For simple TTL caching:
-//
-//	cache := middleware.NewTTLCache(100, 5 * time.Minute)
-//	config := middleware.CacheConfig{Cache: cache, TTL: config.DefaultTTL}
-func CacheMiddleware(config CacheConfig) Middleware {
-	if config.KeyGenerator == nil {
-		config.KeyGenerator = DefaultCacheKeyGenerator
-	}
-
-	return func(next Handler) Handler {
-		return func(ctx context.Context, req any) (any, error) {
-			// Check if request is cacheable
-			if config.CacheableFunc != nil && !config.CacheableFunc(req) {
-				resp, err := next(ctx, req)
-				return resp, wrapIfNotWormholeError("cache", err)
-			}
-
-			// Generate cache key
-			key, err := config.KeyGenerator(req)
-			if err != nil {
-				// If we can't generate a key, just proceed without caching
-				resp, err := next(ctx, req)
-				return resp, wrapIfNotWormholeError("cache", err)
-			}
-			// Namespace the key by provider so the same model string on two
-			// providers (or a cache shared across providers) cannot collide.
-			if p, ok := ctx.Value(CtxKeyProvider).(string); ok && p != "" {
-				key = p + ":" + key
-			}
-
-			// Check cache
-			if cached, found := config.Cache.Get(key); found {
-				cloned, err := cloneValue(cached)
-				if err != nil {
-					// If clone fails, return the original rather than error —
-					// the cache hit is still valid, just without isolation.
-					return cached, nil
-				}
-				return cloned, nil
-			}
-
-			// Execute request
-			resp, err := next(ctx, req)
-			if err != nil {
-				return nil, wrapIfNotWormholeError("cache", err)
-			}
-
-			// Never cache streaming responses: the value is a live channel that a
-			// second caller would receive already-drained, and one surfaced to a
-			// non-stream call type-panics in the adapter. Streams always run fresh.
-			if resp != nil && reflect.TypeOf(resp).Kind() == reflect.Chan {
-				return resp, nil
-			}
-
-			// Cache an isolated copy so a caller cannot mutate the stored value
-			// through the same pointer/reference returned on the miss path.
-			cachedResp, cloneErr := cloneValue(resp)
-			if cloneErr == nil {
-				config.Cache.Set(key, cachedResp, config.TTL)
-			}
-
-			return resp, nil
-		}
-	}
 }
 
 // Close stops the cleanup goroutine and waits for it to finish

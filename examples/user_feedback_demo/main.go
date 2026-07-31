@@ -4,8 +4,8 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/garyblankenship/wormhole/v2"
-	"github.com/garyblankenship/wormhole/v2/types"
+	"github.com/garyblankenship/wormhole/v3"
+	"github.com/garyblankenship/wormhole/v3/types"
 )
 
 // Demo showing the improvements based on user feedback

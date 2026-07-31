@@ -9,75 +9,53 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
-	"github.com/garyblankenship/wormhole/v2/middleware"
+	"github.com/garyblankenship/wormhole/v3/middleware"
 )
 
-func TestPIDController(t *testing.T) {
+func TestPIDControllerComputeAndReset(t *testing.T) {
 	t.Parallel()
-	config := DefaultPIDConfig()
-	pid := NewPIDController(config)
 
-	// Test initialization
-	output := pid.Compute(100*time.Millisecond, 200*time.Millisecond, time.Second)
-	if output != 0.0 {
-		t.Errorf("Expected 0.0 on first call, got %f", output)
+	config := defaultPIDConfig()
+	pid := newPIDController(config)
+	if output := pid.compute(100*time.Millisecond, 200*time.Millisecond, time.Second); output != 0 {
+		t.Fatalf("first output = %f, want 0", output)
+	}
+	if output := pid.compute(100*time.Millisecond, 200*time.Millisecond, time.Second); output <= 0 {
+		t.Fatalf("high-latency output = %f, want positive", output)
+	}
+	if output := pid.compute(100*time.Millisecond, 50*time.Millisecond, time.Second); output >= 0 {
+		t.Fatalf("low-latency output = %f, want negative", output)
 	}
 
-	// Test control output - high latency should give positive output (reduction signal)
-	output = pid.Compute(100*time.Millisecond, 200*time.Millisecond, time.Second)
-	if output <= 0.0 {
-		t.Errorf("Expected positive output for high latency, got %f", output)
+	config.maxOutput = 0.1
+	config.minOutput = -0.1
+	pid = newPIDController(config)
+	_ = pid.compute(100*time.Millisecond, time.Second, time.Second)
+	if output := pid.compute(100*time.Millisecond, time.Second, time.Second); output != 0.1 {
+		t.Fatalf("clamped output = %f, want 0.1", output)
 	}
-
-	// Test low latency should give negative output (increase signal)
-	output = pid.Compute(100*time.Millisecond, 50*time.Millisecond, time.Second)
-	if output >= 0.0 {
-		t.Errorf("Expected negative output for low latency, got %f", output)
-	}
-
-	// Test output clamping
-	config.MaxOutput = 0.1
-	config.MinOutput = -0.1
-	pid = NewPIDController(config)
-	pid.Compute(100*time.Millisecond, 200*time.Millisecond, time.Second) // First call
-	output = pid.Compute(100*time.Millisecond, 200*time.Millisecond, time.Second)
-	if output > 0.1 || output < -0.1 {
-		t.Errorf("Output %f outside clamped range [-0.1, 0.1]", output)
+	pid.reset()
+	if pid.initialized || pid.integralError != 0 || pid.lastError != 0 {
+		t.Fatalf("reset controller = %#v", pid)
 	}
 }
 
-func TestProviderAdaptiveState(t *testing.T) {
+func TestProviderAdaptiveStateMetricsAndCapacity(t *testing.T) {
 	t.Parallel()
-	key := ProviderKey{Provider: "test", Model: "model1"}
-	state := NewProviderAdaptiveState(key, 100*time.Millisecond, 1, 10, 5, 10)
 
-	// Record some latencies
-	state.RecordLatency(50*time.Millisecond, nil)                  // Good
-	state.RecordLatency(150*time.Millisecond, nil)                 // Bad
-	state.RecordLatency(200*time.Millisecond, fmt.Errorf("error")) // Bad with error
+	state := NewProviderAdaptiveState(ProviderKey{Provider: "test", Model: "model1"}, 100*time.Millisecond, 1, 10, 5, 10)
+	state.RecordLatency(50*time.Millisecond, nil)
+	state.RecordLatency(150*time.Millisecond, nil)
+	state.RecordLatency(200*time.Millisecond, fmt.Errorf("request failed"))
 
-	// Get metrics
-	avgLatency, errorRate, p50, p90, p99 := state.GetMetrics()
-	if avgLatency == 0 {
-		t.Error("Expected non-zero average latency")
+	avg, errorRate, _, _, _ := state.GetMetrics()
+	if avg == 0 || errorRate <= 0 {
+		t.Fatalf("metrics = average %s, error rate %f", avg, errorRate)
 	}
-	if errorRate <= 0 {
-		t.Error("Expected non-zero error rate")
-	}
-	// Percentiles might be zero if not enough data
-	_ = p50
-	_ = p90
-	_ = p99
-
-	// Adjust capacity - first call initializes PID controller
 	_, _ = state.AdjustCapacity()
-	// Second call should produce change
-	newCapacity, changed := state.AdjustCapacity()
-	if !changed {
-		t.Error("Expected capacity change with mixed latencies")
-	}
-	if newCapacity < 1 || newCapacity > 10 {
-		t.Errorf("Capacity %d outside bounds [1, 10]", newCapacity)
+	capacity, _ := state.AdjustCapacity()
+	if capacity < 1 || capacity > 10 {
+		t.Fatalf("capacity = %d, want within [1, 10]", capacity)
 	}
 }
 
@@ -99,9 +77,6 @@ func TestProviderAdaptiveStateDirectConstructorNormalizesInputs(t *testing.T) {
 			if got := state.Capacity(); got != tc.wantCapacity {
 				t.Fatalf("state capacity = %d, want %d", got, tc.wantCapacity)
 			}
-			if got := state.Limiter().Capacity(); got != tc.wantCapacity {
-				t.Fatalf("limiter capacity = %d, want %d", got, tc.wantCapacity)
-			}
 			state.RecordLatency(time.Millisecond, nil)
 		})
 	}
@@ -111,15 +86,13 @@ func TestEnhancedAdaptiveLimiterNormalizesZeroAndPartialConfig(t *testing.T) {
 	t.Parallel()
 
 	limiter := NewEnhancedAdaptiveLimiter(EnhancedAdaptiveConfig{
-		ProviderSettings: map[string]ProviderSetting{
-			"partial": {PIDConfig: &PIDConfig{Kp: 2}},
-		},
-		QueryInterval: 0,
+		ProviderSettings: map[string]ProviderSetting{"partial": {}},
+		QueryInterval:    0,
 	})
 	t.Cleanup(limiter.Stop)
 
-	if limiter.globalState.Capacity() <= 0 || limiter.globalState.Limiter().Capacity() != limiter.globalState.Capacity() {
-		t.Fatalf("global state capacity mismatch: state=%d limiter=%d", limiter.globalState.Capacity(), limiter.globalState.Limiter().Capacity())
+	if limiter.globalState.Capacity() <= 0 {
+		t.Fatalf("global capacity = %d", limiter.globalState.Capacity())
 	}
 	release, ok := limiter.AcquireTokenWithProvider(context.Background(), "partial", "model")
 	if !ok {
@@ -133,397 +106,275 @@ func TestEnhancedAdaptiveLimiterNormalizesZeroAndPartialConfig(t *testing.T) {
 	}
 }
 
-func TestEnhancedAdaptiveLimiterBasic(t *testing.T) {
+func TestEnhancedAdaptiveLimiterGlobalAndProviderTokens(t *testing.T) {
 	t.Parallel()
+
 	config := DefaultEnhancedAdaptiveConfig()
-	config.AdjustmentInterval = 100 * time.Millisecond // Fast for testing
-	config.QueryInterval = 0                           // Disable metrics query for test
-
+	config.AdjustmentInterval = time.Hour
+	config.QueryInterval = 0
 	limiter := NewEnhancedAdaptiveLimiter(config)
-	defer limiter.Stop()
+	t.Cleanup(limiter.Stop)
 
-	// Test backward compatibility
-	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
-	defer cancel()
-
-	acquired := limiter.Acquire(ctx)
-	if !acquired {
-		t.Error("Expected to acquire slot")
+	globalRelease, ok := limiter.AcquireToken(context.Background())
+	if !ok || globalRelease == nil {
+		t.Fatal("AcquireToken failed")
 	}
-	limiter.Release()
-
-	// Test provider-aware limiting
-	acquired = limiter.AcquireWithProvider(ctx, "openai", "gpt-4")
-	if !acquired {
-		t.Error("Expected to acquire provider slot")
+	globalRelease()
+	providerRelease, ok := limiter.AcquireTokenWithProvider(context.Background(), "openai", "gpt-4")
+	if !ok || providerRelease == nil {
+		t.Fatal("AcquireTokenWithProvider failed")
 	}
-	limiter.ReleaseWithProvider("openai", "gpt-4")
-
-	// Record latency
+	providerRelease()
 	limiter.RecordLatencyWithProvider(200*time.Millisecond, "openai", "gpt-4", nil)
-
-	// Wait for adjustment
-	time.Sleep(200 * time.Millisecond)
-
-	// Get stats
-	stats := limiter.GetStats()
-	if stats == nil {
-		t.Error("Expected non-nil stats")
+	if stats := limiter.GetStats(); stats == nil {
+		t.Fatal("GetStats returned nil")
 	}
 }
 
-func TestEnhancedAdaptiveLimiterProviderSpecific(t *testing.T) {
+func TestEnhancedAdaptiveLimiterProviderSpecificSettings(t *testing.T) {
 	t.Parallel()
-	config := DefaultEnhancedAdaptiveConfig()
-	config.AdjustmentInterval = 100 * time.Millisecond
-	config.QueryInterval = 0
 
-	// Add provider-specific settings
+	config := DefaultEnhancedAdaptiveConfig()
+	config.QueryInterval = 0
+	config.AdjustmentInterval = time.Hour
 	config.ProviderSettings = map[string]ProviderSetting{
-		"openai": {
-			TargetLatency:   300 * time.Millisecond,
-			MinCapacity:     5,
-			MaxCapacity:     50,
-			InitialCapacity: 15,
-		},
-		"anthropic": {
-			TargetLatency:   500 * time.Millisecond,
-			MinCapacity:     3,
-			MaxCapacity:     30,
-			InitialCapacity: 10,
-		},
+		"openai":    {TargetLatency: 300 * time.Millisecond, MinCapacity: 5, MaxCapacity: 50, InitialCapacity: 15},
+		"anthropic": {TargetLatency: 500 * time.Millisecond, MinCapacity: 3, MaxCapacity: 30, InitialCapacity: 10},
 	}
-
 	limiter := NewEnhancedAdaptiveLimiter(config)
-	defer limiter.Stop()
+	t.Cleanup(limiter.Stop)
 
-	// Test OpenAI specific limits
-	ctx := context.Background()
-	acquired := limiter.AcquireWithProvider(ctx, "openai", "gpt-4")
-	if !acquired {
-		t.Error("Expected to acquire OpenAI slot")
-	}
-	limiter.ReleaseWithProvider("openai", "gpt-4")
-
-	// Test Anthropic specific limits
-	acquired = limiter.AcquireWithProvider(ctx, "anthropic", "claude-3")
-	if !acquired {
-		t.Error("Expected to acquire Anthropic slot")
-	}
-	limiter.ReleaseWithProvider("anthropic", "claude-3")
-
-	// Verify provider states exist
-	stats := limiter.GetStats()
-	providerStats, ok := stats["providers"].(map[string]interface{})
-	if !ok {
-		t.Error("Expected providers stats")
-	}
-
-	// Check OpenAI settings
-	if openaiStats, ok := providerStats["openai"].(map[string]interface{}); ok {
-		if cap, ok := openaiStats["capacity"].(int); ok {
-			if cap != 15 {
-				t.Errorf("Expected OpenAI initial capacity 15, got %d", cap)
-			}
+	for provider, model := range map[string]string{"openai": "gpt-4", "anthropic": "claude"} {
+		release, ok := limiter.AcquireTokenWithProvider(context.Background(), provider, model)
+		if !ok {
+			t.Fatalf("AcquireTokenWithProvider(%q) failed", provider)
 		}
+		release()
+	}
+	if got := limiter.getState("openai", "gpt-4").Capacity(); got != 15 {
+		t.Fatalf("OpenAI initial capacity = %d, want 15", got)
+	}
+	if got := limiter.getState("anthropic", "claude").Capacity(); got != 10 {
+		t.Fatalf("Anthropic initial capacity = %d, want 10", got)
 	}
 }
 
-func TestEnhancedAdaptiveLimiterWithMetrics(t *testing.T) {
+func TestEnhancedAdaptiveLimiterMetrics(t *testing.T) {
 	t.Parallel()
-	// Create a metrics collector
-	metricsConfig := middleware.DefaultEnhancedMetricsConfig()
-	metricsCollector := middleware.NewEnhancedMetricsCollector(metricsConfig)
 
+	collector := middleware.NewEnhancedMetricsCollector(middleware.DefaultEnhancedMetricsConfig())
 	config := DefaultEnhancedAdaptiveConfig()
-	config.MetricsCollector = metricsCollector
-	config.QueryInterval = 100 * time.Millisecond // Fast query for test
-	config.AdjustmentInterval = 100 * time.Millisecond
-
-	limiter := NewEnhancedAdaptiveLimiter(config)
-	defer limiter.Stop()
-
-	// Record some metrics
-	labels := &middleware.RequestLabels{
-		Provider:  "openai",
-		Model:     "gpt-4",
-		Method:    "text",
-		ErrorType: "",
-	}
-	metricsCollector.RecordRequest(labels, 150*time.Millisecond, nil, 0, 100, 200)
-
-	// Wait for metrics query
-	time.Sleep(200 * time.Millisecond)
-
-	// Limiter should have queried metrics
-	stats := limiter.GetStats()
-	if stats == nil {
-		t.Error("Expected stats")
-	}
-}
-
-func TestEnhancedAdaptiveLimiterModelLevel(t *testing.T) {
-	t.Parallel()
-	config := DefaultEnhancedAdaptiveConfig()
-	config.EnableModelLevel = true
-	config.AdjustmentInterval = 100 * time.Millisecond
+	config.MetricsCollector = collector
 	config.QueryInterval = 0
-
+	config.AdjustmentInterval = time.Hour
 	limiter := NewEnhancedAdaptiveLimiter(config)
-	defer limiter.Stop()
+	t.Cleanup(limiter.Stop)
+	limiter.RecordLatencyWithProvider(150*time.Millisecond, "openai", "gpt-4", nil)
+	collector.RecordRequest(&middleware.RequestLabels{Provider: "openai", Model: "gpt-4", Method: "text"}, 150*time.Millisecond, nil, 0, 100, 200)
 
-	// Record latencies for different models of same provider
-	limiter.RecordLatencyWithProvider(100*time.Millisecond, "openai", "gpt-4", nil)
-	limiter.RecordLatencyWithProvider(200*time.Millisecond, "openai", "gpt-3.5", nil)
-	limiter.RecordLatencyWithProvider(300*time.Millisecond, "anthropic", "claude-3", nil)
-
-	// Wait for adjustment
-	time.Sleep(200 * time.Millisecond)
-
-	stats := limiter.GetStats()
-	if stats == nil {
-		t.Error("Expected stats")
-	}
-
-	// Check model-level stats
-	if modelStats, ok := stats["models"].(map[string]interface{}); ok {
-		// Should have entries for openai:gpt-4, openai:gpt-3.5, anthropic:claude-3
-		if len(modelStats) < 3 {
-			t.Errorf("Expected at least 3 model entries, got %d", len(modelStats))
-		}
+	observer := &metricsObserver{config: limiter.config, metricsCollector: collector, limiter: limiter}
+	assert.NotPanics(t, observer.queryExternalMetrics)
+	if stats := collector.GetStats(&middleware.RequestLabels{Provider: "openai", Model: "gpt-4", Method: "text"}); stats["requests"] != int64(1) {
+		t.Fatalf("metrics requests = %#v, want 1", stats["requests"])
 	}
 }
 
-func TestAcquireTokenBasic(t *testing.T) {
+func TestEnhancedAdaptiveLimiterModelLevelStats(t *testing.T) {
 	t.Parallel()
-	config := DefaultEnhancedAdaptiveConfig()
-	config.AdjustmentInterval = 100 * time.Millisecond
-	config.QueryInterval = 0
 
-	limiter := NewEnhancedAdaptiveLimiter(config)
-	defer limiter.Stop()
-
-	ctx := context.Background()
-
-	// Test global AcquireToken
-	release, ok := limiter.AcquireToken(ctx)
-	if !ok {
-		t.Fatal("Expected to acquire global token")
-	}
-	if release == nil {
-		t.Fatal("Expected non-nil release function")
-	}
-	release() // Should not panic
-
-	// Test provider-aware AcquireToken
-	release, ok = limiter.AcquireTokenWithProvider(ctx, "openai", "gpt-4")
-	if !ok {
-		t.Fatal("Expected to acquire provider token")
-	}
-	if release == nil {
-		t.Fatal("Expected non-nil release function")
-	}
-	release() // Should not panic
-}
-
-func TestAcquireTokenContextCanceled(t *testing.T) {
-	t.Parallel()
-	config := DefaultEnhancedAdaptiveConfig()
-	config.InitialCapacity = 1
-	config.MaxCapacity = 1
-	config.AdjustmentInterval = 100 * time.Millisecond
-	config.QueryInterval = 0
-
-	limiter := NewEnhancedAdaptiveLimiter(config)
-	defer limiter.Stop()
-
-	ctx := context.Background()
-
-	// Acquire the only slot
-	release, ok := limiter.AcquireToken(ctx)
-	if !ok {
-		t.Fatal("Expected to acquire slot")
-	}
-
-	// Try to acquire again with canceled context — should fail
-	canceledCtx, cancel := context.WithCancel(context.Background())
-	cancel()
-
-	_, ok = limiter.AcquireToken(canceledCtx)
-	if ok {
-		t.Fatal("Expected acquire to fail with canceled context")
-	}
-
-	release() // Free the slot
-}
-
-func TestAcquireTokenSurvivesLimiterSwap(t *testing.T) {
-	t.Parallel()
-	config := DefaultEnhancedAdaptiveConfig()
-	config.InitialCapacity = 5
-	config.MinCapacity = 1
-	config.MaxCapacity = 20
-	config.AdjustmentInterval = 50 * time.Millisecond
-	config.QueryInterval = 0
-
-	limiter := NewEnhancedAdaptiveLimiter(config)
-	defer limiter.Stop()
-
-	ctx := context.Background()
-
-	// Acquire a token — the release function captures the current limiter instance
-	release, ok := limiter.AcquireTokenWithProvider(ctx, "openai", "gpt-4")
-	if !ok {
-		t.Fatal("Expected to acquire token")
-	}
-
-	// Record high latencies to trigger capacity adjustment
-	for i := 0; i < 20; i++ {
-		limiter.RecordLatencyWithProvider(2*time.Second, "openai", "gpt-4", nil)
-	}
-
-	// Wait for adjustment loop to swap the limiter
-	time.Sleep(150 * time.Millisecond)
-
-	// Release should still work — it targets the original limiter instance
-	release() // Must not panic
-}
-
-func TestEnhancedAdaptiveLimiterEvictsIdleModelStates(t *testing.T) {
-	t.Parallel()
 	config := DefaultEnhancedAdaptiveConfig()
 	config.EnableModelLevel = true
 	config.QueryInterval = 0
 	config.AdjustmentInterval = time.Hour
-	config.IdleStateTTL = 10 * time.Millisecond
-
 	limiter := NewEnhancedAdaptiveLimiter(config)
-	defer limiter.Stop()
+	t.Cleanup(limiter.Stop)
+
+	limiter.RecordLatencyWithProvider(100*time.Millisecond, "openai", "gpt-4", nil)
+	limiter.RecordLatencyWithProvider(200*time.Millisecond, "openai", "gpt-3.5", nil)
+	limiter.RecordLatencyWithProvider(300*time.Millisecond, "anthropic", "claude", nil)
+	models, ok := limiter.GetStats()["models"].(map[string]interface{})
+	if !ok || len(models) != 3 {
+		t.Fatalf("model stats = %#v, want three model entries", models)
+	}
+}
+
+func TestEnhancedAdaptiveLimiterAcquireTokenContextCanceled(t *testing.T) {
+	t.Parallel()
+
+	config := DefaultEnhancedAdaptiveConfig()
+	config.InitialCapacity = 1
+	config.MaxCapacity = 1
+	config.QueryInterval = 0
+	config.AdjustmentInterval = time.Hour
+	limiter := NewEnhancedAdaptiveLimiter(config)
+	t.Cleanup(limiter.Stop)
+
+	release, ok := limiter.AcquireToken(context.Background())
+	if !ok {
+		t.Fatal("AcquireToken failed")
+	}
+	canceled, cancel := context.WithCancel(context.Background())
+	cancel()
+	if release, ok := limiter.AcquireToken(canceled); ok || release != nil {
+		t.Fatalf("canceled AcquireToken returned a release function or success: %t", ok)
+	}
+	release()
+}
+
+func TestEnhancedAdaptiveLimiterAcquireTokenSurvivesLimiterSwap(t *testing.T) {
+	t.Parallel()
+
+	config := DefaultEnhancedAdaptiveConfig()
+	config.InitialCapacity = 5
+	config.MinCapacity = 1
+	config.MaxCapacity = 20
+	config.QueryInterval = 0
+	config.AdjustmentInterval = time.Hour
+	limiter := NewEnhancedAdaptiveLimiter(config)
+	t.Cleanup(limiter.Stop)
+
+	release, ok := limiter.AcquireTokenWithProvider(context.Background(), "openai", "gpt-4")
+	if !ok {
+		t.Fatal("AcquireTokenWithProvider failed")
+	}
+	state := limiter.getState("openai", "gpt-4")
+	state.mu.RLock()
+	oldLimiter := state.limiter
+	state.mu.RUnlock()
+	limiter.RecordLatencyWithProvider(2*time.Second, "openai", "gpt-4", nil)
+	manager := &capacityManager{config: config, limiter: limiter}
+	manager.adjustAllCapacities() // initializes the private PID controller
+	manager.adjustAllCapacities() // swaps the provider limiter
+	state.mu.RLock()
+	swapped := state.limiter != oldLimiter
+	state.mu.RUnlock()
+	if !swapped {
+		t.Fatal("capacity adjustment did not swap the provider limiter")
+	}
+	release()
+	if got := oldLimiter.InUse(); got != 0 {
+		t.Fatalf("captured limiter still has %d permits after release", got)
+	}
+}
+
+func TestEnhancedAdaptiveLimiterEvictsIdleModelStates(t *testing.T) {
+	t.Parallel()
+
+	config := DefaultEnhancedAdaptiveConfig()
+	config.EnableModelLevel = true
+	config.QueryInterval = 0
+	config.AdjustmentInterval = time.Hour
+	config.IdleStateTTL = time.Second
+	limiter := NewEnhancedAdaptiveLimiter(config)
+	t.Cleanup(limiter.Stop)
 
 	stale := limiter.getOrCreateState("openai", "gpt-4")
-	fresh := limiter.getOrCreateState("anthropic", "claude-3")
-
+	fresh := limiter.getOrCreateState("anthropic", "claude")
 	stale.mu.Lock()
 	stale.lastSeen = time.Now().Add(-time.Hour)
 	stale.mu.Unlock()
-
 	fresh.mu.Lock()
 	fresh.lastSeen = time.Now()
 	fresh.mu.Unlock()
-
-	manager := &capacityManager{
-		config:  config,
-		limiter: limiter,
-	}
+	manager := &capacityManager{config: config, limiter: limiter}
 	manager.evictIdleStates()
-
 	assert.Nil(t, limiter.getState("openai", "gpt-4"))
-	assert.NotNil(t, limiter.getState("anthropic", "claude-3"))
+	assert.NotNil(t, limiter.getState("anthropic", "claude"))
 }
 
 func TestEnhancedAdaptiveLimiterPinnedStateSurvivesEviction(t *testing.T) {
+	t.Parallel()
+
 	config := DefaultEnhancedAdaptiveConfig()
 	config.EnableModelLevel = true
 	config.QueryInterval = 0
 	config.AdjustmentInterval = time.Hour
 	config.IdleStateTTL = time.Nanosecond
-
 	limiter := NewEnhancedAdaptiveLimiter(config)
-	defer limiter.Stop()
+	t.Cleanup(limiter.Stop)
 
 	state := limiter.pinState("openai", "gpt-4")
 	state.mu.Lock()
 	state.lastSeen = time.Time{}
 	state.mu.Unlock()
-
 	manager := &capacityManager{config: config, limiter: limiter}
 	manager.evictIdleStates()
 	assert.Same(t, state, limiter.getState("openai", "gpt-4"))
-
 	limiter.unpinState(state)
 	manager.evictIdleStates()
 	assert.Nil(t, limiter.getState("openai", "gpt-4"))
 }
 
 func TestEnhancedAdaptiveLimiterTokenPinsStateUntilIdempotentRelease(t *testing.T) {
+	t.Parallel()
+
 	config := DefaultEnhancedAdaptiveConfig()
 	config.EnableModelLevel = true
 	config.QueryInterval = 0
 	config.AdjustmentInterval = time.Hour
 	config.IdleStateTTL = time.Nanosecond
-
 	limiter := NewEnhancedAdaptiveLimiter(config)
-	defer limiter.Stop()
+	t.Cleanup(limiter.Stop)
 
 	release, ok := limiter.AcquireTokenWithProvider(context.Background(), "openai", "gpt-4")
 	if !ok {
-		t.Fatal("expected token acquisition")
+		t.Fatal("AcquireTokenWithProvider failed")
 	}
 	state := limiter.getState("openai", "gpt-4")
 	limiter.mu.RLock()
 	pins := state.pins
 	limiter.mu.RUnlock()
 	assert.Equal(t, 1, pins)
-
-	// Simulate a capacity rollover: the token is held by the captured old
-	// limiter, so only the state pin can prevent split admission via eviction.
 	state.mu.Lock()
-	state.limiter = NewConcurrencyLimiter(1)
 	state.lastSeen = time.Time{}
 	state.mu.Unlock()
 	manager := &capacityManager{config: config, limiter: limiter}
 	manager.evictIdleStates()
 	assert.Same(t, state, limiter.getState("openai", "gpt-4"))
-
 	release()
 	release()
 	limiter.mu.RLock()
 	pins = state.pins
 	limiter.mu.RUnlock()
 	assert.Equal(t, 0, pins)
-
 	manager.evictIdleStates()
 	assert.Nil(t, limiter.getState("openai", "gpt-4"))
 }
 
 func TestEnhancedAdaptiveLimiterLatencyMutationPinsState(t *testing.T) {
+	t.Parallel()
+
 	config := DefaultEnhancedAdaptiveConfig()
 	config.EnableModelLevel = true
 	config.QueryInterval = 0
 	config.AdjustmentInterval = time.Hour
-
 	limiter := NewEnhancedAdaptiveLimiter(config)
-	defer limiter.Stop()
+	t.Cleanup(limiter.Stop)
 
 	const workers = 64
 	var wg sync.WaitGroup
 	wg.Add(workers)
-	for i := 0; i < workers; i++ {
+	for range workers {
 		go func() {
 			defer wg.Done()
 			limiter.RecordLatencyWithProvider(time.Millisecond, "openai", "gpt-4", nil)
 		}()
 	}
 	wg.Wait()
-
 	state := limiter.getState("openai", "gpt-4")
 	if state == nil {
 		t.Fatal("latency mutation lost its state")
 	}
-	_, _, _, _, _ = state.GetMetrics()
 	limiter.mu.RLock()
 	pins := state.pins
 	limiter.mu.RUnlock()
 	assert.Equal(t, 0, pins)
 }
 
-func TestEnhancedAdaptiveLimiter_RecordLatency(t *testing.T) {
+func TestEnhancedAdaptiveLimiterRecordLatency(t *testing.T) {
 	t.Parallel()
-	config := DefaultEnhancedAdaptiveConfig()
-	limiter := NewEnhancedAdaptiveLimiter(config)
-	defer limiter.Stop()
 
-	assert.NotPanics(t, func() {
-		limiter.RecordLatency(50 * time.Millisecond)
-	})
+	limiter := NewEnhancedAdaptiveLimiter(EnhancedAdaptiveConfig{QueryInterval: 0})
+	t.Cleanup(limiter.Stop)
+	assert.NotPanics(t, func() { limiter.RecordLatency(50 * time.Millisecond) })
 }

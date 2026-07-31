@@ -1,7 +1,7 @@
 package discovery
 
 import (
-	"github.com/garyblankenship/wormhole/v2/types"
+	"github.com/garyblankenship/wormhole/v3/types"
 )
 
 // getFallbackModels returns minimal hardcoded models for offline mode

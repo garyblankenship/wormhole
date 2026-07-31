@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"time"
 
-	"github.com/garyblankenship/wormhole/v2/internal/pool"
+	"github.com/garyblankenship/wormhole/v3/internal/pool"
 )
 
 // FinishReason represents why the model stopped generating

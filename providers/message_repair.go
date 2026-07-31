@@ -3,7 +3,7 @@ package providers
 import (
 	"fmt"
 
-	"github.com/garyblankenship/wormhole/v2/types"
+	"github.com/garyblankenship/wormhole/v3/types"
 )
 
 // ValidateMessageSequence runs the same orphan/stranded detection as

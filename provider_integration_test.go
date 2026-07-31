@@ -12,10 +12,10 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/garyblankenship/wormhole/v2"
-	"github.com/garyblankenship/wormhole/v2/internal/testutil"
-	"github.com/garyblankenship/wormhole/v2/middleware"
-	"github.com/garyblankenship/wormhole/v2/types"
+	"github.com/garyblankenship/wormhole/v3"
+	"github.com/garyblankenship/wormhole/v3/internal/testutil"
+	"github.com/garyblankenship/wormhole/v3/middleware"
+	"github.com/garyblankenship/wormhole/v3/types"
 )
 
 func TestIntegration_MultipleProviders(t *testing.T) {
@@ -149,8 +149,8 @@ func TestIntegration_Middleware(t *testing.T) {
 		})
 
 		// Create metrics middleware
-		metrics := middleware.NewMetrics()
-		metricsMiddleware := middleware.MetricsMiddleware(metrics)
+		metrics := middleware.NewTypedMetrics()
+		metricsMiddleware := middleware.NewTypedMetricsMiddleware(metrics)
 
 		client := wormhole.New(
 			wormhole.WithDefaultProvider("openai"),
@@ -158,7 +158,7 @@ func TestIntegration_Middleware(t *testing.T) {
 				APIKey:  "test-key",
 				BaseURL: server.URL,
 			}),
-			wormhole.WithMiddleware(metricsMiddleware),
+			wormhole.WithProviderMiddleware(metricsMiddleware),
 		)
 
 		// Make a request
@@ -171,85 +171,12 @@ func TestIntegration_Middleware(t *testing.T) {
 		assert.Equal(t, "Middleware test response", response.Text)
 
 		// Verify metrics were recorded
-		requests, errors, avgDuration := metrics.GetStats()
+		requests, errors, avgDuration := metrics.GetTextStats()
 		assert.Equal(t, int64(1), requests)
 		assert.Equal(t, int64(0), errors)
 		assert.Greater(t, avgDuration, time.Duration(0))
 	})
 
-	t.Run("custom capture middleware", func(t *testing.T) {
-		t.Parallel()
-		var capturedRequest any
-		var capturedResponse any
-
-		server := testutil.MockOpenAIServer(t, func(w http.ResponseWriter, r *http.Request) {
-			response := map[string]any{
-				"id":      "chatcmpl-capture123",
-				"object":  "chat.completion",
-				"created": 1699999999,
-				"model":   "gpt-5",
-				"choices": []map[string]any{
-					{
-						"index": 0,
-						"message": map[string]any{
-							"role":    "assistant",
-							"content": "Capture test response",
-						},
-						"finish_reason": "stop",
-					},
-				},
-			}
-
-			w.Header().Set("Content-Type", "application/json")
-			_ = json.NewEncoder(w).Encode(response)
-		})
-
-		// Create custom middleware that captures request/response
-		captureMiddleware := func(next middleware.Handler) middleware.Handler {
-			return func(ctx context.Context, req any) (any, error) {
-				capturedRequest = req
-				resp, err := next(ctx, req)
-				if err == nil {
-					capturedResponse = resp
-				}
-				return resp, err
-			}
-		}
-
-		client := wormhole.New(
-			wormhole.WithDefaultProvider("openai"),
-			wormhole.WithProviderConfig("openai", types.ProviderConfig{
-				APIKey:  "test-key",
-				BaseURL: server.URL,
-			}),
-			wormhole.WithMiddleware(captureMiddleware),
-		)
-
-		response, err := client.Text().
-			Model("gpt-5").
-			Prompt("Test capture").
-			Generate(context.Background())
-
-		require.NoError(t, err)
-		assert.Equal(t, "Capture test response", response.Text)
-
-		// Verify middleware captured the request and response
-		assert.NotNil(t, capturedRequest)
-		assert.NotNil(t, capturedResponse)
-
-		// Type assert and verify request details
-		textReq, ok := capturedRequest.(*types.TextRequest)
-		require.True(t, ok)
-		assert.Equal(t, "gpt-5", textReq.Model)
-		assert.Len(t, textReq.Messages, 1)
-		assert.Equal(t, "Test capture", textReq.Messages[0].GetContent())
-
-		// Type assert and verify response details
-		textResp, ok := capturedResponse.(*types.TextResponse)
-		require.True(t, ok)
-		assert.Equal(t, "chatcmpl-capture123", textResp.ID)
-		assert.Equal(t, "Capture test response", textResp.Text)
-	})
 }
 
 func TestIntegration_OpenRouter(t *testing.T) {

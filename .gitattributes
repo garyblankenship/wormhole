@@ -1,6 +1,17 @@
 # Keep release/source archives focused on the library payload.
 /.github/ export-ignore
-/.claude/ export-ignore
+/.claude export-ignore
+/.claude/** export-ignore
+**/.claude export-ignore
+**/.claude/** export-ignore
+/.work export-ignore
+/.work/** export-ignore
+/logs export-ignore
+/logs/** export-ignore
+/tmp export-ignore
+/tmp/** export-ignore
+/pkg/wormhole export-ignore
+/pkg/wormhole/** export-ignore
 /.repomixignore export-ignore
 /CLAUDE.md export-ignore
 /docs/ export-ignore

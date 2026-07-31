@@ -19,7 +19,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/garyblankenship/wormhole/v2/internal/server"
+	"github.com/garyblankenship/wormhole/v3/internal/server"
 )
 
 func TestRunTopLevelCommands(t *testing.T) {

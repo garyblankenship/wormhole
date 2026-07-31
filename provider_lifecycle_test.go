@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/garyblankenship/wormhole/v2/types"
+	"github.com/garyblankenship/wormhole/v3/types"
 )
 
 type lifecycleProvider struct {
@@ -29,9 +29,9 @@ func (p *lifecycleProvider) SupportedCapabilities() []types.ModelCapability {
 	return []types.ModelCapability{types.CapabilityText, types.CapabilityChat}
 }
 
-// TestRawProviderPinnedUntilShutdown distinguishes the public raw reference
-// from a lease: both age and count cleanup must leave it open until shutdown.
-func TestRawProviderPinnedUntilShutdown(t *testing.T) {
+// TestOpenProviderHandlePreventsEviction verifies that an active lease protects
+// its provider from both age- and count-based cleanup until shutdown.
+func TestOpenProviderHandlePreventsEviction(t *testing.T) {
 	t.Parallel()
 
 	for _, cleanup := range []struct {
@@ -50,27 +50,33 @@ func TestRawProviderPinnedUntilShutdown(t *testing.T) {
 				WithProviderConfig("raw", types.ProviderConfig{}),
 				WithDiscovery(false),
 			)
-			if _, err := client.Provider("raw"); err != nil {
-				t.Fatalf("Provider: %v", err)
+			handle, err := client.ProviderWithHandle("raw")
+			if err != nil {
+				t.Fatalf("ProviderWithHandle(raw): %v", err)
 			}
+			defer func() { _ = handle.Close() }()
 			if cleanup.name == "max-count" {
 				other := newLifecycleProvider("other")
 				client.providerFactories["other"] = func(types.ProviderConfig) (types.Provider, error) { return other, nil }
 				client.config.Providers["other"] = types.ProviderConfig{}
-				if _, err := client.ProviderWithHandle("other"); err != nil {
+				otherHandle, err := client.ProviderWithHandle("other")
+				if err != nil {
 					t.Fatalf("ProviderWithHandle(other): %v", err)
+				}
+				if err := otherHandle.Close(); err != nil {
+					t.Fatalf("other handle.Close: %v", err)
 				}
 			}
 
 			cleanup.run(client)
 			if got := provider.closeCount.Load(); got != 0 {
-				t.Fatalf("raw provider close count after cleanup = %d, want 0", got)
+				t.Fatalf("leased provider close count after cleanup = %d, want 0", got)
 			}
 			if err := client.Shutdown(context.Background()); err != nil {
 				t.Fatalf("Shutdown: %v", err)
 			}
 			if got := provider.closeCount.Load(); got != 1 {
-				t.Fatalf("raw provider close count after shutdown = %d, want 1", got)
+				t.Fatalf("leased provider close count after shutdown = %d, want 1", got)
 			}
 		})
 	}

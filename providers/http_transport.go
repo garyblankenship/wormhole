@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/garyblankenship/wormhole/v2/config"
+	"github.com/garyblankenship/wormhole/v3/config"
 )
 
 // NewSecureHTTPClient creates a new HTTP client with secure TLS configuration

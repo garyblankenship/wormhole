@@ -13,9 +13,9 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/garyblankenship/wormhole/v2/middleware"
-	"github.com/garyblankenship/wormhole/v2/types"
-	wmtest "github.com/garyblankenship/wormhole/v2/wormholetest"
+	"github.com/garyblankenship/wormhole/v3/middleware"
+	"github.com/garyblankenship/wormhole/v3/types"
+	wmtest "github.com/garyblankenship/wormhole/v3/wormholetest"
 )
 
 func skipUnlessLiveTestsEnabled(t *testing.T) {
@@ -587,20 +587,14 @@ func TestEmbeddingsBuilder(t *testing.T) {
 func TestEmbeddingsMiddleware(t *testing.T) {
 	t.Parallel()
 	// Test with a simple logging middleware
-	var middlewareCalled bool
-	mw := func(next middleware.Handler) middleware.Handler {
-		return func(ctx context.Context, req any) (any, error) {
-			middlewareCalled = true
-			return next(ctx, req)
-		}
-	}
+	metrics := middleware.NewTypedMetrics()
 
 	mock := wmtest.NewMockProvider("mock")
 	client := New(
 		WithCustomProvider("mock", wmtest.MockProviderFactory(mock)),
 		WithProviderConfig("mock", types.ProviderConfig{}),
 		WithDefaultProvider("mock"),
-		WithMiddleware(mw),
+		WithProviderMiddleware(middleware.NewTypedMetricsMiddleware(metrics)),
 	)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -613,7 +607,8 @@ func TestEmbeddingsMiddleware(t *testing.T) {
 		Generate(ctx)
 	require.NoError(t, err)
 
-	assert.True(t, middlewareCalled, "Middleware was not called")
+	requests, _, _ := metrics.GetEmbeddingsStats()
+	assert.Equal(t, int64(1), requests, "typed middleware was not called")
 }
 
 // cosineSimilarity calculates the cosine similarity between two vectors

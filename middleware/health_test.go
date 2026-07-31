@@ -5,72 +5,37 @@ import (
 	"errors"
 	"testing"
 	"time"
-
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
 
 func TestHealthCheckerStatusAndProviders(t *testing.T) {
 	t.Parallel()
 	checker := NewHealthChecker(time.Hour)
-	checker.SetCheckFunction(func(ctx context.Context, provider string) error {
+	checker.SetCheckFunction(func(_ context.Context, provider string) error {
 		if provider == "bad" {
 			return errors.New("bad provider")
 		}
 		return nil
 	})
-
 	checker.Start([]string{"good", "bad"})
 	t.Cleanup(checker.Stop)
 
-	assert.True(t, checker.IsHealthy("good"))
-	assert.True(t, checker.IsHealthy("unknown"))
-
+	if !checker.IsHealthy("good") || !checker.IsHealthy("unknown") {
+		t.Fatal("new and unknown providers should begin healthy")
+	}
 	checker.checkAll([]string{"good", "bad"})
 	checker.checkAll([]string{"bad"})
 	checker.checkAll([]string{"bad"})
 
-	goodStatus := checker.GetStatus("good")
-	assert.True(t, goodStatus.Healthy)
-	assert.NoError(t, goodStatus.LastError)
-	assert.Greater(t, goodStatus.LastCheck.UnixNano(), int64(0))
-
-	badStatus := checker.GetStatus("bad")
-	assert.False(t, badStatus.Healthy)
-	assert.GreaterOrEqual(t, badStatus.ConsecutiveFails, 3)
-	require.Error(t, badStatus.LastError)
-
-	assert.Equal(t, []string{"good"}, checker.GetHealthyProviders([]string{"good", "bad"}))
-}
-
-func TestHealthCheckMiddleware(t *testing.T) {
-	t.Parallel()
-	checker := NewHealthChecker(time.Hour)
-	provider := "openai"
-
-	handler := HealthCheckMiddleware(checker, provider)(func(ctx context.Context, req any) (any, error) {
-		return "ok", nil
-	})
-
-	resp, err := handler(context.Background(), "request")
-	require.NoError(t, err)
-	assert.Equal(t, "ok", resp)
-	assert.True(t, checker.IsHealthy(provider))
-
-	failing := HealthCheckMiddleware(checker, provider)(func(ctx context.Context, req any) (any, error) {
-		return nil, errors.New("request failed")
-	})
-	for i := 0; i < 3; i++ {
-		_, err = failing(context.Background(), "request")
-		require.Error(t, err)
+	good := checker.GetStatus("good")
+	if !good.Healthy || good.LastError != nil || good.LastCheck.IsZero() {
+		t.Fatalf("good status = %#v", good)
 	}
-	assert.False(t, checker.IsHealthy(provider))
-
-	_, err = handler(context.Background(), "request")
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "request failed")
-
-	checker.statuses[provider].LastError = nil
-	_, err = handler(context.Background(), "request")
-	require.ErrorIs(t, err, ErrProviderUnhealthy)
+	bad := checker.GetStatus("bad")
+	if bad.Healthy || bad.ConsecutiveFails < 3 || bad.LastError == nil {
+		t.Fatalf("bad status = %#v", bad)
+	}
+	providers := checker.GetHealthyProviders([]string{"good", "bad"})
+	if len(providers) != 1 || providers[0] != "good" {
+		t.Fatalf("healthy providers = %v, want [good]", providers)
+	}
 }

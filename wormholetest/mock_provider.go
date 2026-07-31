@@ -7,7 +7,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/garyblankenship/wormhole/v2/types"
+	"github.com/garyblankenship/wormhole/v3/types"
 )
 
 // MockProvider is a mock implementation of the Provider interface for testing

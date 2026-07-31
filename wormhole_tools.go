@@ -3,7 +3,7 @@ package wormhole
 import (
 	"encoding/json"
 
-	"github.com/garyblankenship/wormhole/v2/types"
+	"github.com/garyblankenship/wormhole/v3/types"
 )
 
 // RegisterTool registers a new tool that can be called by LLMs.

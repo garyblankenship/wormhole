@@ -12,8 +12,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/garyblankenship/wormhole/v2/types"
-	mockpkg "github.com/garyblankenship/wormhole/v2/wormholetest"
+	"github.com/garyblankenship/wormhole/v3/types"
+	mockpkg "github.com/garyblankenship/wormhole/v3/wormholetest"
 )
 
 func TestProviderRegistration(t *testing.T) {
@@ -49,7 +49,7 @@ func TestProviderRegistration(t *testing.T) {
 		assert.Contains(t, wormhole.providerFactories, "custom")
 
 		// Test that we can get the custom provider
-		provider, err := wormhole.Provider("custom")
+		provider, err := wormhole.ProviderWithHandle("custom")
 		require.NoError(t, err)
 		assert.Equal(t, "custom", provider.Name())
 	})
@@ -69,13 +69,13 @@ func TestProviderRegistration(t *testing.T) {
 		)
 
 		// First call should create the provider
-		provider1, err := wormhole.Provider("test")
+		provider1, err := wormhole.ProviderWithHandle("test")
 		require.NoError(t, err)
 		assert.Equal(t, "test", provider1.Name())
 		assert.Equal(t, 1, callCount)
 
 		// Second call should return cached provider (factory not called again)
-		provider2, err := wormhole.Provider("test")
+		provider2, err := wormhole.ProviderWithHandle("test")
 		require.NoError(t, err)
 		assert.Equal(t, provider1, provider2) // Same instance
 		assert.Equal(t, 1, callCount)         // Factory not called again
@@ -85,7 +85,7 @@ func TestProviderRegistration(t *testing.T) {
 		t.Parallel()
 		wormhole := New() // Empty client with no providers
 
-		_, err := wormhole.Provider("nonexistent")
+		_, err := wormhole.ProviderWithHandle("nonexistent")
 		assert.Error(t, err)
 		// DX improvement: error now includes helpful hint about which providers are configured
 		assert.Contains(t, err.Error(), "provider not configured")
@@ -102,7 +102,7 @@ func TestProviderRegistration(t *testing.T) {
 			// Note: WithCustomProvider auto-creates empty config
 		)
 
-		provider, err := wormhole.Provider("autoconfigured")
+		provider, err := wormhole.ProviderWithHandle("autoconfigured")
 		assert.NoError(t, err)
 		assert.NotNil(t, provider)
 		assert.Equal(t, "autoconfigured", provider.Name())
@@ -120,7 +120,7 @@ func TestProviderFactoryUsesFirstAPIKeysEntryWhenAPIKeyIsEmpty(t *testing.T) {
 		WithDiscovery(false),
 	)
 
-	if _, err := client.Provider("custom"); err != nil {
+	if _, err := client.ProviderWithHandle("custom"); err != nil {
 		t.Fatal(err)
 	}
 	if received.APIKey != "test-first" {
@@ -137,7 +137,7 @@ func TestAPIKeysFallbackIsValidated(t *testing.T) {
 		WithDiscovery(false),
 	)
 
-	_, err := client.Provider("openai")
+	_, err := client.ProviderWithHandle("openai")
 	if err == nil || !strings.Contains(err.Error(), "invalid OpenAI API key format") {
 		t.Fatalf("Provider error = %v, want APIKeys fallback validation failure", err)
 	}
@@ -167,7 +167,7 @@ func TestWithOpenAICompatibleOption(t *testing.T) {
 		assert.Contains(t, wormhole.config.Providers, "custom-openai")
 		assert.Equal(t, server.URL, wormhole.config.Providers["custom-openai"].BaseURL)
 
-		provider, err := wormhole.Provider("custom-openai")
+		provider, err := wormhole.ProviderWithHandle("custom-openai")
 		require.NoError(t, err)
 		assert.Equal(t, "custom-openai", provider.Name())
 
@@ -287,7 +287,7 @@ func TestOpenAIBaseURLValidationMode(t *testing.T) {
 		)
 		defer func() { _ = client.Close() }()
 
-		_, err := client.Provider("openai")
+		_, err := client.ProviderWithHandle("openai")
 		require.Error(t, err)
 		assert.True(t, strings.Contains(err.Error(), "invalid OpenAI API key format"), err.Error())
 	})

@@ -47,9 +47,10 @@ func (w *ProviderWrapper) Embeddings(ctx context.Context, request EmbeddingsRequ
 	return handler(ctx, request)
 }
 
-// Rerank delegates directly (no middleware chain for Rerank yet).
+// Rerank implements reranking with middleware.
 func (w *ProviderWrapper) Rerank(ctx context.Context, request RerankRequest) (*RerankResponse, error) {
-	return w.provider.Rerank(ctx, request)
+	handler := w.chain.ApplyRerank(w.provider.Rerank)
+	return handler(ctx, request)
 }
 
 // Audio implements audio with middleware

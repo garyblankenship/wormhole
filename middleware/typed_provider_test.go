@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/garyblankenship/wormhole/v2/types"
+	"github.com/garyblankenship/wormhole/v3/types"
 )
 
 func TestProviderMetricsGetMetricsReturnsIndependentSnapshot(t *testing.T) {
@@ -318,41 +318,6 @@ func TestTypedEnhancedMetricsMiddlewareRecordsAllHandlerTypes(t *testing.T) {
 	}
 	if estimateStructuredOutputTokens(nil) != 100 {
 		t.Fatal("estimateStructuredOutputTokens returned unexpected estimate")
-	}
-}
-
-func TestAdaptiveRateLimiterHealthAdjustment(t *testing.T) {
-	t.Parallel()
-
-	limiter := NewHealthAwareAdaptiveRateLimiter(10, 1, 20, 100*time.Millisecond)
-	if limiter.healthMetrics == nil {
-		t.Fatal("health-aware limiter did not initialize health metrics")
-	}
-
-	limiter.RecordHealthMetrics(&HealthMetrics{
-		CircuitState:     StateOpen,
-		Healthy:          false,
-		ErrorRate:        1.2,
-		ConsecutiveFails: 3,
-	})
-	if score := limiter.calculateHealthScore(); score != 0.0125 {
-		t.Fatalf("health score = %v, want 0.0125", score)
-	}
-	if adjustment := limiter.calculateHealthAdjustment(); adjustment != 0.5 {
-		t.Fatalf("health adjustment = %v, want 0.5", adjustment)
-	}
-
-	limiter.adjustRate(200 * time.Millisecond)
-	if limiter.rate.Load() != 4 {
-		t.Fatalf("adjusted rate = %d, want 4", limiter.rate.Load())
-	}
-
-	limiter.healthMetrics = nil
-	if limiter.calculateHealthScore() != 1.0 || limiter.calculateHealthAdjustment() != 1.0 {
-		t.Fatal("nil health metrics did not return neutral score and adjustment")
-	}
-	if err := limiter.Close(); err != nil {
-		t.Fatalf("Close returned error: %v", err)
 	}
 }
 

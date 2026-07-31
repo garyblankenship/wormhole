@@ -5,10 +5,10 @@ import (
 	"encoding/json"
 	"net/http"
 
-	"github.com/garyblankenship/wormhole/v2/providers"
-	providerstream "github.com/garyblankenship/wormhole/v2/providers/internal/stream"
-	transform "github.com/garyblankenship/wormhole/v2/providers/internal/transform"
-	"github.com/garyblankenship/wormhole/v2/types"
+	"github.com/garyblankenship/wormhole/v3/providers"
+	providerstream "github.com/garyblankenship/wormhole/v3/providers/internal/stream"
+	transform "github.com/garyblankenship/wormhole/v3/providers/internal/transform"
+	"github.com/garyblankenship/wormhole/v3/types"
 )
 
 const defaultBaseURL = "https://api.anthropic.com/v1"

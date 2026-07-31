@@ -4,7 +4,7 @@ import (
 	"context"
 	"time"
 
-	"github.com/garyblankenship/wormhole/v2/types"
+	"github.com/garyblankenship/wormhole/v3/types"
 )
 
 // ModelFetcher defines the interface for fetching models from a provider
@@ -83,15 +83,4 @@ type FileCache struct {
 	Version string                 `json:"version"`
 	Updated time.Time              `json:"updated"`
 	Entries map[string]*CacheEntry `json:"entries"` // provider -> CacheEntry
-}
-
-// JournalEntry represents an append-only journal entry for cache updates.
-//
-// Deprecated: ModelCache no longer writes append journals.
-type JournalEntry struct {
-	Provider  string             `json:"provider"`
-	Models    []*types.ModelInfo `json:"models"`
-	Timestamp time.Time          `json:"timestamp"`
-	Checksum  string             `json:"checksum"` // SHA256 checksum for validation
-	Sequence  int64              `json:"sequence"` // Monotonic sequence number
 }

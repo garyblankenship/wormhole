@@ -7,8 +7,8 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/garyblankenship/wormhole/v2"
-	"github.com/garyblankenship/wormhole/v2/types"
+	"github.com/garyblankenship/wormhole/v3"
+	"github.com/garyblankenship/wormhole/v3/types"
 )
 
 // ExampleProvider demonstrates implementing a custom provider

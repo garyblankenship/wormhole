@@ -5,7 +5,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/garyblankenship/wormhole/v2/types"
+	"github.com/garyblankenship/wormhole/v3/types"
 )
 
 // HealthStatus represents the health status of a provider
@@ -186,53 +186,6 @@ func (hc *HealthChecker) checkProvider(provider string) {
 		status.Healthy = true
 		status.ConsecutiveFails = 0
 		status.LastError = nil
-	}
-}
-
-// HealthCheckMiddleware adds health checking to requests
-func HealthCheckMiddleware(checker *HealthChecker, providerName string) Middleware {
-	return func(next Handler) Handler {
-		return func(ctx context.Context, req any) (any, error) {
-			// Check if provider is healthy
-			if !checker.IsHealthy(providerName) {
-				status := checker.GetStatus(providerName)
-				if status.LastError != nil {
-					return nil, status.LastError
-				}
-				return nil, ErrProviderUnhealthy
-			}
-
-			// Execute request and track health
-			start := time.Now()
-			resp, err := next(ctx, req)
-			responseTime := time.Since(start)
-
-			// Update health status based on response
-			checker.mu.Lock()
-			status, exists := checker.statuses[providerName]
-			if !exists {
-				status = &HealthStatus{}
-				checker.statuses[providerName] = status
-			}
-
-			status.ResponseTime = responseTime
-			status.LastCheck = time.Now()
-
-			if err != nil {
-				status.ConsecutiveFails++
-				status.LastError = err
-				if status.ConsecutiveFails >= 3 {
-					status.Healthy = false
-				}
-			} else {
-				status.Healthy = true
-				status.ConsecutiveFails = 0
-				status.LastError = nil
-			}
-			checker.mu.Unlock()
-
-			return resp, err
-		}
 	}
 }
 

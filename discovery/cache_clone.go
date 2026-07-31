@@ -6,7 +6,7 @@ import (
 	"reflect"
 	"strings"
 
-	"github.com/garyblankenship/wormhole/v2/types"
+	"github.com/garyblankenship/wormhole/v3/types"
 )
 
 // cacheSchemaVersion is stamped into every persisted CacheEntry shard. Bump

@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/garyblankenship/wormhole/v2/types"
+	"github.com/garyblankenship/wormhole/v3/types"
 )
 
 // OpenAIFetcher fetches models from OpenAI API

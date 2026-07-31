@@ -8,7 +8,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/garyblankenship/wormhole/v2"
+	"github.com/garyblankenship/wormhole/v3"
 )
 
 func TestFactoryQuickText(t *testing.T) {

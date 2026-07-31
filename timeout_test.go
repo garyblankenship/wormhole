@@ -7,8 +7,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/garyblankenship/wormhole/v2/types"
-	mockpkg "github.com/garyblankenship/wormhole/v2/wormholetest"
+	"github.com/garyblankenship/wormhole/v3/types"
+	mockpkg "github.com/garyblankenship/wormhole/v3/wormholetest"
 )
 
 func TestUnlimitedTimeoutConfiguration(t *testing.T) {
@@ -51,7 +51,7 @@ func TestUnlimitedTimeoutConfiguration(t *testing.T) {
 		)
 
 		// Get the provider to trigger factory call
-		provider, err := wormhole.Provider("test")
+		provider, err := wormhole.ProviderWithHandle("test")
 		require.NoError(t, err)
 		assert.NotNil(t, provider)
 
@@ -74,7 +74,7 @@ func TestUnlimitedTimeoutConfiguration(t *testing.T) {
 		)
 
 		// Get the provider to trigger factory call
-		provider, err := wormhole.Provider("test")
+		provider, err := wormhole.ProviderWithHandle("test")
 		require.NoError(t, err)
 		assert.NotNil(t, provider)
 
@@ -97,7 +97,7 @@ func TestUnlimitedTimeoutConfiguration(t *testing.T) {
 			WithProviderConfig("test", types.ProviderConfig{APIKey: "test-key"}),
 		)
 
-		provider, err := wormhole.Provider("test")
+		provider, err := wormhole.ProviderWithHandle("test")
 		require.NoError(t, err)
 		assert.NotNil(t, provider)
 
@@ -124,7 +124,7 @@ func TestDefaultRetryConfiguration(t *testing.T) {
 			WithProviderConfig("test", types.ProviderConfig{APIKey: "test-key"}),
 		)
 
-		provider, err := wormhole.Provider("test")
+		provider, err := wormhole.ProviderWithHandle("test")
 		require.NoError(t, err)
 		assert.NotNil(t, provider)
 
@@ -154,7 +154,7 @@ func TestDefaultRetryConfiguration(t *testing.T) {
 			}),
 		)
 
-		provider, err := wormhole.Provider("test")
+		provider, err := wormhole.ProviderWithHandle("test")
 		require.NoError(t, err)
 		assert.NotNil(t, provider)
 

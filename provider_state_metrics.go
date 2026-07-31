@@ -46,7 +46,7 @@ type ProviderAdaptiveState struct {
 	totalSamples int64
 
 	// PID controller
-	pidController *PIDController
+	pidController *pidController
 
 	// Performance targets
 	targetLatency time.Duration
@@ -76,7 +76,7 @@ func NewProviderAdaptiveState(key ProviderKey, targetLatency time.Duration,
 		latencies:       make([]time.Duration, 0, config.LatencyWindowSize),
 		latencyRing:     ring.New(config.LatencyWindowSize),
 		errorRates:      ring.New(config.LatencyWindowSize),
-		pidController:   NewPIDController(DefaultPIDConfig()),
+		pidController:   newPIDController(defaultPIDConfig()),
 		targetLatency:   config.TargetLatency,
 		minCapacity:     config.MinCapacity,
 		maxCapacity:     config.MaxCapacity,

@@ -3,7 +3,7 @@ package wormhole
 import (
 	"fmt"
 
-	"github.com/garyblankenship/wormhole/v2/types"
+	"github.com/garyblankenship/wormhole/v3/types"
 )
 
 // SimpleFactory provides Laravel-inspired factory methods for common use cases

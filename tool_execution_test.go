@@ -12,7 +12,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/garyblankenship/wormhole/v2/types"
+	"github.com/garyblankenship/wormhole/v3/types"
 )
 
 type countedToolResult struct{ calls atomic.Int32 }
@@ -246,25 +246,6 @@ func TestToolExecutor_ExecuteAll(t *testing.T) {
 		assert.Equal(t, fmt.Sprintf("call_%d", i+1), result.ToolCallID)
 		assert.Empty(t, result.Error)
 	}
-}
-
-func TestToolExecutor_BuildToolResultMessage(t *testing.T) {
-	t.Parallel()
-	executor := NewToolExecutor(NewToolRegistry())
-
-	results := []types.ToolResult{
-		{
-			ToolCallID: "call_1",
-			Result:     map[string]any{"data": "success"},
-		},
-	}
-
-	message := executor.BuildToolResultMessage(results)
-
-	assert.Equal(t, types.RoleTool, message.GetRole())
-	assert.Equal(t, "call_1", message.ToolCallID)
-	assert.Contains(t, message.Content, "call_1")
-	assert.Contains(t, message.Content, "success")
 }
 
 func TestToolExecutor_BuildToolResultMessages(t *testing.T) {

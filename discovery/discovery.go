@@ -5,7 +5,7 @@ import (
 	"sort"
 	"sync"
 
-	"github.com/garyblankenship/wormhole/v2/types"
+	"github.com/garyblankenship/wormhole/v3/types"
 )
 
 // DiscoveryService fetches and caches models from providers

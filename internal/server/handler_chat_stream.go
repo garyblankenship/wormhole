@@ -6,8 +6,8 @@ import (
 	"net/http"
 	"time"
 
-	wormhole "github.com/garyblankenship/wormhole/v2"
-	"github.com/garyblankenship/wormhole/v2/types"
+	wormhole "github.com/garyblankenship/wormhole/v3"
+	"github.com/garyblankenship/wormhole/v3/types"
 )
 
 func (p *proxy) streamChat(w http.ResponseWriter, r *http.Request, builder *wormhole.TextRequestBuilder, model string) {

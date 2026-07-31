@@ -21,7 +21,7 @@ Wormhole now supports **native tool calling** (also known as function calling), 
 ```go
 import (
     "context"
-    "github.com/garyblankenship/wormhole/v2"
+    "github.com/garyblankenship/wormhole/v3"
 )
 
 client := wormhole.New(wormhole.WithOpenAI("your-api-key"))
@@ -248,11 +248,8 @@ the wait for a permit; `ToolTimeout` starts only after admission.
 handlers must still return when their context is canceled; see
 [Handler Isolation](#handler-isolation).
 
-`MaxMemoryMB`, `MaxCPUTime`, and `EnableResourceIsolation` are deprecated
-compatibility fields, not isolation controls. Enabling any of them fails
-`ToolSafetyConfig.Validate` and SDK-managed tool execution before a handler
-starts. Run untrusted tools in a separately isolated process; process isolation
-is outside Wormhole's provider-bridge scope.
+Run untrusted tools in a separately isolated process; process isolation is
+outside Wormhole's provider-bridge scope.
 
 ## Tool Registry API
 
@@ -573,7 +570,7 @@ registry.
 **Solutions**:
 - ✅ Make tool descriptions clear and specific
 - ✅ Verify schema matches expected inputs
-- ✅ Check model supports function calling (gpt-5+, o3+, claude-sonnet-4-5+, gemini-2.5+)
+- ✅ Check model supports function calling (gpt-5.6, claude-sonnet-5, gemini-3.6-flash)
 - ✅ Use explicit prompts: "Use the get_weather tool to..."
 
 ### Infinite Tool Loops
@@ -607,4 +604,4 @@ process. Process isolation is outside the provider-bridge scope.
 
 - [Main README](../README.md) - Full Wormhole documentation
 - [Examples](../examples/tool_calling/) - Complete working examples
-- [Package Reference](https://pkg.go.dev/github.com/garyblankenship/wormhole/v2) - Exported API
+- [Package Reference](https://pkg.go.dev/github.com/garyblankenship/wormhole/v3) - Exported API

@@ -1,7 +1,7 @@
 package wormhole
 
 import (
-	"github.com/garyblankenship/wormhole/v2/types"
+	"github.com/garyblankenship/wormhole/v3/types"
 )
 
 // StepEvent provides information about each step in the agent loop.

@@ -8,7 +8,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/garyblankenship/wormhole/v2"
+	"github.com/garyblankenship/wormhole/v3"
 )
 
 // EmbeddingJob represents a batch embedding job

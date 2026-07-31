@@ -2,11 +2,12 @@ package middleware
 
 import (
 	"context"
+	"errors"
 	"sync"
 	"sync/atomic"
 	"time"
 
-	"github.com/garyblankenship/wormhole/v2/types"
+	"github.com/garyblankenship/wormhole/v3/types"
 )
 
 // CircuitState represents the state of a circuit breaker
@@ -40,8 +41,6 @@ type CircuitBreaker struct {
 	maxHalfOpenCalls int32        // int32 for atomic comparison
 }
 
-const defaultCircuitKey = "default\x00default"
-
 type circuitBreakerRegistry struct {
 	mu               sync.RWMutex
 	breakers         map[string]*CircuitBreaker
@@ -57,17 +56,8 @@ func newCircuitBreakerRegistry(failureThreshold int, timeout time.Duration) *cir
 	}
 }
 
-func circuitKey(ctx context.Context) string {
-	provider, _ := ctx.Value(CtxKeyProvider).(string)
-	method, _ := ctx.Value(CtxKeyMethod).(string)
-	if provider == "" && method == "" {
-		return defaultCircuitKey
-	}
-	return provider + "\x00" + method
-}
-
-func (r *circuitBreakerRegistry) breaker(ctx context.Context) *CircuitBreaker {
-	key := circuitKey(ctx)
+func (r *circuitBreakerRegistry) breaker(provider, operation string) *CircuitBreaker {
+	key := provider + "\x00" + operation
 	r.mu.RLock()
 	breaker := r.breakers[key]
 	r.mu.RUnlock()
@@ -106,7 +96,35 @@ func NewCircuitBreaker(failureThreshold int, timeout time.Duration) *CircuitBrea
 
 // Execute wraps a function call with circuit breaker logic
 func (cb *CircuitBreaker) Execute(ctx context.Context, fn func() (any, error)) (any, error) {
+	if err := cb.admit(); err != nil {
+		return nil, err
+	}
+
+	result, err := fn()
+	if err != nil {
+		if ctxErr := ctx.Err(); ctxErr != nil && errors.Is(err, ctxErr) {
+			cb.recordCancellation()
+			return result, err
+		}
+		return result, cb.recordError(err)
+	}
+	cb.recordSuccess()
+	return result, nil
+}
+
+// recordCancellation releases a half-open probe without treating a caller-aborted
+// request as evidence that the provider is unhealthy.
+func (cb *CircuitBreaker) recordCancellation() {
 	cb.mu.Lock()
+	defer cb.mu.Unlock()
+	if cb.state == StateHalfOpen && cb.halfOpenCalls.Load() > 0 {
+		cb.halfOpenCalls.Add(-1)
+	}
+}
+
+func (cb *CircuitBreaker) admit() error {
+	cb.mu.Lock()
+	defer cb.mu.Unlock()
 
 	// Check if we should transition from open to half-open
 	if cb.state == StateOpen {
@@ -115,8 +133,7 @@ func (cb *CircuitBreaker) Execute(ctx context.Context, fn func() (any, error)) (
 			cb.halfOpenCalls.Store(0)
 			cb.successes = 0
 		} else {
-			cb.mu.Unlock()
-			return nil, wrapMiddlewareError("circuit_breaker", "execute", ErrCircuitOpen)
+			return wrapMiddlewareError("circuit_breaker", "execute", ErrCircuitOpen)
 		}
 	}
 
@@ -126,8 +143,7 @@ func (cb *CircuitBreaker) Execute(ctx context.Context, fn func() (any, error)) (
 		for {
 			current := cb.halfOpenCalls.Load()
 			if current >= cb.maxHalfOpenCalls {
-				cb.mu.Unlock()
-				return nil, wrapMiddlewareError("circuit_breaker", "execute", ErrCircuitOpen)
+				return wrapMiddlewareError("circuit_breaker", "execute", ErrCircuitOpen)
 			}
 			// Atomic increment - only proceeds if no concurrent modification
 			if cb.halfOpenCalls.CompareAndSwap(current, current+1) {
@@ -136,20 +152,20 @@ func (cb *CircuitBreaker) Execute(ctx context.Context, fn func() (any, error)) (
 			// CAS failed (another goroutine incremented), retry
 		}
 	}
+	return nil
+}
 
-	cb.mu.Unlock()
-
-	// Execute the function
-	result, err := fn()
-
+func (cb *CircuitBreaker) recordError(err error) error {
 	cb.mu.Lock()
 	defer cb.mu.Unlock()
+	_, wrapped := cb.handleError(nil, wrapIfNotWormholeError("circuit_breaker", err))
+	return wrapped
+}
 
-	if err != nil {
-		return cb.handleError(result, wrapIfNotWormholeError("circuit_breaker", err))
-	}
-
-	return cb.handleSuccess(result), nil
+func (cb *CircuitBreaker) recordSuccess() {
+	cb.mu.Lock()
+	defer cb.mu.Unlock()
+	cb.handleSuccess(nil)
 }
 
 func (cb *CircuitBreaker) handleError(result any, err error) (any, error) {
@@ -197,19 +213,4 @@ func (cb *CircuitBreaker) GetState() CircuitState {
 // Close is a no-op for circuit breaker (no background resources)
 func (cb *CircuitBreaker) Close() error {
 	return nil
-}
-
-// CircuitBreakerMiddleware creates a middleware with circuit breaker protection
-func CircuitBreakerMiddleware(threshold int, timeout time.Duration) Middleware {
-	registry := newCircuitBreakerRegistry(threshold, timeout)
-
-	return func(next Handler) Handler {
-		return func(ctx context.Context, req any) (any, error) {
-			breaker := registry.breaker(ctx)
-			result, err := breaker.Execute(ctx, func() (any, error) {
-				return next(ctx, req)
-			})
-			return result, wrapIfNotWormholeError("circuit_breaker", err)
-		}
-	}
 }

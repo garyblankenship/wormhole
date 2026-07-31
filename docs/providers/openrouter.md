@@ -15,8 +15,8 @@ import (
     "fmt"
     "os"
 
-    "github.com/garyblankenship/wormhole/v2/types"
-    "github.com/garyblankenship/wormhole/v2"
+    "github.com/garyblankenship/wormhole/v3/types"
+    "github.com/garyblankenship/wormhole/v3"
 )
 
 func main() {
@@ -144,7 +144,7 @@ client := wormhole.New(
 Fetch available models dynamically:
 
 ```go
-import "github.com/garyblankenship/wormhole/v2/discovery/fetchers"
+import "github.com/garyblankenship/wormhole/v3/discovery/fetchers"
 
 fetcher := fetchers.NewOpenRouterFetcher()
 models, err := fetcher.FetchModels(context.Background())

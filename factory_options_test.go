@@ -5,8 +5,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/garyblankenship/wormhole/v2/discovery"
-	"github.com/garyblankenship/wormhole/v2/types"
+	"github.com/garyblankenship/wormhole/v3/discovery"
+	"github.com/garyblankenship/wormhole/v3/types"
 )
 
 func TestEmbeddingsBuilderConfigurationCloneAndValidate(t *testing.T) {
@@ -176,11 +176,11 @@ func TestFactoryEnvironmentAndMiddlewareOptions(t *testing.T) {
 	if metrics == nil {
 		t.Fatal("WithMetrics returned nil metrics")
 	}
-	if len(cfg.Middleware) != 5 {
-		t.Fatalf("legacy middleware count = %d, want 5", len(cfg.Middleware))
-	}
 	if len(cfg.ProviderMiddlewares) != 8 {
 		t.Fatalf("provider middleware count = %d, want 8", len(cfg.ProviderMiddlewares))
+	}
+	if len(cfg.Closers) != 1 {
+		t.Fatalf("cache closer count = %d, want 1", len(cfg.Closers))
 	}
 }
 

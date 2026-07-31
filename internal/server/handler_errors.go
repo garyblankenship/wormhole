@@ -5,7 +5,7 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/garyblankenship/wormhole/v2/types"
+	"github.com/garyblankenship/wormhole/v3/types"
 )
 
 func writeUpstreamError(w http.ResponseWriter, err error) {

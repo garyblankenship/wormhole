@@ -12,8 +12,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	providerstream "github.com/garyblankenship/wormhole/v2/providers/internal/stream"
-	"github.com/garyblankenship/wormhole/v2/types"
+	providerstream "github.com/garyblankenship/wormhole/v3/providers/internal/stream"
+	"github.com/garyblankenship/wormhole/v3/types"
 )
 
 func TestAnthropicStreamWireConformance(t *testing.T) {

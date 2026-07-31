@@ -2,6 +2,23 @@
 
 ## Unreleased
 
+## v3.0.0 (2026-07-31)
+
+### Purpose
+- Focus v3 on a typed, application-facing provider bridge for generation,
+  streaming, structured output, tool calling, embeddings, reranking, audio, and
+  images. Provider administration and resource management remain with the
+  official provider SDKs.
+
+### Breaking changes
+- v3 module path: import `github.com/garyblankenship/wormhole/v3`; see
+  [the v3 migration guide](docs/v3-migration.md).
+- Remove legacy any-typed middleware, retry and load-balancing middleware,
+  public PID controls, raw provider access, deprecated discovery journal APIs,
+  and unsupported tool resource-isolation settings. Typed provider middleware,
+  provider retry config, fallback routing, adaptive concurrency, and provider
+  handles are the supported replacements.
+
 ### Features
 - Idempotency: expose `WithIdempotencyMaxEntries` and
   `GetIdempotencyCacheStats` for the bounded cache, whose finite default remains
@@ -19,9 +36,8 @@
 - Tool execution: share one client-owned admission budget across text and agent
   loops, reject more than 32 tool calls per provider response, and bound queue
   admission with the existing 30-second default.
-- Provider ownership: keep deprecated raw `Provider` access pinned for
-  compatibility while directing callers to releasable `ProviderWithHandle`
-  ownership.
+- Provider ownership: require releasable `ProviderWithHandle` leases for direct
+  provider access so idle providers remain eligible for cache eviction.
 
 ## v2.4.0 (2026-07-30)
 

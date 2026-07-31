@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/garyblankenship/wormhole/v2/types"
+	"github.com/garyblankenship/wormhole/v3/types"
 )
 
 // ToolRegistry manages registered tools in a thread-safe manner.

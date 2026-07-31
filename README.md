@@ -23,13 +23,13 @@ realtime APIs, use the provider SDKs or REST APIs directly.
 [![Go](https://img.shields.io/badge/Go-1.25+-blue.svg)](https://go.dev)
 [![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-Upgrading from v1? See the [v2 migration guide](docs/v2-migration.md) for the
-import mapping and removed implementation packages.
+Upgrading from v2? See the [v3 migration guide](docs/v3-migration.md). The
+[v2 migration guide](docs/v2-migration.md) remains available for v1 users.
 
 ## Open A Portal
 
 ```bash
-go get github.com/garyblankenship/wormhole/v2@latest
+go get github.com/garyblankenship/wormhole/v3@latest
 ```
 
 ```go
@@ -40,7 +40,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/garyblankenship/wormhole/v2"
+	"github.com/garyblankenship/wormhole/v3"
 )
 
 func main() {
@@ -500,9 +500,7 @@ Manual mode bypasses the SDK executor, so the caller owns validation, handler
 admission, timeouts, and retries. For automatic execution, one client-wide
 admission budget covers text and agent handlers. The defaults reject more than
 32 calls in one provider response and allow a 30-second queue wait; configure
-them with `WithToolSafetyConfig`. The deprecated `MaxMemoryMB`, `MaxCPUTime`,
-and `EnableResourceIsolation` fields are unsupported and fail validation before
-SDK-managed handlers start. Process isolation belongs outside the provider
+them with `WithToolSafetyConfig`. Process isolation belongs outside the provider
 bridge. See the [tool-calling guide](docs/tool-calling.md).
 
 ## Agent Loop
@@ -598,6 +596,11 @@ client.EnableAdaptiveConcurrency(&wormhole.EnhancedAdaptiveConfig{
 })
 ```
 
+Configure adaptive concurrency with the stable high-level controls: `TargetLatency`,
+`MinCapacity`, `MaxCapacity`, and `InitialCapacity`. Wormhole will continue to
+own the low-level controller tuning rather than replacing it with another
+public tuning API.
+
 Graceful shutdown closes request and provider admission immediately, then drains
 in-flight requests and provider construction before cleaning up shared resources:
 
@@ -630,10 +633,9 @@ in-flight, a new distinct request fails before provider execution with a
 retryable HTTP 503-classified capacity error. `GetIdempotencyCacheStats()`
 reports current entries, capacity, evictions, and rejections.
 
-`Provider(name)` is deprecated. It returns a raw provider pinned until the
-client closes for compatibility. Prefer `ProviderWithHandle(name)` and close
-the returned handle when the provider is no longer in use, allowing cache
-cleanup to evict it safely.
+Direct provider access uses `ProviderWithHandle(name)`. Close the returned
+handle when the provider is no longer in use so cache cleanup can evict it
+safely.
 
 Attempt tracing is available when callers need to observe fallback behavior
 without storing a route ledger:
@@ -826,7 +828,7 @@ Use the mock provider to test application logic without network calls. Burning
 real tokens to unit-test branching logic is not science; it is a billing event.
 
 ```go
-import wmtest "github.com/garyblankenship/wormhole/v2/wormholetest"
+import wmtest "github.com/garyblankenship/wormhole/v3/wormholetest"
 
 func TestSummarize(t *testing.T) {
 	mock := wmtest.NewMockProvider("openai").

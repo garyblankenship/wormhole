@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/garyblankenship/wormhole/v2"
-	"github.com/garyblankenship/wormhole/v2/middleware"
-	"github.com/garyblankenship/wormhole/v2/types"
+	"github.com/garyblankenship/wormhole/v3"
+	"github.com/garyblankenship/wormhole/v3/middleware"
+	"github.com/garyblankenship/wormhole/v3/types"
 )
 
 // Example addressing the specific DX issues from meesix feedback
@@ -32,7 +32,7 @@ func main() {
 		Cache: cache,
 		TTL:   5 * time.Minute,
 	}
-	fmt.Printf("  CacheMiddleware: middleware.CacheConfig{Cache: cache, TTL: 5*time.Minute}\n")
+	fmt.Printf("  NewTypedCacheMiddleware: middleware.CacheConfig{Cache: cache, TTL: 5*time.Minute}\n")
 
 	// Per-provider retry configuration - NEW improved pattern!
 	maxRetries := 5
@@ -52,8 +52,8 @@ func main() {
 			RetryDelay:    &retryDelay,
 			RetryMaxDelay: &maxRetryDelay,
 		}), // This will fail but demonstrate per-provider retry
-		wormhole.WithMiddleware(
-			middleware.CacheMiddleware(cacheConfig),
+		wormhole.WithProviderMiddleware(
+			middleware.NewTypedCacheMiddleware(cacheConfig),
 		),
 	)
 
@@ -92,11 +92,11 @@ func main() {
 			RetryDelay: &productionRetryDelay,
 		}),
 		// Professional middleware stack from feedback
-		wormhole.WithMiddleware(
-			middleware.CircuitBreakerMiddleware(5, 30*time.Second),
-			middleware.RateLimitMiddleware(100),
-			middleware.CacheMiddleware(cacheConfig),
-			middleware.TimeoutMiddleware(60*time.Second),
+		wormhole.WithProviderMiddleware(
+			middleware.NewTypedCircuitBreakerMiddleware(5, 30*time.Second),
+			middleware.NewTypedRateLimitMiddleware(100),
+			middleware.NewTypedCacheMiddleware(cacheConfig),
+			middleware.NewTypedTimeoutMiddleware(60*time.Second),
 		),
 	)
 

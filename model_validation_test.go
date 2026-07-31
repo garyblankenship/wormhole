@@ -7,8 +7,8 @@ import (
 	"sync/atomic"
 	"testing"
 
-	"github.com/garyblankenship/wormhole/v2/types"
-	whtest "github.com/garyblankenship/wormhole/v2/wormholetest"
+	"github.com/garyblankenship/wormhole/v3/types"
+	whtest "github.com/garyblankenship/wormhole/v3/wormholetest"
 )
 
 type validationRecordingProvider struct {

@@ -5,10 +5,16 @@ import (
 	"testing"
 	"time"
 
-	"github.com/garyblankenship/wormhole/v2/middleware"
-	"github.com/garyblankenship/wormhole/v2/types"
-	testing_pkg "github.com/garyblankenship/wormhole/v2/wormholetest"
+	"github.com/garyblankenship/wormhole/v3/middleware"
+	"github.com/garyblankenship/wormhole/v3/types"
+	testing_pkg "github.com/garyblankenship/wormhole/v3/wormholetest"
 )
+
+func createMockClient(name, response string, _ int) *Wormhole {
+	provider := testing_pkg.NewMockProvider(name)
+	provider.WithTextResponse(types.TextResponse{Text: response})
+	return New(WithDefaultProvider(name), WithCustomProvider(name, testing_pkg.MockProviderFactory(provider)), WithModelValidation(false), WithDiscovery(false))
+}
 
 // BenchmarkTextGeneration measures the performance of text generation requests
 func BenchmarkTextGeneration(b *testing.B) {
@@ -121,35 +127,13 @@ func BenchmarkStructuredGeneration(b *testing.B) {
 	}
 }
 
-// BenchmarkWithMiddleware measures the overhead of middleware stack
-func BenchmarkWithMiddleware(b *testing.B) {
+// BenchmarkWithProviderMiddleware measures typed middleware overhead.
+func BenchmarkWithProviderMiddleware(b *testing.B) {
 	mockProvider := testing_pkg.NewMockProvider("mock")
 	mockProvider.WithTextResponse(types.TextResponse{
 		Text:  "Hello with middleware!",
 		Usage: &types.Usage{TotalTokens: 12},
 	})
-
-	// Create middleware stack
-	rateLimitMiddleware := func(next middleware.Handler) middleware.Handler {
-		return func(ctx context.Context, req any) (any, error) {
-			// Simulate rate limiting check
-			return next(ctx, req)
-		}
-	}
-
-	metricsMiddleware := func(next middleware.Handler) middleware.Handler {
-		return func(ctx context.Context, req any) (any, error) {
-			// Simulate metrics collection
-			return next(ctx, req)
-		}
-	}
-
-	circuitBreakerMiddleware := func(next middleware.Handler) middleware.Handler {
-		return func(ctx context.Context, req any) (any, error) {
-			// Simulate circuit breaker check
-			return next(ctx, req)
-		}
-	}
 
 	// Create client with custom provider and middleware stack using functional options
 	client := New(
@@ -157,7 +141,11 @@ func BenchmarkWithMiddleware(b *testing.B) {
 		WithCustomProvider("mock", func(config types.ProviderConfig) (types.Provider, error) {
 			return mockProvider, nil
 		}),
-		WithMiddleware(rateLimitMiddleware, metricsMiddleware, circuitBreakerMiddleware),
+		WithProviderMiddleware(
+			middleware.NewTypedRateLimitMiddleware(1000),
+			middleware.NewTypedMetricsMiddleware(middleware.NewTypedMetrics()),
+			middleware.NewTypedCircuitBreakerMiddleware(10, time.Second),
+		),
 	)
 
 	ctx := context.Background()

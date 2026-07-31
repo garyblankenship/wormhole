@@ -337,26 +337,14 @@ client := wormhole.New(
 Add type-safe middleware to the execution chain:
 
 ```go
-import "github.com/garyblankenship/wormhole/v2/middleware"
+import "github.com/garyblankenship/wormhole/v3/middleware"
 
 client := wormhole.New(
     wormhole.WithOpenAI(apiKey),
     wormhole.WithProviderMiddleware(
-        middleware.NewCircuitBreaker(5, 30*time.Second),
-        middleware.RateLimitMiddleware(10),
+        middleware.NewTypedCircuitBreakerMiddleware(5, 30*time.Second),
+        middleware.NewTypedRateLimitMiddleware(10),
     ),
-)
-```
-
-#### WithMiddleware (Deprecated)
-
-Legacy middleware (automatically converted to type-safe):
-
-```go
-// Deprecated: Use WithProviderMiddleware instead
-client := wormhole.New(
-    wormhole.WithOpenAI(apiKey),
-    wormhole.WithMiddleware(legacyMiddleware...),
 )
 ```
 
@@ -367,7 +355,7 @@ client := wormhole.New(
 Configure dynamic model discovery:
 
 ```go
-import "github.com/garyblankenship/wormhole/v2/discovery"
+import "github.com/garyblankenship/wormhole/v3/discovery"
 
 client := wormhole.New(
     wormhole.WithOpenAI(apiKey),
@@ -527,7 +515,7 @@ var ProductionOpts = []wormhole.Option{
     wormhole.WithProviderFromEnv("anthropic"),
     wormhole.WithTimeout(60 * time.Second),
     wormhole.WithProviderMiddleware(
-        middleware.NewCircuitBreaker(5, 30*time.Second),
+        middleware.NewTypedCircuitBreakerMiddleware(5, 30*time.Second),
     ),
 }
 
@@ -719,8 +707,8 @@ func NewProductionClient() (*wormhole.Wormhole, error) {
 
         // Production middleware
         wormhole.WithProviderMiddleware(
-            middleware.NewCircuitBreaker(5, 30*time.Second),
-            middleware.RateLimitMiddleware(10),
+            middleware.NewTypedCircuitBreakerMiddleware(5, 30*time.Second),
+            middleware.NewTypedRateLimitMiddleware(10),
         ),
 
         // Discovery settings

@@ -7,7 +7,7 @@ import (
 	"io"
 	"net/http"
 
-	"github.com/garyblankenship/wormhole/v2/types"
+	"github.com/garyblankenship/wormhole/v3/types"
 )
 
 const (

@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/garyblankenship/wormhole/v2"
+	"github.com/garyblankenship/wormhole/v3"
 )
 
 func main() {

@@ -8,8 +8,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/garyblankenship/wormhole/v2"
-	"github.com/garyblankenship/wormhole/v2/types"
+	"github.com/garyblankenship/wormhole/v3"
+	"github.com/garyblankenship/wormhole/v3/types"
 )
 
 // QuantumResult holds response from each dimension

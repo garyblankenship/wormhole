@@ -4,8 +4,8 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/garyblankenship/wormhole/v2/internal/schemavalidation"
-	"github.com/garyblankenship/wormhole/v2/types"
+	"github.com/garyblankenship/wormhole/v3/internal/schemavalidation"
+	"github.com/garyblankenship/wormhole/v3/types"
 )
 
 // ToolExecutor handles the execution of tools and orchestration of multi-turn conversations

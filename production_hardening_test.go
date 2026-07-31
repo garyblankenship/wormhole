@@ -10,7 +10,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/garyblankenship/wormhole/v2"
+	"github.com/garyblankenship/wormhole/v3"
 )
 
 type errorCloser struct {
@@ -81,11 +81,7 @@ func TestToolSafetyConfig(t *testing.T) {
 	t.Parallel()
 	config := wormhole.DefaultToolSafetyConfig()
 
-	// Verify default values for new security fields
-	assert.Equal(t, 0, config.MaxMemoryMB, "Default max memory should be 0 (unlimited)")
-	assert.Equal(t, 0*time.Second, config.MaxCPUTime, "Default max CPU time should be 0 (unlimited)")
 	assert.True(t, config.EnableInputValidation, "Input validation should be enabled by default")
-	assert.False(t, config.EnableResourceIsolation, "Resource isolation should be disabled by default")
 	assert.Equal(t, 10*1024*1024, config.MaxToolOutputSize, "Default max output size should be 10MB")
 
 	// Test validation

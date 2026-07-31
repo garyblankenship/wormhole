@@ -8,7 +8,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/garyblankenship/wormhole/v2/providers"
+	"github.com/garyblankenship/wormhole/v3/providers"
 )
 
 var (

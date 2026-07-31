@@ -78,6 +78,8 @@ type EmbeddingsRequest struct {
 	ProviderOptions map[string]any          `json:"-"`
 }
 
+func (r EmbeddingsRequest) GetProviderOptions() map[string]any { return r.ProviderOptions }
+
 // EmbeddingEncodingFormat controls how embedding vectors are represented in
 // the normalized response.
 type EmbeddingEncodingFormat string
@@ -96,6 +98,8 @@ type RerankRequest struct {
 	ProviderOptions map[string]any `json:"-"`
 }
 
+func (r RerankRequest) GetProviderOptions() map[string]any { return r.ProviderOptions }
+
 // ImagesRequest represents an image generation request
 type ImagesRequest struct {
 	Model           string         `json:"model"`
@@ -107,6 +111,8 @@ type ImagesRequest struct {
 	ResponseFormat  string         `json:"response_format,omitempty"`
 	ProviderOptions map[string]any `json:"-"`
 }
+
+func (r ImagesRequest) GetProviderOptions() map[string]any { return r.ProviderOptions }
 
 // SpeechToTextRequest represents a speech-to-text request
 type SpeechToTextRequest struct {
@@ -136,6 +142,8 @@ type TextToSpeechRequest struct {
 	ProviderOptions map[string]any `json:"-"`
 }
 
+func (r TextToSpeechRequest) GetProviderOptions() map[string]any { return r.ProviderOptions }
+
 // ImageRequest represents an image generation request (alias for ImagesRequest)
 type ImageRequest = ImagesRequest
 
@@ -152,3 +160,5 @@ type AudioRequest struct {
 	ResponseFormat  string           `json:"response_format,omitempty"`
 	ProviderOptions map[string]any   `json:"-"`
 }
+
+func (r AudioRequest) GetProviderOptions() map[string]any { return r.ProviderOptions }

@@ -4,7 +4,7 @@ import (
 	"net/http"
 	"testing"
 
-	"github.com/garyblankenship/wormhole/v2/types"
+	"github.com/garyblankenship/wormhole/v3/types"
 )
 
 func TestAuthStrategiesApply(t *testing.T) {

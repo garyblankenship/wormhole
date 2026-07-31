@@ -6,7 +6,7 @@ import (
 	"reflect"
 	"time"
 
-	"github.com/garyblankenship/wormhole/v2/types"
+	"github.com/garyblankenship/wormhole/v3/types"
 )
 
 // deref returns the underlying value if v is a pointer, otherwise returns v unchanged.

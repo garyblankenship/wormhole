@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/garyblankenship/wormhole/v2/types"
+	"github.com/garyblankenship/wormhole/v3/types"
 )
 
 // fetchModels fetches models from a provider and updates cache. staleOK is

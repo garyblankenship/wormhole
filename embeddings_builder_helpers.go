@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"math"
 
-	"github.com/garyblankenship/wormhole/v2/types"
+	"github.com/garyblankenship/wormhole/v3/types"
 )
 
 func encodeEmbeddingsResponse(response *types.EmbeddingsResponse, format types.EmbeddingEncodingFormat) *types.EmbeddingsResponse {

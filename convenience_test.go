@@ -6,7 +6,7 @@ import (
 	"slices"
 	"testing"
 
-	"github.com/garyblankenship/wormhole/v2/types"
+	"github.com/garyblankenship/wormhole/v3/types"
 )
 
 func TestImageBuilderConfigurationAndValidation(t *testing.T) {

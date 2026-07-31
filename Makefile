@@ -79,10 +79,11 @@ bench-profile:
 # Prepare release (requires version argument)
 prepare-release:
 	@if [ -z "$(VERSION)" ]; then \
-		echo "Usage: make prepare-release VERSION=v2.0.0"; \
+		echo "Usage: make prepare-release VERSION=v3.0.0"; \
 		exit 1; \
 	fi
 	@echo "Preparing release $(VERSION)..."
+	@./scripts/check-public-surface.sh
 	@go mod tidy
 	@go test ./...
 	@goreleaser check
@@ -166,7 +167,7 @@ help:
 	@echo "    make perf-test     - Performance regression test"
 	@echo ""
 	@echo "  🚀 Release"
-	@echo "    make prepare-release VERSION=v2.0.0 - Prepare release"
+	@echo "    make prepare-release VERSION=v3.0.0 - Prepare release"
 	@echo "    make release       - Create GitHub release"
 	@echo "    make release-check - Validate release config"
 	@echo "    make release-snapshot - Create test release"

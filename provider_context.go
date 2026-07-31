@@ -3,8 +3,8 @@ package wormhole
 import (
 	"context"
 
-	"github.com/garyblankenship/wormhole/v2/middleware"
-	"github.com/garyblankenship/wormhole/v2/types"
+	"github.com/garyblankenship/wormhole/v3/middleware"
+	"github.com/garyblankenship/wormhole/v3/types"
 )
 
 func contextWithProviderOperation(ctx context.Context, provider types.Provider, operation string) context.Context {

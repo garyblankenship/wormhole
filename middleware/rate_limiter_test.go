@@ -3,67 +3,45 @@ package middleware
 import (
 	"context"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
+	"github.com/garyblankenship/wormhole/v3/types"
 )
 
-func TestRateLimitMiddleware(t *testing.T) {
+func TestTypedRateLimitMiddleware(t *testing.T) {
 	t.Parallel()
-	t.Run("allows requests within rate limit", func(t *testing.T) {
-		t.Parallel()
-		mw := RateLimitMiddleware(10) // 10 requests per second
-
-		handler := func(ctx context.Context, req any) (any, error) {
-			return testResponse, nil
-		}
-
-		wrapped := mw(handler)
-
-		// Make 5 requests quickly (should all succeed)
-		for i := 0; i < 5; i++ {
-			resp, err := wrapped(context.Background(), "request")
-			require.NoError(t, err)
-			assert.Equal(t, "response", resp)
-		}
+	mw := NewTypedRateLimitMiddleware(10)
+	handler := mw.ApplyText(func(context.Context, types.TextRequest) (*types.TextResponse, error) {
+		return &types.TextResponse{Text: "response"}, nil
 	})
+	for range 5 {
+		response, err := handler(context.Background(), testTextRequest("request"))
+		if err != nil || response.Text != "response" {
+			t.Fatalf("typed rate limited request = (%#v, %v)", response, err)
+		}
+	}
+}
 
-	// Timing-sensitive test disabled due to test environment variations
-	// t.Run("enforces rate limit", func(t *testing.T) {
-	// 	mw := RateLimitMiddleware(5) // 5 requests per second
-	//
-	// 	var count int
-	// 	handler := func(ctx context.Context, req any) (any, error) {
-	// 		count++
-	// 		return testResponse, nil
-	// 	}
-	//
-	// 	wrapped := mw(handler)
-	//
-	// 	// Make 8 requests quickly
-	// 	start := time.Now()
-	// 	for i := 0; i < 8; i++ {
-	// 		_, _ = wrapped(context.Background(), "request")
-	// 	}
-	// 	duration := time.Since(start)
-	//
-	// 	// Should take at least 1.4 seconds for 8 requests at 5 req/sec (8/5 = 1.6s, allow some margin)
-	// 	assert.Greater(t, duration, 1200*time.Millisecond)
-	// 	assert.Equal(t, 8, count)
-	// })
+func TestTypedRateLimitMiddlewareNormalizesNonPositiveRate(t *testing.T) {
+	t.Parallel()
+	for _, rate := range []int{-1, 0} {
+		mw := NewTypedRateLimitMiddleware(rate)
+		handler := mw.ApplyText(func(context.Context, types.TextRequest) (*types.TextResponse, error) {
+			return &types.TextResponse{Text: "response"}, nil
+		})
+		if _, err := handler(context.Background(), testTextRequest("request")); err != nil {
+			t.Fatalf("rate %d: %v", rate, err)
+		}
+	}
 }
 
 func TestRateLimitCloseRace(t *testing.T) {
 	t.Parallel()
-
 	rl := NewRateLimiter(5)
-
 	var wg sync.WaitGroup
-	// Concurrent Waiters racing against Close — must not panic on a
-	// write-to-closed channel.
-	for i := 0; i < 50; i++ {
+	for range 50 {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
@@ -72,323 +50,41 @@ func TestRateLimitCloseRace(t *testing.T) {
 			_ = rl.Wait(ctx)
 		}()
 	}
-
-	// Close concurrently from multiple goroutines to prove idempotency too.
-	for i := 0; i < 5; i++ {
+	for range 5 {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			require.NoError(t, rl.Close())
+			if err := rl.Close(); err != nil {
+				t.Errorf("Close() error = %v", err)
+			}
 		}()
 	}
-
 	wg.Wait()
-
-	// Wait after Close returns the rate-limit error, never panics.
-	err := rl.Wait(context.Background())
-	require.ErrorIs(t, err, ErrRateLimitExceeded)
+	if err := rl.Wait(context.Background()); err != ErrRateLimitExceeded {
+		t.Fatalf("Wait after Close = %v, want %v", err, ErrRateLimitExceeded)
+	}
 }
 
-// TokenBucketRateLimiter test disabled - function not implemented yet
-// func TestTokenBucketRateLimiter(t *testing.T) {
-// 	t.Run("token bucket allows burst", func(t *testing.T) {
-// 		limiter := NewTokenBucketRateLimiter(5, 10) // 5 req/sec, burst of 10
-//
-// 		// Should allow 10 requests immediately (burst)
-// 		for i := 0; i < 10; i++ {
-// 			assert.True(t, limiter.Allow())
-// 		}
-//
-// 		// 11th request should need to wait
-// 		start := time.Now()
-// 		limiter.Wait()
-// 		duration := time.Since(start)
-// 		assert.Greater(t, duration, 190*time.Millisecond) // ~200ms for 1 token at 5/sec
-// 	})
-// }
-
-func TestAdaptiveRateLimitMiddleware(t *testing.T) {
+func TestConcurrentTypedRateLimiting(t *testing.T) {
 	t.Parallel()
-	t.Run("adjusts rate based on latency", func(t *testing.T) {
-		t.Parallel()
-		mw := AdaptiveRateLimitMiddleware(5, 2, 10, 50*time.Millisecond)
-
-		var handlerLatency time.Duration
-		handler := func(ctx context.Context, req any) (any, error) {
-			time.Sleep(handlerLatency)
-			return testResponse, nil
-		}
-
-		wrapped := mw(handler)
-
-		// Fast responses should increase rate
-		handlerLatency = 10 * time.Millisecond
-		for i := 0; i < 5; i++ {
-			_, _ = wrapped(context.Background(), "request")
-		}
-
-		// Slow responses should decrease rate
-		handlerLatency = 200 * time.Millisecond
-		for i := 0; i < 5; i++ {
-			_, _ = wrapped(context.Background(), "request")
-		}
+	mw := NewTypedRateLimitMiddleware(10)
+	var calls atomic.Int64
+	handler := mw.ApplyText(func(context.Context, types.TextRequest) (*types.TextResponse, error) {
+		calls.Add(1)
+		return &types.TextResponse{Text: "response"}, nil
 	})
-}
-
-func TestConcurrentRateLimiting(t *testing.T) {
-	t.Parallel()
-	t.Run("handles concurrent requests correctly", func(t *testing.T) {
-		t.Parallel()
-		mw := RateLimitMiddleware(10) // 10 requests per second
-
-		var count int
-		var mu sync.Mutex
-		handler := func(ctx context.Context, req any) (any, error) {
-			mu.Lock()
-			count++
-			mu.Unlock()
-			return testResponse, nil
-		}
-
-		wrapped := mw(handler)
-
-		// Launch 20 concurrent requests
-		var wg sync.WaitGroup
-		for i := 0; i < 20; i++ {
-			wg.Add(1)
-			go func() {
-				defer wg.Done()
-				_, _ = wrapped(context.Background(), "request")
-			}()
-		}
-
-		wg.Wait()
-		assert.Equal(t, 20, count)
-	})
-}
-
-// mockProviderAwareLimiter is a test implementation of ProviderAwareLimiter
-type mockProviderAwareLimiter struct {
-	acquireCalls                   []acquireCall
-	releaseCalls                   []releaseCall
-	recordLatencyCalls             []recordLatencyCall
-	acquireShouldFail              bool
-	acquireWithProviderShouldFail  bool
-	acquireReturnValue             bool
-	acquireWithProviderReturnValue bool
-}
-
-type acquireCall struct {
-	ctx context.Context
-}
-
-type releaseCall struct {
-	provider string
-	model    string
-}
-
-type recordLatencyCall struct {
-	latency  time.Duration
-	provider string
-	model    string
-	err      error
-}
-
-func (m *mockProviderAwareLimiter) Acquire(ctx context.Context) bool {
-	m.acquireCalls = append(m.acquireCalls, acquireCall{ctx: ctx})
-	if m.acquireShouldFail {
-		return false
+	var wg sync.WaitGroup
+	for range 20 {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			if _, err := handler(context.Background(), testTextRequest("request")); err != nil {
+				t.Errorf("typed rate limit handler: %v", err)
+			}
+		}()
 	}
-	return m.acquireReturnValue
-}
-
-func (m *mockProviderAwareLimiter) AcquireWithProvider(ctx context.Context, provider, model string) bool {
-	m.acquireCalls = append(m.acquireCalls, acquireCall{ctx: ctx})
-	if m.acquireWithProviderShouldFail {
-		return false
+	wg.Wait()
+	if got := calls.Load(); got != 20 {
+		t.Errorf("handler calls = %d, want 20", got)
 	}
-	return m.acquireWithProviderReturnValue
-}
-
-func (m *mockProviderAwareLimiter) AcquireToken(ctx context.Context) (func(), bool) {
-	m.acquireCalls = append(m.acquireCalls, acquireCall{ctx: ctx})
-	if m.acquireShouldFail {
-		return nil, false
-	}
-	if !m.acquireReturnValue {
-		return nil, false
-	}
-	return func() {
-		m.releaseCalls = append(m.releaseCalls, releaseCall{})
-	}, true
-}
-
-func (m *mockProviderAwareLimiter) AcquireTokenWithProvider(ctx context.Context, provider, model string) (func(), bool) {
-	m.acquireCalls = append(m.acquireCalls, acquireCall{ctx: ctx})
-	if m.acquireWithProviderShouldFail {
-		return nil, false
-	}
-	if !m.acquireWithProviderReturnValue {
-		return nil, false
-	}
-	return func() {
-		m.releaseCalls = append(m.releaseCalls, releaseCall{provider: provider, model: model})
-	}, true
-}
-
-func (m *mockProviderAwareLimiter) Release() {
-	m.releaseCalls = append(m.releaseCalls, releaseCall{})
-}
-
-func (m *mockProviderAwareLimiter) ReleaseWithProvider(provider, model string) {
-	m.releaseCalls = append(m.releaseCalls, releaseCall{provider: provider, model: model})
-}
-
-func (m *mockProviderAwareLimiter) RecordLatency(latency time.Duration) {
-	m.recordLatencyCalls = append(m.recordLatencyCalls, recordLatencyCall{latency: latency})
-}
-
-func (m *mockProviderAwareLimiter) RecordLatencyWithProvider(latency time.Duration, provider, model string, err error) {
-	m.recordLatencyCalls = append(m.recordLatencyCalls, recordLatencyCall{
-		latency:  latency,
-		provider: provider,
-		model:    model,
-		err:      err,
-	})
-}
-
-func TestProviderAwareConcurrencyLimitMiddleware(t *testing.T) {
-	t.Parallel()
-	t.Run("uses provider-aware limiting when provider in context", func(t *testing.T) {
-		t.Parallel()
-		mockLimiter := &mockProviderAwareLimiter{
-			acquireReturnValue:             true,
-			acquireWithProviderReturnValue: true,
-		}
-
-		mw := ProviderAwareConcurrencyLimitMiddleware(mockLimiter)
-
-		var handlerCalls int
-		handler := func(ctx context.Context, req any) (any, error) {
-			handlerCalls++
-			return testResponse, nil
-		}
-
-		wrapped := mw(handler)
-
-		// Test with provider in context - should use provider-aware methods
-		ctx := context.WithValue(context.Background(), CtxKeyProvider, "openai")
-		ctx = context.WithValue(ctx, CtxKeyModel, "test-model")
-
-		resp, err := wrapped(ctx, "request")
-		require.NoError(t, err)
-		assert.Equal(t, testResponse, resp)
-		assert.Equal(t, 1, handlerCalls)
-
-		// Should have called AcquireWithProvider
-		assert.Equal(t, 1, len(mockLimiter.acquireCalls))
-		// Should have called RecordLatencyWithProvider
-		assert.Equal(t, 1, len(mockLimiter.recordLatencyCalls))
-		assert.Equal(t, "openai", mockLimiter.recordLatencyCalls[0].provider)
-		assert.Equal(t, "test-model", mockLimiter.recordLatencyCalls[0].model)
-		// Should have called ReleaseWithProvider
-		assert.Equal(t, 1, len(mockLimiter.releaseCalls))
-		assert.Equal(t, "openai", mockLimiter.releaseCalls[0].provider)
-		assert.Equal(t, "test-model", mockLimiter.releaseCalls[0].model)
-
-		// Reset mock for second test
-		mockLimiter.acquireCalls = nil
-		mockLimiter.recordLatencyCalls = nil
-		mockLimiter.releaseCalls = nil
-
-		// Test without provider in context - should use global methods
-		ctx2 := context.Background()
-		resp2, err2 := wrapped(ctx2, "request")
-		require.NoError(t, err2)
-		assert.Equal(t, testResponse, resp2)
-		assert.Equal(t, 2, handlerCalls)
-
-		// Should have called Acquire (not AcquireWithProvider)
-		assert.Equal(t, 1, len(mockLimiter.acquireCalls))
-		// Should have called RecordLatency (not RecordLatencyWithProvider)
-		assert.Equal(t, 1, len(mockLimiter.recordLatencyCalls))
-		assert.Equal(t, "", mockLimiter.recordLatencyCalls[0].provider) // Empty for global
-		assert.Equal(t, "", mockLimiter.recordLatencyCalls[0].model)    // Empty for global
-		// Should have called Release (not ReleaseWithProvider)
-		assert.Equal(t, 1, len(mockLimiter.releaseCalls))
-		assert.Equal(t, "", mockLimiter.releaseCalls[0].provider) // Empty for global
-		assert.Equal(t, "", mockLimiter.releaseCalls[0].model)    // Empty for global
-	})
-
-	t.Run("handles acquire failure (context cancellation)", func(t *testing.T) {
-		t.Parallel()
-		mockLimiter := &mockProviderAwareLimiter{
-			acquireWithProviderReturnValue: false, // Simulate context cancellation
-		}
-
-		mw := ProviderAwareConcurrencyLimitMiddleware(mockLimiter)
-
-		var handlerCalls int
-		handler := func(ctx context.Context, req any) (any, error) {
-			handlerCalls++
-			return testResponse, nil
-		}
-
-		wrapped := mw(handler)
-
-		// Create a canceled context
-		ctx, cancel := context.WithCancel(context.Background())
-		cancel() // Cancel immediately
-		ctx = context.WithValue(ctx, CtxKeyProvider, "test")
-		ctx = context.WithValue(ctx, CtxKeyModel, "test-model")
-
-		resp, err := wrapped(ctx, "request")
-		require.Error(t, err)
-		assert.Nil(t, resp)
-		assert.Equal(t, 0, handlerCalls) // Handler should not be called
-		// Should return context canceled error
-		assert.ErrorIs(t, err, context.Canceled)
-	})
-
-	t.Run("respects EnableProviderAware config when disabled", func(t *testing.T) {
-		t.Parallel()
-		mockLimiter := &mockProviderAwareLimiter{
-			acquireReturnValue:             true,
-			acquireWithProviderReturnValue: true,
-		}
-
-		// Create middleware with provider-aware disabled
-		mw := ProviderAwareConcurrencyLimitMiddlewareWithConfig(ProviderAwareConcurrencyLimitConfig{
-			Limiter:             mockLimiter,
-			EnableProviderAware: false,
-		})
-
-		var handlerCalls int
-		handler := func(ctx context.Context, req any) (any, error) {
-			handlerCalls++
-			return testResponse, nil
-		}
-
-		wrapped := mw(handler)
-
-		// Even with provider in context, should use global methods when disabled
-		ctx := context.WithValue(context.Background(), CtxKeyProvider, "openai")
-		ctx = context.WithValue(ctx, CtxKeyModel, "test-model")
-
-		resp, err := wrapped(ctx, "request")
-		require.NoError(t, err)
-		assert.Equal(t, testResponse, resp)
-		assert.Equal(t, 1, handlerCalls)
-
-		// Should have called Acquire (not AcquireWithProvider) even though provider is in context
-		assert.Equal(t, 1, len(mockLimiter.acquireCalls))
-		// Should have called RecordLatency (not RecordLatencyWithProvider)
-		assert.Equal(t, 1, len(mockLimiter.recordLatencyCalls))
-		assert.Equal(t, "", mockLimiter.recordLatencyCalls[0].provider) // Empty for global
-		assert.Equal(t, "", mockLimiter.recordLatencyCalls[0].model)    // Empty for global
-		// Should have called Release (not ReleaseWithProvider)
-		assert.Equal(t, 1, len(mockLimiter.releaseCalls))
-		assert.Equal(t, "", mockLimiter.releaseCalls[0].provider) // Empty for global
-		assert.Equal(t, "", mockLimiter.releaseCalls[0].model)    // Empty for global
-	})
 }

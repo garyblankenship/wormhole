@@ -144,7 +144,7 @@ if errors.As(err, &validErr) {
 Use built-in type-checking helpers:
 
 ```go
-import "github.com/garyblankenship/wormhole/v2/types"
+import "github.com/garyblankenship/wormhole/v3/types"
 
 if types.IsAuthError(err) {
     // Handle authentication failures
@@ -172,7 +172,7 @@ if types.IsMiddlewareError(err) {
 Check for specific error instances:
 
 ```go
-import "github.com/garyblankenship/wormhole/v2/types"
+import "github.com/garyblankenship/wormhole/v3/types"
 
 if errors.Is(err, types.ErrInvalidAPIKey) {
     // Prompt for new API key
@@ -199,7 +199,7 @@ err := fmt.Errorf("operation failed: %w", originalErr)
 ### Wormhole Error Wrapping
 
 ```go
-import "github.com/garyblankenship/wormhole/v2/types"
+import "github.com/garyblankenship/wormhole/v3/types"
 
 // Create a classified WormholeError while preserving the cause
 err := types.WrapError(types.ErrorCodeAuth, "authentication failed", false, originalErr)
@@ -242,18 +242,26 @@ if err != nil {
 
 ## Retry Strategies
 
-### Retry Configuration
+### Provider Retry Configuration
 
 ```go
-type RetryConfig struct {
-    MaxRetries      int           // Maximum retry attempts (default: 3)
-    InitialDelay    time.Duration // Initial backoff delay (default: 1s)
-    MaxDelay        time.Duration // Maximum backoff delay (default: 30s)
-    BackoffMultiple float64       // Backoff multiplier (default: 2.0)
-    Jitter          bool          // Add randomness to prevent thundering herd
-    RetryableFunc   func(error) bool // Custom retryable check
-}
+maxRetries := 5
+retryDelay := 2 * time.Second
+retryMaxDelay := 30 * time.Second
+
+client := wormhole.New(
+    wormhole.WithOpenAI(apiKey, types.ProviderConfig{
+        MaxRetries:    &maxRetries,
+        RetryDelay:    &retryDelay,
+        RetryMaxDelay: &retryMaxDelay,
+    }),
+)
 ```
+
+Retries are provider-transport behavior in v3. Configure them on
+`types.ProviderConfig`, or use `wormhole.WithRetries` for client defaults.
+Wormhole retries only requests the provider transport classifies as safe and
+retryable; application-level fallback belongs on the request builder.
 
 ### Default Retryable Errors
 
@@ -271,35 +279,19 @@ The following errors are considered retryable by default:
 | `ErrRateLimited` | Wormhole rate limit error |
 | Network errors | Connection failures |
 
-### Exponential Backoff
+### Fallback Routing
 
-Default retry strategy with exponential backoff:
-
-```go
-config := middleware.DefaultRetryConfig()
-
-// Delay calculation:
-// attempt 0: 1s ± 25% (with jitter)
-// attempt 1: 2s ± 25%
-// attempt 2: 4s ± 25%
-```
-
-### Custom Retryable Function
-
-Define custom retry logic:
+Provider or model fallback is explicit request behavior, separate from
+transport retry:
 
 ```go
-config := &middleware.RetryConfig{
-    MaxRetries: 5,
-    RetryableFunc: func(err error) bool {
-        // Only retry network errors
-        var werr *types.WormholeError
-        if errors.As(err, &werr) {
-            return werr.Code == types.ErrorCodeNetwork
-        }
-        return false
-    },
-}
+response, err := client.Text().
+    Using("openai").
+    Model("gpt-5.6").
+    WithFallback("gpt-5-mini").
+    WithProviderFallback(wormhole.TextRoute{Provider: "anthropic", Model: "claude-sonnet-5"}).
+    Prompt("Summarize this report.").
+    Generate(ctx)
 ```
 
 ### Retry After
@@ -307,7 +299,7 @@ config := &middleware.RetryConfig{
 Get suggested retry delay from error:
 
 ```go
-import "github.com/garyblankenship/wormhole/v2/types"
+import "github.com/garyblankenship/wormhole/v3/types"
 
 // GetRetryAfter returns a suggested delay, or 0 when the error is not retryable.
 // It prefers a provider-supplied hint when present, then falls back to
@@ -362,7 +354,7 @@ provider config when one provider needs different behavior.
 Use predefined errors for common cases:
 
 ```go
-import "github.com/garyblankenship/wormhole/v2/types"
+import "github.com/garyblankenship/wormhole/v3/types"
 
 var (
     ErrInvalidAPIKey    = types.ErrInvalidAPIKey
@@ -379,7 +371,7 @@ var (
 Convert HTTP status codes to WormholeErrors:
 
 ```go
-import "github.com/garyblankenship/wormhole/v2/types"
+import "github.com/garyblankenship/wormhole/v3/types"
 
 statusCode := 429
 err := types.HTTPStatusToError(statusCode, responseBody)
@@ -389,7 +381,7 @@ err := types.HTTPStatusToError(statusCode, responseBody)
 ### Custom Error Creation
 
 ```go
-import "github.com/garyblankenship/wormhole/v2/types"
+import "github.com/garyblankenship/wormhole/v3/types"
 
 // Simple error
 err := types.NewWormholeError(

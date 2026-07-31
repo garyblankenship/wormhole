@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/garyblankenship/wormhole/v2/types"
+	"github.com/garyblankenship/wormhole/v3/types"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"

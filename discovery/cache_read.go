@@ -5,7 +5,7 @@ import (
 	"os"
 	"time"
 
-	"github.com/garyblankenship/wormhole/v2/types"
+	"github.com/garyblankenship/wormhole/v3/types"
 )
 
 // Get retrieves models from cache (L1 -> L2 -> L3)

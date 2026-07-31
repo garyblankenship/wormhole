@@ -7,7 +7,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/garyblankenship/wormhole/v2/types"
+	"github.com/garyblankenship/wormhole/v3/types"
 )
 
 // StreamAndAccumulate is a convenience method that streams the response while

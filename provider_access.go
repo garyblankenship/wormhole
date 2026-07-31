@@ -4,28 +4,8 @@ import (
 	"fmt"
 	"sync/atomic"
 
-	"github.com/garyblankenship/wormhole/v2/types"
+	"github.com/garyblankenship/wormhole/v3/types"
 )
-
-// Provider returns a specific provider instance.
-//
-// Deprecated: Use ProviderWithHandle instead. A raw provider is pinned until
-// the client closes, while a handle releases its provider for cache eviction.
-func (p *Wormhole) Provider(name string) (types.Provider, error) {
-	if !p.beginProviderAcquisition() {
-		return nil, fmt.Errorf("client is shutting down")
-	}
-	defer p.providerAcquisitionWg.Done()
-
-	provider, err := p.getOrCreateCachedProvider(name, false, true)
-	if err != nil {
-		return nil, err
-	}
-	if p.finishProviderAcquisition() {
-		return nil, fmt.Errorf("client is shutting down")
-	}
-	return provider, nil
-}
 
 func (p *Wormhole) releaseProvider(name string) {
 	p.providersMutex.RLock()

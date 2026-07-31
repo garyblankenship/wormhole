@@ -4,7 +4,7 @@ import (
 	"context"
 	"strings"
 
-	"github.com/garyblankenship/wormhole/v2/types"
+	"github.com/garyblankenship/wormhole/v3/types"
 )
 
 // OllamaFetcher fetches locally available models from Ollama

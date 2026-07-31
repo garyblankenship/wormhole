@@ -4,18 +4,18 @@ import (
 	"os"
 	"time"
 
-	"github.com/garyblankenship/wormhole/v2/middleware"
-	"github.com/garyblankenship/wormhole/v2/types"
+	"github.com/garyblankenship/wormhole/v3/middleware"
+	"github.com/garyblankenship/wormhole/v3/types"
 )
 
 // WithRateLimit returns an option to add rate limiting middleware
 func (f *SimpleFactory) WithRateLimit(requestsPerSecond int) Option {
-	return WithMiddleware(middleware.RateLimitMiddleware(requestsPerSecond))
+	return WithProviderMiddleware(middleware.NewTypedRateLimitMiddleware(requestsPerSecond))
 }
 
 // WithCircuitBreaker returns an option to add circuit breaker middleware
 func (f *SimpleFactory) WithCircuitBreaker(threshold int, timeout time.Duration) Option {
-	return WithMiddleware(middleware.CircuitBreakerMiddleware(threshold, timeout))
+	return WithProviderMiddleware(middleware.NewTypedCircuitBreakerMiddleware(threshold, timeout))
 }
 
 // WithCache returns an option to add caching middleware
@@ -27,7 +27,7 @@ func (f *SimpleFactory) WithCache(ttl time.Duration) Option {
 	}
 	return func(c *Config) {
 		c.Closers = append(c.Closers, cache)
-		WithMiddleware(middleware.CacheMiddleware(config))(c)
+		WithProviderMiddleware(middleware.NewTypedCacheMiddleware(config))(c)
 	}
 }
 
@@ -44,13 +44,13 @@ func (f *SimpleFactory) WithMetrics() (Option, *middleware.TypedMetrics) {
 
 // WithLogging returns an option to add basic logging middleware
 func (f *SimpleFactory) WithLogging(logger types.Logger) Option {
-	return WithMiddleware(middleware.LoggingMiddleware(logger))
+	return WithProviderMiddleware(middleware.NewTypedLoggingMiddleware(middleware.DefaultLoggingConfig(logger)))
 }
 
 // WithDetailedLogging returns an option to add detailed logging middleware with configuration
 func (f *SimpleFactory) WithDetailedLogging(logger types.Logger) Option {
 	config := middleware.DefaultLoggingConfig(logger)
-	return WithMiddleware(middleware.DetailedLoggingMiddleware(config))
+	return WithProviderMiddleware(middleware.NewTypedLoggingMiddleware(config))
 }
 
 // WithDebugLogging returns an option to add debug logging middleware

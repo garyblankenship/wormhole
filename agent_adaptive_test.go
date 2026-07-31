@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/garyblankenship/wormhole/v2/types"
+	"github.com/garyblankenship/wormhole/v3/types"
 )
 
 func TestAgentBuilderConfigurationAndRun(t *testing.T) {
@@ -183,10 +183,6 @@ func TestAdaptiveLimiter(t *testing.T) {
 		t.Fatal("AcquireToken failed")
 	}
 	release()
-	if !limiter.Acquire(context.Background()) {
-		t.Fatal("Acquire failed")
-	}
-	limiter.Release()
 
 	limiter.RecordLatency(20 * time.Millisecond)
 	limiter.adjustCapacity()
@@ -254,8 +250,6 @@ func TestToolSafetyConfigValidationAndHelpers(t *testing.T) {
 		AdaptiveTargetLatency:      0,
 		AdaptiveAdjustmentInterval: 0,
 		AdaptiveLatencyWindowSize:  0,
-		MaxMemoryMB:                -1,
-		MaxCPUTime:                 -1,
 		MaxToolOutputSize:          0,
 	}
 	if err := config.Validate(); err != nil {
@@ -264,8 +258,8 @@ func TestToolSafetyConfigValidationAndHelpers(t *testing.T) {
 	if !config.IsUnlimitedConcurrency() {
 		t.Fatal("expected unlimited concurrency after normalization")
 	}
-	if config.HasTimeout() || config.HasMemoryLimit() || config.HasCPULimit() {
-		t.Fatal("unexpected timeout/memory/cpu limit after normalization")
+	if config.HasTimeout() {
+		t.Fatal("unexpected timeout limit after normalization")
 	}
 	if !config.HasOutputSizeLimit() {
 		t.Fatal("expected default output size limit")
@@ -279,21 +273,6 @@ func TestToolSafetyConfigValidationAndHelpers(t *testing.T) {
 		t.Fatalf("adaptive config = %#v", adaptive)
 	}
 
-	unsupported := DefaultToolSafetyConfig()
-	unsupported.MaxMemoryMB = 1
-	if err := unsupported.Validate(); err == nil {
-		t.Fatal("Validate with MaxMemoryMB returned nil error")
-	}
-	unsupported = DefaultToolSafetyConfig()
-	unsupported.MaxCPUTime = time.Second
-	if err := unsupported.Validate(); err == nil {
-		t.Fatal("Validate with MaxCPUTime returned nil error")
-	}
-	unsupported = DefaultToolSafetyConfig()
-	unsupported.EnableResourceIsolation = true
-	if err := unsupported.Validate(); err == nil {
-		t.Fatal("Validate with EnableResourceIsolation returned nil error")
-	}
 }
 
 func TestRetryExecutorContextCancellation(t *testing.T) {

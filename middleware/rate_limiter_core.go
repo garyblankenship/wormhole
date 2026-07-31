@@ -6,7 +6,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/garyblankenship/wormhole/v2/types"
+	"github.com/garyblankenship/wormhole/v3/types"
 )
 
 var (
@@ -17,7 +17,7 @@ var (
 // RateLimiter implements token bucket rate limiting.
 type RateLimiter struct {
 	mu           sync.Mutex
-	rate         atomic.Int64 // requests/sec; read (Wait, refill) and written (AdaptiveRateLimiter.adjustRate) from different locks, so kept lock-free
+	rate         atomic.Int64 // requests/second, shared by the acquire and refill paths
 	capacity     int
 	tokens       float64
 	lastRefill   time.Time
@@ -27,6 +27,9 @@ type RateLimiter struct {
 
 // NewRateLimiter creates a new rate limiter.
 func NewRateLimiter(requestsPerSecond int) *RateLimiter {
+	if requestsPerSecond < 1 {
+		requestsPerSecond = 1
+	}
 	capacity := requestsPerSecond * 2
 
 	rl := &RateLimiter{

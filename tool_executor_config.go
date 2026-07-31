@@ -1,9 +1,6 @@
 package wormhole
 
-import (
-	"fmt"
-	"time"
-)
+import "time"
 
 // ToolSafetyConfig defines safety constraints for tool execution
 type ToolSafetyConfig struct {
@@ -67,32 +64,10 @@ type ToolSafetyConfig struct {
 	// Default: 1 minute
 	CircuitBreakerResetTimeout time.Duration `json:"circuit_breaker_reset_timeout" yaml:"circuit_breaker_reset_timeout"`
 
-	// MaxMemoryMB is retained for compatibility but is not enforced.
-	// Positive values fail Validate and SDK-managed tool execution before a
-	// handler starts.
-	//
-	// Deprecated: Process memory limits are unsupported.
-	MaxMemoryMB int `json:"max_memory_mb" yaml:"max_memory_mb"`
-
-	// MaxCPUTime is retained for compatibility but is not enforced.
-	// Positive values fail Validate and SDK-managed tool execution before a
-	// handler starts.
-	//
-	// Deprecated: Process CPU limits are unsupported.
-	MaxCPUTime time.Duration `json:"max_cpu_time" yaml:"max_cpu_time"`
-
 	// EnableInputValidation enables strict validation of tool arguments against schemas
 	// When enabled, all tool arguments are validated against their JSON schemas
 	// Default: true (recommended for production)
 	EnableInputValidation bool `json:"enable_input_validation" yaml:"enable_input_validation"`
-
-	// EnableResourceIsolation is retained for compatibility but is not
-	// implemented. Enabling it fails Validate and SDK-managed tool execution
-	// before a handler starts. Process isolation is outside this provider
-	// bridge's scope.
-	//
-	// Deprecated: Resource isolation is unsupported.
-	EnableResourceIsolation bool `json:"enable_resource_isolation" yaml:"enable_resource_isolation"`
 
 	// MaxToolOutputSize limits the size of tool output in bytes
 	// Prevents memory exhaustion from large tool outputs
@@ -117,18 +92,13 @@ func DefaultToolSafetyConfig() ToolSafetyConfig {
 		MaxRetriesPerTool:          0,
 		CircuitBreakerThreshold:    5,
 		CircuitBreakerResetTimeout: time.Minute,
-		MaxMemoryMB:                0,                // Unlimited by default
-		MaxCPUTime:                 0,                // Unlimited by default
 		EnableInputValidation:      true,             // Enabled by default for safety
-		EnableResourceIsolation:    false,            // Disabled by default (performance)
 		MaxToolOutputSize:          10 * 1024 * 1024, // 10MB default
 	}
 }
 
 // Validate validates the safety configuration
 func (c *ToolSafetyConfig) Validate() error {
-	var unsupported []string
-
 	if c.MaxToolCallsPerRound <= 0 {
 		c.MaxToolCallsPerRound = 32
 	}
@@ -166,29 +136,10 @@ func (c *ToolSafetyConfig) Validate() error {
 	if c.AdaptiveLatencyWindowSize < 1 {
 		c.AdaptiveLatencyWindowSize = 100
 	}
-	// Validate new security fields
-	if c.MaxMemoryMB < 0 {
-		c.MaxMemoryMB = 0
-	}
-	if c.MaxCPUTime < 0 {
-		c.MaxCPUTime = 0
-	}
-	if c.MaxMemoryMB > 0 {
-		unsupported = append(unsupported, "MaxMemoryMB")
-	}
-	if c.MaxCPUTime > 0 {
-		unsupported = append(unsupported, "MaxCPUTime")
-	}
-	if c.EnableResourceIsolation {
-		unsupported = append(unsupported, "EnableResourceIsolation")
-	}
 	if c.MaxToolOutputSize < 0 {
 		c.MaxToolOutputSize = 0
 	} else if c.MaxToolOutputSize == 0 {
 		c.MaxToolOutputSize = 10 * 1024 * 1024 // Default to 10MB if 0
-	}
-	if len(unsupported) > 0 {
-		return fmt.Errorf("unsupported tool safety settings: %v", unsupported)
 	}
 	return nil
 }
@@ -213,24 +164,6 @@ func (c *ToolSafetyConfig) IsUnlimitedConcurrency() bool {
 // HasTimeout returns true if a timeout is configured
 func (c *ToolSafetyConfig) HasTimeout() bool {
 	return c.ToolTimeout > 0
-}
-
-// HasMemoryLimit reports whether the unsupported MaxMemoryMB compatibility
-// field is positive.
-//
-// Deprecated: Process memory limits are unsupported. Positive MaxMemoryMB
-// values fail Validate and SDK-managed tool execution before a handler starts.
-func (c *ToolSafetyConfig) HasMemoryLimit() bool {
-	return c.MaxMemoryMB > 0
-}
-
-// HasCPULimit reports whether the unsupported MaxCPUTime compatibility field is
-// positive.
-//
-// Deprecated: Process CPU limits are unsupported. Positive MaxCPUTime values
-// fail Validate and SDK-managed tool execution before a handler starts.
-func (c *ToolSafetyConfig) HasCPULimit() bool {
-	return c.MaxCPUTime > 0
 }
 
 // HasOutputSizeLimit returns true if an output size limit is configured

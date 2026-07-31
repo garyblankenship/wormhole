@@ -3,7 +3,7 @@ package server
 import (
 	"strings"
 
-	"github.com/garyblankenship/wormhole/v2"
+	"github.com/garyblankenship/wormhole/v3"
 )
 
 // knownProviderSet is initialized once from embedded provider profiles.

@@ -4,7 +4,7 @@ import (
 	"context"
 	"time"
 
-	"github.com/garyblankenship/wormhole/v2/types"
+	"github.com/garyblankenship/wormhole/v3/types"
 )
 
 // TypedLoggingMiddleware implements the ProviderMiddleware interface with type-safe logging

@@ -22,7 +22,7 @@ coverage.txt
 !docs/assets/wormhole-banner.webp
 
 # Local agent scratch space
-.work/
+/.work/
 
 # Generated code
 *.pb.go
@@ -41,7 +41,7 @@ go.work.sum
 go.sum.backup
 
 # Air live reload tool
-tmp/
+/tmp/
 
 ### IDE & Editor ###
 # Visual Studio Code
@@ -104,6 +104,7 @@ debug
 dist/
 build/
 bin/
+/pkg/wormhole/
 
 # Temporary files
 *.tmp
@@ -169,16 +170,13 @@ config/local.yaml
 docs/build/
 site/
 data/
-logs/
+/logs/
 repomix-wormhole.md
 repomix.config.json
 CLAUDE.md
-.claude/
+**/.claude/
 *.repomix*
 docs/workspace/
-
-# Work directory (specs, audits, research, scratch)
-.work/
 
 # Analysis and audit reports (dev artifacts)
 *_REPORT.md

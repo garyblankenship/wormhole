@@ -8,7 +8,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/garyblankenship/wormhole/v2/types"
+	"github.com/garyblankenship/wormhole/v3/types"
 )
 
 // GetModelsWithStatus returns models for a provider along with a Stale flag,

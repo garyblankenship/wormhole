@@ -12,7 +12,7 @@ func (s *ProviderAdaptiveState) resetTracking() {
 	s.latencyRing = ring.New(s.latencyRing.Len())
 	s.totalLatency = 0
 	s.latencySamples = 0
-	s.pidController.Reset()
+	s.pidController.reset()
 }
 
 // carryOccupancy reserves room on newLimiter for operations still in

@@ -9,9 +9,9 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/garyblankenship/wormhole/v2/discovery"
-	"github.com/garyblankenship/wormhole/v2/types"
-	wmtest "github.com/garyblankenship/wormhole/v2/wormholetest"
+	"github.com/garyblankenship/wormhole/v3/discovery"
+	"github.com/garyblankenship/wormhole/v3/types"
+	wmtest "github.com/garyblankenship/wormhole/v3/wormholetest"
 )
 
 func TestCapabilitiesFromConfiguredProvider(t *testing.T) {

@@ -5,8 +5,8 @@ import (
 	"maps"
 	"time"
 
-	whconfig "github.com/garyblankenship/wormhole/v2/config"
-	"github.com/garyblankenship/wormhole/v2/types"
+	whconfig "github.com/garyblankenship/wormhole/v3/config"
+	"github.com/garyblankenship/wormhole/v3/types"
 )
 
 func (p *Wormhole) configuredProviderConfig(name string) (types.ProviderConfig, error) {

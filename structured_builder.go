@@ -5,8 +5,8 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/garyblankenship/wormhole/v2/internal/pool"
-	"github.com/garyblankenship/wormhole/v2/types"
+	"github.com/garyblankenship/wormhole/v3/internal/pool"
+	"github.com/garyblankenship/wormhole/v3/types"
 )
 
 // StructuredRequestBuilder builds structured output requests

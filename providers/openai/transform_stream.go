@@ -3,8 +3,8 @@ package openai
 import (
 	"encoding/json"
 
-	providerTransform "github.com/garyblankenship/wormhole/v2/providers/internal/transform"
-	"github.com/garyblankenship/wormhole/v2/types"
+	providerTransform "github.com/garyblankenship/wormhole/v3/providers/internal/transform"
+	"github.com/garyblankenship/wormhole/v3/types"
 )
 
 // parseStreamChunk parses a streaming chunk

@@ -5,11 +5,11 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/garyblankenship/wormhole/v2/types"
+	"github.com/garyblankenship/wormhole/v3/types"
 )
 
 // TestConcurrentProviderAccess tests that multiple goroutines can safely
-// access the Provider method simultaneously without causing data races
+// access ProviderWithHandle simultaneously without causing data races
 func TestConcurrentProviderAccess(t *testing.T) {
 	t.Parallel()
 	// Create wormhole with OpenAI provider configured
@@ -24,18 +24,22 @@ func TestConcurrentProviderAccess(t *testing.T) {
 	var wg sync.WaitGroup
 	errChan := make(chan error, numGoroutines*numIterations)
 
-	// Launch multiple goroutines that simultaneously call Provider
+	// Launch multiple goroutines that simultaneously acquire provider handles.
 	for i := 0; i < numGoroutines; i++ {
 		wg.Add(1)
 		go func(_ int) {
 			defer wg.Done()
 			for j := 0; j < numIterations; j++ {
-				provider, err := w.Provider("openai")
+				handle, err := w.ProviderWithHandle("openai")
 				if err != nil {
 					errChan <- err
 					return
 				}
-				if provider == nil {
+				if handle == nil {
+					errChan <- errors.New("nil provider handle")
+					return
+				}
+				if err := handle.Close(); err != nil {
 					errChan <- err
 					return
 				}
@@ -243,12 +247,16 @@ func TestHighContentionProviderAccess(t *testing.T) {
 			startWg.Wait()
 
 			// All goroutines hit this at the same time
-			provider, err := w.Provider("openai")
+			handle, err := w.ProviderWithHandle("openai")
 			if err != nil {
 				errChan <- err
 				return
 			}
-			if provider == nil {
+			if handle == nil {
+				errChan <- errors.New("nil provider handle")
+				return
+			}
+			if err := handle.Close(); err != nil {
 				errChan <- err
 				return
 			}
@@ -300,12 +308,15 @@ func TestConcurrentProviderInitialization(t *testing.T) {
 
 				startWg.Wait() // Synchronize start
 
-				provider, err := w.Provider("openai")
+				handle, err := w.ProviderWithHandle("openai")
 				if err != nil {
 					errChan <- err
 					return
 				}
-				providerChan <- provider
+				providerChan <- handle.Provider
+				if err := handle.Close(); err != nil {
+					errChan <- err
+				}
 			}()
 		}
 

@@ -3,7 +3,7 @@ package transform
 import (
 	"strings"
 
-	"github.com/garyblankenship/wormhole/v2/types"
+	"github.com/garyblankenship/wormhole/v3/types"
 )
 
 // MapFinishReason maps a provider's finish reason string to the canonical FinishReason.

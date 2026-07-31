@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/garyblankenship/wormhole/v2/types"
+	"github.com/garyblankenship/wormhole/v3/types"
 )
 
 // mergeSystemMessages merges any RoleSystem messages from msgs into base.

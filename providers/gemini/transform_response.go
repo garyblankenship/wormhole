@@ -6,8 +6,8 @@ import (
 	"strings"
 	"time"
 
-	providerTransform "github.com/garyblankenship/wormhole/v2/providers/internal/transform"
-	"github.com/garyblankenship/wormhole/v2/types"
+	providerTransform "github.com/garyblankenship/wormhole/v3/providers/internal/transform"
+	"github.com/garyblankenship/wormhole/v3/types"
 )
 
 // transformTextResponse converts Gemini response to types.TextResponse

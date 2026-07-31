@@ -1,6 +1,6 @@
 package middleware
 
-import "github.com/garyblankenship/wormhole/v2/types"
+import "github.com/garyblankenship/wormhole/v3/types"
 
 type circuitErrorClass int
 

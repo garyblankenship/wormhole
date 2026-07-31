@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/garyblankenship/wormhole/v2/types"
+	"github.com/garyblankenship/wormhole/v3/types"
 )
 
 const streamAttemptsErrorMessage = "all stream attempts failed before emitting a chunk"

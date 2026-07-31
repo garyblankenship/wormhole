@@ -5,7 +5,7 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/garyblankenship/wormhole/v2/types"
+	"github.com/garyblankenship/wormhole/v3/types"
 )
 
 // ToolCallIDSafePattern matches any character outside the charset accepted by

@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/garyblankenship/wormhole/v2/types"
+	"github.com/garyblankenship/wormhole/v3/types"
 )
 
 // transformTextResponse converts Ollama response to internal format

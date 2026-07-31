@@ -108,5 +108,5 @@ For production applications, consider integrating with vector databases:
 ## 📚 Learn More
 
 - [Wormhole Documentation](../../docs/)
-- [Embeddings builder API](https://pkg.go.dev/github.com/garyblankenship/wormhole/v2#EmbeddingsRequestBuilder)
+- [Embeddings builder API](https://pkg.go.dev/github.com/garyblankenship/wormhole/v3#EmbeddingsRequestBuilder)
 - [Integration Tests](../../embeddings_integration_test.go)

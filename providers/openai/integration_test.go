@@ -14,8 +14,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/garyblankenship/wormhole/v2/providers/openai"
-	"github.com/garyblankenship/wormhole/v2/types"
+	"github.com/garyblankenship/wormhole/v3/providers/openai"
+	"github.com/garyblankenship/wormhole/v3/types"
 )
 
 // TestOpenAIProvider_IntegrationTextGeneration tests the complete text generation flow

@@ -7,9 +7,9 @@ import (
 	"io"
 	"strings"
 
-	providerstream "github.com/garyblankenship/wormhole/v2/providers/internal/stream"
-	providerTransform "github.com/garyblankenship/wormhole/v2/providers/internal/transform"
-	"github.com/garyblankenship/wormhole/v2/types"
+	providerstream "github.com/garyblankenship/wormhole/v3/providers/internal/stream"
+	providerTransform "github.com/garyblankenship/wormhole/v3/providers/internal/transform"
+	"github.com/garyblankenship/wormhole/v3/types"
 )
 
 // processStreamCandidate extracts chunks from a candidate response

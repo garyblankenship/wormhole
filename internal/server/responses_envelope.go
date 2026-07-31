@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/garyblankenship/wormhole/v2/types"
+	"github.com/garyblankenship/wormhole/v3/types"
 )
 
 func completedResponsesEnvelope(resp *types.TextResponse, model string, customTools map[string]bool) responsesEnvelope {

@@ -1,8 +1,8 @@
 package wormhole
 
 import (
-	"github.com/garyblankenship/wormhole/v2/discovery"
-	"github.com/garyblankenship/wormhole/v2/types"
+	"github.com/garyblankenship/wormhole/v3/discovery"
+	"github.com/garyblankenship/wormhole/v3/types"
 )
 
 // WithDiscoveryConfig configures the dynamic model discovery service.

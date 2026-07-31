@@ -4,8 +4,8 @@ import (
 	"context"
 	"net/http"
 
-	providerstream "github.com/garyblankenship/wormhole/v2/providers/internal/stream"
-	"github.com/garyblankenship/wormhole/v2/types"
+	providerstream "github.com/garyblankenship/wormhole/v3/providers/internal/stream"
+	"github.com/garyblankenship/wormhole/v3/types"
 )
 
 const (

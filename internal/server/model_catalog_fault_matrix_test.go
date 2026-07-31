@@ -9,9 +9,9 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	wormhole "github.com/garyblankenship/wormhole/v2"
-	"github.com/garyblankenship/wormhole/v2/discovery"
-	"github.com/garyblankenship/wormhole/v2/types"
+	wormhole "github.com/garyblankenship/wormhole/v3"
+	"github.com/garyblankenship/wormhole/v3/discovery"
+	"github.com/garyblankenship/wormhole/v3/types"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"

@@ -6,9 +6,9 @@ import (
 	"log"
 	"time"
 
-	"github.com/garyblankenship/wormhole/v2"
-	"github.com/garyblankenship/wormhole/v2/middleware"
-	"github.com/garyblankenship/wormhole/v2/types"
+	"github.com/garyblankenship/wormhole/v3"
+	"github.com/garyblankenship/wormhole/v3/middleware"
+	"github.com/garyblankenship/wormhole/v3/types"
 )
 
 // Example demonstrating all the user feedback improvements
@@ -32,9 +32,9 @@ func main() {
 			RetryMaxDelay: &maxRetryDelay,
 		}), // Same retry settings for Anthropic
 		// Production-grade middleware stack
-		wormhole.WithMiddleware(
-			middleware.CircuitBreakerMiddleware(5, 30*time.Second), // Circuit breaking
-			middleware.RateLimitMiddleware(100),                    // Rate limiting
+		wormhole.WithProviderMiddleware(
+			middleware.NewTypedCircuitBreakerMiddleware(5, 30*time.Second), // Circuit breaking
+			middleware.NewTypedRateLimitMiddleware(100),                    // Rate limiting
 		),
 	)
 

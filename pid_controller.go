@@ -5,58 +5,47 @@ import (
 	"time"
 )
 
-// PIDConfig holds PID controller tuning parameters
-type PIDConfig struct {
-	Kp float64 // Proportional gain
-	Ki float64 // Integral gain
-	Kd float64 // Derivative gain
+type pidConfig struct {
+	kp float64
+	ki float64
+	kd float64
 
-	// Anti-windup: limit integral term accumulation
-	MaxIntegral float64
-	MinIntegral float64
-
-	// Output limits
-	MaxOutput float64
-	MinOutput float64
+	maxIntegral float64
+	minIntegral float64
+	maxOutput   float64
+	minOutput   float64
 }
 
-// DefaultPIDConfig returns sensible defaults for concurrency control
-func DefaultPIDConfig() PIDConfig {
-	return PIDConfig{
-		Kp: 0.5, // Moderate proportional response
-		// Ki scaled so Ki*MaxIntegral stays within MaxOutput (0.05*10.0=0.5);
+func defaultPIDConfig() pidConfig {
+	return pidConfig{
+		kp: 0.5, // Moderate proportional response
+		// ki scaled so ki*maxIntegral stays within maxOutput (0.05*10.0=0.5);
 		// the previous 0.1 let the integral term alone saturate output,
 		// causing bang-bang (always +/-50%) instead of a graduated response.
-		Ki: 0.05,
-		Kd: 0.05, // Dampen oscillations
+		ki: 0.05,
+		kd: 0.05, // Dampen oscillations
 
-		MaxIntegral: 10.0,
-		MinIntegral: -10.0,
-		MaxOutput:   0.5,  // Max 50% capacity change per adjustment
-		MinOutput:   -0.5, // Max 50% reduction per adjustment
+		maxIntegral: 10.0,
+		minIntegral: -10.0,
+		maxOutput:   0.5,  // Max 50% capacity change per adjustment
+		minOutput:   -0.5, // Max 50% reduction per adjustment
 	}
 }
 
-// PIDController implements a PID control algorithm
-type PIDController struct {
-	config PIDConfig
+type pidController struct {
+	config pidConfig
 
-	// State
 	integralError float64
 	lastError     float64
 	lastTime      time.Time
 	initialized   bool
 }
 
-// NewPIDController creates a new PID controller
-func NewPIDController(config PIDConfig) *PIDController {
-	return &PIDController{
-		config: config,
-	}
+func newPIDController(config pidConfig) *pidController {
+	return &pidController{config: config}
 }
 
-// Compute calculates the control output based on error
-func (p *PIDController) Compute(setpoint, measurement, dt time.Duration) float64 {
+func (p *pidController) compute(setpoint, measurement, dt time.Duration) float64 {
 	if !p.initialized {
 		p.lastTime = time.Now()
 		p.initialized = true
@@ -64,7 +53,7 @@ func (p *PIDController) Compute(setpoint, measurement, dt time.Duration) float64
 	}
 
 	// Normalized error: (actual - target) / target
-	error := float64(measurement-setpoint) / float64(setpoint)
+	controlError := float64(measurement-setpoint) / float64(setpoint)
 
 	// Calculate time delta in seconds
 	dtSec := dt.Seconds()
@@ -73,34 +62,33 @@ func (p *PIDController) Compute(setpoint, measurement, dt time.Duration) float64
 	}
 
 	// Proportional term
-	proportional := p.config.Kp * error
+	proportional := p.config.kp * controlError
 
 	// Integral term with anti-windup
-	p.integralError += error * dtSec
-	p.integralError = math.Max(p.config.MinIntegral,
-		math.Min(p.config.MaxIntegral, p.integralError))
-	integral := p.config.Ki * p.integralError
+	p.integralError += controlError * dtSec
+	p.integralError = math.Max(p.config.minIntegral,
+		math.Min(p.config.maxIntegral, p.integralError))
+	integral := p.config.ki * p.integralError
 
 	// Derivative term
 	derivative := 0.0
 	if dtSec > 0 {
-		derivative = p.config.Kd * (error - p.lastError) / dtSec
+		derivative = p.config.kd * (controlError - p.lastError) / dtSec
 	}
 
-	p.lastError = error
+	p.lastError = controlError
 
 	// Compute output
 	output := proportional + integral + derivative
 
 	// Clamp output
-	output = math.Max(p.config.MinOutput,
-		math.Min(p.config.MaxOutput, output))
+	output = math.Max(p.config.minOutput,
+		math.Min(p.config.maxOutput, output))
 
 	return output
 }
 
-// Reset clears the controller state
-func (p *PIDController) Reset() {
+func (p *pidController) reset() {
 	p.integralError = 0.0
 	p.lastError = 0.0
 	p.initialized = false

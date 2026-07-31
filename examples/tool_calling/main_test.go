@@ -6,9 +6,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/garyblankenship/wormhole/v2"
-	"github.com/garyblankenship/wormhole/v2/types"
-	"github.com/garyblankenship/wormhole/v2/wormholetest"
+	"github.com/garyblankenship/wormhole/v3"
+	"github.com/garyblankenship/wormhole/v3/types"
+	"github.com/garyblankenship/wormhole/v3/wormholetest"
 )
 
 func TestExecuteManualToolRejectsMalformedArguments(t *testing.T) {

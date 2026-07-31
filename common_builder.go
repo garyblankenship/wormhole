@@ -1,6 +1,6 @@
 package wormhole
 
-import "github.com/garyblankenship/wormhole/v2/types"
+import "github.com/garyblankenship/wormhole/v3/types"
 
 // CommonBuilder contains shared fields and methods for all request builders
 type CommonBuilder struct {

@@ -44,9 +44,6 @@ const (
 	// FallbackHealthCheckInterval is used only if WORMHOLE_HEALTH_CHECK_INTERVAL not set
 	FallbackHealthCheckInterval = 30 * time.Second
 
-	// FallbackLoadBalancerHealthInterval is used only if env var not set
-	FallbackLoadBalancerHealthInterval = 30 * time.Second
-
 	// FallbackAnthropicMaxTokens is used only if WORMHOLE_ANTHROPIC_MAX_TOKENS not set
 	// and the request does not specify MaxTokens. Anthropic requires the max_tokens field.
 	FallbackAnthropicMaxTokens = 4096
@@ -55,10 +52,9 @@ const (
 // Backwards compatibility aliases - DO NOT USE DIRECTLY
 // Use Get*() functions instead
 const (
-	DefaultMaxRetries                 = FallbackMaxRetries
-	DefaultInitialDelay               = FallbackInitialDelay
-	DefaultMaxDelay                   = FallbackMaxDelay
-	DefaultLoadBalancerHealthInterval = FallbackLoadBalancerHealthInterval
+	DefaultMaxRetries   = FallbackMaxRetries
+	DefaultInitialDelay = FallbackInitialDelay
+	DefaultMaxDelay     = FallbackMaxDelay
 )
 
 // Runtime Configuration Support

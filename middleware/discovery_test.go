@@ -10,12 +10,12 @@ func TestAvailableMiddleware(t *testing.T) {
 
 	// Should have at least the core middleware
 	expectedMiddleware := []string{
-		"CacheMiddleware",
-		"CircuitBreakerMiddleware",
-		"RateLimitMiddleware",
-		"LoggingMiddleware",
-		"MetricsMiddleware",
-		"TimeoutMiddleware",
+		"NewTypedCacheMiddleware",
+		"NewTypedCircuitBreakerMiddleware",
+		"NewTypedRateLimitMiddleware",
+		"NewTypedLoggingMiddleware",
+		"NewTypedMetricsMiddleware",
+		"NewTypedTimeoutMiddleware",
 	}
 
 	// Create a map for easier lookup
@@ -58,12 +58,12 @@ func TestMiddlewareInfoStructure(t *testing.T) {
 	// Test specific examples for correctness
 	for _, mw := range middlewares {
 		switch mw.Name {
-		case "CacheMiddleware":
+		case "NewTypedCacheMiddleware":
 			if mw.ConfigType != "CacheConfig" {
 				t.Errorf("CacheMiddleware should have ConfigType 'CacheConfig', got '%s'", mw.ConfigType)
 			}
 
-		case "TimeoutMiddleware":
+		case "NewTypedTimeoutMiddleware":
 			expectedConfig := "timeout time.Duration"
 			if mw.ConfigType != expectedConfig {
 				t.Errorf("TimeoutMiddleware should have ConfigType '%s', got '%s'", expectedConfig, mw.ConfigType)

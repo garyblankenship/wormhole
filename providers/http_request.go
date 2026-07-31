@@ -10,7 +10,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/garyblankenship/wormhole/v2/types"
+	"github.com/garyblankenship/wormhole/v3/types"
 )
 
 func (w *HTTPClientWrapper) StreamRequest(ctx context.Context, method, url string, body any) (io.ReadCloser, error) {

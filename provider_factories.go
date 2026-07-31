@@ -6,11 +6,11 @@ import (
 	"strings"
 	"sync/atomic"
 
-	"github.com/garyblankenship/wormhole/v2/providers/anthropic"
-	"github.com/garyblankenship/wormhole/v2/providers/gemini"
-	"github.com/garyblankenship/wormhole/v2/providers/ollama"
-	"github.com/garyblankenship/wormhole/v2/providers/openai"
-	"github.com/garyblankenship/wormhole/v2/types"
+	"github.com/garyblankenship/wormhole/v3/providers/anthropic"
+	"github.com/garyblankenship/wormhole/v3/providers/gemini"
+	"github.com/garyblankenship/wormhole/v3/providers/ollama"
+	"github.com/garyblankenship/wormhole/v3/providers/openai"
+	"github.com/garyblankenship/wormhole/v3/types"
 )
 
 func validateAPIKey(provider, apiKey string) error {

@@ -20,10 +20,10 @@ func (l *EnhancedAdaptiveLimiter) createProviderState(provider string) *Provider
 	return state
 }
 
-// resolveProviderSettings returns previously normalized capacity, latency, and
-// PID settings for a provider.
+// resolveProviderSettings returns previously normalized capacity and latency
+// settings for a provider.
 func (l *EnhancedAdaptiveLimiter) resolveProviderSettings(provider string) (
-	targetLatency time.Duration, minCapacity, maxCapacity, initialCapacity int, pidConfig PIDConfig,
+	targetLatency time.Duration, minCapacity, maxCapacity, initialCapacity int,
 ) {
 	providerSetting, hasProviderSetting := l.config.ProviderSettings[provider]
 
@@ -32,7 +32,6 @@ func (l *EnhancedAdaptiveLimiter) resolveProviderSettings(provider string) (
 		minCapacity = providerSetting.MinCapacity
 		maxCapacity = providerSetting.MaxCapacity
 		initialCapacity = providerSetting.InitialCapacity
-		pidConfig = *providerSetting.PIDConfig
 		return
 	} else {
 		targetLatency = l.config.TargetLatency
@@ -41,7 +40,6 @@ func (l *EnhancedAdaptiveLimiter) resolveProviderSettings(provider string) (
 		initialCapacity = l.config.InitialCapacity
 	}
 
-	pidConfig = l.config.PIDConfig
 	return
 }
 

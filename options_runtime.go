@@ -3,8 +3,7 @@ package wormhole
 import (
 	"time"
 
-	"github.com/garyblankenship/wormhole/v2/middleware"
-	"github.com/garyblankenship/wormhole/v2/types"
+	"github.com/garyblankenship/wormhole/v3/types"
 )
 
 // WithToolSafetyConfig configures client-owned admission shared by automatic
@@ -44,25 +43,7 @@ func WithProviderConfig(name string, config types.ProviderConfig) Option {
 	}
 }
 
-// WithMiddleware adds middleware to the client's execution chain.
-// DEPRECATED: Use WithProviderMiddleware for type-safe middleware instead.
-// This function automatically converts legacy middleware to type-safe middleware
-// using adapter pattern for backward compatibility.
-func WithMiddleware(mw ...middleware.Middleware) Option {
-	return func(c *Config) {
-		// Store legacy middleware for backward compatibility
-		c.Middleware = append(c.Middleware, mw...)
-
-		// Convert legacy middleware to type-safe middleware using adapter
-		for _, legacyMw := range mw {
-			adapter := middleware.NewLegacyAdapter(legacyMw)
-			c.ProviderMiddlewares = append(c.ProviderMiddlewares, adapter)
-		}
-	}
-}
-
 // WithProviderMiddleware adds type-safe middleware to the client's execution chain.
-// Use this for compile-time type checking instead of the deprecated WithMiddleware.
 func WithProviderMiddleware(mw ...types.ProviderMiddleware) Option {
 	return func(c *Config) {
 		c.ProviderMiddlewares = append(c.ProviderMiddlewares, mw...)

@@ -14,6 +14,10 @@ func cloneValue(src any) (any, error) {
 	if src == nil {
 		return nil, nil
 	}
+	srcValue := reflect.ValueOf(src)
+	if srcValue.Kind() == reflect.Pointer && srcValue.IsNil() {
+		return src, nil
+	}
 	if m, ok := src.(map[string]any); ok {
 		return deepCopyMap(m), nil
 	}
@@ -21,7 +25,7 @@ func cloneValue(src any) (any, error) {
 	if err != nil {
 		return nil, fmt.Errorf("cache clone marshal: %w", err)
 	}
-	srcType := reflect.TypeOf(src)
+	srcType := srcValue.Type()
 	var dst any
 	if srcType.Kind() == reflect.Pointer {
 		dst = reflect.New(srcType.Elem()).Interface()

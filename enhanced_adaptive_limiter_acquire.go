@@ -5,7 +5,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/garyblankenship/wormhole/v2/middleware"
+	"github.com/garyblankenship/wormhole/v3/middleware"
 )
 
 // EnhancedAdaptiveLimiter implements provider-aware adaptive concurrency control
@@ -68,7 +68,6 @@ func NewEnhancedAdaptiveLimiter(config EnhancedAdaptiveConfig) *EnhancedAdaptive
 			setting.InitialCapacity,
 			config.LatencyWindowSize,
 		)
-		state.pidController = NewPIDController(*setting.PIDConfig)
 		limiter.providerStates[provider] = state
 	}
 
@@ -93,51 +92,6 @@ func NewEnhancedAdaptiveLimiter(config EnhancedAdaptiveConfig) *EnhancedAdaptive
 	}
 
 	return limiter
-}
-
-// Acquire acquires a slot from the global limiter (backward compatible).
-//
-// Deprecated: Use AcquireToken instead to prevent race conditions when
-// capacity adjustment swaps the limiter between acquire and release.
-// This method now delegates to AcquireToken internally for safety, but
-// callers must still pair with Release() which may hit a different limiter.
-func (l *EnhancedAdaptiveLimiter) Acquire(ctx context.Context) bool {
-	_, ok := l.globalState.AcquireToken(ctx)
-	return ok
-}
-
-// AcquireWithProvider acquires a slot with provider/model awareness.
-//
-// Deprecated: Use AcquireTokenWithProvider instead to prevent race conditions.
-// This method now delegates to AcquireToken internally for safety, but
-// callers must still pair with ReleaseWithProvider() which may hit a different limiter.
-func (l *EnhancedAdaptiveLimiter) AcquireWithProvider(ctx context.Context, provider, model string) bool {
-	state := l.pinState(provider, model)
-	_, ok := state.AcquireToken(ctx)
-	if !ok {
-		l.unpinState(state)
-	}
-	return ok
-}
-
-// Release releases a slot to the global limiter.
-//
-// Deprecated: Use the release function returned by AcquireToken instead.
-func (l *EnhancedAdaptiveLimiter) Release() {
-	l.globalState.Limiter().Release()
-}
-
-// ReleaseWithProvider releases a slot with provider/model awareness.
-//
-// Deprecated: Use the release function returned by AcquireTokenWithProvider instead.
-func (l *EnhancedAdaptiveLimiter) ReleaseWithProvider(provider, model string) {
-	state := l.getState(provider, model)
-	if state != nil {
-		state.Limiter().Release()
-		l.unpinState(state)
-	} else {
-		l.globalState.Limiter().Release()
-	}
 }
 
 // AcquireToken acquires a slot from the global limiter and returns a release function.
@@ -225,7 +179,7 @@ func (l *EnhancedAdaptiveLimiter) getOrCreateStateLocked(provider, model string)
 }
 
 func (l *EnhancedAdaptiveLimiter) newProviderState(key ProviderKey) *ProviderAdaptiveState {
-	targetLatency, minCapacity, maxCapacity, initialCapacity, pidConfig := l.resolveProviderSettings(key.Provider)
+	targetLatency, minCapacity, maxCapacity, initialCapacity := l.resolveProviderSettings(key.Provider)
 	state := NewProviderAdaptiveState(
 		key,
 		targetLatency,
@@ -234,7 +188,6 @@ func (l *EnhancedAdaptiveLimiter) newProviderState(key ProviderKey) *ProviderAda
 		initialCapacity,
 		l.config.LatencyWindowSize,
 	)
-	state.pidController = NewPIDController(pidConfig)
 	return state
 }
 

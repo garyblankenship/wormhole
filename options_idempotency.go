@@ -3,7 +3,7 @@ package wormhole
 import (
 	"time"
 
-	"github.com/garyblankenship/wormhole/v2/types"
+	"github.com/garyblankenship/wormhole/v3/types"
 )
 
 // WithIdempotencyKey adds an idempotency key to prevent duplicate operations during retries.

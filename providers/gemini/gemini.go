@@ -4,9 +4,9 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/garyblankenship/wormhole/v2/providers"
-	transform "github.com/garyblankenship/wormhole/v2/providers/internal/transform"
-	"github.com/garyblankenship/wormhole/v2/types"
+	"github.com/garyblankenship/wormhole/v3/providers"
+	transform "github.com/garyblankenship/wormhole/v3/providers/internal/transform"
+	"github.com/garyblankenship/wormhole/v3/types"
 )
 
 const (

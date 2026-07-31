@@ -4,8 +4,8 @@ import (
 	"encoding/json"
 	"time"
 
-	providerTransform "github.com/garyblankenship/wormhole/v2/providers/internal/transform"
-	"github.com/garyblankenship/wormhole/v2/types"
+	providerTransform "github.com/garyblankenship/wormhole/v3/providers/internal/transform"
+	"github.com/garyblankenship/wormhole/v3/types"
 )
 
 // transformTextResponse converts Anthropic response to internal format

@@ -7,7 +7,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/garyblankenship/wormhole/v2/middleware"
+	"github.com/garyblankenship/wormhole/v3/middleware"
 )
 
 // capacityManager handles capacity adjustments and state eviction

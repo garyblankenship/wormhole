@@ -6,7 +6,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/garyblankenship/wormhole/v2/types"
+	"github.com/garyblankenship/wormhole/v3/types"
 )
 
 // ModelSort controls the deterministic order used by SelectModels.

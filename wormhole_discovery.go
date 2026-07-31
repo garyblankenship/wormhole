@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"sort"
 
-	"github.com/garyblankenship/wormhole/v2/discovery"
-	"github.com/garyblankenship/wormhole/v2/discovery/fetchers"
-	"github.com/garyblankenship/wormhole/v2/types"
+	"github.com/garyblankenship/wormhole/v3/discovery"
+	"github.com/garyblankenship/wormhole/v3/discovery/fetchers"
+	"github.com/garyblankenship/wormhole/v3/types"
 )
 
 func (p *Wormhole) initializeDiscoveryService() {

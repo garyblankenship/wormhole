@@ -275,6 +275,27 @@ func TestProviderMiddlewareChainApplyRerank(t *testing.T) {
 		t.Fatalf("mw.count = %d, want 1: ApplyRerank must route through the middleware chain", mw.count)
 	}
 }
+
+type rerankProvider struct{ *BaseProvider }
+
+func (p *rerankProvider) Rerank(_ context.Context, request RerankRequest) (*RerankResponse, error) {
+	return &RerankResponse{Model: request.Model}, nil
+}
+
+func TestProviderWrapperAppliesRerankMiddleware(t *testing.T) {
+	t.Parallel()
+
+	mw := &countingMiddleware{}
+	provider := &rerankProvider{BaseProvider: NewBaseProvider("rerank")}
+	wrapper := NewProviderWrapper(provider, mw)
+	response, err := wrapper.Rerank(context.Background(), RerankRequest{Model: "rerank-1"})
+	if err != nil {
+		t.Fatalf("Rerank returned error: %v", err)
+	}
+	if response.Model != "rerank-1" || mw.count != 1 {
+		t.Fatalf("Rerank response=%#v middleware count=%d", response, mw.count)
+	}
+}
 func (m *countingMiddleware) ApplyAudio(next AudioHandler) AudioHandler {
 	return func(ctx context.Context, request AudioRequest) (*AudioResponse, error) {
 		m.count++

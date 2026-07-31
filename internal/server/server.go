@@ -11,7 +11,7 @@ import (
 	"strings"
 	"time"
 
-	wormhole "github.com/garyblankenship/wormhole/v2"
+	wormhole "github.com/garyblankenship/wormhole/v3"
 )
 
 // Config holds server configuration.
@@ -29,6 +29,24 @@ type proxy struct {
 	logger          *slog.Logger
 	apiKey          string
 	defaultProvider string
+}
+
+type proxyRoute struct {
+	pattern string
+	handler http.HandlerFunc
+}
+
+// routes is the complete app-facing HTTP surface of the proxy. Keep provider
+// administration in official provider SDKs rather than registering it here.
+func (p *proxy) routes() []proxyRoute {
+	return []proxyRoute{
+		{pattern: "POST /v1/chat/completions", handler: p.handleChatCompletions},
+		{pattern: "POST /v1/responses", handler: p.handleResponses},
+		{pattern: "POST /v1/embeddings", handler: p.handleEmbeddings},
+		{pattern: "POST /v1/rerank", handler: p.handleRerank},
+		{pattern: "GET /v1/models", handler: p.handleListModels},
+		{pattern: "GET /health", handler: p.handleHealth},
+	}
 }
 
 // New creates and wires a new proxy server from the given config.
@@ -60,12 +78,9 @@ func New(cfg Config) *proxy {
 	}
 
 	mux := http.NewServeMux()
-	mux.HandleFunc("POST /v1/chat/completions", p.handleChatCompletions)
-	mux.HandleFunc("POST /v1/responses", p.handleResponses)
-	mux.HandleFunc("POST /v1/embeddings", p.handleEmbeddings)
-	mux.HandleFunc("POST /v1/rerank", p.handleRerank)
-	mux.HandleFunc("GET /v1/models", p.handleListModels)
-	mux.HandleFunc("GET /health", p.handleHealth)
+	for _, route := range p.routes() {
+		mux.HandleFunc(route.pattern, route.handler)
+	}
 
 	p.server = &http.Server{
 		Addr:              cfg.Addr,

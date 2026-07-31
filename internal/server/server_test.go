@@ -18,9 +18,9 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	wormhole "github.com/garyblankenship/wormhole/v2"
-	"github.com/garyblankenship/wormhole/v2/types"
-	wmtest "github.com/garyblankenship/wormhole/v2/wormholetest"
+	wormhole "github.com/garyblankenship/wormhole/v3"
+	"github.com/garyblankenship/wormhole/v3/types"
+	wmtest "github.com/garyblankenship/wormhole/v3/wormholetest"
 )
 
 type shutdownErrorCloser struct {

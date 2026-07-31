@@ -4,8 +4,8 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/garyblankenship/wormhole/v2/providers"
-	"github.com/garyblankenship/wormhole/v2/types"
+	"github.com/garyblankenship/wormhole/v3/providers"
+	"github.com/garyblankenship/wormhole/v3/types"
 )
 
 // buildTextPayload builds the request payload for text generation

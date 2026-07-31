@@ -85,9 +85,6 @@ func TestAdaptiveLimiter_AcquireAndRelease(t *testing.T) {
 	assert.False(t, ok3)
 	assert.Nil(t, rel3)
 
-	// Deprecated Acquire method
-	assert.False(t, al.Acquire(ctxTimeout))
-
 	// Release slot
 	rel1()
 	al.RecordLatency(50 * time.Millisecond)
@@ -99,7 +96,6 @@ func TestAdaptiveLimiter_AcquireAndRelease(t *testing.T) {
 
 	rel2()
 	rel4()
-	al.Release() // test deprecated Release
 }
 
 func TestAdaptiveLimiter_CapacityAdjustment(t *testing.T) {

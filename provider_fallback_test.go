@@ -6,8 +6,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/garyblankenship/wormhole/v2/middleware"
-	"github.com/garyblankenship/wormhole/v2/types"
+	"github.com/garyblankenship/wormhole/v3/middleware"
+	"github.com/garyblankenship/wormhole/v3/types"
 )
 
 func TestCircuitBreakerDoesNotBlockProviderFallback(t *testing.T) {
@@ -25,7 +25,7 @@ func TestCircuitBreakerDoesNotBlockProviderFallback(t *testing.T) {
 		WithProviderConfig("primary", types.ProviderConfig{}),
 		WithCustomProvider("secondary", func(types.ProviderConfig) (types.Provider, error) { return secondary, nil }),
 		WithProviderConfig("secondary", types.ProviderConfig{}),
-		WithMiddleware(middleware.CircuitBreakerMiddleware(1, time.Hour)),
+		WithProviderMiddleware(middleware.NewTypedCircuitBreakerMiddleware(1, time.Hour)),
 		WithDiscovery(false),
 	)
 

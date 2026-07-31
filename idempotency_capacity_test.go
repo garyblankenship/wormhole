@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/garyblankenship/wormhole/v2/types"
+	"github.com/garyblankenship/wormhole/v3/types"
 )
 
 func TestIdempotencyCapacityEvictsOnlyCompletedEntries(t *testing.T) {
@@ -52,6 +52,38 @@ func TestIdempotencyCapacityEvictsOnlyCompletedEntries(t *testing.T) {
 	stats := client.GetIdempotencyCacheStats()
 	if stats.Entries != 2 || stats.Capacity != 2 || stats.CapacityEvictions != 1 {
 		t.Fatalf("stats = %+v", stats)
+	}
+}
+
+func TestIdempotencyKeyIncludesProviderOptionsForEveryTypedRequest(t *testing.T) {
+	t.Parallel()
+	client := New(WithIdempotencyKey("provider-options"), WithDiscovery(false))
+	requests := []struct {
+		name  string
+		left  any
+		right any
+	}{
+		{"text", types.TextRequest{BaseRequest: types.BaseRequest{ProviderOptions: map[string]any{"mode": "left"}}}, types.TextRequest{BaseRequest: types.BaseRequest{ProviderOptions: map[string]any{"mode": "right"}}}},
+		{"structured", types.StructuredRequest{BaseRequest: types.BaseRequest{ProviderOptions: map[string]any{"mode": "left"}}}, types.StructuredRequest{BaseRequest: types.BaseRequest{ProviderOptions: map[string]any{"mode": "right"}}}},
+		{"embeddings", types.EmbeddingsRequest{ProviderOptions: map[string]any{"mode": "left"}}, types.EmbeddingsRequest{ProviderOptions: map[string]any{"mode": "right"}}},
+		{"rerank", types.RerankRequest{ProviderOptions: map[string]any{"mode": "left"}}, types.RerankRequest{ProviderOptions: map[string]any{"mode": "right"}}},
+		{"image", types.ImageRequest{ProviderOptions: map[string]any{"mode": "left"}}, types.ImageRequest{ProviderOptions: map[string]any{"mode": "right"}}},
+		{"audio", types.AudioRequest{ProviderOptions: map[string]any{"mode": "left"}}, types.AudioRequest{ProviderOptions: map[string]any{"mode": "right"}}},
+	}
+	for _, request := range requests {
+		t.Run(request.name, func(t *testing.T) {
+			left, ok := client.idempotencyCacheKey(request.name, request.left)
+			if !ok {
+				t.Fatal("left idempotency key was not generated")
+			}
+			right, ok := client.idempotencyCacheKey(request.name, request.right)
+			if !ok {
+				t.Fatal("right idempotency key was not generated")
+			}
+			if left == right {
+				t.Fatal("provider options did not affect the idempotency key")
+			}
+		})
 	}
 }
 

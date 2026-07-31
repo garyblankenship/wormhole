@@ -4,8 +4,8 @@ import (
 	"context"
 	"encoding/json"
 
-	"github.com/garyblankenship/wormhole/v2/internal/pool"
-	"github.com/garyblankenship/wormhole/v2/types"
+	"github.com/garyblankenship/wormhole/v3/internal/pool"
+	"github.com/garyblankenship/wormhole/v3/types"
 )
 
 // Structured generates a structured response

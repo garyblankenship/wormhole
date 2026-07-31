@@ -2,201 +2,116 @@ package main
 
 import (
 	"context"
-	"strings"
 	"testing"
 	"time"
 
-	"github.com/garyblankenship/wormhole/v2/middleware"
+	"github.com/garyblankenship/wormhole/v3/middleware"
+	"github.com/garyblankenship/wormhole/v3/types"
 )
 
 func TestMiddlewareDiscovery(t *testing.T) {
-	// Test that middleware discovery returns expected information
-	middlewares := middleware.AvailableMiddleware()
-
-	// Should have the key middleware from DX improvements
-	// Provider HTTP retries are configured through provider options, not middleware.
-	expectedMiddleware := map[string]bool{
-		"CacheMiddleware":          true,
-		"CircuitBreakerMiddleware": true,
-		"RateLimitMiddleware":      true,
-		"LoggingMiddleware":        true,
-		"MetricsMiddleware":        true,
-		"TimeoutMiddleware":        true,
+	t.Parallel()
+	found := make(map[string]middleware.MiddlewareInfo)
+	for _, item := range middleware.AvailableMiddleware() {
+		found[item.Name] = item
 	}
-
-	found := make(map[string]bool)
-	for _, mw := range middlewares {
-		found[mw.Name] = true
-
-		// Verify examples contain expected patterns
-		if mw.Name == "RetryMiddleware" {
-			if !strings.Contains(mw.Example, "DefaultRetryConfig()") {
-				t.Errorf("RetryMiddleware example should mention DefaultRetryConfig(), got: %s", mw.Example)
-			}
-		}
-
-		if mw.Name == "CacheMiddleware" {
-			if !strings.Contains(mw.Example, "CacheConfig") {
-				t.Errorf("CacheMiddleware example should mention CacheConfig, got: %s", mw.Example)
-			}
+	for _, name := range []string{
+		"NewTypedCacheMiddleware",
+		"NewTypedCircuitBreakerMiddleware",
+		"NewTypedRateLimitMiddleware",
+		"NewTypedLoggingMiddleware",
+		"NewTypedMetricsMiddleware",
+		"NewTypedTimeoutMiddleware",
+	} {
+		if _, ok := found[name]; !ok {
+			t.Errorf("AvailableMiddleware missing %s", name)
 		}
 	}
-
-	// Verify all expected middleware are present
-	for name := range expectedMiddleware {
-		if !found[name] {
-			t.Errorf("Expected middleware %s not found", name)
-		}
+	if item := found["NewTypedCacheMiddleware"]; item.ConfigType != "CacheConfig" {
+		t.Errorf("typed cache config type = %q, want CacheConfig", item.ConfigType)
 	}
 }
 
 func TestCacheConfigurationPattern(t *testing.T) {
-	// Test the "correct way" pattern from DX improvements
+	t.Parallel()
 	cache := middleware.NewMemoryCache(100)
-	config := middleware.CacheConfig{
-		Cache: cache,
-		TTL:   5 * time.Minute,
+	t.Cleanup(func() { _ = cache.Close() })
+	config := middleware.CacheConfig{Cache: cache, TTL: 5 * time.Minute}
+	if config.Cache == nil || config.TTL != 5*time.Minute {
+		t.Fatalf("CacheConfig = %#v", config)
 	}
-
-	if config.Cache == nil {
-		t.Error("Expected cache to be set")
-	}
-	if config.TTL != 5*time.Minute {
-		t.Errorf("Expected TTL to be 5 minutes, got %v", config.TTL)
-	}
-
-	// Test that the middleware can be created with this config
-	cacheMW := middleware.CacheMiddleware(config)
-	if cacheMW == nil {
-		t.Error("Expected middleware to be created successfully")
+	if middleware.NewTypedCacheMiddleware(config) == nil {
+		t.Fatal("NewTypedCacheMiddleware returned nil")
 	}
 }
 
-func TestRetryConfigurationPattern(t *testing.T) {
-	defaultConfig := middleware.DefaultRetryConfig()
-	if defaultConfig.MaxRetries == 0 {
-		t.Error("Expected default config to have non-zero MaxRetries")
+func TestProviderConfigurationReplacements(t *testing.T) {
+	t.Parallel()
+	maxRetries := 5
+	retryDelay := 2 * time.Second
+	retryMaxDelay := 30 * time.Second
+	config := types.ProviderConfig{MaxRetries: &maxRetries, RetryDelay: &retryDelay, RetryMaxDelay: &retryMaxDelay}
+	if config.MaxRetries == nil || *config.MaxRetries != 5 || config.RetryDelay == nil || *config.RetryDelay != 2*time.Second || config.RetryMaxDelay == nil || *config.RetryMaxDelay != 30*time.Second {
+		t.Fatalf("ProviderConfig retry replacement = %#v", config)
 	}
-	if defaultConfig.InitialDelay == 0 {
-		t.Error("Expected default config to have non-zero InitialDelay")
-	}
-
-	customConfig := middleware.RetryConfig{
-		MaxRetries:      5,
-		InitialDelay:    2 * time.Second,
-		MaxDelay:        30 * time.Second,
-		BackoffMultiple: 2,
-		Jitter:          true,
-	}
-	if customConfig.MaxRetries != 5 {
-		t.Errorf("Expected MaxRetries=5, got %d", customConfig.MaxRetries)
-	}
-	if customConfig.InitialDelay != 2*time.Second {
-		t.Errorf("Expected InitialDelay=2s, got %v", customConfig.InitialDelay)
+	// Fallback belongs on the typed text builder (WithFallback/WithProviderFallback),
+	// and adaptive concurrency remains a Wormhole client capability, not middleware.
+	if middleware.NewTypedRateLimitMiddleware(1) == nil {
+		t.Fatal("typed rate limit middleware was not constructed")
 	}
 }
 
 func TestProductionMiddlewareStack(t *testing.T) {
-	// Test the production stack pattern from DX improvements
+	t.Parallel()
 	cache := middleware.NewMemoryCache(100)
-	cacheConfig := middleware.CacheConfig{
-		Cache: cache,
-		TTL:   5 * time.Minute,
+	t.Cleanup(func() { _ = cache.Close() })
+	stack := []types.ProviderMiddleware{
+		middleware.NewTypedCircuitBreakerMiddleware(5, 30*time.Second),
+		middleware.NewTypedRateLimitMiddleware(100),
+		middleware.NewTypedCacheMiddleware(middleware.CacheConfig{Cache: cache, TTL: 5 * time.Minute}),
+		middleware.NewTypedTimeoutMiddleware(60 * time.Second),
 	}
-
-	// Verify all middleware can be created (the stack from the example)
-	// Provider HTTP retry is not middleware, so this stack uses the remaining middleware.
-	middlewares := []middleware.Middleware{
-		middleware.CircuitBreakerMiddleware(5, 30*time.Second),
-		middleware.RateLimitMiddleware(100),
-		middleware.CacheMiddleware(cacheConfig),
-		middleware.TimeoutMiddleware(60 * time.Second),
+	if len(stack) != 4 {
+		t.Fatalf("production stack length = %d, want 4", len(stack))
 	}
-
-	if len(middlewares) != 4 {
-		t.Errorf("Expected 4 middleware in production stack, got %d", len(middlewares))
-	}
-
-	// Test that they can be chained
-	chain := middleware.NewChain(middlewares...)
-	if chain == nil {
-		t.Error("Expected middleware chain to be created successfully")
+	if types.NewProviderChain(stack...) == nil {
+		t.Fatal("NewProviderChain returned nil")
 	}
 }
 
 func TestDXImprovementPatterns(t *testing.T) {
-	// Test patterns mentioned in the DX improvements
-
-	// 1. Test middleware discovery (no more source diving)
-	middlewares := middleware.AvailableMiddleware()
-	if len(middlewares) == 0 {
-		t.Error("Expected middleware discovery to return available middleware")
+	t.Parallel()
+	if len(middleware.AvailableMiddleware()) == 0 {
+		t.Fatal("middleware discovery returned no entries")
 	}
-
-	// 2. Test clear configuration patterns
-	// Cache with TTL
-	ttlCache := middleware.NewTTLCache(100, 5*time.Minute)
-	if ttlCache == nil {
-		t.Error("Expected TTL cache to be created")
+	for _, cache := range []middleware.Cache{middleware.NewTTLCache(100, 5*time.Minute), middleware.NewMemoryCache(100), middleware.NewLRUCache(100)} {
+		if cache == nil {
+			t.Fatal("cache constructor returned nil")
+		}
+		if err := cache.Close(); err != nil {
+			t.Fatal(err)
+		}
 	}
-
-	// Memory cache
-	memCache := middleware.NewMemoryCache(100)
-	if memCache == nil {
-		t.Error("Expected memory cache to be created")
-	}
-
-	// LRU cache
-	lruCache := middleware.NewLRUCache(100)
-	if lruCache == nil {
-		t.Error("Expected LRU cache to be created")
-	}
-
-	// 3. Test provider HTTP retry backoff is covered by the providers package
-	// The middleware discovery and cache patterns are the main DX improvements
 }
 
-// Integration test that verifies the example patterns actually work
 func TestDXImprovementsIntegration(t *testing.T) {
-	// This test verifies that the patterns shown in the DX improvements
-	// actually work end-to-end
-
-	// Create cache following the documented pattern
+	t.Parallel()
 	cache := middleware.NewMemoryCache(10)
-	cacheConfig := middleware.CacheConfig{
-		Cache: cache,
-		TTL:   1 * time.Minute,
-	}
-	cacheMW := middleware.CacheMiddleware(cacheConfig)
-
-	// Provider HTTP retry is not exposed as middleware
-	// Create a complete middleware stack with remaining middleware
-	chain := middleware.NewChain(
-		middleware.CircuitBreakerMiddleware(3, 10*time.Second),
-		middleware.RateLimitMiddleware(50),
-		cacheMW,
-		middleware.TimeoutMiddleware(30*time.Second),
+	t.Cleanup(func() { _ = cache.Close() })
+	chain := types.NewProviderChain(
+		middleware.NewTypedCircuitBreakerMiddleware(3, 10*time.Second),
+		middleware.NewTypedRateLimitMiddleware(50),
+		middleware.NewTypedCacheMiddleware(middleware.CacheConfig{Cache: cache, TTL: time.Minute}),
+		middleware.NewTypedTimeoutMiddleware(30*time.Second),
 	)
-
-	// Verify the chain works
-	callCount := 0
-	mockHandler := func(ctx context.Context, req any) (any, error) {
-		callCount++
-		return "success", nil
-	}
-
-	wrappedHandler := chain.Apply(mockHandler)
-
-	// Test the wrapped handler
-	ctx := context.Background()
-	resp, err := wrappedHandler(ctx, "request")
-	if err != nil {
-		t.Errorf("Expected no error, got %v", err)
-	}
-	if resp != "success" {
-		t.Errorf("Expected 'success', got %v", resp)
-	}
-	if callCount != 1 {
-		t.Errorf("Expected 1 call, got %d", callCount)
+	var calls int
+	handler := chain.ApplyText(func(context.Context, types.TextRequest) (*types.TextResponse, error) {
+		calls++
+		return &types.TextResponse{Text: "success"}, nil
+	})
+	request := types.TextRequest{BaseRequest: types.BaseRequest{Model: "test"}, Messages: []types.Message{types.NewUserMessage("request")}}
+	response, err := handler(context.Background(), request)
+	if err != nil || response.Text != "success" || calls != 1 {
+		t.Fatalf("typed DX stack = (%#v, %v), calls = %d", response, err, calls)
 	}
 }

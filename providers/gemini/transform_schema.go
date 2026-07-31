@@ -3,7 +3,7 @@ package gemini
 import (
 	"encoding/json"
 
-	"github.com/garyblankenship/wormhole/v2/types"
+	"github.com/garyblankenship/wormhole/v3/types"
 )
 
 // normalizeSchemaMap rewrites JSON Schema union types into Gemini-compatible form,

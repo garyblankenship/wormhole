@@ -23,7 +23,7 @@ import (
     "context"
     "fmt"
 
-    "github.com/garyblankenship/wormhole/v2"
+    "github.com/garyblankenship/wormhole/v3"
 )
 
 func main() {
@@ -154,7 +154,7 @@ client := wormhole.New(
 ### Custom Configuration
 
 ```go
-import "github.com/garyblankenship/wormhole/v2/discovery"
+import "github.com/garyblankenship/wormhole/v3/discovery"
 
 client := wormhole.New(
     wormhole.WithOpenAI("key"),

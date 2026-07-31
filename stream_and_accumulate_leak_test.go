@@ -7,8 +7,8 @@ import (
 
 	"go.uber.org/goleak"
 
-	"github.com/garyblankenship/wormhole/v2/types"
-	whtest "github.com/garyblankenship/wormhole/v2/wormholetest"
+	"github.com/garyblankenship/wormhole/v3/types"
+	whtest "github.com/garyblankenship/wormhole/v3/wormholetest"
 )
 
 // This test intentionally does not call t.Parallel(): goleak's goroutine
