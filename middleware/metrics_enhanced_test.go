@@ -328,6 +328,7 @@ func TestEnhancedMetricsStructuredLabelsAndPrometheusGolden(t *testing.T) {
 		"wormhole_output_tokens_total 0\n" +
 		"wormhole_duration_bucket{le=\"10.000000\"} 0\n" +
 		"wormhole_duration_bucket{le=\"+Inf\"} 0\n" +
+		"wormhole_label_overflow_requests_total 0\n" +
 		"wormhole_requests_total{provider=\"api:one\",model=\"model\\\"two\",method=\"text\\\\line\\n\",error_type=\"\"} 1\n" +
 		"wormhole_errors_total{provider=\"api:one\",model=\"model\\\"two\",method=\"text\\\\line\\n\",error_type=\"\"} 0\n" +
 		"wormhole_retries_total{provider=\"api:one\",model=\"model\\\"two\",method=\"text\\\\line\\n\",error_type=\"\"} 0\n" +

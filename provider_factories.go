@@ -108,8 +108,10 @@ type cachedProvider struct {
 	pinned   bool // protected by Wormhole.providersMutex
 }
 
-// ProviderHandle wraps a provider with automatic reference counting.
-// Callers MUST call Close() when done with the provider to prevent memory leaks.
+// ProviderHandle is a cache-eviction lease, not a shutdown lease. Close releases
+// the provider for ordinary cache eviction. Shutdown invalidates all outstanding
+// handles and closes their providers; callers must finish direct handle
+// operations before shutting the client down. Close remains harmless afterward.
 type ProviderHandle struct {
 	types.Provider
 	wormhole *Wormhole

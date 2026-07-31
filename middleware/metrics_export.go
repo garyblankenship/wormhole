@@ -28,8 +28,11 @@ func (c *EnhancedMetricsCollector) GetStats(labels *RequestLabels) map[string]in
 	}
 
 	stats := bucket.getStats(c.buckets)
-	if labels == nil && c.config.EnableConcurrencyTracking {
-		stats["in_flight_requests"] = atomic.LoadInt64(&c.inFlightRequests)
+	if labels == nil {
+		stats["label_overflow_requests"] = atomic.LoadInt64(&c.labelOverflowRequests)
+		if c.config.EnableConcurrencyTracking {
+			stats["in_flight_requests"] = atomic.LoadInt64(&c.inFlightRequests)
+		}
 	}
 	return stats
 }
@@ -43,6 +46,7 @@ func (c *EnhancedMetricsCollector) GetAllStats() map[string]interface{} {
 
 	// Add global stats
 	global := c.global.getStats(c.buckets)
+	global["label_overflow_requests"] = atomic.LoadInt64(&c.labelOverflowRequests)
 	if c.config.EnableConcurrencyTracking {
 		global["in_flight_requests"] = atomic.LoadInt64(&c.inFlightRequests)
 	}
@@ -110,6 +114,7 @@ func (c *EnhancedMetricsCollector) PrometheusExporter() string {
 
 	// Write global metrics
 	builder.WriteString(c.global.prometheusFormat(nil, c.buckets))
+	fmt.Fprintf(&builder, "wormhole_label_overflow_requests_total %d\n", atomic.LoadInt64(&c.labelOverflowRequests))
 	if c.config.EnableConcurrencyTracking {
 		fmt.Fprintf(&builder, "wormhole_in_flight_requests %d\n", atomic.LoadInt64(&c.inFlightRequests))
 	}
@@ -212,6 +217,10 @@ func (c *EnhancedMetricsCollector) Reset() {
 	defer c.stateMu.Unlock()
 	c.global.reset()
 	c.perLabel.Clear()
+	c.labelAdmissionMu.Lock()
+	c.admittedLabelSets = 0
+	c.labelAdmissionMu.Unlock()
+	atomic.StoreInt64(&c.labelOverflowRequests, 0)
 }
 
 // Helper function to extract labels from request context

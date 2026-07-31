@@ -3,7 +3,6 @@ package wormhole
 import (
 	"context"
 	"fmt"
-	"time"
 
 	"github.com/garyblankenship/wormhole/v2/internal/schemavalidation"
 	"github.com/garyblankenship/wormhole/v2/types"
@@ -18,6 +17,8 @@ type ToolExecutor struct {
 	circuitBreaker  *SimpleCircuitBreaker
 	retryExecutor   *RetryExecutor
 	configErr       error
+	admission       *toolAdmissionBudget
+	ownsAdmission   bool
 }
 
 // NewToolExecutor creates a new ToolExecutor with the given registry and default safety config
@@ -31,36 +32,20 @@ func NewToolExecutorWithConfig(registry *ToolRegistry, config ToolSafetyConfig) 
 	validationErr := config.Validate()
 
 	executor := &ToolExecutor{
-		registry:     registry,
-		safetyConfig: config,
-		configErr:    validationErr,
+		registry:      registry,
+		safetyConfig:  config,
+		configErr:     validationErr,
+		ownsAdmission: true,
 	}
 
 	if validationErr != nil {
 		return executor
 	}
 
-	// Initialize concurrency limiter if configured
-	if config.EnableAdaptiveConcurrency && !config.IsUnlimitedConcurrency() {
-		// Use adaptive concurrency control
-		executor.adaptiveLimiter = NewAdaptiveLimiter(config.ToAdaptiveConfig())
-	} else if !config.IsUnlimitedConcurrency() {
-		// Use fixed concurrency limit
-		executor.limiter = NewConcurrencyLimiter(config.MaxConcurrentTools)
-	}
-
-	// Initialize circuit breaker if enabled
-	if config.EnableCircuitBreaker {
-		executor.circuitBreaker = NewSimpleCircuitBreaker(
-			config.CircuitBreakerThreshold,
-			config.CircuitBreakerResetTimeout,
-		)
-	}
-
-	// Initialize retry executor if configured
-	if config.MaxRetriesPerTool > 0 {
-		executor.retryExecutor = NewRetryExecutor(config.MaxRetriesPerTool)
-	}
+	executor.admission = newToolAdmissionBudget(config)
+	executor.limiter = executor.admission.limiter
+	executor.adaptiveLimiter = executor.admission.adaptiveLimiter
+	executor.initializeExecutionPolicies()
 
 	return executor
 }
@@ -74,11 +59,16 @@ func NewToolExecutorWithConfig(registry *ToolRegistry, config ToolSafetyConfig) 
 // Returns:
 //   - ToolResult with the execution result or error
 func (e *ToolExecutor) Execute(ctx context.Context, toolCall types.ToolCall) types.ToolResult {
+	result, _ := e.execute(ctx, toolCall)
+	return result
+}
+
+func (e *ToolExecutor) execute(ctx context.Context, toolCall types.ToolCall) (types.ToolResult, bool) {
 	if e.configErr != nil {
 		return types.ToolResult{
 			ToolCallID: toolCall.ID,
 			Error:      e.configErr.Error(),
-		}
+		}, false
 	}
 
 	// Check circuit breaker if enabled
@@ -86,24 +76,22 @@ func (e *ToolExecutor) Execute(ctx context.Context, toolCall types.ToolCall) typ
 		return types.ToolResult{
 			ToolCallID: toolCall.ID,
 			Error:      "circuit breaker tripped - tool execution temporarily disabled",
-		}
+		}, false
 	}
 
 	if result, rejected := e.rejectMalformedArguments(toolCall); rejected {
-		return result
+		return result, false
 	}
 
 	// Get tool definition from registry
 	definition := e.registry.getStored(toolCall.Name)
 	if definition == nil {
 		// Record failure for circuit breaker
-		if e.circuitBreaker != nil {
-			e.circuitBreaker.RecordFailure()
-		}
+		e.recordCircuitFailure()
 		return types.ToolResult{
 			ToolCallID: toolCall.ID,
 			Error:      fmt.Sprintf("tool %q not found in registry", toolCall.Name),
-		}
+		}, false
 	}
 
 	// Arguments are already a map from the provider
@@ -113,25 +101,25 @@ func (e *ToolExecutor) Execute(ctx context.Context, toolCall types.ToolCall) typ
 	if e.safetyConfig.EnableInputValidation && definition.Tool.InputSchema != nil {
 		if err := schemavalidation.ValidateAgainstSchema(args, definition.Tool.InputSchema); err != nil {
 			// Record failure for circuit breaker
-			if e.circuitBreaker != nil {
-				e.circuitBreaker.RecordFailure()
-			}
+			e.recordCircuitFailure()
 			return types.ToolResult{
 				ToolCallID: toolCall.ID,
 				Error:      fmt.Sprintf("schema validation failed: %v", err),
-			}
+			}, false
 		}
 	}
 
 	// Acquire capacity immediately before starting user code. The permit is
 	// released by the execution goroutine, not by this caller, because a handler
 	// may ignore cancellation and continue after Execute returns.
-	releasePermit, ok := e.acquirePermit(ctx)
+	queueCtx, cancelQueue := context.WithTimeout(ctx, e.safetyConfig.ToolQueueTimeout)
+	releasePermit, ok := e.acquirePermit(queueCtx)
+	cancelQueue()
 	if !ok {
 		return types.ToolResult{
 			ToolCallID: toolCall.ID,
-			Error:      "concurrency limit exceeded or context canceled",
-		}
+			Error:      "concurrency limit exceeded or context canceled while waiting for tool execution permit",
+		}, false
 	}
 
 	// ToolTimeout bounds handler execution, not time spent waiting for capacity.
@@ -194,30 +182,31 @@ func (e *ToolExecutor) Execute(ctx context.Context, toolCall types.ToolCall) typ
 		result, err = o.result, o.err
 	case <-ctx.Done():
 		err = fmt.Errorf("tool %q timed out or was canceled: %w", toolCall.Name, ctx.Err())
+		e.recordCircuitFailure()
+		return types.ToolResult{
+			ToolCallID: toolCall.ID,
+			Error:      err.Error(),
+		}, true
 	}
 
 	if err != nil {
 		// Record failure for circuit breaker
-		if e.circuitBreaker != nil {
-			e.circuitBreaker.RecordFailure()
-		}
+		e.recordCircuitFailure()
 		return types.ToolResult{
 			ToolCallID: toolCall.ID,
 			Error:      err.Error(),
-		}
+		}, false
 	}
 
 	// Apply output size limit if configured
 	if e.safetyConfig.HasOutputSizeLimit() && result != nil {
 		if err := e.validateOutputSize(result); err != nil {
 			// Record failure for circuit breaker
-			if e.circuitBreaker != nil {
-				e.circuitBreaker.RecordFailure()
-			}
+			e.recordCircuitFailure()
 			return types.ToolResult{
 				ToolCallID: toolCall.ID,
 				Error:      fmt.Sprintf("output size limit exceeded: %v", err),
-			}
+			}, false
 		}
 	}
 
@@ -229,16 +218,14 @@ func (e *ToolExecutor) Execute(ctx context.Context, toolCall types.ToolCall) typ
 	return types.ToolResult{
 		ToolCallID: toolCall.ID,
 		Result:     result, // Result is any, not string
-	}
+	}, false
 }
 
 func (e *ToolExecutor) rejectMalformedArguments(toolCall types.ToolCall) (types.ToolResult, bool) {
 	if !toolCall.ArgsInvalid {
 		return types.ToolResult{}, false
 	}
-	if e.circuitBreaker != nil {
-		e.circuitBreaker.RecordFailure()
-	}
+	e.recordCircuitFailure()
 	parseError := toolCall.ArgsParseError
 	if parseError == "" {
 		parseError = "provider could not parse the arguments as JSON"
@@ -249,25 +236,43 @@ func (e *ToolExecutor) rejectMalformedArguments(toolCall types.ToolCall) (types.
 	}, true
 }
 
+func (e *ToolExecutor) recordCircuitFailure() {
+	if e.circuitBreaker != nil {
+		e.circuitBreaker.RecordFailure()
+	}
+}
+
 func (e *ToolExecutor) acquirePermit(ctx context.Context) (release func(), ok bool) {
-	if e.adaptiveLimiter != nil {
-		release, ok := e.adaptiveLimiter.AcquireToken(ctx)
-		if !ok {
-			return nil, false
-		}
-		started := time.Now()
-		return func() {
-			e.adaptiveLimiter.RecordLatency(time.Since(started))
-			release()
-		}, true
-	}
+	return e.admission.acquire(ctx)
+}
 
-	if e.limiter != nil {
-		if !e.limiter.Acquire(ctx) {
-			return nil, false
-		}
-		return e.limiter.Release, true
+func (p *Wormhole) newToolExecutor(registry *ToolRegistry) *ToolExecutor {
+	config := p.config.ToolSafety
+	executor := &ToolExecutor{
+		registry:      registry,
+		safetyConfig:  config,
+		configErr:     p.toolConfigErr,
+		admission:     p.toolBudget,
+		ownsAdmission: false,
 	}
+	if p.toolBudget != nil {
+		executor.limiter = p.toolBudget.limiter
+		executor.adaptiveLimiter = p.toolBudget.adaptiveLimiter
+	}
+	if p.toolConfigErr == nil {
+		executor.initializeExecutionPolicies()
+	}
+	return executor
+}
 
-	return func() {}, true
+func (e *ToolExecutor) initializeExecutionPolicies() {
+	if e.safetyConfig.EnableCircuitBreaker {
+		e.circuitBreaker = NewSimpleCircuitBreaker(
+			e.safetyConfig.CircuitBreakerThreshold,
+			e.safetyConfig.CircuitBreakerResetTimeout,
+		)
+	}
+	if e.safetyConfig.MaxRetriesPerTool > 0 {
+		e.retryExecutor = NewRetryExecutor(e.safetyConfig.MaxRetriesPerTool)
+	}
 }

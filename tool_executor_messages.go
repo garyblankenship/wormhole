@@ -65,7 +65,7 @@ func (e *ToolExecutor) BuildToolResultMessages(toolResults []types.ToolResult) [
 
 // Stop stops any background goroutines used by the tool executor
 func (e *ToolExecutor) Stop() {
-	if e.adaptiveLimiter != nil {
-		e.adaptiveLimiter.Stop()
+	if e.ownsAdmission {
+		e.admission.Stop()
 	}
 }

@@ -7,6 +7,10 @@ import (
 
 // ToolSafetyConfig defines safety constraints for tool execution
 type ToolSafetyConfig struct {
+	// MaxToolCallsPerRound rejects oversized provider tool-call batches before
+	// allocation or execution. Non-positive values use the default of 32.
+	MaxToolCallsPerRound int `json:"max_tool_calls_per_round" yaml:"max_tool_calls_per_round"`
+
 	// MaxConcurrentTools limits the number of tools that can execute concurrently
 	// Default: 10, 0 means unlimited
 	MaxConcurrentTools int `json:"max_concurrent_tools" yaml:"max_concurrent_tools"`
@@ -40,6 +44,11 @@ type ToolSafetyConfig struct {
 	// ToolTimeout sets a maximum execution time for each individual tool
 	// Default: 30 seconds, 0 means no timeout
 	ToolTimeout time.Duration `json:"tool_timeout" yaml:"tool_timeout"`
+
+	// ToolQueueTimeout bounds only the wait for an execution permit. The
+	// handler-only ToolTimeout starts after admission.
+	// Default: 30 seconds.
+	ToolQueueTimeout time.Duration `json:"tool_queue_timeout" yaml:"tool_queue_timeout"`
 
 	// EnableCircuitBreaker enables a simple circuit breaker to stop tool execution
 	// after a certain number of consecutive failures
@@ -87,6 +96,7 @@ type ToolSafetyConfig struct {
 // DefaultToolSafetyConfig returns a safe default configuration
 func DefaultToolSafetyConfig() ToolSafetyConfig {
 	return ToolSafetyConfig{
+		MaxToolCallsPerRound:       32,
 		MaxConcurrentTools:         10,
 		EnableAdaptiveConcurrency:  false,
 		AdaptiveTargetLatency:      500 * time.Millisecond,
@@ -95,6 +105,7 @@ func DefaultToolSafetyConfig() ToolSafetyConfig {
 		AdaptiveAdjustmentInterval: 30 * time.Second,
 		AdaptiveLatencyWindowSize:  100,
 		ToolTimeout:                30 * time.Second,
+		ToolQueueTimeout:           30 * time.Second,
 		EnableCircuitBreaker:       false,
 		MaxRetriesPerTool:          0,
 		CircuitBreakerThreshold:    5,
@@ -111,11 +122,17 @@ func DefaultToolSafetyConfig() ToolSafetyConfig {
 func (c *ToolSafetyConfig) Validate() error {
 	var unsupported []string
 
+	if c.MaxToolCallsPerRound <= 0 {
+		c.MaxToolCallsPerRound = 32
+	}
 	if c.MaxConcurrentTools < 0 {
 		c.MaxConcurrentTools = 0
 	}
 	if c.ToolTimeout < 0 {
 		c.ToolTimeout = 0
+	}
+	if c.ToolQueueTimeout <= 0 {
+		c.ToolQueueTimeout = 30 * time.Second
 	}
 	if c.MaxRetriesPerTool < 0 {
 		c.MaxRetriesPerTool = 0

@@ -37,7 +37,8 @@ func (p *Wormhole) releaseProvider(name string) {
 	}
 }
 
-// ProviderWithHandle returns a provider wrapped in a handle that must be closed.
+// ProviderWithHandle returns a cache-eviction lease that must be closed. The
+// lease does not extend provider lifetime across Wormhole.Shutdown.
 func (p *Wormhole) ProviderWithHandle(name string) (*ProviderHandle, error) {
 	if !p.beginProviderAcquisition() {
 		return nil, fmt.Errorf("client is shutting down")

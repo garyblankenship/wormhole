@@ -7,6 +7,14 @@ import (
 	"github.com/garyblankenship/wormhole/v2/types"
 )
 
+// WithToolSafetyConfig configures client-owned admission shared by automatic
+// text and agent tool execution.
+func WithToolSafetyConfig(config ToolSafetyConfig) Option {
+	return func(c *Config) {
+		c.ToolSafety = config
+	}
+}
+
 // WithCustomProvider registers a custom provider with its factory function.
 func WithCustomProvider(name string, factory types.ProviderFactory) Option {
 	return func(c *Config) {

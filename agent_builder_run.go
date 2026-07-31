@@ -13,6 +13,10 @@ func (b *AgentBuilder) Run(ctx context.Context, prompt string) (*AgentResult, er
 	if b.model == "" {
 		return nil, fmt.Errorf("agent: model is required")
 	}
+	if !b.wormhole.trackRequest() {
+		return nil, fmt.Errorf("agent: client is shutting down")
+	}
+	defer b.wormhole.untrackRequest()
 
 	maxSteps := b.maxSteps
 
@@ -57,7 +61,7 @@ func (b *AgentBuilder) Run(ctx context.Context, prompt string) (*AgentResult, er
 	request.Messages = prepareExecutionMessages(request.SystemPrompt, request.Messages)
 
 	// Create executor for tool calls
-	executor := NewToolExecutor(mergedRegistry)
+	executor := b.wormhole.newToolExecutor(mergedRegistry)
 
 	var steps []StepEvent
 	ctx = contextWithProviderOperation(ctx, provider, "agent")
@@ -93,6 +97,9 @@ func (b *AgentBuilder) Run(ctx context.Context, prompt string) (*AgentResult, er
 				Steps:      steps,
 				TotalSteps: step,
 			}, nil
+		}
+		if err := executor.validateToolCallBatch(resp.ToolCalls); err != nil {
+			return nil, fmt.Errorf("agent step %d: invalid tool call batch: %w", step, err)
 		}
 
 		// Execute tool calls

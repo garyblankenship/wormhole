@@ -72,6 +72,9 @@ func (e *ToolExecutor) executeWithTools(
 			// No more tool calls - return final response
 			return response, nil
 		}
+		if err := e.validateToolCallBatch(response.ToolCalls); err != nil {
+			return nil, fmt.Errorf("invalid tool call batch: %w", err)
+		}
 
 		// Execute all tool calls
 		toolResults := e.ExecuteAll(ctx, response.ToolCalls)

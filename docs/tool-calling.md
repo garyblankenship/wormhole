@@ -527,6 +527,13 @@ for _, toolCall := range response.ToolCalls {
 - ✅ Validate all inputs before use
 - ✅ Return errors instead of panicking
 
+## Handler Isolation
+
+Tool timeouts and cancellation bound Wormhole's wait and retain admission
+capacity while a handler is still running. Arbitrary in-process Go handlers
+cannot be forcibly killed; isolate hostile or untrusted code in a separate
+process. Process isolation is outside the provider-bridge scope.
+
 ## See Also
 
 - [Main README](../README.md) - Full Wormhole documentation

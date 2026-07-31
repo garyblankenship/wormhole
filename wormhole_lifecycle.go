@@ -40,6 +40,7 @@ func (p *Wormhole) runShutdown() {
 
 	p.idempotencySweepWg.Wait()
 	p.activeRequests.Wait()
+	p.toolBudget.Stop()
 	p.providerAcquisitionWg.Wait()
 
 	var errs []error
@@ -129,7 +130,13 @@ func (p *Wormhole) finishProviderAcquisition() bool {
 func (p *Wormhole) ClearIdempotencyCache() {
 	p.idempotencyMu.Lock()
 	defer p.idempotencyMu.Unlock()
+	for _, entry := range p.idempotencyCache {
+		entry.orderElem = nil
+	}
 	clear(p.idempotencyCache)
+	if p.idempotencyOrder != nil {
+		p.idempotencyOrder.Init()
+	}
 }
 
 // CleanupStaleProviders cleans up providers that haven't been used for a while.

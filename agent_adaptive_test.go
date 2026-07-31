@@ -270,6 +270,9 @@ func TestToolSafetyConfigValidationAndHelpers(t *testing.T) {
 	if !config.HasOutputSizeLimit() {
 		t.Fatal("expected default output size limit")
 	}
+	if config.MaxToolCallsPerRound != 32 || config.ToolQueueTimeout != 30*time.Second {
+		t.Fatalf("finite tool defaults = (%d, %s), want (32, 30s)", config.MaxToolCallsPerRound, config.ToolQueueTimeout)
+	}
 
 	adaptive := config.ToAdaptiveConfig()
 	if adaptive.MinCapacity != 1 || adaptive.MaxCapacity != 1 || adaptive.InitialCapacity != 0 {

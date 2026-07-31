@@ -1,6 +1,7 @@
 package wormhole
 
 import (
+	"container/list"
 	"io"
 	"sync"
 	"sync/atomic"
@@ -43,9 +44,15 @@ type Wormhole struct {
 	shuttingDown          atomic.Bool    // Atomic flag for shutdown state
 
 	// Idempotency cache
-	idempotencyMu      sync.Mutex
-	idempotencyCache   map[string]*idempotencyEntry
-	idempotencySweepWg sync.WaitGroup
+	idempotencyMu         sync.Mutex
+	idempotencyCache      map[string]*idempotencyEntry
+	idempotencyOrder      *list.List
+	idempotencyEvictions  uint64
+	idempotencyRejections uint64
+	idempotencySweepWg    sync.WaitGroup
+
+	toolBudget    *toolAdmissionBudget
+	toolConfigErr error
 
 	// Closers registered by options, closed in Shutdown
 	closers []io.Closer
@@ -57,6 +64,9 @@ type IdempotencyConfig struct {
 	Key string
 	// TTL is the time-to-live for cached responses
 	TTL time.Duration
+	// MaxEntries bounds retained in-flight and completed entries. Non-positive
+	// values use the finite default of 10,000 entries.
+	MaxEntries int
 }
 
 // Config holds the configuration for Wormhole
@@ -78,6 +88,7 @@ type Config struct {
 	DiscoveryConfig      discovery.DiscoveryConfig // Dynamic model discovery configuration
 	EnableDiscovery      bool                      // Whether to enable dynamic model discovery (default: true)
 	Idempotency          *IdempotencyConfig        // Idempotency configuration for duplicate prevention
+	ToolSafety           ToolSafetyConfig          // Admission and timeout policy for automatic tool execution
 	Models               []*types.ModelInfo        // Models to load into the registry (opt-in; see WithModels)
 	AttemptTrace         AttemptTraceFunc          // Optional per-attempt tracing callback
 	StreamIdleTimeout    time.Duration             // Per-chunk idle timeout for streaming (0 = disabled)
@@ -111,12 +122,14 @@ func New(opts ...Option) *Wormhole {
 		ModelValidation: true,                      // Enable model validation by default
 		EnableDiscovery: true,                      // Enable model discovery by default
 		DiscoveryConfig: discovery.DefaultConfig(), // Use default discovery configuration
+		ToolSafety:      DefaultToolSafetyConfig(),
 	}
 
 	// Apply all provided options
 	for _, opt := range opts {
 		opt(&config)
 	}
+	toolConfigErr := config.ToolSafety.Validate()
 
 	// Populate the opt-in model registry with any caller-supplied models.
 	if len(config.Models) > 0 {
@@ -133,7 +146,12 @@ func New(opts ...Option) *Wormhole {
 		shutdownDone:      make(chan struct{}),
 		shutdownChan:      make(chan struct{}),
 		idempotencyCache:  make(map[string]*idempotencyEntry),
+		idempotencyOrder:  list.New(),
 		closers:           config.Closers,
+		toolConfigErr:     toolConfigErr,
+	}
+	if toolConfigErr == nil {
+		p.toolBudget = newToolAdmissionBudget(config.ToolSafety)
 	}
 
 	// Start the sweeper only when idempotency can actually retain entries.

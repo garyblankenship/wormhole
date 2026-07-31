@@ -35,7 +35,10 @@ func TestIdempotencyInFlightEntryDoesNotExpire(t *testing.T) {
 	ttl := time.Second
 	client := &Wormhole{idempotencyCache: make(map[string]*idempotencyEntry)}
 
-	first, created := client.loadOrCreateIdempotencyEntry("same", now)
+	first, created, err := client.loadOrCreateIdempotencyEntry("same", now)
+	if err != nil {
+		t.Fatal(err)
+	}
 	if !created {
 		t.Fatal("first entry was not created")
 	}
@@ -43,7 +46,10 @@ func TestIdempotencyInFlightEntryDoesNotExpire(t *testing.T) {
 		t.Fatalf("first entry state = %v, want in-flight", first.state)
 	}
 
-	duplicate, created := client.loadOrCreateIdempotencyEntry("same", now.Add(2*ttl))
+	duplicate, created, err := client.loadOrCreateIdempotencyEntry("same", now.Add(2*ttl))
+	if err != nil {
+		t.Fatal(err)
+	}
 	if created {
 		t.Fatal("in-flight entry was replaced after the response TTL elapsed")
 	}
@@ -59,19 +65,28 @@ func TestIdempotencyTTLStartsAtSuccessfulCompletion(t *testing.T) {
 	ttl := time.Second
 	client := &Wormhole{idempotencyCache: make(map[string]*idempotencyEntry)}
 
-	first, created := client.loadOrCreateIdempotencyEntry("same", now)
+	first, created, err := client.loadOrCreateIdempotencyEntry("same", now)
+	if err != nil {
+		t.Fatal(err)
+	}
 	if !created {
 		t.Fatal("first entry was not created")
 	}
 	completedAt := now.Add(2 * ttl)
 	client.completeIdempotencyEntry(first, completedAt, ttl)
 
-	duplicate, created := client.loadOrCreateIdempotencyEntry("same", completedAt.Add(ttl-time.Nanosecond))
+	duplicate, created, err := client.loadOrCreateIdempotencyEntry("same", completedAt.Add(ttl-time.Nanosecond))
+	if err != nil {
+		t.Fatal(err)
+	}
 	if created || duplicate != first {
 		t.Fatal("completed response was not retained for its full post-completion TTL")
 	}
 
-	replacement, created := client.loadOrCreateIdempotencyEntry("same", completedAt.Add(ttl))
+	replacement, created, err := client.loadOrCreateIdempotencyEntry("same", completedAt.Add(ttl))
+	if err != nil {
+		t.Fatal(err)
+	}
 	if !created || replacement == first {
 		t.Fatal("completed response was not replaced after its post-completion TTL")
 	}
@@ -81,12 +96,18 @@ func TestIdempotencySweeperSkipsInFlight(t *testing.T) {
 	t.Parallel()
 
 	client := &Wormhole{idempotencyCache: make(map[string]*idempotencyEntry)}
-	inFlight, created := client.loadOrCreateIdempotencyEntry("in-flight", time.Now())
+	inFlight, created, err := client.loadOrCreateIdempotencyEntry("in-flight", time.Now())
+	if err != nil {
+		t.Fatal(err)
+	}
 	if !created {
 		t.Fatal("in-flight entry was not created")
 	}
 
-	completed, created := client.loadOrCreateIdempotencyEntry("completed", time.Now())
+	completed, created, err := client.loadOrCreateIdempotencyEntry("completed", time.Now())
+	if err != nil {
+		t.Fatal(err)
+	}
 	if !created {
 		t.Fatal("completed entry was not created")
 	}
@@ -112,7 +133,10 @@ func TestIdempotencyCompletionAndSweepRace(t *testing.T) {
 
 	for i := 0; i < iterations; i++ {
 		key := "same"
-		entry, created := client.loadOrCreateIdempotencyEntry(key, time.Now())
+		entry, created, err := client.loadOrCreateIdempotencyEntry(key, time.Now())
+		if err != nil {
+			t.Fatal(err)
+		}
 		if !created {
 			t.Fatal("entry was not created")
 		}
@@ -143,7 +167,10 @@ func TestIdempotencyClearDuringFlightDoesNotStrandWaiters(t *testing.T) {
 	t.Parallel()
 
 	client := &Wormhole{idempotencyCache: make(map[string]*idempotencyEntry)}
-	old, created := client.loadOrCreateIdempotencyEntry("same", time.Now())
+	old, created, err := client.loadOrCreateIdempotencyEntry("same", time.Now())
+	if err != nil {
+		t.Fatal(err)
+	}
 	if !created {
 		t.Fatal("old entry was not created")
 	}
@@ -155,7 +182,10 @@ func TestIdempotencyClearDuringFlightDoesNotStrandWaiters(t *testing.T) {
 	}()
 
 	client.ClearIdempotencyCache()
-	current, created := client.loadOrCreateIdempotencyEntry("same", time.Now())
+	current, created, err := client.loadOrCreateIdempotencyEntry("same", time.Now())
+	if err != nil {
+		t.Fatal(err)
+	}
 	if !created || current == old {
 		t.Fatal("clear did not permit a new idempotency entry")
 	}

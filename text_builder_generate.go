@@ -160,7 +160,7 @@ func (b *TextRequestBuilder) executeGenerate(ctx context.Context, provider types
 
 	// If auto-execution is enabled, use the tool executor
 	if shouldAutoExecuteTools {
-		executor := NewToolExecutor(wormhole.toolRegistry)
+		executor := wormhole.newToolExecutor(wormhole.toolRegistry)
 		maxIterations := b.maxToolIterations
 		if maxIterations == 0 {
 			maxIterations = 10 // Default

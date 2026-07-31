@@ -48,9 +48,10 @@ type AdaptiveLimiter struct {
 	limiter *ConcurrencyLimiter
 	config  AdaptiveConfig
 
-	latencies    *ring.Ring // ring buffer of recent latencies
-	totalLatency time.Duration
-	sampleCount  int
+	latencies       *ring.Ring // ring buffer of recent latencies
+	totalLatency    time.Duration
+	sampleCount     int
+	pendingAcquires int
 
 	stopChan chan struct{}
 	stopOnce sync.Once
@@ -104,11 +105,16 @@ func (al *AdaptiveLimiter) Release() {
 // Callers MUST call the returned release function exactly once after the
 // operation completes.
 func (al *AdaptiveLimiter) AcquireToken(ctx context.Context) (release func(), ok bool) {
-	al.mu.RLock()
+	al.mu.Lock()
 	limiter := al.limiter
-	al.mu.RUnlock()
+	al.pendingAcquires++
+	al.mu.Unlock()
 
-	if !limiter.Acquire(ctx) {
+	ok = limiter.Acquire(ctx)
+	al.mu.Lock()
+	al.pendingAcquires--
+	al.mu.Unlock()
+	if !ok {
 		return nil, false
 	}
 	return limiter.Release, true
@@ -155,6 +161,12 @@ func (al *AdaptiveLimiter) adjustCapacity() {
 
 	if al.sampleCount == 0 {
 		return // No data yet
+	}
+	if al.pendingAcquires > 0 || al.limiter.InUse() > 0 {
+		// Replacing the limiter while permits are held would detach those
+		// permits from admission accounting. Defer adjustment until every
+		// admitted handler has released its captured token.
+		return
 	}
 
 	averageLatency := al.totalLatency / time.Duration(al.sampleCount)

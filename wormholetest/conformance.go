@@ -2,6 +2,8 @@ package wormholetest
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	stdtesting "testing"
 	"time"
 
@@ -16,6 +18,8 @@ type ProviderConformanceConfig struct {
 	EmbeddingsModel string
 	StreamModel     string
 	Timeout         time.Duration
+	// CheckStreamCancellation opts into a pre-canceled stream context check.
+	CheckStreamCancellation bool
 }
 
 // RunProviderConformance runs reusable contract checks for custom providers.
@@ -87,6 +91,13 @@ func RunProviderConformance(t *stdtesting.T, cfg ProviderConformanceConfig) {
 				t.Fatal("Stream returned no text")
 			}
 		})
+		if cfg.CheckStreamCancellation {
+			t.Run("stream_cancellation", func(t *stdtesting.T) {
+				if err := checkStreamCancellation(cfg.Provider, cfg.StreamModel, cfg.Timeout); err != nil {
+					t.Fatal(err)
+				}
+			})
+		}
 	}
 	if caps[types.CapabilityStructured] {
 		t.Run("structured", func(t *stdtesting.T) {
@@ -126,6 +137,45 @@ func RunProviderConformance(t *stdtesting.T, cfg ProviderConformanceConfig) {
 			t.Fatalf("Close returned error: %v", err)
 		}
 	})
+}
+
+func checkStreamCancellation(provider types.Provider, model string, timeout time.Duration) error {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	stream, err := provider.Stream(ctx, types.TextRequest{
+		BaseRequest: types.BaseRequest{Model: model},
+		Messages:    []types.Message{types.NewUserMessage("hello")},
+	})
+	if err != nil {
+		if errors.Is(err, context.Canceled) {
+			return nil
+		}
+		return fmt.Errorf("Stream returned a non-cancellation error for pre-canceled context: %w", err)
+	}
+	if stream == nil {
+		return fmt.Errorf("Stream returned nil channel without a cancellation error")
+	}
+	wait := timeout
+	if wait > 100*time.Millisecond {
+		wait = 100 * time.Millisecond
+	}
+	timer := time.NewTimer(wait)
+	defer timer.Stop()
+	select {
+	case chunk, ok := <-stream:
+		if !ok {
+			return nil
+		}
+		if errors.Is(chunk.Error, context.Canceled) {
+			return nil
+		}
+		if chunk.Error != nil {
+			return fmt.Errorf("Stream produced a non-cancellation error after pre-canceled context: %w", chunk.Error)
+		}
+		return fmt.Errorf("Stream produced data after pre-canceled context")
+	case <-timer.C:
+		return fmt.Errorf("Stream neither reported cancellation nor closed promptly")
+	}
 }
 
 func capabilitySet(capabilities []types.ModelCapability) map[types.ModelCapability]bool {

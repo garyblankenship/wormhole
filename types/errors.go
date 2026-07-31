@@ -57,9 +57,14 @@ var (
 	ErrValidation = NewWormholeError(ErrorCodeValidation, "validation failed", false)
 
 	// Middleware errors
-	ErrCircuitOpen        = NewWormholeError(ErrorCodeMiddleware, "circuit breaker is open", true)
-	ErrRateLimitExceeded  = NewWormholeError(ErrorCodeMiddleware, "rate limit exceeded", true)
-	ErrNoHealthyProviders = NewWormholeError(ErrorCodeMiddleware, "no healthy providers available", true)
+	ErrCircuitOpen         = NewWormholeError(ErrorCodeMiddleware, "circuit breaker is open", true)
+	ErrRateLimitExceeded   = NewWormholeError(ErrorCodeMiddleware, "rate limit exceeded", true)
+	ErrNoHealthyProviders  = NewWormholeError(ErrorCodeMiddleware, "no healthy providers available", true)
+	ErrIdempotencyCapacity = NewWormholeError(
+		ErrorCodeMiddleware,
+		"idempotency cache capacity is exhausted by in-flight requests",
+		true,
+	).WithStatusCode(503)
 )
 
 // WormholeError provides structured error information

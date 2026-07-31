@@ -3,6 +3,7 @@ package wormhole
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/garyblankenship/wormhole/v2/types"
 )
@@ -43,7 +44,7 @@ func forwardStreamWithFirstChunkSafety(ctx context.Context, cancelAttempt contex
 			}
 			if !emitted && chunk.HasError() {
 				cancelAttempt()
-				go drainStream(ctx, stream)
+				go drainStream(ctx, stream, time.Second)
 				return false, true, chunk.Error
 			}
 			emitted = true
@@ -66,10 +67,14 @@ func sendStreamChunk(ctx context.Context, out chan<- types.StreamChunk, chunk ty
 	}
 }
 
-func drainStream(ctx context.Context, stream <-chan types.StreamChunk) {
+func drainStream(ctx context.Context, stream <-chan types.StreamChunk, maxDuration time.Duration) {
+	timer := time.NewTimer(maxDuration)
+	defer timer.Stop()
 	for {
 		select {
 		case <-ctx.Done():
+			return
+		case <-timer.C:
 			return
 		case _, ok := <-stream:
 			if !ok {

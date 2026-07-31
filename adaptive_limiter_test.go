@@ -2,6 +2,8 @@ package wormhole
 
 import (
 	"context"
+	"runtime"
+	"sync"
 	"testing"
 	"time"
 
@@ -150,4 +152,93 @@ func TestAdaptiveLimiter_StopIdempotency(t *testing.T) {
 	assert.NotPanics(t, func() {
 		al.Stop()
 	})
+}
+
+func TestAdaptiveLimiterDoesNotReplaceLimiterWithOutstandingPermit(t *testing.T) {
+	t.Parallel()
+
+	al := NewAdaptiveLimiter(AdaptiveConfig{
+		TargetLatency:      100 * time.Millisecond,
+		MinCapacity:        1,
+		MaxCapacity:        2,
+		InitialCapacity:    1,
+		AdjustmentInterval: time.Hour,
+		LatencyWindowSize:  2,
+	})
+	t.Cleanup(al.Stop)
+	release, ok := al.AcquireToken(context.Background())
+	if !ok {
+		t.Fatal("AcquireToken failed")
+	}
+	al.RecordLatency(time.Millisecond)
+	al.adjustCapacity()
+	if got := al.limiter.Capacity(); got != 1 {
+		t.Fatalf("capacity with outstanding permit = %d, want 1", got)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if _, ok := al.AcquireToken(ctx); ok {
+		t.Fatal("replacement limiter admitted a second handler")
+	}
+	release()
+	al.adjustCapacity()
+	if got := al.limiter.Capacity(); got != 2 {
+		t.Fatalf("capacity after permit release = %d, want 2", got)
+	}
+}
+
+func TestAdaptiveLimiterDoesNotReplaceLimiterWithPendingAcquire(t *testing.T) {
+	t.Parallel()
+
+	al := NewAdaptiveLimiter(AdaptiveConfig{
+		TargetLatency:      100 * time.Millisecond,
+		MinCapacity:        1,
+		MaxCapacity:        2,
+		InitialCapacity:    1,
+		AdjustmentInterval: time.Hour,
+		LatencyWindowSize:  2,
+	})
+	t.Cleanup(al.Stop)
+	release, ok := al.AcquireToken(context.Background())
+	if !ok {
+		t.Fatal("initial AcquireToken failed")
+	}
+	release = sync.OnceFunc(release)
+	t.Cleanup(release)
+	al.RecordLatency(time.Millisecond)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+	pendingDone := make(chan bool, 1)
+	go func() {
+		_, acquired := al.AcquireToken(ctx)
+		pendingDone <- acquired
+	}()
+	deadline := time.Now().Add(time.Second)
+	for {
+		al.mu.RLock()
+		pending := al.pendingAcquires
+		al.mu.RUnlock()
+		if pending == 1 {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("timed out waiting for pending acquire")
+		}
+		runtime.Gosched()
+	}
+
+	al.adjustCapacity()
+	if got := al.limiter.Capacity(); got != 1 {
+		t.Fatalf("capacity with pending acquire = %d, want 1", got)
+	}
+	cancel()
+	if <-pendingDone {
+		t.Fatal("canceled pending acquire succeeded")
+	}
+	release()
+	al.adjustCapacity()
+	if got := al.limiter.Capacity(); got != 2 {
+		t.Fatalf("capacity after pending acquire cleared = %d, want 2", got)
+	}
 }

@@ -4,8 +4,10 @@ import (
 	"context"
 	"fmt"
 	"sync"
+	"sync/atomic"
 
 	"github.com/garyblankenship/wormhole/v2/internal/pool"
+	"github.com/garyblankenship/wormhole/v2/providers"
 	"github.com/garyblankenship/wormhole/v2/types"
 )
 
@@ -36,43 +38,66 @@ func (e *ToolExecutor) validateOutputSize(result any) error {
 // Note: Tools are executed concurrently for performance. If you need sequential
 // execution, call Execute() for each tool individually.
 func (e *ToolExecutor) ExecuteAll(ctx context.Context, toolCalls []types.ToolCall) []types.ToolResult {
+	if err := e.validateToolCallBatch(toolCalls); err != nil {
+		return []types.ToolResult{{Error: err.Error()}}
+	}
+	if len(toolCalls) == 0 {
+		return nil
+	}
 	results := make([]types.ToolResult, len(toolCalls))
-
-	// Execute all tools concurrently
-	type resultWithIndex struct {
-		index  int
-		result types.ToolResult
+	for i := range results {
+		results[i] = types.ToolResult{
+			ToolCallID: toolCalls[i].ID,
+			Name:       toolCalls[i].Name,
+			Error:      "tool execution not started because an earlier handler outlived cancellation",
+		}
 	}
 
-	resultChan := make(chan resultWithIndex, len(toolCalls))
-
-	// Wait group to track goroutines
+	workerCount := len(toolCalls)
+	if max := e.safetyConfig.MaxConcurrentTools; max > 0 && workerCount > max {
+		workerCount = max
+	}
 	var wg sync.WaitGroup
-
-	for i, toolCall := range toolCalls {
+	var next atomic.Int64
+	for range workerCount {
 		wg.Add(1)
-
-		// Launch goroutine for each tool execution
-		go func(idx int, tc types.ToolCall) {
+		go func() {
 			defer wg.Done()
-
-			result := e.Execute(ctx, tc)
-			result.Name = tc.Name
-
-			resultChan <- resultWithIndex{index: idx, result: result}
-		}(i, toolCall)
+			for {
+				idx := int(next.Add(1) - 1)
+				if idx >= len(toolCalls) {
+					return
+				}
+				result, handlerRunning := e.execute(ctx, toolCalls[idx])
+				result.Name = toolCalls[idx].Name
+				results[idx] = result
+				if handlerRunning {
+					return
+				}
+			}
+		}()
 	}
-
-	// Close result channel after all goroutines complete
-	go func() {
-		wg.Wait()
-		close(resultChan)
-	}()
-
-	// Collect results
-	for r := range resultChan {
-		results[r.index] = r.result
-	}
-
+	wg.Wait()
 	return results
+}
+
+func (e *ToolExecutor) validateToolCallBatch(toolCalls []types.ToolCall) error {
+	if len(toolCalls) > e.safetyConfig.MaxToolCallsPerRound {
+		return fmt.Errorf("tool call batch size %d exceeds limit of %d", len(toolCalls), e.safetyConfig.MaxToolCallsPerRound)
+	}
+	ids := make(map[string]struct{}, len(toolCalls))
+	for _, call := range toolCalls {
+		if call.ID == "" {
+			return fmt.Errorf("tool call ID is empty")
+		}
+		normalized := providers.ToolCallIDSafePattern.ReplaceAllString(call.ID, "_")
+		if len(normalized) > providers.ToolCallIDMaxLen {
+			normalized = normalized[:providers.ToolCallIDMaxLen]
+		}
+		if _, duplicate := ids[normalized]; duplicate {
+			return fmt.Errorf("duplicate normalized tool call ID %q", normalized)
+		}
+		ids[normalized] = struct{}{}
+	}
+	return nil
 }

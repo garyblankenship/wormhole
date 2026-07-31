@@ -24,6 +24,10 @@ type EnhancedMetricsConfig struct {
 
 	// LabelAggregation controls whether metrics are aggregated per-label or globally
 	LabelAggregation bool
+
+	// MaxLabelSets bounds distinct per-label buckets. Non-positive values use
+	// the finite default of 1,000 label sets.
+	MaxLabelSets int
 }
 
 // DefaultEnhancedMetricsConfig returns the default configuration
@@ -34,6 +38,7 @@ func DefaultEnhancedMetricsConfig() *EnhancedMetricsConfig {
 		EnableTokenTracking:       true,
 		EnableConcurrencyTracking: true,
 		LabelAggregation:          false,
+		MaxLabelSets:              1_000,
 	}
 }
 
@@ -84,7 +89,10 @@ type EnhancedMetricsCollector struct {
 	global *enhancedMetricsBucket
 
 	// Per-label metrics (if LabelAggregation is true)
-	perLabel sync.Map // map[requestLabelKey]*enhancedMetricsBucket
+	perLabel              sync.Map // map[requestLabelKey]*enhancedMetricsBucket
+	labelAdmissionMu      sync.Mutex
+	admittedLabelSets     int
+	labelOverflowRequests int64
 
 	// Histogram buckets (shared across all metrics)
 	buckets []float64
@@ -153,6 +161,9 @@ func NewEnhancedMetricsCollector(config *EnhancedMetricsConfig) *EnhancedMetrics
 	}
 	configCopy := *config
 	configCopy.DefaultHistogramBuckets = append([]float64(nil), config.DefaultHistogramBuckets...)
+	if configCopy.MaxLabelSets <= 0 {
+		configCopy.MaxLabelSets = 1_000
+	}
 
 	return &EnhancedMetricsCollector{
 		config:        &configCopy,
@@ -194,8 +205,18 @@ func (c *EnhancedMetricsCollector) RecordRequest(labels *RequestLabels, duration
 		if actual, ok := c.perLabel.Load(bucketKey); ok {
 			bucket = actual.(*enhancedMetricsBucket)
 		} else {
-			actual, _ := c.perLabel.LoadOrStore(bucketKey, newEnhancedMetricsBucket(c.buckets))
-			bucket = actual.(*enhancedMetricsBucket)
+			c.labelAdmissionMu.Lock()
+			if actual, ok := c.perLabel.Load(bucketKey); ok {
+				bucket = actual.(*enhancedMetricsBucket)
+			} else if c.admittedLabelSets >= c.config.MaxLabelSets {
+				atomic.AddInt64(&c.labelOverflowRequests, 1)
+				bucket = c.global
+			} else {
+				bucket = newEnhancedMetricsBucket(c.buckets)
+				c.perLabel.Store(bucketKey, bucket)
+				c.admittedLabelSets++
+			}
+			c.labelAdmissionMu.Unlock()
 		}
 	} else {
 		bucket = c.global

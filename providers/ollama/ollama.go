@@ -121,7 +121,7 @@ func (p *Provider) Structured(ctx context.Context, request types.StructuredReque
 	// Convert to text request with JSON mode
 	textRequest := types.TextRequest{
 		BaseRequest:  request.BaseRequest,
-		Messages:     request.Messages,
+		Messages:     types.CloneMessages(request.Messages),
 		SystemPrompt: request.SystemPrompt,
 	}
 

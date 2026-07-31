@@ -31,6 +31,17 @@ func WithIdempotencyKey(key string, ttl ...time.Duration) Option {
 	}
 }
 
+// WithIdempotencyMaxEntries bounds the number of retained idempotency entries.
+// Non-positive values select the finite default of 10,000 entries.
+func WithIdempotencyMaxEntries(maxEntries int) Option {
+	return func(c *Config) {
+		if c.Idempotency == nil {
+			c.Idempotency = &IdempotencyConfig{}
+		}
+		c.Idempotency.MaxEntries = maxEntries
+	}
+}
+
 // WithModels populates the opt-in model registry with the given models.
 //
 // The global model registry (types.DefaultModelRegistry) starts empty. When
