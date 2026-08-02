@@ -1,6 +1,7 @@
 package fetchers
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"net/http"
@@ -289,4 +290,42 @@ func TestFetchJSONReturnsStatusError(t *testing.T) {
 	err = fetchJSON(req, &out)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "status 418")
+}
+
+func TestFetchJSONResponseBodyLimit(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		size := maxDiscoveryResponseBodyBytes
+		if r.URL.Path == "/overflow" {
+			size++
+		}
+		_, _ = w.Write([]byte(`{}`))
+		_, _ = w.Write(bytes.Repeat([]byte{' '}, size-2))
+	}))
+	t.Cleanup(server.Close)
+	useTestHTTPClient(t, server.Client())
+
+	t.Run("exactly 32 MiB succeeds", func(t *testing.T) {
+		t.Parallel()
+
+		req, err := newGetRequest(context.Background(), server.URL+"/limit")
+		require.NoError(t, err)
+
+		var out map[string]any
+		require.NoError(t, fetchJSON(req, &out))
+	})
+
+	t.Run("32 MiB plus one byte is rejected", func(t *testing.T) {
+		t.Parallel()
+
+		req, err := newGetRequest(context.Background(), server.URL+"/overflow")
+		require.NoError(t, err)
+
+		var out map[string]any
+		err = fetchJSON(req, &out)
+		require.Error(t, err)
+		wormholeErr, ok := types.AsWormholeError(err)
+		require.True(t, ok)
+		assert.Equal(t, types.ErrorCodeRequest, wormholeErr.Code)
+		assert.NotContains(t, wormholeErr.Details, `{}`)
+	})
 }

@@ -1,15 +1,20 @@
 package fetchers
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"sync"
 	"time"
 
 	"github.com/garyblankenship/wormhole/v3/providers"
+	"github.com/garyblankenship/wormhole/v3/types"
 )
+
+const maxDiscoveryResponseBodyBytes = 32 << 20
 
 var (
 	defaultClient     *http.Client
@@ -34,7 +39,16 @@ func fetchJSON(req *http.Request, out any) error {
 	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("API returned status %d", resp.StatusCode)
 	}
-	return json.NewDecoder(resp.Body).Decode(out)
+	body, err := io.ReadAll(io.LimitReader(resp.Body, maxDiscoveryResponseBodyBytes+1))
+	if err != nil {
+		return fmt.Errorf("failed to read model discovery response: %w", err)
+	}
+	if len(body) > maxDiscoveryResponseBodyBytes {
+		return types.ErrRequestTooLarge.WithDetails(
+			fmt.Sprintf("model discovery response body exceeded %d bytes", maxDiscoveryResponseBodyBytes),
+		)
+	}
+	return json.NewDecoder(bytes.NewReader(body)).Decode(out)
 }
 
 func newGetRequest(ctx context.Context, url string) (*http.Request, error) {
