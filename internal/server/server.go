@@ -14,6 +14,8 @@ import (
 	wormhole "github.com/garyblankenship/wormhole/v3"
 )
 
+const maxProxyRequestHeaderBytes = 1 << 20
+
 // Config holds server configuration.
 type Config struct {
 	Addr            string
@@ -85,6 +87,7 @@ func New(cfg Config) *proxy {
 	p.server = &http.Server{
 		Addr:              cfg.Addr,
 		Handler:           p.auth(mux),
+		MaxHeaderBytes:    maxProxyRequestHeaderBytes,
 		ReadHeaderTimeout: 10 * time.Second,
 		ReadTimeout:       60 * time.Second,
 		IdleTimeout:       120 * time.Second,
