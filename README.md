@@ -692,6 +692,11 @@ Supported proxy endpoints:
 | `GET` | `/v1/models` |
 | `GET` | `/health` |
 
+`/v1/models` performs best-effort aggregation across provider catalogs. It
+returns HTTP 200 with models from every catalog that succeeds and omits
+providers whose catalogs fail. If every provider catalog fails, it returns an
+empty model list. The response does not include failure metadata or telemetry.
+
 `/v1/chat/completions` accepts `frequency_penalty`, `presence_penalty`, `seed`,
 `n` (currently only `1`), and `parallel_tool_calls`, subject to the provider
 support rules above. `/v1/embeddings` accepts `encoding_format` as `float`

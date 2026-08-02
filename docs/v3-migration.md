@@ -5,6 +5,8 @@ Wormhole v3 is a lean provider bridge. Update imports to
 
 ## Import paths
 
+### Migrating from v2
+
 | v2 import | v3 import |
 | --- | --- |
 | `github.com/garyblankenship/wormhole/v2` | `github.com/garyblankenship/wormhole/v3` |
@@ -19,6 +21,42 @@ Wormhole v3 is a lean provider bridge. Update imports to
 | `github.com/garyblankenship/wormhole/v2/providers/openai` | `github.com/garyblankenship/wormhole/v3/providers/openai` |
 | `github.com/garyblankenship/wormhole/v2/types` | `github.com/garyblankenship/wormhole/v3/types` |
 | `github.com/garyblankenship/wormhole/v2/wormholetest` | `github.com/garyblankenship/wormhole/v3/wormholetest` |
+
+### Migrating from v1.24.0 (`pkg/` layout)
+
+Legacy v1 installations nest packages under `pkg/`. In v3, `pkg/` is removed in favor of root-level subpackages:
+
+```diff
+// go.mod
+- require github.com/garyblankenship/wormhole v1.24.0
++ require github.com/garyblankenship/wormhole/v3 v3.0.0
+```
+
+| v1.24.0 import | v3 import |
+| --- | --- |
+| `github.com/garyblankenship/wormhole/pkg/wormhole` | `github.com/garyblankenship/wormhole/v3` |
+| `github.com/garyblankenship/wormhole/pkg/types` | `github.com/garyblankenship/wormhole/v3/types` |
+| `github.com/garyblankenship/wormhole/pkg/config` | `github.com/garyblankenship/wormhole/v3/config` |
+| `github.com/garyblankenship/wormhole/pkg/providers` | `github.com/garyblankenship/wormhole/v3/providers` |
+| `github.com/garyblankenship/wormhole/pkg/providers/openai` | `github.com/garyblankenship/wormhole/v3/providers/openai` |
+| `github.com/garyblankenship/wormhole/pkg/providers/gemini` | `github.com/garyblankenship/wormhole/v3/providers/gemini` |
+| `github.com/garyblankenship/wormhole/pkg/providers/anthropic` | `github.com/garyblankenship/wormhole/v3/providers/anthropic` |
+
+Example import migration:
+
+```go
+// Before (v1.24.0)
+import (
+	"github.com/garyblankenship/wormhole/pkg/types"
+	"github.com/garyblankenship/wormhole/pkg/wormhole"
+)
+
+// After (v3)
+import (
+	"github.com/garyblankenship/wormhole/v3"
+	"github.com/garyblankenship/wormhole/v3/types"
+)
+```
 
 ## Removed APIs and replacements
 
