@@ -43,6 +43,158 @@ func TestToolExecutorRejectsMalformedArgumentsBeforeHandler(t *testing.T) {
 	}
 }
 
+func TestConcurrencyLimiterRejectsPreCanceledContextWithoutPermit(t *testing.T) {
+	t.Parallel()
+
+	limiter := NewConcurrencyLimiter(1)
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if limiter.Acquire(ctx) {
+		t.Fatal("pre-canceled context acquired a free permit")
+	}
+	if got := limiter.InUse(); got != 0 {
+		t.Fatalf("permits in use after canceled acquire = %d, want 0", got)
+	}
+	if !limiter.Acquire(context.Background()) {
+		t.Fatal("free limiter did not admit active context after canceled acquire")
+	}
+	limiter.Release()
+}
+
+func TestToolExecutorPreCanceledContextsNeverStartHandlers(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name         string
+		configure    func(*ToolSafetyConfig)
+		nilAdmission bool
+	}{
+		{
+			name: "bounded",
+			configure: func(config *ToolSafetyConfig) {
+				config.MaxConcurrentTools = 1
+			},
+		},
+		{
+			name: "adaptive",
+			configure: func(config *ToolSafetyConfig) {
+				config.MaxConcurrentTools = 1
+				config.EnableAdaptiveConcurrency = true
+				config.AdaptiveMinCapacity = 1
+				config.AdaptiveMaxCapacity = 1
+				config.AdaptiveAdjustmentInterval = time.Hour
+			},
+		},
+		{
+			name: "unlimited",
+			configure: func(config *ToolSafetyConfig) {
+				config.MaxConcurrentTools = 0
+			},
+		},
+		{
+			name: "nil admission",
+			configure: func(config *ToolSafetyConfig) {
+				config.MaxConcurrentTools = 0
+			},
+			nilAdmission: true,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+
+			var calls atomic.Int32
+			registry := NewToolRegistry()
+			registry.Register("side-effect", types.NewToolDefinition(types.Tool{Name: "side-effect"}, func(context.Context, map[string]any) (any, error) {
+				calls.Add(1)
+				return "unexpected", nil
+			}))
+			config := DefaultToolSafetyConfig()
+			config.ToolTimeout = 0
+			config.MaxRetriesPerTool = 3
+			config.EnableCircuitBreaker = true
+			config.CircuitBreakerThreshold = 1
+			test.configure(&config)
+			executor := NewToolExecutorWithConfig(registry, config)
+			if test.nilAdmission {
+				executor.admission = nil
+			}
+			t.Cleanup(executor.Stop)
+
+			ctx, cancel := context.WithCancel(context.Background())
+			cancel()
+			for i := 0; i < 3; i++ {
+				result, handlerRunning := executor.execute(ctx, types.ToolCall{ID: "single", Name: "side-effect"})
+				if handlerRunning {
+					t.Fatal("pre-canceled call reported a running handler")
+				}
+				if result.ToolCallID != "single" || !strings.Contains(result.Error, "context canceled while waiting for tool execution permit") {
+					t.Fatalf("pre-canceled result = %#v", result)
+				}
+			}
+
+			batch := []types.ToolCall{
+				{ID: "first", Name: "side-effect"},
+				{ID: "second", Name: "side-effect"},
+				{ID: "third", Name: "side-effect"},
+			}
+			results := executor.ExecuteAll(ctx, batch)
+			if len(results) != len(batch) {
+				t.Fatalf("results = %#v, want %d results", results, len(batch))
+			}
+			for i, result := range results {
+				if result.ToolCallID != batch[i].ID || result.Name != batch[i].Name {
+					t.Fatalf("result %d identity = %#v, want ID %q and name %q", i, result, batch[i].ID, batch[i].Name)
+				}
+				if !strings.Contains(result.Error, "context canceled while waiting for tool execution permit") {
+					t.Fatalf("result %d error = %q", i, result.Error)
+				}
+			}
+			if got := calls.Load(); got != 0 {
+				t.Fatalf("handler calls = %d, want 0", got)
+			}
+			if got := toolExecutorPermitsInUse(executor); got != 0 {
+				t.Fatalf("permits in use = %d, want 0", got)
+			}
+			executor.circuitBreaker.mu.RLock()
+			failures := executor.circuitBreaker.failureCount
+			executor.circuitBreaker.mu.RUnlock()
+			if failures != 0 {
+				t.Fatalf("circuit breaker failures = %d, want 0", failures)
+			}
+		})
+	}
+}
+
+func TestToolAdmissionAdaptivePreStartReleaseDoesNotRecordLatency(t *testing.T) {
+	t.Parallel()
+
+	config := DefaultToolSafetyConfig()
+	config.MaxConcurrentTools = 1
+	config.EnableAdaptiveConcurrency = true
+	config.AdaptiveMinCapacity = 1
+	config.AdaptiveMaxCapacity = 1
+	config.AdaptiveAdjustmentInterval = time.Hour
+	budget := newToolAdmissionBudget(config)
+	t.Cleanup(budget.Stop)
+
+	release, ok := budget.acquire(context.Background())
+	if !ok {
+		t.Fatal("adaptive admission unexpectedly rejected an active context")
+	}
+	release(false)
+	if got := budget.adaptiveLimiter.limiter.InUse(); got != 0 {
+		t.Fatalf("permits in use after pre-start release = %d, want 0", got)
+	}
+	budget.adaptiveLimiter.mu.RLock()
+	samples := budget.adaptiveLimiter.sampleCount
+	budget.adaptiveLimiter.mu.RUnlock()
+	if samples != 0 {
+		t.Fatalf("adaptive latency samples = %d, want 0 for work that never started", samples)
+	}
+}
+
 func TestToolExecutorPermitTracksActualHandlerLifetime(t *testing.T) {
 	t.Parallel()
 

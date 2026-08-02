@@ -22,28 +22,48 @@ func newToolAdmissionBudget(config ToolSafetyConfig) *toolAdmissionBudget {
 	return budget
 }
 
-func (b *toolAdmissionBudget) acquire(ctx context.Context) (release func(), ok bool) {
+func (b *toolAdmissionBudget) acquire(ctx context.Context) (release func(handlerStarted bool), ok bool) {
+	if ctx.Err() != nil {
+		return nil, false
+	}
 	if b == nil {
-		return func() {}, true
+		return func(bool) {}, true
 	}
 	if b.adaptiveLimiter != nil {
-		release, ok := b.adaptiveLimiter.AcquireToken(ctx)
-		if !ok {
+		adaptiveRelease, acquired := b.adaptiveLimiter.AcquireToken(ctx)
+		if !acquired {
+			return nil, false
+		}
+		if ctx.Err() != nil {
+			adaptiveRelease()
 			return nil, false
 		}
 		started := time.Now()
-		return func() {
-			b.adaptiveLimiter.RecordLatency(time.Since(started))
-			release()
-		}, true
+		release = func(handlerStarted bool) {
+			if handlerStarted {
+				b.adaptiveLimiter.RecordLatency(time.Since(started))
+			}
+			adaptiveRelease()
+		}
+		return release, true
 	}
 	if b.limiter != nil {
 		if !b.limiter.Acquire(ctx) {
 			return nil, false
 		}
-		return b.limiter.Release, true
+		release = func(bool) {
+			b.limiter.Release()
+		}
+		if ctx.Err() != nil {
+			release(false)
+			return nil, false
+		}
+		return release, true
 	}
-	return func() {}, true
+	if ctx.Err() != nil {
+		return nil, false
+	}
+	return func(bool) {}, true
 }
 
 func (b *toolAdmissionBudget) Stop() {

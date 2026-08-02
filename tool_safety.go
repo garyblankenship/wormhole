@@ -28,7 +28,21 @@ func NewConcurrencyLimiter(capacity int) *ConcurrencyLimiter {
 // Returns true if acquired, false if context expired or canceled
 func (l *ConcurrencyLimiter) Acquire(ctx context.Context) bool {
 	select {
+	case <-ctx.Done():
+		return false
+	default:
+	}
+
+	select {
 	case l.sem <- struct{}{}:
+		// Cancellation can race a free semaphore. Do not report admission once
+		// it has been observed, and return the slot before rejecting the call.
+		select {
+		case <-ctx.Done():
+			l.Release()
+			return false
+		default:
+		}
 		return true
 	case <-ctx.Done():
 		return false
