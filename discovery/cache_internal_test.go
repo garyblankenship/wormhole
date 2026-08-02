@@ -1,11 +1,13 @@
 package discovery
 
 import (
+	"bytes"
 	"encoding/json"
 	"os"
 	"path/filepath"
 	"sync"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/stretchr/testify/assert"
@@ -62,6 +64,78 @@ func TestModelCacheFileBackedSetGetClear(t *testing.T) {
 	assert.NoFileExists(t, providerPath)
 }
 
+func TestModelCacheClearRemovesOnlyOwnedShards(t *testing.T) {
+	t.Parallel()
+
+	cache := newFileBackedCache(t)
+	writeEntry := func(path string, entry CacheEntry) {
+		t.Helper()
+		data, err := json.Marshal(entry)
+		require.NoError(t, err)
+		require.NoError(t, os.WriteFile(path, data, 0o600))
+	}
+	ownedCurrent := cache.getProviderFilePath("current")
+	ownedLegacy := cache.getLegacyProviderFilePath("legacy/provider")
+	writeEntry(ownedCurrent, CacheEntry{
+		SchemaVersion: cacheSchemaVersion,
+		Models:        testModels("current"),
+		Timestamp:     time.Now(),
+		Provider:      "current",
+	})
+	writeEntry(ownedLegacy, CacheEntry{
+		SchemaVersion: cacheSchemaVersion,
+		Models:        testModels("legacy/provider"),
+		Timestamp:     time.Now(),
+		Provider:      "legacy/provider",
+	})
+	require.NoError(t, os.WriteFile(cache.filePath, []byte(`{"entries":{}}`), 0o600))
+
+	dir := filepath.Dir(cache.filePath)
+	backup := filepath.Join(dir, "models-backup.json")
+	malformed := filepath.Join(dir, "models-malformed.json")
+	mismatched := cache.getProviderFilePath("claimed")
+	temporary := cache.getProviderFilePath("temporary") + ".tmp-1"
+	directory := cache.getProviderFilePath("directory")
+	oversized := cache.getProviderFilePath("oversized")
+	require.NoError(t, os.WriteFile(backup, []byte("private backup"), 0o600))
+	require.NoError(t, os.WriteFile(malformed, []byte(`{"provider":`), 0o600))
+	writeEntry(mismatched, CacheEntry{
+		SchemaVersion: cacheSchemaVersion,
+		Models:        testModels("other"),
+		Timestamp:     time.Now(),
+		Provider:      "other",
+	})
+	require.NoError(t, os.WriteFile(temporary, []byte("temporary shard"), 0o600))
+	require.NoError(t, os.Mkdir(directory, 0o700))
+	oversizedData, err := json.Marshal(CacheEntry{
+		SchemaVersion: cacheSchemaVersion,
+		Models:        testModels("oversized"),
+		Timestamp:     time.Now(),
+		Provider:      "oversized",
+	})
+	require.NoError(t, err)
+	oversizedData = append(oversizedData, bytes.Repeat([]byte(" "), maxProviderShardVerificationSize-len(oversizedData)+1)...)
+	require.NoError(t, os.WriteFile(oversized, oversizedData, 0o600))
+
+	symlink := cache.getProviderFilePath("symlink")
+	require.NoError(t, os.Symlink(backup, symlink))
+
+	cache.Clear()
+
+	assert.NoFileExists(t, cache.filePath)
+	assert.NoFileExists(t, ownedCurrent)
+	assert.NoFileExists(t, ownedLegacy)
+	assert.FileExists(t, backup)
+	assert.FileExists(t, malformed)
+	assert.FileExists(t, mismatched)
+	assert.FileExists(t, temporary)
+	assert.DirExists(t, directory)
+	assert.FileExists(t, oversized)
+	info, err := os.Lstat(symlink)
+	require.NoError(t, err)
+	assert.NotZero(t, info.Mode()&os.ModeSymlink)
+}
+
 func TestModelCacheLoadFromMonolithicFileMigrates(t *testing.T) {
 	t.Parallel()
 	cache := newFileBackedCache(t)
@@ -89,7 +163,7 @@ func TestModelCacheLoadFromMonolithicFileMigrates(t *testing.T) {
 	assert.FileExists(t, cache.getProviderFilePath("legacy"))
 }
 
-func TestModelCacheScopedKeyFallsBackToBaseEntryAndMigrates(t *testing.T) {
+func TestModelCacheScopedKeyRejectsBaseEntryWithoutMigration(t *testing.T) {
 	t.Parallel()
 
 	cache := newFileBackedCache(t)
@@ -110,15 +184,141 @@ func TestModelCacheScopedKeyFallsBackToBaseEntryAndMigrates(t *testing.T) {
 	require.NoError(t, os.WriteFile(cache.filePath, data, 0o600))
 
 	models, fresh := cache.Get("openai__acct1234")
-	require.True(t, fresh)
-	require.Len(t, models, 1)
-	assert.Equal(t, "openai-model", models[0].ID)
+	require.False(t, fresh)
+	require.NotEmpty(t, models)
+	for _, model := range models {
+		assert.NotEqual(t, "openai-model", model.ID)
+	}
 
 	scopedPath := cache.getProviderFilePath("openai__acct1234")
-	require.Eventually(t, func() bool {
-		_, err := os.Stat(scopedPath)
-		return err == nil
-	}, time.Second, 10*time.Millisecond)
+	assert.NoFileExists(t, scopedPath)
+}
+
+func TestModelCacheScopedLookupIgnoresUnscopedRecords(t *testing.T) {
+	t.Parallel()
+
+	const provider = "openai"
+	const scoped = "openai__acct1234"
+	assertFallback := func(t *testing.T, cache *ModelCache) {
+		t.Helper()
+		models, fresh := cache.Get(scoped)
+		assert.False(t, fresh)
+		require.NotEmpty(t, models)
+		for _, model := range models {
+			assert.NotEqual(t, "private-model", model.ID)
+		}
+		assert.NoFileExists(t, cache.getProviderFilePath(scoped))
+	}
+
+	t.Run("memory", func(t *testing.T) {
+		t.Parallel()
+		cache := newFileBackedCache(t)
+		cache.Set(provider, []*types.ModelInfo{{ID: "private-model"}})
+		assertFallback(t, cache)
+	})
+	t.Run("stale memory", func(t *testing.T) {
+		t.Parallel()
+		cache := newFileBackedCache(t)
+		cache.memory[provider] = &CacheEntry{Models: []*types.ModelInfo{{ID: "private-model"}}, Timestamp: time.Now().Add(-2 * time.Hour), Provider: provider}
+		assert.Nil(t, cache.GetStale(scoped))
+	})
+	t.Run("current shard", func(t *testing.T) {
+		t.Parallel()
+		cache := newFileBackedCache(t)
+		data, err := json.Marshal(CacheEntry{SchemaVersion: cacheSchemaVersion, Models: []*types.ModelInfo{{ID: "private-model"}}, Timestamp: time.Now(), Provider: provider})
+		require.NoError(t, err)
+		require.NoError(t, os.WriteFile(cache.getProviderFilePath(provider), data, 0o600))
+		assertFallback(t, cache)
+	})
+	t.Run("legacy shard", func(t *testing.T) {
+		t.Parallel()
+		cache := newFileBackedCache(t)
+		data, err := json.Marshal(CacheEntry{SchemaVersion: cacheSchemaVersion, Models: []*types.ModelInfo{{ID: "private-model"}}, Timestamp: time.Now(), Provider: provider})
+		require.NoError(t, err)
+		require.NoError(t, os.WriteFile(cache.getLegacyProviderFilePath(provider), data, 0o600))
+		assertFallback(t, cache)
+	})
+	t.Run("monolithic", func(t *testing.T) {
+		t.Parallel()
+		cache := newFileBackedCache(t)
+		data, err := json.Marshal(FileCache{Entries: map[string]*CacheEntry{
+			provider: {Models: []*types.ModelInfo{{ID: "private-model"}}, Timestamp: time.Now(), Provider: provider},
+		}})
+		require.NoError(t, err)
+		require.NoError(t, os.WriteFile(cache.filePath, data, 0o600))
+		assertFallback(t, cache)
+	})
+}
+
+func TestModelCacheScopedMonolithicMigrationStaysWithinScope(t *testing.T) {
+	t.Parallel()
+
+	cache := newFileBackedCache(t)
+	const provider = "openai__acct1234"
+	entry := &CacheEntry{Models: []*types.ModelInfo{{ID: "private-model"}}, Timestamp: time.Now(), Provider: provider}
+	data, err := json.Marshal(FileCache{Entries: map[string]*CacheEntry{provider: entry}})
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(cache.filePath, data, 0o600))
+
+	models, fresh := cache.Get(provider)
+	require.True(t, fresh)
+	require.Len(t, models, 1)
+	assert.Equal(t, "private-model", models[0].ID)
+	cache.wg.Wait()
+	assert.FileExists(t, cache.getProviderFilePath(provider))
+	assert.NoFileExists(t, cache.getProviderFilePath("openai"))
+}
+
+func TestModelCacheScopedAndUnscopedExpiredShardsFallThroughToMonolithic(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		provider string
+		legacy   bool
+	}{
+		{name: "unscoped current", provider: "openai"},
+		{name: "unscoped legacy", provider: "openai", legacy: true},
+		{name: "scoped current", provider: "openai__acct1234"},
+		{name: "scoped legacy", provider: "openai__acct1234", legacy: true},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+
+			cache := newFileBackedCache(t)
+			t.Cleanup(func() {
+				require.NoError(t, cache.Close())
+			})
+			expired := CacheEntry{
+				SchemaVersion: cacheSchemaVersion,
+				Models:        []*types.ModelInfo{{ID: "expired-model"}},
+				Timestamp:     time.Now().Add(-2 * time.Hour),
+				Provider:      test.provider,
+			}
+			expiredData, err := json.Marshal(expired)
+			require.NoError(t, err)
+			shardPath := cache.getProviderFilePath(test.provider)
+			if test.legacy {
+				shardPath = cache.getLegacyProviderFilePath(test.provider)
+			}
+			require.NoError(t, os.WriteFile(shardPath, expiredData, 0o600))
+
+			fresh := &CacheEntry{
+				Models:    []*types.ModelInfo{{ID: "fresh-monolithic-model"}},
+				Timestamp: time.Now(),
+				Provider:  test.provider,
+			}
+			monolithicData, err := json.Marshal(FileCache{Entries: map[string]*CacheEntry{test.provider: fresh}})
+			require.NoError(t, err)
+			require.NoError(t, os.WriteFile(cache.filePath, monolithicData, 0o600))
+
+			models, ok := cache.loadFromFile(test.provider)
+			require.True(t, ok)
+			require.Len(t, models, 1)
+			assert.Equal(t, "fresh-monolithic-model", models[0].ID)
+		})
+	}
 }
 
 func TestModelCacheExpiredInvalidAndFallbackPaths(t *testing.T) {
@@ -311,18 +511,20 @@ func TestModelCacheClonesInputsOutputsAndFallbacks(t *testing.T) {
 
 func TestModelCacheStartCleanupCloseAndExpandPath(t *testing.T) {
 	t.Parallel()
-	cache := NewModelCache(DiscoveryConfig{
-		CacheTTL:        time.Nanosecond,
-		FileCacheTTL:    time.Hour,
-		FileCachePath:   filepath.Join(t.TempDir(), "models.json"),
-		EnableFileCache: false,
+	synctest.Test(t, func(t *testing.T) {
+		cache := NewModelCache(DiscoveryConfig{
+			CacheTTL:        time.Nanosecond,
+			FileCacheTTL:    time.Hour,
+			FileCachePath:   filepath.Join(t.TempDir(), "models.json"),
+			EnableFileCache: false,
+		})
+		cache.Set("test", testModels("test"))
+		cache.StartCleanup(time.Millisecond)
+		time.Sleep(5 * time.Millisecond)
+		require.NoError(t, cache.Close())
+		require.NoError(t, cache.Close())
+		assert.Equal(t, 0, cache.Size())
 	})
-	cache.Set("test", testModels("test"))
-	cache.StartCleanup(time.Millisecond)
-	time.Sleep(5 * time.Millisecond)
-	require.NoError(t, cache.Close())
-	require.NoError(t, cache.Close())
-	assert.Equal(t, 0, cache.Size())
 
 	validated, err := expandPath("../bad")
 	require.NoError(t, err)

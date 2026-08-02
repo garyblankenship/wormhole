@@ -27,14 +27,15 @@ type ModelCache struct {
 	mu              sync.RWMutex             // Protects file operations
 	fileLocks       map[string]*sync.RWMutex // Per-provider file locks
 	fileLocksMu     sync.RWMutex             // Protects fileLocks map
+	writeShard      func(string, []byte) error
 
 	// Goroutine lifecycle management
 	stopCh   chan struct{}
 	wg       sync.WaitGroup
 	stopOnce sync.Once
-	muClosed sync.RWMutex // protects closed and clearGen
-	closed   bool         // set only by Close(); permanently aborts in-flight migrations
-	clearGen uint64       // incremented by Clear(); aborts migrations spawned before this generation
+	muClosed sync.RWMutex // serializes Set, Get, and migration admission with Clear and Close
+	closed   bool         // set only by Close(); prevents later persistent saves and migrations
+	clearGen uint64       // incremented by Clear(); invalidates migrations not yet admitted
 }
 
 // NewModelCache creates a new model cache
@@ -54,6 +55,7 @@ func NewModelCache(config DiscoveryConfig) *ModelCache {
 		enableFileCache: config.EnableFileCache,
 		fallback:        getFallbackModels(),
 		fileLocks:       make(map[string]*sync.RWMutex),
+		writeShard:      writeShardAtomic,
 		stopCh:          make(chan struct{}),
 	}
 }
@@ -127,6 +129,22 @@ func (c *ModelCache) providerCachePath(shardID string) string {
 
 // migrateToSharded migrates a cache entry from monolithic file to provider-specific file
 func (c *ModelCache) migrateToSharded(provider string, entry *CacheEntry, gen uint64) {
+	c.muClosed.RLock()
+	defer c.muClosed.RUnlock()
+
+	if c.closed || c.clearGen != gen {
+		return
+	}
+	c.migrateToShardedLifecycleHeld(provider, entry, gen)
+}
+
+// migrateToShardedLifecycleHeld commits a migration while its caller retains
+// lifecycle read ownership. Lifecycle ownership must precede provider locks.
+func (c *ModelCache) migrateToShardedLifecycleHeld(provider string, entry *CacheEntry, gen uint64) {
+	if c.closed || c.clearGen != gen {
+		return
+	}
+
 	// Use per-provider lock to prevent concurrent migration
 	lock := c.getProviderLock(provider)
 	lock.Lock()
@@ -153,18 +171,8 @@ func (c *ModelCache) migrateToSharded(provider string, entry *CacheEntry, gen ui
 		return // Can't create directory, skip
 	}
 
-	// Serialize writes against Clear/Close so they cannot resurrect shards after
-	// deletion or race WaitGroup shutdown.
-	c.muClosed.RLock()
-	abort := c.closed || c.clearGen != gen
-	if abort {
-		c.muClosed.RUnlock()
-		return
-	}
-	defer c.muClosed.RUnlock()
-
 	// Write atomically (unique temp path + fsync before rename)
-	if err := writeShardAtomic(providerPath, data); err != nil {
+	if err := c.writeShard(providerPath, data); err != nil {
 		return // Can't write, skip
 	}
 }

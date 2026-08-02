@@ -11,6 +11,18 @@ import (
 
 // saveToFile persists models to file cache
 func (c *ModelCache) saveToFile(provider string, models []*types.ModelInfo) {
+	c.muClosed.RLock()
+	defer c.muClosed.RUnlock()
+
+	if c.closed {
+		return
+	}
+	c.saveToFileLifecycleHeld(provider, models)
+}
+
+// saveToFileLifecycleHeld persists models while its caller retains lifecycle
+// read ownership. Lifecycle ownership must precede provider locks.
+func (c *ModelCache) saveToFileLifecycleHeld(provider string, models []*types.ModelInfo) {
 	// Get or create provider-specific lock
 	lock := c.getProviderLock(provider)
 	lock.Lock()
@@ -39,7 +51,7 @@ func (c *ModelCache) saveToFile(provider string, models []*types.ModelInfo) {
 	}
 
 	// Write atomically (unique temp path + fsync before rename)
-	if err := writeShardAtomic(providerPath, data); err != nil {
+	if err := c.writeShard(providerPath, data); err != nil {
 		return // Can't write, skip
 	}
 }

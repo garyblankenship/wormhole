@@ -1,6 +1,8 @@
 package discovery
 
 import (
+	"encoding/json"
+	"io"
 	"log"
 	"os"
 	"path/filepath"
@@ -8,11 +10,14 @@ import (
 	"time"
 )
 
+const maxProviderShardVerificationSize = 32 * 1024 * 1024
+
 // Clear removes all cached entries
 func (c *ModelCache) Clear() {
 	c.muClosed.Lock()
+	defer c.muClosed.Unlock()
+
 	c.clearGen++
-	c.muClosed.Unlock()
 
 	c.memoryMu.Lock()
 	for k := range c.memory {
@@ -30,7 +35,9 @@ func (c *ModelCache) Clear() {
 	}
 }
 
-// clearProviderFiles removes all provider-specific cache files
+// clearProviderFiles removes only provider-specific cache files whose complete
+// contents prove they belong to this cache. Prefix matching alone is unsafe:
+// the cache directory can contain unrelated user files with the same prefix.
 func (c *ModelCache) clearProviderFiles() {
 	dir := filepath.Dir(c.filePath)
 	base := filepath.Base(c.filePath)
@@ -38,17 +45,65 @@ func (c *ModelCache) clearProviderFiles() {
 	if ext != "" {
 		base = strings.TrimSuffix(base, ext)
 	}
-	// Pattern: base-*.ext
-	pattern := filepath.Join(dir, base+"-*"+ext)
-	matches, err := filepath.Glob(pattern)
+
+	entries, err := os.ReadDir(dir)
 	if err != nil {
-		return // No matches or error
+		log.Printf("warning: failed to list provider cache directory %s: %v", dir, err) // #nosec G304 - path validated via ValidatePath
+		return
 	}
-	for _, path := range matches {
+	for _, entry := range entries {
+		if !isProviderCacheFilename(entry.Name(), base, ext) || entry.Type()&os.ModeSymlink != 0 {
+			continue
+		}
+		info, err := entry.Info()
+		if err != nil || !info.Mode().IsRegular() {
+			continue
+		}
+
+		path := filepath.Join(dir, entry.Name())
+		if !c.ownsProviderShard(path) {
+			continue
+		}
 		if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
 			log.Printf("warning: failed to remove provider cache file %s: %v", path, err) // #nosec G304 - path validated via ValidatePath
 		}
 	}
+}
+
+func isProviderCacheFilename(name, base, ext string) bool {
+	return strings.HasPrefix(name, base+"-") && strings.HasSuffix(name, ext)
+}
+
+// ownsProviderShard returns true only for a complete, current-schema shard
+// whose embedded provider identity maps back to this exact current or legacy
+// filename. It deliberately treats malformed and ambiguous files as user data.
+func (c *ModelCache) ownsProviderShard(path string) bool {
+	file, err := os.Open(path) // #nosec G304 - path validated via ValidatePath
+	if err != nil {
+		return false
+	}
+	defer func() {
+		_ = file.Close()
+	}()
+
+	info, err := file.Stat()
+	if err != nil || !info.Mode().IsRegular() || info.Size() > maxProviderShardVerificationSize {
+		return false
+	}
+
+	var entry CacheEntry
+	decoder := json.NewDecoder(file)
+	if err := decoder.Decode(&entry); err != nil || entry.SchemaVersion != cacheSchemaVersion || entry.Provider == "" {
+		return false
+	}
+	var extra any
+	if err := decoder.Decode(&extra); err != io.EOF {
+		return false
+	}
+
+	cleanedPath := filepath.Clean(path)
+	return cleanedPath == filepath.Clean(c.getProviderFilePath(entry.Provider)) ||
+		cleanedPath == filepath.Clean(c.getLegacyProviderFilePath(entry.Provider))
 }
 
 // Size returns the number of entries in the memory cache
@@ -58,9 +113,12 @@ func (c *ModelCache) Size() int {
 	return len(c.memory)
 }
 
-// StartCleanup starts a background goroutine that periodically removes expired entries
+// StartCleanup starts a background goroutine that periodically removes expired entries.
+// A nonpositive interval disables cleanup.
 func (c *ModelCache) StartCleanup(interval time.Duration) {
-	c.wg.Add(1)
+	if !c.admitCleanup(interval) {
+		return
+	}
 	go func() {
 		defer c.wg.Done()
 		ticker := time.NewTicker(interval)
@@ -74,6 +132,22 @@ func (c *ModelCache) StartCleanup(interval time.Duration) {
 			}
 		}
 	}()
+}
+
+// admitCleanup reserves a cleanup worker while lifecycle admission is held so
+// Close cannot begin waiting before the worker is accounted for.
+func (c *ModelCache) admitCleanup(interval time.Duration) bool {
+	if interval <= 0 {
+		return false
+	}
+	c.muClosed.RLock()
+	defer c.muClosed.RUnlock()
+
+	if c.closed {
+		return false
+	}
+	c.wg.Add(1)
+	return true
 }
 
 // Close stops the cleanup goroutine and waits for it to finish

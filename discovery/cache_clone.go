@@ -55,7 +55,10 @@ func baseProviderKey(provider string) string {
 	return provider
 }
 
-func cacheLookupKeys(provider string) []string {
+// fallbackLookupKeys is intentionally restricted to the immutable hardcoded
+// fallback catalog. Live cache entries are account-scoped and must always use
+// their exact provider key.
+func fallbackLookupKeys(provider string) []string {
 	base := baseProviderKey(provider)
 	if base == provider {
 		return []string{provider}

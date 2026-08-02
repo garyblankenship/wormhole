@@ -10,29 +10,25 @@ import (
 
 // Get retrieves models from cache (L1 -> L2 -> L3)
 func (c *ModelCache) Get(provider string) ([]*types.ModelInfo, bool) {
-	// L1: Check memory cache
-	for _, lookup := range cacheLookupKeys(provider) {
-		c.memoryMu.RLock()
-		entry, ok := c.memory[lookup]
-		c.memoryMu.RUnlock()
-		if ok && time.Since(entry.Timestamp) < c.memoryTTL {
-			if lookup != provider {
-				c.memoryMu.Lock()
-				c.memory[provider] = &CacheEntry{
-					SchemaVersion: entry.SchemaVersion,
-					Models:        entry.Models,
-					Timestamp:     entry.Timestamp,
-					Provider:      provider,
-				}
-				c.memoryMu.Unlock()
-			}
-			return cloneModels(entry.Models), true
+	c.muClosed.RLock()
+	releaseLifecycle := true
+	defer func() {
+		if releaseLifecycle {
+			c.muClosed.RUnlock()
 		}
+	}()
+
+	// L1: Check memory cache
+	c.memoryMu.RLock()
+	entry, ok := c.memory[provider]
+	c.memoryMu.RUnlock()
+	if ok && time.Since(entry.Timestamp) < c.memoryTTL {
+		return cloneModels(entry.Models), true
 	}
 
 	// L2: Check file cache (if enabled)
 	if c.enableFileCache {
-		if models, ok := c.loadFromFile(provider); ok {
+		if models, ok, migration := c.loadFromFileLifecycleHeld(provider); ok {
 			// Populate memory cache
 			entry := &CacheEntry{
 				Models:    models,
@@ -42,6 +38,9 @@ func (c *ModelCache) Get(provider string) ([]*types.ModelInfo, bool) {
 			c.memoryMu.Lock()
 			c.memory[provider] = entry
 			c.memoryMu.Unlock()
+			if migration != nil {
+				releaseLifecycle = !c.scheduleMigrationLifecycleHeld(provider, migration)
+			}
 			return cloneModels(models), true
 		}
 	}
@@ -49,7 +48,7 @@ func (c *ModelCache) Get(provider string) ([]*types.ModelInfo, bool) {
 	// L3: Return fallback (indicates stale/offline)
 	c.mu.RLock()
 	defer c.mu.RUnlock()
-	for _, lookup := range cacheLookupKeys(provider) {
+	for _, lookup := range fallbackLookupKeys(provider) {
 		if models, ok := c.fallback[lookup]; ok {
 			return cloneModels(models), false // false = using fallback
 		}
@@ -62,19 +61,20 @@ func (c *ModelCache) Get(provider string) ([]*types.ModelInfo, bool) {
 // It is used only after a live discovery failure; normal cache reads continue
 // to enforce freshness through Get.
 func (c *ModelCache) GetStale(provider string) []*types.ModelInfo {
-	for _, lookup := range cacheLookupKeys(provider) {
-		c.memoryMu.RLock()
-		entry := c.memory[lookup]
-		c.memoryMu.RUnlock()
-		if entry != nil && len(entry.Models) > 0 {
-			return cloneModels(entry.Models)
-		}
+	c.memoryMu.RLock()
+	entry := c.memory[provider]
+	c.memoryMu.RUnlock()
+	if entry != nil && len(entry.Models) > 0 {
+		return cloneModels(entry.Models)
 	}
 	return nil
 }
 
 // Set stores models in cache (L1 + L2)
 func (c *ModelCache) Set(provider string, models []*types.ModelInfo) {
+	c.muClosed.RLock()
+	defer c.muClosed.RUnlock()
+
 	models = cloneModels(models)
 	entry := &CacheEntry{
 		Models:    models,
@@ -88,91 +88,91 @@ func (c *ModelCache) Set(provider string, models []*types.ModelInfo) {
 	c.memoryMu.Unlock()
 
 	// L2: File cache (if enabled)
-	if c.enableFileCache {
-		c.saveToFile(provider, models)
+	if c.enableFileCache && !c.closed {
+		c.saveToFileLifecycleHeld(provider, models)
 	}
 }
 
 // loadFromFile loads models from persistent file cache
 func (c *ModelCache) loadFromFile(provider string) ([]*types.ModelInfo, bool) {
-	for _, lookup := range cacheLookupKeys(provider) {
-		// Use per-provider read lock for consistency
-		lock := c.getProviderLock(lookup)
-		lock.RLock()
+	c.muClosed.RLock()
+	models, ok, migration := c.loadFromFileLifecycleHeld(provider)
+	if migration != nil && c.scheduleMigrationLifecycleHeld(provider, migration) {
+		return models, ok
+	}
+	c.muClosed.RUnlock()
+	return models, ok
+}
 
-		// Try provider-specific file first
-		providerPath := c.getProviderFilePath(lookup)
-		data, err := os.ReadFile(providerPath) // #nosec G304 - path validated via ValidatePath
-		if err == nil {
-			lock.RUnlock()
-			entry, ok := c.decodeProviderShard(data, lookup)
-			if !ok {
-				return nil, false
-			}
-			if time.Since(entry.Timestamp) > c.fileTTL {
-				continue
-			}
-			if lookup != provider {
-				c.scheduleMigration(provider, entry)
-			}
-			return entry.Models, true
-		}
-		if !os.IsNotExist(err) {
-			lock.RUnlock()
-			return nil, false
-		}
+func (c *ModelCache) loadFromFileLifecycleHeld(provider string) ([]*types.ModelInfo, bool, *CacheEntry) {
+	// Use a per-provider read lock for consistency.
+	lock := c.getProviderLock(provider)
+	lock.RLock()
 
-		legacyPath := c.getLegacyProviderFilePath(lookup)
-		data, err = os.ReadFile(legacyPath) // #nosec G304 - path validated via ValidatePath
+	// Try the current provider-specific file first.
+	providerPath := c.getProviderFilePath(provider)
+	data, err := os.ReadFile(providerPath) // #nosec G304 - path validated via ValidatePath
+	if err == nil {
 		lock.RUnlock()
-		if err == nil {
-			entry, ok := c.decodeProviderShard(data, lookup)
-			if !ok {
-				return nil, false
-			}
-			if time.Since(entry.Timestamp) > c.fileTTL {
-				continue
-			}
-			c.scheduleMigration(provider, entry)
-			return entry.Models, true
+		entry, ok := c.decodeProviderShard(data, provider)
+		if !ok {
+			return nil, false, nil
 		}
-		if !os.IsNotExist(err) {
-			return nil, false
+		if time.Since(entry.Timestamp) > c.fileTTL {
+			return c.loadFromMonolithicLifecycleHeld(provider)
 		}
+		return entry.Models, true, nil
+	}
+	if !os.IsNotExist(err) {
+		lock.RUnlock()
+		return nil, false, nil
 	}
 
-	// Fallback to monolithic file for backward compatibility
+	legacyPath := c.getLegacyProviderFilePath(provider)
+	data, err = os.ReadFile(legacyPath) // #nosec G304 - path validated via ValidatePath
+	lock.RUnlock()
+	if err == nil {
+		entry, ok := c.decodeProviderShard(data, provider)
+		if !ok {
+			return nil, false, nil
+		}
+		if time.Since(entry.Timestamp) > c.fileTTL {
+			return c.loadFromMonolithicLifecycleHeld(provider)
+		}
+		return entry.Models, true, entry
+	}
+	if !os.IsNotExist(err) {
+		return nil, false, nil
+	}
+
+	return c.loadFromMonolithicLifecycleHeld(provider)
+}
+
+// loadFromMonolithicLifecycleHeld reads the legacy cache using the same exact
+// provider/account key requested by the caller.
+func (c *ModelCache) loadFromMonolithicLifecycleHeld(provider string) ([]*types.ModelInfo, bool, *CacheEntry) {
 	data, err := os.ReadFile(c.filePath) // #nosec G304 - path validated via ValidatePath
 	if err != nil {
-		return nil, false // File doesn't exist or can't be read
+		return nil, false, nil // File doesn't exist or can't be read
 	}
 
 	// Parse JSON
 	var fileCache FileCache
 	if err := json.Unmarshal(data, &fileCache); err != nil {
-		return nil, false // Invalid JSON
+		return nil, false, nil // Invalid JSON
 	}
 
-	for _, lookup := range cacheLookupKeys(provider) {
-		entry, ok := fileCache.Entries[lookup]
-		if !ok {
-			continue
-		}
-		if entry.Provider != "" && entry.Provider != lookup {
-			continue
-		}
-
-		// Check TTL
-		if time.Since(entry.Timestamp) > c.fileTTL {
-			continue
-		}
-
-		// Migrate to provider-specific file for future reads
-		c.scheduleMigration(provider, entry)
-		return entry.Models, true
+	entry, ok := fileCache.Entries[provider]
+	if !ok || entry == nil || (entry.Provider != "" && entry.Provider != provider) {
+		return nil, false, nil
 	}
 
-	return nil, false
+	// Check TTL
+	if time.Since(entry.Timestamp) > c.fileTTL {
+		return nil, false, nil
+	}
+
+	return entry.Models, true, entry
 }
 
 func (c *ModelCache) decodeProviderShard(data []byte, provider string) (*CacheEntry, bool) {
@@ -186,22 +186,24 @@ func (c *ModelCache) decodeProviderShard(data []byte, provider string) (*CacheEn
 	return &entry, true
 }
 
-func (c *ModelCache) scheduleMigration(provider string, entry *CacheEntry) {
-	c.muClosed.RLock()
+// scheduleMigrationLifecycleHeld transfers the caller's lifecycle read
+// ownership to the migration goroutine. That preserves lifecycle -> provider
+// lock ordering and prevents Clear or Close from overtaking admitted work.
+func (c *ModelCache) scheduleMigrationLifecycleHeld(provider string, entry *CacheEntry) bool {
 	if c.closed {
-		c.muClosed.RUnlock()
-		return
+		return false
 	}
+
 	gen := c.clearGen
+	entryCopy := *entry
+	entryCopy.Models = cloneModels(entry.Models)
+	entryCopy.Provider = provider
 	c.wg.Add(1)
-	c.muClosed.RUnlock()
 
 	go func() {
+		defer c.muClosed.RUnlock()
 		defer c.wg.Done()
-
-		entryCopy := *entry
-		entryCopy.Models = cloneModels(entry.Models)
-		entryCopy.Provider = provider
-		c.migrateToSharded(provider, &entryCopy, gen)
+		c.migrateToShardedLifecycleHeld(provider, &entryCopy, gen)
 	}()
+	return true
 }
