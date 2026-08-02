@@ -1,5 +1,8 @@
 .PHONY: all build test test-short test-live clean lint fmt help bench release prepare-release
 
+GORELEASER_VERSION := v2.17.1
+GORELEASER := go run github.com/goreleaser/goreleaser/v2@$(GORELEASER_VERSION)
+
 # Default target: format, lint, test, build
 all: fmt lint test build
 
@@ -84,43 +87,31 @@ prepare-release:
 	fi
 	@echo "Preparing release $(VERSION)..."
 	@./scripts/check-public-surface.sh
-	@go mod tidy
+	@go mod tidy -diff
 	@go test ./...
-	@goreleaser check
+	@$(GORELEASER) check
 	@echo "Release $(VERSION) is ready to tag."
 
 # Create GitHub release using goreleaser
-release:
+release: prepare-release
 	@echo "Creating release with goreleaser..."
-	@if ! command -v goreleaser >/dev/null 2>&1; then \
-		echo "Installing goreleaser..."; \
-		go install github.com/goreleaser/goreleaser@latest; \
-	fi
-	@goreleaser release --clean
+	@$(GORELEASER) release --clean
 
 # Validate release configuration
 release-check:
 	@echo "Validating release configuration..."
-	@if ! command -v goreleaser >/dev/null 2>&1; then \
-		echo "Installing goreleaser..."; \
-		go install github.com/goreleaser/goreleaser@latest; \
-	fi
-	@goreleaser check
+	@$(GORELEASER) check
 
 # Create snapshot release (for testing)
 release-snapshot:
 	@echo "Creating snapshot release..."
-	@if ! command -v goreleaser >/dev/null 2>&1; then \
-		echo "Installing goreleaser..."; \
-		go install github.com/goreleaser/goreleaser@latest; \
-	fi
-	@goreleaser release --snapshot --clean
+	@$(GORELEASER) release --snapshot --clean
 
 # Setup development environment
 setup:
 	@echo "Setting up development environment..."
 	@go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
-	@go install github.com/goreleaser/goreleaser@latest
+	@go install github.com/goreleaser/goreleaser/v2@$(GORELEASER_VERSION)
 	@go mod download
 	@go mod tidy
 	@echo "Development environment ready!"
@@ -168,7 +159,7 @@ help:
 	@echo ""
 	@echo "  🚀 Release"
 	@echo "    make prepare-release VERSION=v3.0.0 - Prepare release"
-	@echo "    make release       - Create GitHub release"
+	@echo "    make release VERSION=v3.0.0 - Prepare and create GitHub release"
 	@echo "    make release-check - Validate release config"
 	@echo "    make release-snapshot - Create test release"
 	@echo ""

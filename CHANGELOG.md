@@ -2,6 +2,28 @@
 
 ## Unreleased
 
+## v3.0.1 (2026-08-01)
+
+### Fixes
+- Proxy: make the existing effective 1 MiB request-header ceiling explicit in
+  server configuration.
+- Discovery: keep live cache entries scoped to exact provider and account keys,
+  serialize persistence and cleanup admission with clear and close, remove only
+  verified owned shards while preserving oversized shards (>32 MiB) as
+  unverified user data, bound catalog responses at 32 MiB, and treat nonpositive
+  cleanup intervals as disabled.
+- Tool execution: prevent canceled calls from starting handlers or leaking
+  permits, and exclude handlers canceled before start from adaptive latency
+  samples.
+
+### Documentation
+- Document the proxy's best-effort model catalog behavior and add a v1.24.0
+  `pkg/`-layout path to the v3 migration guide.
+
+### Other
+- Pin GoReleaser v2.17.1, make module-tidiness checks non-mutating, and run
+  preparation gates before publishing a release.
+
 ## v3.0.0 (2026-07-31)
 
 ### Purpose
