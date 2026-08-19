@@ -156,8 +156,6 @@ func TestProxyResponsesRejectsUnsupportedToolsAndChoices(t *testing.T) {
 		{name: "empty function name", body: `{"model":"glm-5.2","input":"call","tools":[{"type":"function","name":""}]}`},
 		{name: "undeclared selected tool", body: `{"model":"glm-5.2","input":"call","tools":[{"type":"function","name":"declared"}],"tool_choice":{"type":"function","name":"missing"}}`},
 		{name: "unknown tool choice", body: `{"model":"glm-5.2","input":"call","tool_choice":"sometimes"}`},
-		{name: "web search", body: `{"model":"glm-5.2","input":"call","tools":[{"type":"web_search"}]}`, messagePart: `unsupported tool type "web_search"`},
-		{name: "unknown tool type", body: `{"model":"glm-5.2","input":"call","tools":[{"type":"computer_use_preview"}]}`, messagePart: `unsupported tool type "computer_use_preview"`},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
@@ -183,6 +181,23 @@ func TestProxyResponsesSkipsMetadataToolContainers(t *testing.T) {
 	require.Equal(t, http.StatusOK, rec.Code)
 	require.Len(t, provider.lastRequest().Tools, 1)
 	assert.Equal(t, "read_file", provider.lastRequest().Tools[0].Name)
+}
+
+func TestProxyResponsesSkipsNonPortableToolTypes(t *testing.T) {
+	t.Parallel()
+
+	for _, toolType := range []string{"web_search", "computer_use_preview"} {
+		t.Run(toolType, func(t *testing.T) {
+			provider := newCapturingTextProvider("openai")
+			body := `{"model":"glm-5.2","input":"call","tools":[{"type":"` + toolType + `"},{"type":"function","name":"read_file"}]}`
+
+			rec := performRequest(newCapturingTestProxy(provider), http.MethodPost, "/v1/responses", body)
+
+			require.Equal(t, http.StatusOK, rec.Code)
+			require.Len(t, provider.lastRequest().Tools, 1)
+			assert.Equal(t, "read_file", provider.lastRequest().Tools[0].Name)
+		})
+	}
 }
 
 func TestProxyResponsesFailureEventIsSequenced(t *testing.T) {

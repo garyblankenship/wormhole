@@ -19,7 +19,10 @@ func translateResponsesTools(input []responsesTool, selection responsesToolChoic
 			continue
 		}
 		if tool.Type != "function" && tool.Type != "custom" {
-			return nil, nil, unsupportedToolTypeError(tool.Type)
+			// Non-portable hosted tools (e.g. codex 0.148's built-in web_search)
+			// have no Chat Completions equivalent; skip them rather than failing
+			// the whole request.
+			continue
 		}
 		if tool.Name == "" {
 			return nil, nil, fmt.Errorf("%s tool name is required", tool.Type)
