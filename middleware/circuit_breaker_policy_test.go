@@ -96,3 +96,62 @@ func TestCircuitBreakerErrorPolicyKeepsTransientThreshold(t *testing.T) {
 		t.Fatalf("transient error = %v, state = %v; want closed", err, cb.GetState())
 	}
 }
+
+func TestCircuitBreakerIgnoresIncompleteGeneration(t *testing.T) {
+	t.Parallel()
+
+	cb := NewCircuitBreaker(1, time.Hour)
+	responses := []*types.TextResponse{
+		{FinishReason: types.FinishReasonLength},
+		{FinishReason: types.FinishReasonStop, Thinking: &types.Thinking{Content: "private"}},
+		{FinishReason: types.FinishReasonStop},
+	}
+	for _, response := range responses {
+		incomplete := types.NewIncompleteGenerationError(response)
+		_, err := cb.Execute(context.Background(), func() (any, error) { return nil, incomplete })
+		if !errors.Is(err, incomplete) || cb.GetState() != StateClosed {
+			t.Fatalf("incomplete generation = %v, state = %v; want original error and closed", err, cb.GetState())
+		}
+	}
+}
+
+func TestCircuitBreakerReleasesHalfOpenIncompleteGeneration(t *testing.T) {
+	t.Parallel()
+
+	truncated := types.NewIncompleteGenerationError(&types.TextResponse{
+		FinishReason: types.FinishReasonLength,
+	})
+	cb := NewCircuitBreaker(1, time.Hour)
+	cb.state = StateHalfOpen
+
+	for range 2 {
+		_, err := cb.Execute(context.Background(), func() (any, error) { return nil, truncated })
+		if !errors.Is(err, truncated) || cb.GetState() != StateHalfOpen {
+			t.Fatalf("incomplete generation = %v, state = %v; want original error and half-open", err, cb.GetState())
+		}
+		if got := cb.halfOpenCalls.Load(); got != 0 {
+			t.Fatalf("half-open calls = %d, want released admission", got)
+		}
+	}
+}
+
+func TestCircuitBreakerHalfOpenSuccessThreshold(t *testing.T) {
+	t.Parallel()
+
+	cb := NewCircuitBreaker(4, time.Hour)
+	cb.state = StateHalfOpen
+	cb.failures = cb.failureThreshold
+
+	for attempt := range cb.successThreshold {
+		result, err := cb.Execute(context.Background(), func() (any, error) { return "ok", nil })
+		if err != nil || result != "ok" {
+			t.Fatalf("successful probe %d = (%v, %v)", attempt, result, err)
+		}
+	}
+	if cb.GetState() != StateClosed || cb.failures != 0 || cb.successes != 0 {
+		t.Fatalf("recovered state = %v failures=%d successes=%d", cb.GetState(), cb.failures, cb.successes)
+	}
+	if err := cb.Close(); err != nil {
+		t.Fatalf("close: %v", err)
+	}
+}

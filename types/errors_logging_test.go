@@ -47,3 +47,17 @@ func TestSafeErrorValueDoesNotFormatArbitraryError(t *testing.T) {
 		t.Fatalf("safe error value formatted raw error: %s", buf.String())
 	}
 }
+
+func TestSafeLogStringSanitizesAndBoundsMetadata(t *testing.T) {
+	t.Parallel()
+
+	got := SafeLogString("https://user:secret@example.com/v1?token=secret#fragment")
+	if got != "https://example.com/v1" {
+		t.Fatalf("sanitized URL = %q", got)
+	}
+
+	long := strings.Repeat("x", maxSafeErrorFieldLength+100)
+	if got := SafeLogString(long); len(got) != maxSafeErrorFieldLength {
+		t.Fatalf("bounded metadata length = %d", len(got))
+	}
+}

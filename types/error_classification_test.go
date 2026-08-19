@@ -9,20 +9,30 @@ import (
 func TestClassifyErrorUsesTypedErrors(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
+		name string
 		err  error
 		want ErrorClass
 	}{
-		{ErrRateLimited, ErrorClassRateLimit},
-		{ErrQuotaExceeded, ErrorClassQuota},
-		{ErrInvalidAPIKey, ErrorClassAuth},
-		{ErrInvalidRequest, ErrorClassConfig},
-		{ErrTimeout, ErrorClassTimeout},
-		{ErrNetworkError, ErrorClassNetwork},
+		{name: "nil", err: nil, want: ErrorClassUnknown},
+		{name: "rate limit", err: ErrRateLimited, want: ErrorClassRateLimit},
+		{name: "quota", err: ErrQuotaExceeded, want: ErrorClassQuota},
+		{name: "auth", err: ErrInvalidAPIKey, want: ErrorClassAuth},
+		{name: "request", err: ErrInvalidRequest, want: ErrorClassConfig},
+		{name: "model", err: ErrInvalidModel, want: ErrorClassConfig},
+		{name: "validation", err: ErrValidation, want: ErrorClassConfig},
+		{name: "timeout", err: ErrTimeout, want: ErrorClassTimeout},
+		{name: "network", err: ErrNetworkError, want: ErrorClassNetwork},
+		{name: "retryable provider", err: ErrProviderUnavailable, want: ErrorClassTransient},
+		{name: "non-retryable provider", err: ErrProviderConstraintError, want: ErrorClassConfig},
+		{name: "unknown code", err: NewWormholeError(ErrorCodeUnknown, "unknown", false), want: ErrorClassUnknown},
 	}
 	for _, tt := range tests {
-		if got := ClassifyError(tt.err); got != tt.want {
-			t.Fatalf("ClassifyError(%v) = %s, want %s", tt.err, got, tt.want)
-		}
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			if got := ClassifyError(tt.err); got != tt.want {
+				t.Fatalf("ClassifyError(%v) = %s, want %s", tt.err, got, tt.want)
+			}
+		})
 	}
 }
 
@@ -37,5 +47,57 @@ func TestClassifyErrorUsesStatusAndTextFallbacks(t *testing.T) {
 	}
 	if !ErrorClassAuth.OpensProviderCircuit() || ErrorClassTransient.OpensProviderCircuit() {
 		t.Fatal("unexpected circuit impact")
+	}
+}
+
+func TestClassifyErrorTextFallbacks(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		message string
+		want    ErrorClass
+	}{
+		{message: "too many requests", want: ErrorClassRateLimit},
+		{message: "quota exceeded", want: ErrorClassQuota},
+		{message: "unauthorized", want: ErrorClassAuth},
+		{message: "model not configured", want: ErrorClassConfig},
+		{message: "deadline exceeded", want: ErrorClassTimeout},
+		{message: "connection reset", want: ErrorClassNetwork},
+		{message: "unclassified failure", want: ErrorClassTransient},
+	}
+	for _, tt := range tests {
+		t.Run(tt.message, func(t *testing.T) {
+			t.Parallel()
+			if got := ClassifyError(errors.New(tt.message)); got != tt.want {
+				t.Fatalf("ClassifyError(%q) = %s, want %s", tt.message, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestClassifyStatusCode(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		status int
+		want   ErrorClass
+		ok     bool
+	}{
+		{status: http.StatusTooManyRequests, want: ErrorClassRateLimit, ok: true},
+		{status: http.StatusUnauthorized, want: ErrorClassAuth, ok: true},
+		{status: http.StatusForbidden, want: ErrorClassQuota, ok: true},
+		{status: http.StatusBadRequest, want: ErrorClassConfig, ok: true},
+		{status: http.StatusNotFound, want: ErrorClassConfig, ok: true},
+		{status: http.StatusUnprocessableEntity, want: ErrorClassConfig, ok: true},
+		{status: http.StatusServiceUnavailable, want: ErrorClassTransient, ok: false},
+	}
+	for _, tt := range tests {
+		t.Run(http.StatusText(tt.status), func(t *testing.T) {
+			t.Parallel()
+			got, ok := ClassifyStatusCode(tt.status)
+			if got != tt.want || ok != tt.ok {
+				t.Fatalf("ClassifyStatusCode(%d) = (%s, %t), want (%s, %t)", tt.status, got, ok, tt.want, tt.ok)
+			}
+		})
 	}
 }

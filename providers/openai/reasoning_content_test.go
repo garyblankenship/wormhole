@@ -18,11 +18,7 @@ func TestTransformTextResponseReasoningContent(t *testing.T) {
 		ID:      "rc-1",
 		Model:   "deepseek-v4-pro",
 		Created: time.Now().Unix(),
-		Choices: []struct {
-			Index        int     `json:"index"`
-			Message      message `json:"message"`
-			FinishReason string  `json:"finish_reason"`
-		}{
+		Choices: []chatCompletionChoice{
 			{
 				Message:      message{Content: "the answer", ReasoningContent: "chain of thought"},
 				FinishReason: "stop",
@@ -38,11 +34,7 @@ func TestTransformTextResponseReasoningContent(t *testing.T) {
 		ID:      "rc-2",
 		Model:   "deepseek-v4-pro",
 		Created: time.Now().Unix(),
-		Choices: []struct {
-			Index        int     `json:"index"`
-			Message      message `json:"message"`
-			FinishReason string  `json:"finish_reason"`
-		}{
+		Choices: []chatCompletionChoice{
 			{
 				Message:      message{Content: "the answer"},
 				FinishReason: "stop",

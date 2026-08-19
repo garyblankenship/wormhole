@@ -6,6 +6,7 @@ type circuitErrorClass int
 
 const (
 	circuitErrorTransient circuitErrorClass = iota
+	circuitErrorNeutral
 	circuitErrorRateLimit
 	circuitErrorQuota
 	circuitErrorAuth
@@ -13,6 +14,9 @@ const (
 )
 
 func classifyCircuitError(err error) circuitErrorClass {
+	if _, ok := types.AsIncompleteGenerationError(err); ok {
+		return circuitErrorNeutral
+	}
 	switch types.ClassifyError(err) {
 	case types.ErrorClassRateLimit:
 		return circuitErrorRateLimit
@@ -32,6 +36,8 @@ func circuitFailureWeight(err error, threshold int) int {
 		threshold = 1
 	}
 	switch classifyCircuitError(err) {
+	case circuitErrorNeutral:
+		return 0
 	case circuitErrorRateLimit, circuitErrorQuota, circuitErrorAuth, circuitErrorConfig:
 		return threshold
 	default:

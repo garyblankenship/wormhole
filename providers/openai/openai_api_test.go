@@ -3,6 +3,7 @@ package openai
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -46,11 +47,7 @@ func TestProviderTextAndEmptyResponse(t *testing.T) {
 				ID:      "chatcmpl-1",
 				Created: 100,
 				Model:   "gpt-4o-mini",
-				Choices: []struct {
-					Index        int     `json:"index"`
-					Message      message `json:"message"`
-					FinishReason string  `json:"finish_reason"`
-				}{{
+				Choices: []chatCompletionChoice{{
 					Message:      message{Role: "assistant", Content: "hello"},
 					FinishReason: "stop",
 				}},
@@ -75,11 +72,7 @@ func TestProviderTextAndEmptyResponse(t *testing.T) {
 				ID:      "chatcmpl-empty",
 				Created: 100,
 				Model:   "gpt-4o-mini",
-				Choices: []struct {
-					Index        int     `json:"index"`
-					Message      message `json:"message"`
-					FinishReason string  `json:"finish_reason"`
-				}{{Message: message{Role: "assistant"}}},
+				Choices: []chatCompletionChoice{{Message: message{Role: "assistant"}}},
 			}))
 		})
 
@@ -89,6 +82,106 @@ func TestProviderTextAndEmptyResponse(t *testing.T) {
 		})
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "empty response")
+	})
+
+	t.Run("zero-choice response preserves usage", func(t *testing.T) {
+		t.Parallel()
+		provider, _ := newOpenAITestProvider(t, func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			require.NoError(t, json.NewEncoder(w).Encode(chatCompletionResponse{
+				ID:      "chatcmpl-no-choices",
+				Created: 100,
+				Model:   "gpt-5.6-luna",
+				Usage: usage{
+					PromptTokens:     10,
+					CompletionTokens: 2,
+					TotalTokens:      12,
+				},
+			}))
+		})
+
+		_, err := provider.Text(context.Background(), types.TextRequest{
+			BaseRequest: types.BaseRequest{Model: "gpt-5.6-luna"},
+			Messages:    []types.Message{types.NewUserMessage("summarize")},
+		})
+		require.Error(t, err)
+
+		var incompleteErr *types.IncompleteGenerationError
+		require.True(t, errors.As(err, &incompleteErr))
+		require.NotNil(t, incompleteErr.Usage)
+		assert.Equal(t, 10, incompleteErr.Usage.PromptTokens)
+		assert.Equal(t, 2, incompleteErr.Usage.CompletionTokens)
+		assert.Equal(t, 12, incompleteErr.Usage.TotalTokens)
+	})
+
+	t.Run("reasoning-only truncation preserves safe metadata", func(t *testing.T) {
+		t.Parallel()
+		provider, _ := newOpenAITestProvider(t, func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			reasoningDetails := &completionTokensDetail{ReasoningTokens: 8192}
+			require.NoError(t, json.NewEncoder(w).Encode(chatCompletionResponse{
+				ID:      "chatcmpl-truncated",
+				Created: 100,
+				Model:   "",
+				Choices: []chatCompletionChoice{{
+					Message:      message{Role: "assistant", ReasoningContent: "private reasoning"},
+					FinishReason: "length",
+				}},
+				Usage: usage{
+					PromptTokens:            13217,
+					CompletionTokens:        8192,
+					TotalTokens:             21409,
+					CompletionTokensDetails: reasoningDetails,
+				},
+			}))
+		})
+
+		response, err := provider.Text(context.Background(), types.TextRequest{
+			BaseRequest: types.BaseRequest{Model: "gpt-5.6-luna"},
+			Messages:    []types.Message{types.NewUserMessage("summarize")},
+		})
+		require.Nil(t, response)
+		require.Error(t, err)
+
+		var incompleteErr *types.IncompleteGenerationError
+		require.True(t, errors.As(err, &incompleteErr))
+		assert.Equal(t, types.IncompleteGenerationTruncated, incompleteErr.Reason)
+		assert.Equal(t, "openai", incompleteErr.Provider)
+		assert.Equal(t, "gpt-5.6-luna", incompleteErr.Model)
+		assert.Equal(t, "chatcmpl-truncated", incompleteErr.RequestID)
+		assert.Equal(t, types.FinishReasonLength, incompleteErr.FinishReason)
+		assert.Equal(t, 13217, incompleteErr.Usage.PromptTokens)
+		assert.Equal(t, 8192, incompleteErr.Usage.CompletionTokens)
+		assert.Equal(t, 8192, incompleteErr.Usage.ReasoningTokens)
+		assert.True(t, incompleteErr.ReasoningPresent)
+		assert.False(t, incompleteErr.Retryable)
+		assert.Equal(t, types.ErrorClassTruncation, types.ClassifyError(err))
+		assert.NotContains(t, err.Error(), "private reasoning")
+	})
+
+	t.Run("refusal-only response succeeds", func(t *testing.T) {
+		t.Parallel()
+		provider, _ := newOpenAITestProvider(t, func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			require.NoError(t, json.NewEncoder(w).Encode(chatCompletionResponse{
+				ID:      "chatcmpl-refusal",
+				Created: 100,
+				Model:   "gpt-5.6-luna",
+				Choices: []chatCompletionChoice{{
+					Message:      message{Role: "assistant", Refusal: "I cannot help with that."},
+					FinishReason: "content_filter",
+				}},
+			}))
+		})
+
+		response, err := provider.Text(context.Background(), types.TextRequest{
+			BaseRequest: types.BaseRequest{Model: "gpt-5.6-luna"},
+			Messages:    []types.Message{types.NewUserMessage("request")},
+		})
+		require.NoError(t, err)
+		require.NotNil(t, response)
+		assert.Equal(t, "I cannot help with that.", response.Refusal)
+		assert.Equal(t, types.FinishReasonContentFilter, response.FinishReason)
 	})
 }
 
@@ -160,11 +253,7 @@ func TestProviderStructuredJSONAndTools(t *testing.T) {
 				ID:      "chatcmpl-json",
 				Created: 100,
 				Model:   "gpt-4o-mini",
-				Choices: []struct {
-					Index        int     `json:"index"`
-					Message      message `json:"message"`
-					FinishReason string  `json:"finish_reason"`
-				}{{Message: message{Role: "assistant", Content: `{"name":"Ada"}`}, FinishReason: "stop"}},
+				Choices: []chatCompletionChoice{{Message: message{Role: "assistant", Content: `{"name":"Ada"}`}, FinishReason: "stop"}},
 			}))
 		})
 
@@ -190,11 +279,7 @@ func TestProviderStructuredJSONAndTools(t *testing.T) {
 				ID:      "chatcmpl-tool",
 				Created: 100,
 				Model:   "gpt-4o-mini",
-				Choices: []struct {
-					Index        int     `json:"index"`
-					Message      message `json:"message"`
-					FinishReason string  `json:"finish_reason"`
-				}{{
+				Choices: []chatCompletionChoice{{
 					Message: message{Role: "assistant", ToolCalls: []toolCall{{
 						ID:   "call-1",
 						Type: "function",
@@ -249,11 +334,7 @@ func TestStructuredStrictEmitsJSONSchema(t *testing.T) {
 			ID:      "chatcmpl-strict-json-schema",
 			Created: 100,
 			Model:   "gpt-4o-mini",
-			Choices: []struct {
-				Index        int     `json:"index"`
-				Message      message `json:"message"`
-				FinishReason string  `json:"finish_reason"`
-			}{{Message: message{Role: "assistant", Content: `{"name":"Ada"}`}, FinishReason: "stop"}},
+			Choices: []chatCompletionChoice{{Message: message{Role: "assistant", Content: `{"name":"Ada"}`}, FinishReason: "stop"}},
 		}))
 	})
 

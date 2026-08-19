@@ -65,6 +65,28 @@ if err != nil {
 }
 ```
 
+### IncompleteGenerationError
+
+OpenAI-compatible endpoints can exhaust the completion budget in private
+reasoning before producing visible text. Wormhole returns a typed,
+non-retryable `IncompleteGenerationError` instead of discarding the provider's
+safe response metadata:
+
+```go
+var incompleteErr *types.IncompleteGenerationError
+if errors.As(err, &incompleteErr) {
+    log.Printf("reason=%s finish=%s request=%s", incompleteErr.Reason,
+        incompleteErr.FinishReason, incompleteErr.RequestID)
+}
+```
+
+The error preserves provider, model, request ID, finish reason, and token usage.
+`ReasoningPresent` reports only whether reasoning was returned; reasoning content
+is never retained on the error. A length stop classifies as
+`ErrorClassTruncation` and is not retryable. Incomplete generation is a
+request outcome, not provider-health evidence, so it does not count against
+provider circuit breakers.
+
 ### ValidationError
 
 Field-level validation failures:

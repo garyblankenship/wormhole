@@ -9,19 +9,26 @@ import (
 type ErrorClass string
 
 const (
-	ErrorClassTransient ErrorClass = "transient"
-	ErrorClassRateLimit ErrorClass = "rate_limit"
-	ErrorClassQuota     ErrorClass = "quota"
-	ErrorClassAuth      ErrorClass = "auth"
-	ErrorClassConfig    ErrorClass = "config"
-	ErrorClassTimeout   ErrorClass = "timeout"
-	ErrorClassNetwork   ErrorClass = "network"
-	ErrorClassUnknown   ErrorClass = "unknown"
+	ErrorClassTransient  ErrorClass = "transient"
+	ErrorClassRateLimit  ErrorClass = "rate_limit"
+	ErrorClassQuota      ErrorClass = "quota"
+	ErrorClassAuth       ErrorClass = "auth"
+	ErrorClassConfig     ErrorClass = "config"
+	ErrorClassTruncation ErrorClass = "truncation"
+	ErrorClassTimeout    ErrorClass = "timeout"
+	ErrorClassNetwork    ErrorClass = "network"
+	ErrorClassUnknown    ErrorClass = "unknown"
 )
 
 // ClassifyError maps an error to its provider-health impact class.
 func ClassifyError(err error) ErrorClass {
 	if err == nil {
+		return ErrorClassUnknown
+	}
+	if incompleteErr, ok := AsIncompleteGenerationError(err); ok {
+		if incompleteErr.Reason == IncompleteGenerationTruncated {
+			return ErrorClassTruncation
+		}
 		return ErrorClassUnknown
 	}
 	if wormholeErr, ok := AsWormholeError(err); ok {

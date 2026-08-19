@@ -35,11 +35,7 @@ func TestProviderFieldPopulated(t *testing.T) {
 				ID:      "chatcmpl-field",
 				Created: 100,
 				Model:   "gpt-4o-mini",
-				Choices: []struct {
-					Index        int     `json:"index"`
-					Message      message `json:"message"`
-					FinishReason string  `json:"finish_reason"`
-				}{{
+				Choices: []chatCompletionChoice{{
 					Message:      message{Role: "assistant", Content: "hello"},
 					FinishReason: "stop",
 				}},

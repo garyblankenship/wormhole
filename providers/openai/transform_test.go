@@ -72,11 +72,7 @@ func TestTransformTextResponseWithJSONCleaning(t *testing.T) {
 		ID:      "test-id",
 		Model:   "claude-opus-4.1",
 		Created: time.Now().Unix(),
-		Choices: []struct {
-			Index        int     `json:"index"`
-			Message      message `json:"message"`
-			FinishReason string  `json:"finish_reason"`
-		}{
+		Choices: []chatCompletionChoice{
 			{
 				Message: message{
 					Content: "```json\n{\"variations\": [{\"strategy\": \"test\"}]}\n```",
@@ -104,11 +100,7 @@ func TestTransformTextResponseModelAgnosticCleaning(t *testing.T) {
 		ID:      "test-id",
 		Model:   "gpt-4",
 		Created: time.Now().Unix(),
-		Choices: []struct {
-			Index        int     `json:"index"`
-			Message      message `json:"message"`
-			FinishReason string  `json:"finish_reason"`
-		}{
+		Choices: []chatCompletionChoice{
 			{
 				Message: message{
 					Content: "```json\n{\"key\": \"value\"}\n```",
@@ -165,11 +157,7 @@ func TestTransformTextResponsePlainTextUnchanged(t *testing.T) {
 		ID:      "test-id",
 		Model:   "gpt-4",
 		Created: time.Now().Unix(),
-		Choices: []struct {
-			Index        int     `json:"index"`
-			Message      message `json:"message"`
-			FinishReason string  `json:"finish_reason"`
-		}{
+		Choices: []chatCompletionChoice{
 			{
 				Message: message{
 					Content: "Just plain text, no JSON here.",
@@ -241,11 +229,7 @@ func TestTransform_MalformedToolCallArgs_FlaggedNotSwallowed(t *testing.T) {
 		ID:      "malformed-tool-args",
 		Model:   "gpt-4o-mini",
 		Created: time.Now().Unix(),
-		Choices: []struct {
-			Index        int     `json:"index"`
-			Message      message `json:"message"`
-			FinishReason string  `json:"finish_reason"`
-		}{
+		Choices: []chatCompletionChoice{
 			{
 				Message: message{
 					Role: "assistant",

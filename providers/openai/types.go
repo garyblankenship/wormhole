@@ -3,16 +3,18 @@ package openai
 // OpenAI API response types
 
 type chatCompletionResponse struct {
-	ID      string `json:"id"`
-	Object  string `json:"object"`
-	Created int64  `json:"created"`
-	Model   string `json:"model"`
-	Choices []struct {
-		Index        int     `json:"index"`
-		Message      message `json:"message"`
-		FinishReason string  `json:"finish_reason"`
-	} `json:"choices"`
-	Usage usage `json:"usage"`
+	ID      string                 `json:"id"`
+	Object  string                 `json:"object"`
+	Created int64                  `json:"created"`
+	Model   string                 `json:"model"`
+	Choices []chatCompletionChoice `json:"choices"`
+	Usage   usage                  `json:"usage"`
+}
+
+type chatCompletionChoice struct {
+	Index        int     `json:"index"`
+	Message      message `json:"message"`
+	FinishReason string  `json:"finish_reason"`
 }
 
 type message struct {

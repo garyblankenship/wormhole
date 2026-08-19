@@ -107,10 +107,14 @@ func (p *Provider) Text(ctx context.Context, request types.TextRequest) (*types.
 
 	textResponse := p.transformTextResponse(&response)
 	textResponse.Provider = p.Name()
+	if textResponse.Model == "" {
+		textResponse.Model = request.Model
+	}
 
-	// Validate response has content to prevent silent failures
-	if textResponse.Text == "" && len(textResponse.ToolCalls) == 0 {
-		return nil, p.ProviderError("received empty response from OpenAI API", "no content or tool calls returned")
+	// Preserve safe metadata when the provider ends generation without
+	// app-visible output. Reasoning content itself stays out of the error.
+	if textResponse.Text == "" && textResponse.Refusal == "" && len(textResponse.ToolCalls) == 0 {
+		return nil, types.NewIncompleteGenerationError(textResponse)
 	}
 
 	return textResponse, nil

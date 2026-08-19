@@ -41,6 +41,7 @@ func (p *Provider) transformTextResponse(response *chatCompletionResponse) *type
 		return &types.TextResponse{
 			ID:      response.ID,
 			Model:   response.Model,
+			Usage:   p.convertUsage(response.Usage),
 			Created: time.Unix(response.Created, 0),
 		}
 	}

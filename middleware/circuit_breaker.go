@@ -156,6 +156,10 @@ func (cb *CircuitBreaker) admit() error {
 }
 
 func (cb *CircuitBreaker) recordError(err error) error {
+	if classifyCircuitError(err) == circuitErrorNeutral {
+		cb.recordCancellation()
+		return err
+	}
 	cb.mu.Lock()
 	defer cb.mu.Unlock()
 	_, wrapped := cb.handleError(nil, wrapIfNotWormholeError("circuit_breaker", err))

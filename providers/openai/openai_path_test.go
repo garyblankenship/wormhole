@@ -25,11 +25,7 @@ func TestChatCompletionsPath(t *testing.T) {
 				ID:      "chatcmpl-path",
 				Created: 100,
 				Model:   "m",
-				Choices: []struct {
-					Index        int     `json:"index"`
-					Message      message `json:"message"`
-					FinishReason string  `json:"finish_reason"`
-				}{{
+				Choices: []chatCompletionChoice{{
 					Message:      message{Role: "assistant", Content: "hello"},
 					FinishReason: "stop",
 				}},
