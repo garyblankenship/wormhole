@@ -139,7 +139,10 @@ func (hc *HealthChecker) runHealthChecks(providers []string) {
 }
 
 func (hc *HealthChecker) checkAll(providers []string) {
-	if hc.checkFunc == nil {
+	hc.mu.RLock()
+	checkFunc := hc.checkFunc
+	hc.mu.RUnlock()
+	if checkFunc == nil {
 		return
 	}
 
@@ -148,18 +151,18 @@ func (hc *HealthChecker) checkAll(providers []string) {
 		wg.Add(1)
 		go func(p string) {
 			defer wg.Done()
-			hc.checkProvider(p)
+			hc.checkProvider(p, checkFunc)
 		}(provider)
 	}
 	wg.Wait()
 }
 
-func (hc *HealthChecker) checkProvider(provider string) {
+func (hc *HealthChecker) checkProvider(provider string, checkFunc func(context.Context, string) error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
 	start := time.Now()
-	err := hc.checkFunc(ctx, provider)
+	err := checkFunc(ctx, provider)
 	responseTime := time.Since(start)
 
 	hc.mu.Lock()

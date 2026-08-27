@@ -3,6 +3,9 @@ package middleware
 import (
 	"context"
 	"errors"
+	"fmt"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -38,4 +41,47 @@ func TestHealthCheckerStatusAndProviders(t *testing.T) {
 	if len(providers) != 1 || providers[0] != "good" {
 		t.Fatalf("healthy providers = %v, want [good]", providers)
 	}
+}
+
+func TestHealthCheckerUsesOneCallbackPerSweep(t *testing.T) {
+	checker := NewHealthChecker(time.Hour)
+	providers := make([]string, 256)
+	for i := range providers {
+		providers[i] = fmt.Sprintf("provider-%d", i)
+	}
+
+	var originalCalls atomic.Int32
+	var replacementCalls atomic.Int32
+	entered := make(chan struct{})
+	release := make(chan struct{})
+	var enteredOnce sync.Once
+	checker.SetCheckFunction(func(context.Context, string) error {
+		originalCalls.Add(1)
+		enteredOnce.Do(func() { close(entered) })
+		<-release
+		return nil
+	})
+
+	done := make(chan struct{})
+	go func() {
+		checker.checkAll(providers)
+		close(done)
+	}()
+	<-entered
+	checker.SetCheckFunction(func(context.Context, string) error {
+		replacementCalls.Add(1)
+		return nil
+	})
+	close(release)
+	<-done
+
+	if got := originalCalls.Load(); got != int32(len(providers)) {
+		t.Fatalf("original callback calls = %d, want %d", got, len(providers))
+	}
+	if got := replacementCalls.Load(); got != 0 {
+		t.Fatalf("replacement callback ran %d times during in-flight sweep", got)
+	}
+
+	checker.SetCheckFunction(nil)
+	checker.checkAll(providers)
 }
