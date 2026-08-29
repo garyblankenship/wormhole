@@ -1,6 +1,13 @@
 # Changelog
 
-## Unreleased
+## v3.0.2 (2026-08-29)
+
+### Features
+- Types: add `IncompleteGenerationError` with truncation classification.
+
+### Fixes
+- Server: skip non-portable tool types instead of rejecting.
+- Health: keep health check callbacks stable during each background sweep.
 
 ## v3.0.1 (2026-08-01)
 
