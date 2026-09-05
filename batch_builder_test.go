@@ -2,12 +2,39 @@ package wormhole
 
 import (
 	"context"
+	"errors"
+	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/garyblankenship/wormhole/v3/types"
 )
+
+type batchTestProvider struct {
+	*types.BaseProvider
+	text func(context.Context, types.TextRequest) (*types.TextResponse, error)
+}
+
+func (p *batchTestProvider) Text(ctx context.Context, request types.TextRequest) (*types.TextResponse, error) {
+	return p.text(ctx, request)
+}
+
+func (p *batchTestProvider) SupportedCapabilities() []types.ModelCapability {
+	return []types.ModelCapability{types.CapabilityText, types.CapabilityChat}
+}
+
+func newBatchTestClient(text func(context.Context, types.TextRequest) (*types.TextResponse, error)) *Wormhole {
+	provider := &batchTestProvider{BaseProvider: types.NewBaseProvider("batch"), text: text}
+	return New(
+		WithDefaultProvider("batch"),
+		WithCustomProvider("batch", func(types.ProviderConfig) (types.Provider, error) { return provider, nil }),
+		WithProviderConfig("batch", types.ProviderConfig{DynamicModels: true}),
+		WithDiscovery(false),
+	)
+}
 
 func TestBatchBuilder(t *testing.T) {
 	t.Parallel()
@@ -115,6 +142,94 @@ func TestBatchBuilderExecution(t *testing.T) {
 		for _, r := range results {
 			assert.Error(t, r.Error)
 		}
+	})
+}
+
+func TestBatchExecutionModesShareWorkerPool(t *testing.T) {
+	t.Run("worker pool enforces configured concurrency", func(t *testing.T) {
+		var active atomic.Int32
+		var maximum atomic.Int32
+		client := newBatchTestClient(func(_ context.Context, request types.TextRequest) (*types.TextResponse, error) {
+			current := active.Add(1)
+			defer active.Add(-1)
+			for observed := maximum.Load(); current > observed && !maximum.CompareAndSwap(observed, current); observed = maximum.Load() {
+			}
+			time.Sleep(20 * time.Millisecond)
+			return &types.TextResponse{Model: request.Model}, nil
+		})
+		t.Cleanup(func() { _ = client.Close() })
+
+		batch := client.Batch().Concurrency(2)
+		for range 5 {
+			batch.Add(client.Text().Model("model").Prompt("request"))
+		}
+		results := batch.Execute(context.Background())
+
+		require.Len(t, results, 5)
+		assert.Equal(t, int32(2), maximum.Load())
+	})
+
+	t.Run("Execute preserves request order when completion order differs", func(t *testing.T) {
+		client := newBatchTestClient(func(ctx context.Context, request types.TextRequest) (*types.TextResponse, error) {
+			if request.Model == "slow" {
+				time.Sleep(20 * time.Millisecond)
+			}
+			return &types.TextResponse{Model: request.Model}, nil
+		})
+		t.Cleanup(func() { _ = client.Close() })
+
+		results := client.Batch().Concurrency(2).
+			Add(client.Text().Model("slow").Prompt("first")).
+			Add(client.Text().Model("fast").Prompt("second")).
+			Execute(context.Background())
+
+		require.Len(t, results, 2)
+		require.NoError(t, results[0].Error)
+		require.NoError(t, results[1].Error)
+		assert.Equal(t, "slow", results[0].Response.Model)
+		assert.Equal(t, "fast", results[1].Response.Model)
+	})
+
+	t.Run("ExecuteFirst cancels remaining requests after a success", func(t *testing.T) {
+		canceled := make(chan struct{})
+		client := newBatchTestClient(func(ctx context.Context, request types.TextRequest) (*types.TextResponse, error) {
+			if request.Model == "fast" {
+				return &types.TextResponse{Model: request.Model}, nil
+			}
+			<-ctx.Done()
+			close(canceled)
+			return nil, ctx.Err()
+		})
+		t.Cleanup(func() { _ = client.Close() })
+
+		response, err := client.Batch().Concurrency(2).
+			Add(client.Text().Model("slow").Prompt("first")).
+			Add(client.Text().Model("fast").Prompt("second")).
+			ExecuteFirst(context.Background())
+
+		require.NoError(t, err)
+		require.NotNil(t, response)
+		assert.Equal(t, "fast", response.Model)
+		select {
+		case <-canceled:
+		case <-time.After(time.Second):
+			t.Fatal("remaining request was not canceled")
+		}
+	})
+
+	t.Run("ExecuteFirst returns the last serial failure", func(t *testing.T) {
+		client := newBatchTestClient(func(_ context.Context, request types.TextRequest) (*types.TextResponse, error) {
+			return nil, errors.New(request.Model)
+		})
+		t.Cleanup(func() { _ = client.Close() })
+
+		response, err := client.Batch().Concurrency(1).
+			Add(client.Text().Model("first-error").Prompt("first")).
+			Add(client.Text().Model("last-error").Prompt("second")).
+			ExecuteFirst(context.Background())
+
+		assert.Nil(t, response)
+		require.EqualError(t, err, "last-error")
 	})
 }
 

@@ -66,68 +66,9 @@ func (b *BatchBuilder) Execute(ctx context.Context) []BatchResult {
 		return nil
 	}
 
-	// Default concurrency
-	concurrency := b.concurrency
-	if concurrency <= 0 {
-		concurrency = 10
-	}
-
-	// Limit concurrency to number of requests
-	if concurrency > len(b.requests) {
-		concurrency = len(b.requests)
-	}
-
 	results := make([]BatchResult, len(b.requests))
-	taskCh := make(chan int, len(b.requests)) // send indices to workers
-	resultCh := make(chan batchResult, len(b.requests))
-	var wg sync.WaitGroup
-
-	// Check if adaptive concurrency is enabled
-	adaptiveLimiter := b.wormhole.GetAdaptiveLimiter()
-
-	// Start worker goroutines
-	for w := 0; w < concurrency; w++ {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			for index := range taskCh {
-				req := b.requests[index]
-
-				resp, err := executeRequestWithLimiter(ctx, req, adaptiveLimiter)
-				if err == ctx.Err() && resp == nil {
-					// If ctx.Err() was returned due to context expiration or cancellation
-					// we just wrap it according to what we had before
-					resultCh <- batchResult{
-						index:    index,
-						response: nil,
-						err:      ctx.Err(),
-					}
-					continue
-				}
-
-				resultCh <- batchResult{
-					index:    index,
-					response: resp,
-					err:      err,
-				}
-			}
-		}()
-	}
-
-	// Send all tasks
-	for i := range b.requests {
-		taskCh <- i
-	}
-	close(taskCh)
-
-	// Wait for workers to finish and collect results
-	go func() {
-		wg.Wait()
-		close(resultCh)
-	}()
-
 	// Collect results (order doesn't matter, we store by index)
-	for r := range resultCh {
+	for r := range b.execute(ctx) {
 		results[r.index] = BatchResult{
 			Index:    r.index,
 			Response: r.response,
@@ -195,7 +136,36 @@ func (b *BatchBuilder) ExecuteFirst(ctx context.Context) (*types.TextResponse, e
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
-	// Determine concurrency
+	// Wait for first success or all failures
+	var lastErr error
+	results := b.execute(ctx)
+	for {
+		select {
+		case r, ok := <-results:
+			if !ok {
+				return nil, lastErr
+			}
+			if r.err == nil {
+				cancel() // Cancel remaining requests
+				return r.response, nil
+			}
+			lastErr = r.err
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		}
+	}
+}
+
+// execute owns the bounded worker pool shared by the batch completion modes.
+// Its buffered result stream lets a caller stop consuming after cancellation
+// without stranding workers that are finishing already-started requests.
+func (b *BatchBuilder) execute(ctx context.Context) <-chan batchResult {
+	resultCh := make(chan batchResult, len(b.requests))
+	if len(b.requests) == 0 {
+		close(resultCh)
+		return resultCh
+	}
+
 	concurrency := b.concurrency
 	if concurrency <= 0 {
 		concurrency = 10
@@ -204,71 +174,33 @@ func (b *BatchBuilder) ExecuteFirst(ctx context.Context) (*types.TextResponse, e
 		concurrency = len(b.requests)
 	}
 
-	// Check if adaptive concurrency is enabled
-	adaptiveLimiter := b.wormhole.GetAdaptiveLimiter()
-
-	type result struct {
-		resp *types.TextResponse
-		err  error
-	}
-
-	resultCh := make(chan result, len(b.requests))
 	taskCh := make(chan int, len(b.requests))
-	var wg sync.WaitGroup
-
-	// Start workers
-	for w := 0; w < concurrency; w++ {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			for index := range taskCh {
-				req := b.requests[index]
-
-				resp, err := executeRequestWithLimiter(ctx, req, adaptiveLimiter)
-				if err == ctx.Err() && resp == nil {
-					select {
-					case resultCh <- result{nil, ctx.Err()}:
-					case <-ctx.Done():
-					}
-					continue
-				}
-
-				select {
-				case resultCh <- result{resp, err}:
-				case <-ctx.Done():
-				}
-			}
-		}()
-	}
-
-	// Send all tasks
 	for i := range b.requests {
 		taskCh <- i
 	}
 	close(taskCh)
 
-	// Wait for workers to finish (in background)
+	adaptiveLimiter := b.wormhole.GetAdaptiveLimiter()
+	var wg sync.WaitGroup
+	wg.Add(concurrency)
+	for range concurrency {
+		go func() {
+			defer wg.Done()
+			for index := range taskCh {
+				response, err := executeRequestWithLimiter(ctx, b.requests[index], adaptiveLimiter)
+				if err == ctx.Err() && response == nil {
+					err = ctx.Err()
+				}
+				resultCh <- batchResult{index: index, response: response, err: err}
+			}
+		}()
+	}
+
 	go func() {
 		wg.Wait()
 		close(resultCh)
 	}()
-
-	// Wait for first success or all failures
-	var lastErr error
-	for i := 0; i < len(b.requests); i++ {
-		select {
-		case r := <-resultCh:
-			if r.err == nil {
-				cancel() // Cancel remaining requests
-				return r.resp, nil
-			}
-			lastErr = r.err
-		case <-ctx.Done():
-			return nil, ctx.Err()
-		}
-	}
-
-	return nil, lastErr
+	return resultCh
 }
 
 // Count returns the number of requests in the batch.
