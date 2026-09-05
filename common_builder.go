@@ -1,6 +1,10 @@
 package wormhole
 
-import "github.com/garyblankenship/wormhole/v3/types"
+import (
+	"context"
+
+	"github.com/garyblankenship/wormhole/v3/types"
+)
 
 // CommonBuilder contains shared fields and methods for all request builders
 type CommonBuilder struct {
@@ -67,6 +71,25 @@ func (cb *CommonBuilder) getProviderWithBaseURL() (types.Provider, func(), error
 	}
 
 	return provider, func() { _ = provider.Close() }, nil
+}
+
+// executeProviderOperation owns the provider lease and operation context shared
+// by non-streaming request builders. The caller retains modality-specific
+// middleware and provider invocation.
+func executeProviderOperation[T any](
+	ctx context.Context,
+	builder *CommonBuilder,
+	operation string,
+	invoke func(context.Context, types.Provider) (T, error),
+) (T, error) {
+	var zero T
+	provider, release, err := builder.getProviderWithBaseURL()
+	if err != nil {
+		return zero, err
+	}
+	defer release()
+
+	return invoke(contextWithProviderOperation(ctx, provider, operation), provider)
 }
 
 func (cb *CommonBuilder) idempotencyScope(operation string) string {

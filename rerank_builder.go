@@ -102,17 +102,12 @@ func (b *RerankRequestBuilder) Generate(ctx context.Context) (*types.RerankRespo
 // executeRerank resolves the provider and routes the call through the
 // middleware chain, mirroring EmbeddingsRequestBuilder.executeEmbeddings.
 func (b *RerankRequestBuilder) executeRerank(ctx context.Context, request *types.RerankRequest) (*types.RerankResponse, error) {
-	provider, release, err := b.getProviderWithBaseURL()
-	if err != nil {
-		return nil, err
-	}
-	defer release()
+	return executeProviderOperation(ctx, &b.CommonBuilder, "rerank", func(ctx context.Context, provider types.Provider) (*types.RerankResponse, error) {
+		if b.getWormhole().providerMiddleware != nil {
+			handler := b.getWormhole().providerMiddleware.ApplyRerank(provider.Rerank)
+			return handler(ctx, *request)
+		}
 
-	ctx = contextWithProviderOperation(ctx, provider, "rerank")
-	if b.getWormhole().providerMiddleware != nil {
-		handler := b.getWormhole().providerMiddleware.ApplyRerank(provider.Rerank)
-		return handler(ctx, *request)
-	}
-
-	return provider.Rerank(ctx, *request)
+		return provider.Rerank(ctx, *request)
+	})
 }

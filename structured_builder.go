@@ -126,19 +126,14 @@ func (b *StructuredRequestBuilder) Generate(ctx context.Context) (*types.Structu
 	}
 
 	return executeTrackedRequest(ctx, b.getWormhole(), b.idempotencyScope("structured.generate"), request, func(ctx context.Context) (*types.StructuredResponse, error) {
-		provider, release, err := b.getProviderWithBaseURL()
-		if err != nil {
-			return nil, err
-		}
-		defer release()
+		return executeProviderOperation(ctx, &b.CommonBuilder, "structured", func(ctx context.Context, provider types.Provider) (*types.StructuredResponse, error) {
+			if b.getWormhole().providerMiddleware != nil {
+				handler := b.getWormhole().providerMiddleware.ApplyStructured(provider.Structured)
+				return handler(ctx, *request)
+			}
 
-		ctx = contextWithProviderOperation(ctx, provider, "structured")
-		if b.getWormhole().providerMiddleware != nil {
-			handler := b.getWormhole().providerMiddleware.ApplyStructured(provider.Structured)
-			return handler(ctx, *request)
-		}
-
-		return provider.Structured(ctx, *request)
+			return provider.Structured(ctx, *request)
+		})
 	})
 }
 

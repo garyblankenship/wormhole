@@ -33,19 +33,14 @@ func validEmbeddingEncodingFormat(format types.EmbeddingEncodingFormat) bool {
 }
 
 func (b *EmbeddingsRequestBuilder) executeEmbeddings(ctx context.Context, request *types.EmbeddingsRequest) (*types.EmbeddingsResponse, error) {
-	provider, release, err := b.getProviderWithBaseURL()
-	if err != nil {
-		return nil, err
-	}
-	defer release()
+	return executeProviderOperation(ctx, &b.CommonBuilder, "embeddings", func(ctx context.Context, provider types.Provider) (*types.EmbeddingsResponse, error) {
+		if b.getWormhole().providerMiddleware != nil {
+			handler := b.getWormhole().providerMiddleware.ApplyEmbeddings(provider.Embeddings)
+			return handler(ctx, *request)
+		}
 
-	ctx = contextWithProviderOperation(ctx, provider, "embeddings")
-	if b.getWormhole().providerMiddleware != nil {
-		handler := b.getWormhole().providerMiddleware.ApplyEmbeddings(provider.Embeddings)
-		return handler(ctx, *request)
-	}
-
-	return provider.Embeddings(ctx, *request)
+		return provider.Embeddings(ctx, *request)
+	})
 }
 
 func placeEmbeddingBatch(out []types.Embedding, start, count int, embeddings []types.Embedding) error {

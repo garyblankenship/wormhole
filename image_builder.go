@@ -94,19 +94,14 @@ func (b *ImageRequestBuilder) Generate(ctx context.Context) (*types.ImageRespons
 	}
 
 	return executeTrackedRequest(ctx, b.getWormhole(), b.idempotencyScope("image.generate"), request, func(ctx context.Context) (*types.ImageResponse, error) {
-		provider, release, err := b.getProviderWithBaseURL()
-		if err != nil {
-			return nil, err
-		}
-		defer release()
+		return executeProviderOperation(ctx, &b.CommonBuilder, "image", func(ctx context.Context, provider types.Provider) (*types.ImageResponse, error) {
+			if b.getWormhole().providerMiddleware != nil {
+				handler := b.getWormhole().providerMiddleware.ApplyImage(provider.GenerateImage)
+				return handler(ctx, *request)
+			}
 
-		ctx = contextWithProviderOperation(ctx, provider, "image")
-		if b.getWormhole().providerMiddleware != nil {
-			handler := b.getWormhole().providerMiddleware.ApplyImage(provider.GenerateImage)
-			return handler(ctx, *request)
-		}
-
-		return provider.GenerateImage(ctx, *request)
+			return provider.GenerateImage(ctx, *request)
+		})
 	})
 }
 
