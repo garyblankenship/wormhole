@@ -49,17 +49,15 @@ func (p *proxy) responsesBuilder(req responsesRequest) (responsesExecution, erro
 	if err != nil {
 		return responsesExecution{}, err
 	}
-	configuredProviders := p.wh.ConfiguredProviders()
-	effDefaultProvider := effectiveDefaultProvider(p.defaultProvider, configuredProviders)
-	provider, model := parseModelRoute(req.Model, effDefaultProvider, configuredProviders)
+	route := p.resolveModelRoute(req.Model)
 
-	builder := p.wh.Text().Model(model).Messages(messages...)
+	builder := p.wh.Text().Model(route.model).Messages(messages...)
 	toolSelection, err := parseResponsesToolChoice(req.ToolChoice)
 	if err != nil {
 		return responsesExecution{}, err
 	}
-	if provider != "" {
-		builder = builder.Using(provider)
+	if route.provider != "" {
+		builder = builder.Using(route.provider)
 	}
 	if req.Temperature != nil {
 		builder = builder.Temperature(float32(*req.Temperature))
@@ -81,11 +79,7 @@ func (p *proxy) responsesBuilder(req responsesRequest) (responsesExecution, erro
 		builder = builder.ToolChoice(toolSelection.choice)
 	}
 	if req.Reasoning != nil && req.Reasoning.Effort != "" {
-		targetProvider := provider
-		if targetProvider == "" {
-			targetProvider = effDefaultProvider
-		}
-		if targetProvider == "zai" {
+		if route.effectiveProvider == "zai" {
 			thinkingType := "enabled"
 			if req.Reasoning.Effort == "none" {
 				thinkingType = "disabled"
@@ -95,5 +89,5 @@ func (p *proxy) responsesBuilder(req responsesRequest) (responsesExecution, erro
 			builder = builder.Reasoning(types.Reasoning{Effort: types.ReasoningEffort(req.Reasoning.Effort)})
 		}
 	}
-	return responsesExecution{builder: builder, model: model, customTools: customTools}, nil
+	return responsesExecution{builder: builder, model: route.model, customTools: customTools}, nil
 }

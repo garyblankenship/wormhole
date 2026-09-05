@@ -25,6 +25,23 @@ var knownProviderSet = func() map[string]bool {
 // the model string and pass through, not get hijacked into direct routing.
 const openRouterProviderName = "openrouter"
 
+type resolvedModelRoute struct {
+	provider          string
+	model             string
+	effectiveProvider string
+}
+
+func (p *proxy) resolveModelRoute(model string) resolvedModelRoute {
+	configuredProviders := p.wh.ConfiguredProviders()
+	defaultProvider := effectiveDefaultProvider(p.defaultProvider, configuredProviders)
+	provider, resolvedModel := parseModelRoute(model, defaultProvider, configuredProviders)
+	effectiveProvider := provider
+	if effectiveProvider == "" {
+		effectiveProvider = defaultProvider
+	}
+	return resolvedModelRoute{provider: provider, model: resolvedModel, effectiveProvider: effectiveProvider}
+}
+
 // parseModelRoute splits a model string like "anthropic/claude-sonnet-4-5"
 // into (provider, model). If no known provider prefix, returns ("", fullModel).
 // When the effective default provider is openrouter, only explicit prefixes for

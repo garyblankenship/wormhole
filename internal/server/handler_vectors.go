@@ -25,13 +25,11 @@ func (p *proxy) handleEmbeddings(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	configuredProviders := p.wh.ConfiguredProviders()
-	effDefaultProvider := effectiveDefaultProvider(p.defaultProvider, configuredProviders)
-	provider, model := parseModelRoute(req.Model, effDefaultProvider, configuredProviders)
+	route := p.resolveModelRoute(req.Model)
 
-	builder := p.wh.Embeddings().Model(model).Input([]string(req.Input)...)
-	if provider != "" {
-		builder = builder.Using(provider)
+	builder := p.wh.Embeddings().Model(route.model).Input([]string(req.Input)...)
+	if route.provider != "" {
+		builder = builder.Using(route.provider)
 	}
 	if req.Dimensions != nil {
 		builder = builder.Dimensions(*req.Dimensions)
@@ -69,7 +67,7 @@ func (p *proxy) handleEmbeddings(w http.ResponseWriter, r *http.Request) {
 	out := EmbeddingResponse{
 		Object: "list",
 		Data:   data,
-		Model:  model,
+		Model:  route.model,
 	}
 	if resp.Usage != nil {
 		out.Usage = &EmbeddingUsage{
@@ -103,13 +101,11 @@ func (p *proxy) handleRerank(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	configuredProviders := p.wh.ConfiguredProviders()
-	effDefaultProvider := effectiveDefaultProvider(p.defaultProvider, configuredProviders)
-	provider, model := parseModelRoute(req.Model, effDefaultProvider, configuredProviders)
+	route := p.resolveModelRoute(req.Model)
 
-	builder := p.wh.Rerank().Model(model).Query(req.Query).Documents(req.Documents...)
-	if provider != "" {
-		builder = builder.Using(provider)
+	builder := p.wh.Rerank().Model(route.model).Query(req.Query).Documents(req.Documents...)
+	if route.provider != "" {
+		builder = builder.Using(route.provider)
 	}
 	if req.TopN != nil {
 		builder = builder.TopN(*req.TopN)
@@ -132,7 +128,7 @@ func (p *proxy) handleRerank(w http.ResponseWriter, r *http.Request) {
 	}
 	responseModel := resp.Model
 	if responseModel == "" {
-		responseModel = model
+		responseModel = route.model
 	}
 	out := RerankResponse{
 		ID:      resp.ID,

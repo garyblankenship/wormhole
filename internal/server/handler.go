@@ -95,14 +95,8 @@ func (p *proxy) handleChatCompletions(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	configuredProviders := p.wh.ConfiguredProviders()
-	effDefaultProvider := effectiveDefaultProvider(p.defaultProvider, configuredProviders)
-	provider, model := parseModelRoute(req.Model, effDefaultProvider, configuredProviders)
-	effProvider := provider
-	if effProvider == "" {
-		effProvider = effDefaultProvider
-	}
-	if err := validateChatControls(req, effProvider); err != nil {
+	route := p.resolveModelRoute(req.Model)
+	if err := validateChatControls(req, route.effectiveProvider); err != nil {
 		writeError(w, http.StatusBadRequest, "unsupported_parameter", err.Error(), "invalid_request_error")
 		return
 	}
@@ -118,9 +112,9 @@ func (p *proxy) handleChatCompletions(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	builder := p.wh.Text().Model(model).Messages(msgs...)
-	if provider != "" {
-		builder = builder.Using(provider)
+	builder := p.wh.Text().Model(route.model).Messages(msgs...)
+	if route.provider != "" {
+		builder = builder.Using(route.provider)
 	}
 	builder = applyChatGenerationControls(builder, req)
 	if len(req.Tools) > 0 {
@@ -130,13 +124,9 @@ func (p *proxy) handleChatCompletions(w http.ResponseWriter, r *http.Request) {
 		builder = builder.ToolChoice(toolChoice)
 	}
 	if len(req.ResponseFormat) > 0 {
-		effProvider := provider
-		if effProvider == "" {
-			effProvider = effDefaultProvider
-		}
-		if responseFormatUnsupported(effProvider) {
+		if responseFormatUnsupported(route.effectiveProvider) {
 			writeError(w, http.StatusBadRequest, "unsupported_response_format",
-				fmt.Sprintf("response_format is not yet supported through the proxy for the %q provider; use the SDK's structured output instead", effProvider),
+				fmt.Sprintf("response_format is not yet supported through the proxy for the %q provider; use the SDK's structured output instead", route.effectiveProvider),
 				"invalid_request_error")
 			return
 		}
@@ -150,7 +140,7 @@ func (p *proxy) handleChatCompletions(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if req.Stream {
-		p.streamChat(w, r, builder, model)
+		p.streamChat(w, r, builder, route.model)
 		return
 	}
 
@@ -172,7 +162,7 @@ func (p *proxy) handleChatCompletions(w http.ResponseWriter, r *http.Request) {
 		ID:      fmt.Sprintf("wh-%s", resp.ID),
 		Object:  "chat.completion",
 		Created: resp.Created.Unix(),
-		Model:   model,
+		Model:   route.model,
 		Choices: []ChatChoice{{
 			Index:        0,
 			Message:      msg,
