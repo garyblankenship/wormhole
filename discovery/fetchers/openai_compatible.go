@@ -61,24 +61,5 @@ func (f *OpenAICompatibleFetcher) FetchModels(ctx context.Context) ([]*types.Mod
 		req.Header.Set(key, value)
 	}
 
-	var response struct {
-		Data []struct {
-			ID      string `json:"id"`
-			OwnedBy string `json:"owned_by"`
-		} `json:"data"`
-	}
-	if err := fetchJSON(req, &response); err != nil {
-		return nil, err
-	}
-
-	models := make([]*types.ModelInfo, 0, len(response.Data))
-	for _, model := range response.Data {
-		models = append(models, &types.ModelInfo{
-			ID:           model.ID,
-			Name:         formatModelName(model.ID),
-			Provider:     f.name,
-			Capabilities: inferOpenAICapabilities(model.ID),
-		})
-	}
-	return models, nil
+	return fetchOpenAICompatibleModels(req, f.name, false)
 }

@@ -52,3 +52,18 @@ func TestOpenAIFetcherRequiresAPIKey(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "API key")
 }
+
+func TestOpenAIFetcherRejectsNonNumericCreated(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"data": []map[string]any{{"id": "gpt-test", "created": "not-a-number"}},
+		})
+	}))
+	defer server.Close()
+	useTestHTTPClient(t, server.Client())
+
+	fetcher := NewOpenAIFetcher("test-key")
+	fetcher.baseURL = server.URL
+	_, err := fetcher.FetchModels(context.Background())
+	require.Error(t, err)
+}

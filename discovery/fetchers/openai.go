@@ -2,7 +2,9 @@ package fetchers
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"net/http"
 	"strings"
 
 	"github.com/garyblankenship/wormhole/v3/types"
@@ -12,6 +14,45 @@ import (
 type OpenAIFetcher struct {
 	apiKey  string
 	baseURL string
+}
+
+type openAIModelsResponse struct {
+	Object string        `json:"object"`
+	Data   []openAIModel `json:"data"`
+}
+
+type openAIModel struct {
+	ID      string          `json:"id"`
+	Object  string          `json:"object"`
+	Created json.RawMessage `json:"created"`
+	OwnedBy string          `json:"owned_by"`
+}
+
+func fetchOpenAICompatibleModels(req *http.Request, provider string, includeMetadata bool) ([]*types.ModelInfo, error) {
+	var response openAIModelsResponse
+	if err := fetchJSON(req, &response); err != nil {
+		return nil, err
+	}
+
+	models := make([]*types.ModelInfo, 0, len(response.Data))
+	for _, model := range response.Data {
+		info := &types.ModelInfo{
+			ID:           model.ID,
+			Name:         formatModelName(model.ID),
+			Provider:     provider,
+			Capabilities: inferOpenAICapabilities(model.ID),
+		}
+		if includeMetadata {
+			if len(model.Created) > 0 {
+				if err := json.Unmarshal(model.Created, &info.Created); err != nil {
+					return nil, err
+				}
+			}
+			info.OwnedBy = model.OwnedBy
+		}
+		models = append(models, info)
+	}
+	return models, nil
 }
 
 // NewOpenAIFetcher creates a new OpenAI model fetcher
@@ -45,34 +86,7 @@ func (f *OpenAIFetcher) FetchModels(ctx context.Context) ([]*types.ModelInfo, er
 	}
 	req.Header.Set("Authorization", "Bearer "+f.apiKey)
 
-	var response struct {
-		Object string `json:"object"`
-		Data   []struct {
-			ID      string `json:"id"`
-			Object  string `json:"object"`
-			Created int64  `json:"created"`
-			OwnedBy string `json:"owned_by"`
-		} `json:"data"`
-	}
-
-	if err := fetchJSON(req, &response); err != nil {
-		return nil, err
-	}
-
-	// Convert to ModelInfo
-	models := make([]*types.ModelInfo, 0, len(response.Data))
-	for _, m := range response.Data {
-		models = append(models, &types.ModelInfo{
-			ID:           m.ID,
-			Name:         formatModelName(m.ID),
-			Provider:     "openai",
-			Created:      m.Created,
-			OwnedBy:      m.OwnedBy,
-			Capabilities: inferOpenAICapabilities(m.ID),
-		})
-	}
-
-	return models, nil
+	return fetchOpenAICompatibleModels(req, f.Name(), true)
 }
 
 // inferOpenAICapabilities determines capabilities from model ID

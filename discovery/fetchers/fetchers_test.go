@@ -247,7 +247,7 @@ func TestOpenAICompatibleFetcher(t *testing.T) {
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]any{
 			"data": []map[string]any{
-				{"id": "gpt-compatible"},
+				{"id": "gpt-compatible", "created": "2026-01-01T00:00:00Z", "owned_by": "upstream-owner"},
 			},
 		})
 	}))
@@ -261,6 +261,8 @@ func TestOpenAICompatibleFetcher(t *testing.T) {
 	assert.True(t, sawHeaders)
 	assert.Equal(t, "compatible", fetcher.Name())
 	assert.Equal(t, "compatible", models[0].Provider)
+	assert.Zero(t, models[0].Created)
+	assert.Empty(t, models[0].OwnedBy)
 	assert.True(t, hasCapability(models[0], types.CapabilityText))
 }
 
