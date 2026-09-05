@@ -95,25 +95,13 @@ func WithProviderFromEnv(provider string) Option {
 			BaseURL: configuredBaseURL(profile),
 		}
 
-		switch provider {
-		case "openai":
-			WithOpenAI(apiKey, cfg)(c)
-		case "anthropic":
-			WithAnthropic(apiKey, cfg)(c)
-		case "gemini":
-			WithGemini(apiKey, cfg)(c)
-		case "groq":
-			WithGroq(apiKey, cfg)(c)
-		case "mistral":
-			WithMistral(cfg)(c)
-		case "ollama":
+		switch {
+		case provider == providerOllama:
 			WithOllama(cfg)(c)
-		case "openrouter":
-			WithProfiledOpenAICompatible("openrouter", cfg)(c)
-		default:
-			if profile.Kind == providerKindOpenAICompatible && cfg.BaseURL != "" {
-				WithProfiledOpenAICompatible(provider, cfg)(c)
-			}
+		case profile.Kind == providerKindOpenAICompatible && cfg.BaseURL != "":
+			WithProfiledOpenAICompatible(provider, cfg)(c)
+		case provider == providerOpenAI || provider == providerAnthropic || provider == providerGemini:
+			registerProvider(c, provider, apiKey, cfg)
 		}
 	}
 }

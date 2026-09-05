@@ -221,6 +221,36 @@ func TestWithProviderFromEnvDefaultBranchAppliesProfile(t *testing.T) {
 	}
 }
 
+func TestWithProviderFromEnvUsesProfileKindForCompatibleProviders(t *testing.T) {
+	tests := []struct {
+		name   string
+		envKey string
+	}{
+		{name: "groq", envKey: "GROQ_API_KEY"},
+		{name: "mistral", envKey: "MISTRAL_API_KEY"},
+		{name: "openrouter", envKey: "OPENROUTER_API_KEY"},
+		{name: "synthetic", envKey: "SYNTHETIC_API_KEY"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Setenv(tt.envKey, "test-key")
+			client := New(WithProviderFromEnv(tt.name), WithDiscovery(false))
+			t.Cleanup(func() { _ = client.Close() })
+
+			cfg, configured := client.config.Providers[tt.name]
+			if !configured {
+				t.Fatalf("provider %q was not configured", tt.name)
+			}
+			if cfg.APIKey != "test-key" || cfg.BaseURL == "" {
+				t.Fatalf("provider %q config = %#v", tt.name, cfg)
+			}
+			if _, factoryConfigured := client.providerFactories[tt.name]; !factoryConfigured {
+				t.Fatalf("provider %q compatible factory was not configured", tt.name)
+			}
+		})
+	}
+}
+
 func TestProviderProfileRequestPolicyFlowsIntoConfig(t *testing.T) {
 	t.Parallel()
 	client := New(WithOpenAI("test-key"), WithDiscovery(false))
