@@ -49,6 +49,14 @@ func (p *Wormhole) SelectModel(ctx context.Context, query ModelQuery) (*types.Mo
 
 // SelectModels returns discovered models matching query.
 func (p *Wormhole) SelectModels(ctx context.Context, query ModelQuery) ([]*types.ModelInfo, error) {
+	result, err := p.selectModels(ctx, query)
+	if err != nil {
+		return nil, err
+	}
+	return result.Models, nil
+}
+
+func (p *Wormhole) selectModels(ctx context.Context, query ModelQuery) (*ModelSelectionResult, error) {
 	if p.discoveryService == nil {
 		return nil, fmt.Errorf("model discovery is not enabled")
 	}
@@ -61,29 +69,34 @@ func (p *Wormhole) SelectModels(ctx context.Context, query ModelQuery) ([]*types
 		return nil, types.ErrModelNotFound.WithDetails("no model discovery providers configured")
 	}
 
-	var matches []*types.ModelInfo
+	result := &ModelSelectionResult{}
 	var errs []string
 	for _, provider := range providers {
-		models, err := p.discoveryService.GetModels(ctx, provider)
+		modelsResult, err := p.discoveryService.GetModelsWithStatus(ctx, provider)
+		diagnostic := ModelDiscoveryDiagnostic{Provider: provider, Err: err}
+		if modelsResult != nil {
+			diagnostic.Stale = modelsResult.Stale
+		}
+		result.Diagnostics = append(result.Diagnostics, diagnostic)
 		if err != nil {
 			errs = append(errs, fmt.Sprintf("%s: %v", provider, err))
 			continue
 		}
-		for _, model := range models {
+		for _, model := range modelsResult.Models {
 			if matchesModelQuery(model, query) {
-				matches = append(matches, cloneModelInfo(model))
+				result.Models = append(result.Models, cloneModelInfo(model))
 			}
 		}
 	}
 
-	sortModels(matches, query)
-	if query.Limit > 0 && len(matches) > query.Limit {
-		matches = matches[:query.Limit]
+	sortModels(result.Models, query)
+	if query.Limit > 0 && len(result.Models) > query.Limit {
+		result.Models = result.Models[:query.Limit]
 	}
-	if len(matches) == 0 && len(errs) > 0 {
-		return nil, fmt.Errorf("model selection failed: %s", strings.Join(errs, "; "))
+	if len(result.Models) == 0 && len(errs) > 0 {
+		return result, fmt.Errorf("model selection failed: %s", strings.Join(errs, "; "))
 	}
-	return matches, nil
+	return result, nil
 }
 
 func matchesModelQuery(model *types.ModelInfo, query ModelQuery) bool {

@@ -19,14 +19,20 @@ func (p *proxy) handleListModels(w http.ResponseWriter, r *http.Request) {
 
 	providers := mergeProviderNames(p.wh.ConfiguredProviders(), p.wh.ModelDiscoveryProviders())
 	var entries []ModelEntry
+	failedCount := 0
+	staleCount := 0
 	ts := time.Now().Unix()
 
 	for _, prov := range providers {
-		models, err := p.wh.ListAvailableModelsWithContext(r.Context(), prov)
+		result, err := p.wh.ListAvailableModelsWithStatus(r.Context(), prov)
 		if err != nil {
+			failedCount++
 			continue
 		}
-		for _, m := range models {
+		if result.Stale {
+			staleCount++
+		}
+		for _, m := range result.Models {
 			entries = append(entries, ModelEntry{
 				ID:      fmt.Sprintf("%s/%s", prov, m.ID),
 				Object:  "model",
@@ -40,6 +46,8 @@ func (p *proxy) handleListModels(w http.ResponseWriter, r *http.Request) {
 		entries = []ModelEntry{}
 	}
 
+	w.Header().Set("X-Wormhole-Discovery-Failed-Count", fmt.Sprintf("%d", failedCount))
+	w.Header().Set("X-Wormhole-Discovery-Stale-Count", fmt.Sprintf("%d", staleCount))
 	writeJSON(w, http.StatusOK, ModelListResponse{
 		Object: "list",
 		Data:   entries,

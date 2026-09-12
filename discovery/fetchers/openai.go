@@ -12,8 +12,11 @@ import (
 
 // OpenAIFetcher fetches models from OpenAI API
 type OpenAIFetcher struct {
-	apiKey  string
-	baseURL string
+	apiKey          string
+	baseURL         string
+	headers         map[string]string
+	noAuth          bool
+	configuredScope string
 }
 
 type openAIModelsResponse struct {
@@ -63,6 +66,19 @@ func NewOpenAIFetcher(apiKey string) *OpenAIFetcher {
 	}
 }
 
+// NewOpenAIFetcherWithConfig creates an OpenAI model fetcher using the same
+// endpoint, authentication, and custom-header precedence as provider requests.
+func NewOpenAIFetcherWithConfig(config types.ProviderConfig) *OpenAIFetcher {
+	configured := newConfiguredFetcherConfig("https://api.openai.com/v1", config)
+	return &OpenAIFetcher{
+		apiKey:          configured.apiKey,
+		baseURL:         configured.baseURL,
+		headers:         configured.headers,
+		noAuth:          configured.noAuth,
+		configuredScope: configured.scope,
+	}
+}
+
 // Name returns the provider name
 func (f *OpenAIFetcher) Name() string {
 	return "openai"
@@ -71,12 +87,15 @@ func (f *OpenAIFetcher) Name() string {
 // AccountDiscriminator scopes the model cache per API key so different
 // OpenAI accounts don't collide on the same cache file.
 func (f *OpenAIFetcher) AccountDiscriminator() string {
+	if f.configuredScope != "" {
+		return f.configuredScope
+	}
 	return accountKeyDiscriminator(f.apiKey)
 }
 
 // FetchModels retrieves all available models from OpenAI
 func (f *OpenAIFetcher) FetchModels(ctx context.Context) ([]*types.ModelInfo, error) {
-	if f.apiKey == "" {
+	if f.apiKey == "" && !f.noAuth {
 		return nil, fmt.Errorf("OpenAI API key not configured")
 	}
 
@@ -84,7 +103,10 @@ func (f *OpenAIFetcher) FetchModels(ctx context.Context) ([]*types.ModelInfo, er
 	if err != nil {
 		return nil, err
 	}
-	req.Header.Set("Authorization", "Bearer "+f.apiKey)
+	if !f.noAuth {
+		req.Header.Set("Authorization", "Bearer "+f.apiKey)
+	}
+	applyHeaders(req, f.headers)
 
 	return fetchOpenAICompatibleModels(req, f.Name(), true)
 }

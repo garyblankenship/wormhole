@@ -17,9 +17,17 @@ type ProviderConformanceConfig struct {
 	StructuredModel string
 	EmbeddingsModel string
 	StreamModel     string
+	ToolModel       string
+	RerankModel     string
 	Timeout         time.Duration
 	// CheckStreamCancellation opts into a pre-canceled stream context check.
 	CheckStreamCancellation bool
+	// CheckStreamCancellationAfterStart opts into cancellation after a stream returns its first chunk.
+	CheckStreamCancellationAfterStart bool
+	// CheckToolCalling opts into a function-calling conformance check.
+	CheckToolCalling bool
+	// CheckRerank opts into a reranking conformance check.
+	CheckRerank bool
 }
 
 // RunProviderConformance runs reusable contract checks for custom providers.
@@ -44,6 +52,12 @@ func RunProviderConformance(t *stdtesting.T, cfg ProviderConformanceConfig) {
 	}
 	if cfg.StreamModel == "" {
 		cfg.StreamModel = cfg.TextModel
+	}
+	if cfg.ToolModel == "" {
+		cfg.ToolModel = cfg.TextModel
+	}
+	if cfg.RerankModel == "" {
+		cfg.RerankModel = cfg.TextModel
 	}
 
 	t.Run("identity", func(t *stdtesting.T) {
@@ -98,6 +112,13 @@ func RunProviderConformance(t *stdtesting.T, cfg ProviderConformanceConfig) {
 				}
 			})
 		}
+		if cfg.CheckStreamCancellationAfterStart {
+			t.Run("stream_cancellation_after_start", func(t *stdtesting.T) {
+				if err := checkStreamCancellationAfterStart(cfg.Provider, cfg.StreamModel, cfg.Timeout); err != nil {
+					t.Fatal(err)
+				}
+			})
+		}
 	}
 	if caps[types.CapabilityStructured] {
 		t.Run("structured", func(t *stdtesting.T) {
@@ -112,6 +133,26 @@ func RunProviderConformance(t *stdtesting.T, cfg ProviderConformanceConfig) {
 			}
 			if resp == nil || resp.Content() == nil {
 				t.Fatal("Structured returned empty response")
+			}
+		})
+	}
+	if cfg.CheckToolCalling {
+		t.Run("tool_calling", func(t *stdtesting.T) {
+			if err := requireConformanceCapability(caps, types.CapabilityFunctions, "tool calling"); err != nil {
+				t.Fatal(err)
+			}
+			if err := checkToolCalling(cfg.Provider, cfg.ToolModel, cfg.Timeout); err != nil {
+				t.Fatal(err)
+			}
+		})
+	}
+	if cfg.CheckRerank {
+		t.Run("rerank", func(t *stdtesting.T) {
+			if err := requireConformanceCapability(caps, types.CapabilityRerank, "rerank"); err != nil {
+				t.Fatal(err)
+			}
+			if err := checkRerank(cfg.Provider, cfg.RerankModel, cfg.Timeout); err != nil {
+				t.Fatal(err)
 			}
 		})
 	}

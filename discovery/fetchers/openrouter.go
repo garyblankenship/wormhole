@@ -12,7 +12,11 @@ const providerOpenRouter = "openrouter"
 
 // OpenRouterFetcher fetches models from OpenRouter API
 type OpenRouterFetcher struct {
-	baseURL string
+	baseURL         string
+	apiKey          string
+	headers         map[string]string
+	noAuth          bool
+	configuredScope string
 }
 
 // NewOpenRouterFetcher creates a new OpenRouter model fetcher
@@ -22,9 +26,28 @@ func NewOpenRouterFetcher() *OpenRouterFetcher {
 	}
 }
 
+// NewOpenRouterFetcherWithConfig creates an OpenRouter model fetcher using the
+// configured endpoint and request headers.
+func NewOpenRouterFetcherWithConfig(config types.ProviderConfig) *OpenRouterFetcher {
+	configured := newConfiguredFetcherConfig("https://openrouter.ai/api/v1", config)
+	return &OpenRouterFetcher{
+		baseURL:         configured.baseURL,
+		apiKey:          configured.apiKey,
+		headers:         configured.headers,
+		noAuth:          configured.noAuth,
+		configuredScope: configured.scope,
+	}
+}
+
 // Name returns the provider name
 func (f *OpenRouterFetcher) Name() string {
 	return providerOpenRouter
+}
+
+// AccountDiscriminator scopes configured OpenRouter discovery caches without
+// changing the legacy public catalog cache identity.
+func (f *OpenRouterFetcher) AccountDiscriminator() string {
+	return f.configuredScope
 }
 
 // FetchModels retrieves all available models from OpenRouter
@@ -33,6 +56,10 @@ func (f *OpenRouterFetcher) FetchModels(ctx context.Context) ([]*types.ModelInfo
 	if err != nil {
 		return nil, err
 	}
+	if !f.noAuth && f.apiKey != "" {
+		req.Header.Set("Authorization", "Bearer "+f.apiKey)
+	}
+	applyHeaders(req, f.headers)
 
 	var response struct {
 		Data []struct {
@@ -73,11 +100,11 @@ func (f *OpenRouterFetcher) FetchModels(ctx context.Context) ([]*types.ModelInfo
 		provider := extractProvider(m.ID)
 
 		models = append(models, &types.ModelInfo{
-			ID:           m.ID,
-			Name:         m.Name,
-			Provider:     provider,
-			Capabilities: capabilities,
-			MaxTokens:    m.ContextLength,
+			ID:            m.ID,
+			Name:          m.Name,
+			Provider:      provider,
+			Capabilities:  capabilities,
+			ContextLength: m.ContextLength,
 		})
 	}
 

@@ -62,7 +62,9 @@ func TestAnthropicFetcher(t *testing.T) {
 	assert.Equal(t, "anthropic", fetcher.Name())
 	assert.Equal(t, "Claude Sonnet 4.5", models[0].Name)
 	assert.Equal(t, "Custom Claude", models[1].Name)
-	assert.Equal(t, 200000, models[0].MaxTokens)
+	assert.Zero(t, models[0].ContextLength)
+	assert.Zero(t, models[0].MaxTokens)
+	assert.True(t, hasCapability(models[0], types.CapabilityStream))
 	assert.True(t, hasCapability(models[0], types.CapabilityVision))
 }
 
@@ -113,7 +115,8 @@ func TestOpenRouterFetcher(t *testing.T) {
 	require.Len(t, models, 2)
 	assert.Equal(t, providerOpenRouter, fetcher.Name())
 	assert.Equal(t, "openai", models[0].Provider)
-	assert.Equal(t, 400000, models[0].MaxTokens)
+	assert.Equal(t, 400000, models[0].ContextLength)
+	assert.Zero(t, models[0].MaxTokens)
 	assert.True(t, hasCapability(models[0], types.CapabilityChat))
 	assert.Equal(t, "google", models[1].Provider)
 	assert.True(t, hasCapability(models[1], types.CapabilityVision))

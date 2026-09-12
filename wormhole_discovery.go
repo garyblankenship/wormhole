@@ -23,12 +23,20 @@ func (p *Wormhole) initializeDiscoveryService() {
 
 		switch discoveryKind {
 		case discoveryOpenAI:
-			if apiKey != "" {
-				modelFetchers = append(modelFetchers, fetchers.NewOpenAIFetcher(apiKey))
+			if apiKey != "" || providerConfig.NoAuth {
+				config := providerConfig
+				if config.BaseURL == "" && known {
+					config.BaseURL = configuredBaseURL(profile)
+				}
+				modelFetchers = append(modelFetchers, fetchers.NewOpenAIFetcherWithConfig(config))
 			}
 		case discoveryAnthropic:
-			if apiKey != "" {
-				modelFetchers = append(modelFetchers, fetchers.NewAnthropicFetcher(apiKey))
+			if apiKey != "" || providerConfig.NoAuth {
+				config := providerConfig
+				if config.BaseURL == "" && known {
+					config.BaseURL = configuredBaseURL(profile)
+				}
+				modelFetchers = append(modelFetchers, fetchers.NewAnthropicFetcherWithConfig(config))
 			}
 		case discoveryOllama:
 			baseURL := providerConfig.BaseURL
@@ -37,7 +45,11 @@ func (p *Wormhole) initializeDiscoveryService() {
 			}
 			modelFetchers = append(modelFetchers, fetchers.NewOllamaFetcher(baseURL))
 		case discoveryOpenRouter:
-			modelFetchers = append(modelFetchers, fetchers.NewOpenRouterFetcher())
+			config := providerConfig
+			if config.BaseURL == "" && known {
+				config.BaseURL = configuredBaseURL(profile)
+			}
+			modelFetchers = append(modelFetchers, fetchers.NewOpenRouterFetcherWithConfig(config))
 		case discoveryGemini:
 			if apiKey != "" {
 				modelFetchers = append(modelFetchers, fetchers.NewGeminiFetcher(providerConfig.BaseURL, apiKey))

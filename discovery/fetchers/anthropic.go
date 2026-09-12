@@ -9,8 +9,11 @@ import (
 
 // AnthropicFetcher fetches models from Anthropic API
 type AnthropicFetcher struct {
-	apiKey  string
-	baseURL string
+	apiKey          string
+	baseURL         string
+	headers         map[string]string
+	noAuth          bool
+	configuredScope string
 }
 
 // NewAnthropicFetcher creates a new Anthropic model fetcher
@@ -18,6 +21,19 @@ func NewAnthropicFetcher(apiKey string) *AnthropicFetcher {
 	return &AnthropicFetcher{
 		apiKey:  apiKey,
 		baseURL: "https://api.anthropic.com/v1",
+	}
+}
+
+// NewAnthropicFetcherWithConfig creates an Anthropic model fetcher using the
+// configured endpoint, authentication, and custom-header precedence.
+func NewAnthropicFetcherWithConfig(config types.ProviderConfig) *AnthropicFetcher {
+	configured := newConfiguredFetcherConfig("https://api.anthropic.com/v1", config)
+	return &AnthropicFetcher{
+		apiKey:          configured.apiKey,
+		baseURL:         configured.baseURL,
+		headers:         configured.headers,
+		noAuth:          configured.noAuth,
+		configuredScope: configured.scope,
 	}
 }
 
@@ -29,12 +45,15 @@ func (f *AnthropicFetcher) Name() string {
 // AccountDiscriminator scopes the model cache per API key so different
 // Anthropic accounts don't collide on the same cache file.
 func (f *AnthropicFetcher) AccountDiscriminator() string {
+	if f.configuredScope != "" {
+		return f.configuredScope
+	}
 	return accountKeyDiscriminator(f.apiKey)
 }
 
 // FetchModels retrieves all available models from Anthropic
 func (f *AnthropicFetcher) FetchModels(ctx context.Context) ([]*types.ModelInfo, error) {
-	if f.apiKey == "" {
+	if f.apiKey == "" && !f.noAuth {
 		return nil, fmt.Errorf("anthropic API key not configured")
 	}
 
@@ -42,8 +61,11 @@ func (f *AnthropicFetcher) FetchModels(ctx context.Context) ([]*types.ModelInfo,
 	if err != nil {
 		return nil, err
 	}
-	req.Header.Set("x-api-key", f.apiKey)
-	req.Header.Set("anthropic-version", "2023-06-01")
+	if !f.noAuth {
+		req.Header.Set("x-api-key", f.apiKey)
+		req.Header.Set("anthropic-version", "2023-06-01")
+	}
+	applyHeaders(req, f.headers)
 
 	var response struct {
 		Data []struct {
@@ -65,6 +87,7 @@ func (f *AnthropicFetcher) FetchModels(ctx context.Context) ([]*types.ModelInfo,
 		capabilities := []types.ModelCapability{
 			types.CapabilityText,
 			types.CapabilityChat,
+			types.CapabilityStream,
 			types.CapabilityFunctions,
 			types.CapabilityStructured,
 			types.CapabilityVision,
@@ -80,7 +103,6 @@ func (f *AnthropicFetcher) FetchModels(ctx context.Context) ([]*types.ModelInfo,
 			Name:         name,
 			Provider:     "anthropic",
 			Capabilities: capabilities,
-			MaxTokens:    200000, // All Claude models have 200k context
 		})
 	}
 
