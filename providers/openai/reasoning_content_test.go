@@ -16,7 +16,7 @@ func TestTransformTextResponseReasoningContent(t *testing.T) {
 
 	withReasoning := &chatCompletionResponse{
 		ID:      "rc-1",
-		Model:   "deepseek-v4-pro",
+		Model:   "deepseek-v4.1-flash",
 		Created: time.Now().Unix(),
 		Choices: []chatCompletionChoice{
 			{
@@ -32,7 +32,7 @@ func TestTransformTextResponseReasoningContent(t *testing.T) {
 
 	withoutReasoning := &chatCompletionResponse{
 		ID:      "rc-2",
-		Model:   "deepseek-v4-pro",
+		Model:   "deepseek-v4.1-flash",
 		Created: time.Now().Unix(),
 		Choices: []chatCompletionChoice{
 			{
@@ -51,7 +51,7 @@ func TestParseStreamChunkReasoningContent(t *testing.T) {
 	provider.streamingTransformer = nil
 
 	chunk, err := provider.parseStreamChunk([]byte(`{
-		"id":"chunk-rc","model":"deepseek-v4-pro",
+		"id":"chunk-rc","model":"deepseek-v4.1-flash",
 		"choices":[{"delta":{"reasoning_content":"thinking step"}}]
 	}`))
 	require.NoError(t, err)
@@ -63,7 +63,7 @@ func TestParseStreamChunkReasoningContent(t *testing.T) {
 	assert.Equal(t, "thinking step", chunk.Delta.Thinking.Content)
 
 	chunk, err = provider.parseStreamChunk([]byte(`{
-		"id":"chunk-c","model":"deepseek-v4-pro",
+		"id":"chunk-c","model":"deepseek-v4.1-flash",
 		"choices":[{"delta":{"content":"hi"}}]
 	}`))
 	require.NoError(t, err)

@@ -31,7 +31,7 @@ func main() {
     ctx := context.Background()
 
     response, err := client.Text().
-        Model("deepseek-v4-flash").
+        Model("deepseek-v4.1-flash").
         Prompt("Explain Go interfaces in two sentences.").
         Generate(ctx)
 
@@ -49,10 +49,10 @@ Current V4 lineup:
 
 | Model | Context | Max output | Notes |
 |-------|---------|------------|-------|
-| `deepseek-v4-pro` | 1M | 384K | Thinking (default on at DeepSeek) + non-thinking; tools, JSON |
-| `deepseek-v4-flash` | 1M | 384K | Cheaper; thinking + non-thinking; tools, JSON |
+| `deepseek-v4.1-flash` | 1M | 384K | Thinking (default on at DeepSeek) + non-thinking; tools, JSON |
+| `deepseek-v4.1-flash` | 1M | 384K | Cheaper; thinking + non-thinking; tools, JSON |
 
-Legacy IDs `deepseek-chat` and `deepseek-reasoner` are deprecated and DeepSeek retires them after 2026-07-24. They currently alias to `deepseek-v4-flash` non-thinking and thinking modes respectively. Prefer the V4 IDs.
+Legacy IDs `deepseek-chat` and `deepseek-reasoner` are deprecated and DeepSeek retires them after 2026-07-24. They currently alias to `deepseek-v4.1-flash` non-thinking and thinking modes respectively. Prefer the V4 IDs.
 
 ## Reasoning (thinking)
 
@@ -60,7 +60,7 @@ Wormhole's DeepSeek profile sends `thinking: {"type": "disabled"}` by default fo
 
 ```go
 response, err := client.Text().
-    Model("deepseek-v4-pro").
+    Model("deepseek-v4.1-flash").
     Prompt("Use json to explain the tradeoffs.").
     ProviderOptions(map[string]any{
         "thinking": map[string]any{"type": "enabled"},
