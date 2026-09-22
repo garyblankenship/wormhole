@@ -2,6 +2,7 @@ package openai
 
 import (
 	"context"
+	"errors"
 
 	"github.com/garyblankenship/wormhole/v3/types"
 )
@@ -58,6 +59,17 @@ func (p *Provider) accumulatingStream(ctx context.Context, in <-chan types.TextC
 			case out <- chunk:
 			case <-ctx.Done():
 				return
+			}
+		}
+		// A supported end marker can close the parser without a finish chunk.
+		// Buffered tool calls still require explicit completion; do not lose them
+		// silently or expose them as successful calls when that event is absent.
+		if ctx.Err() == nil {
+			if calls := acc.finish(); len(calls) > 0 {
+				select {
+				case out <- types.TextChunk{Error: errors.New("stream ended before tool-call completion"), ToolCalls: calls}:
+				case <-ctx.Done():
+				}
 			}
 		}
 	}()
@@ -128,5 +140,8 @@ func (s *streamFragmentAccumulator) finish() []types.ToolCall {
 		toolCall.MarkArgsError(parseErrMsg)
 		out = append(out, toolCall)
 	}
+	// A later usage, finish, or error event must not emit these calls again.
+	clear(s.calls)
+	s.order = nil
 	return out
 }

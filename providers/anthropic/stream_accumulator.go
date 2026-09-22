@@ -2,6 +2,7 @@ package anthropic
 
 import (
 	"context"
+	"errors"
 
 	"github.com/garyblankenship/wormhole/v3/types"
 )
@@ -22,6 +23,7 @@ type accumulatedToolCall struct {
 // fragment with empty ID appends its raw args to the most-recently-opened slot.
 type streamFragmentAccumulator struct {
 	calls []*accumulatedToolCall
+	usage *types.Usage
 }
 
 func newStreamFragmentAccumulator() *streamFragmentAccumulator {
@@ -79,6 +81,7 @@ func (s *streamFragmentAccumulator) finish() []types.ToolCall {
 		toolCall.MarkArgsError(parseErrMsg)
 		out = append(out, toolCall)
 	}
+	s.calls = nil
 	return out
 }
 
@@ -92,6 +95,24 @@ func (p *Provider) accumulatingStream(ctx context.Context, in <-chan types.Strea
 		defer close(out)
 		acc := newStreamFragmentAccumulator()
 		for chunk := range in {
+			if chunk.Usage != nil {
+				if acc.usage == nil {
+					copy := *chunk.Usage
+					acc.usage = &copy
+				} else {
+					// Usage events contain cumulative counts, not increments.
+					// Preserve input/cache counts omitted by later output updates.
+					acc.usage.PromptTokens = max(acc.usage.PromptTokens, chunk.Usage.PromptTokens)
+					acc.usage.CompletionTokens = max(acc.usage.CompletionTokens, chunk.Usage.CompletionTokens)
+					acc.usage.CacheReadTokens = max(acc.usage.CacheReadTokens, chunk.Usage.CacheReadTokens)
+					acc.usage.CacheWriteTokens = max(acc.usage.CacheWriteTokens, chunk.Usage.CacheWriteTokens)
+					acc.usage.TotalTokens = acc.usage.PromptTokens + acc.usage.CompletionTokens
+				}
+			}
+			if acc.usage != nil && (chunk.Usage != nil || chunk.IsDone()) {
+				copy := *acc.usage
+				chunk.Usage = &copy
+			}
 			if chunk.Delta != nil && len(chunk.Delta.ToolCalls) > 0 {
 				acc.add(chunk.Delta.ToolCalls)
 				chunk.Delta.ToolCalls = nil
@@ -112,6 +133,16 @@ func (p *Provider) accumulatingStream(ctx context.Context, in <-chan types.Strea
 			case out <- chunk:
 			case <-ctx.Done():
 				return
+			}
+		}
+		if ctx.Err() != nil {
+			return
+		}
+		if calls := acc.finish(); len(calls) > 0 {
+			chunk := types.StreamChunk{Error: errors.New("stream ended before tool-call completion"), ToolCalls: calls}
+			select {
+			case out <- chunk:
+			case <-ctx.Done():
 			}
 		}
 	}()

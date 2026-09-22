@@ -126,7 +126,21 @@ func NewOllamaStreamingTransformer() *StreamingTransformer {
 		FinishReasonAdapter:   MapFinishReason,
 		ReturnsBatch:          false,
 		ChunkType:             "text_chunk",
+		UsageAdapter:          ollamaStreamUsage,
 	})
+}
+
+func ollamaStreamUsage(v any) (*types.Usage, error) {
+	m, ok := v.(map[string]any)
+	if !ok {
+		return nil, fmt.Errorf("unsupported usage data type: %T", v)
+	}
+	prompt, hasPrompt := m["prompt_eval_count"].(float64)
+	completion, hasCompletion := m["eval_count"].(float64)
+	if !hasPrompt && !hasCompletion {
+		return nil, nil
+	}
+	return &types.Usage{PromptTokens: int(prompt), CompletionTokens: int(completion), TotalTokens: int(prompt) + int(completion)}, nil
 }
 
 // NewGeminiStreamingTransformer creates a transformer configured for Gemini

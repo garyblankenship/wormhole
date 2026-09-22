@@ -52,7 +52,8 @@ type contentBlockDeltaEvent struct {
 	} `json:"delta"`
 }
 type messageDeltaEvent struct {
-	Type  string `json:"type"`
+	Type  string        `json:"type"`
+	Usage *messageUsage `json:"usage,omitempty"`
 	Delta struct {
 		StopReason string       `json:"stop_reason,omitempty"`
 		Usage      messageUsage `json:"usage,omitempty"`

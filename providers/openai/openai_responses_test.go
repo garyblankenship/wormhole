@@ -286,19 +286,11 @@ func TestParseResponsesStreamFunctionCallAndThinkingEvents(t *testing.T) {
 
 	start, err := provider.parseResponsesStreamChunk([]byte(`{"type":"response.output_item.added","item_id":"item-1","item":{"type":"function_call","call_id":"call-1","name":"lookup","arguments":""}}`))
 	require.NoError(t, err)
-	require.NotNil(t, start)
-	require.Len(t, start.ToolCalls, 1)
-	assert.Equal(t, "call-1", start.ToolCalls[0].ID)
-	assert.Equal(t, "lookup", start.ToolCalls[0].Name)
-	require.NotNil(t, start.Delta)
-	require.Len(t, start.Delta.ToolCalls, 1)
+	assert.Nil(t, start)
 
 	args, err := provider.parseResponsesStreamChunk([]byte(`{"type":"response.function_call_arguments.delta","item_id":"call-1","delta":"{\"q\""}`))
 	require.NoError(t, err)
-	require.NotNil(t, args)
-	require.Len(t, args.ToolCalls, 1)
-	require.NotNil(t, args.ToolCalls[0].Function)
-	assert.Equal(t, `{"q"`, args.ToolCalls[0].Function.Arguments)
+	assert.Nil(t, args)
 
 	thinking, err := provider.parseResponsesStreamChunk([]byte(`{"type":"response.reasoning_summary_text.delta","item_id":"rs-1","delta":"considering"}`))
 	require.NoError(t, err)
@@ -307,4 +299,48 @@ func TestParseResponsesStreamFunctionCallAndThinkingEvents(t *testing.T) {
 	assert.Equal(t, "considering", thinking.Thinking.Content)
 	require.NotNil(t, thinking.Delta)
 	require.NotNil(t, thinking.Delta.Thinking)
+}
+
+func TestProviderResponsesAPIStreamEmitsCompleteToolCallsOnce(t *testing.T) {
+	t.Parallel()
+	events := []string{
+		`{"type":"response.output_item.added","item_id":"item-1","item":{"type":"function_call","call_id":"call-1","name":"lookup","arguments":""}}`,
+		`{"type":"response.output_item.added","item_id":"item-2","item":{"type":"function_call","call_id":"call-2","name":"lookup","arguments":""}}`,
+		`{"type":"response.function_call_arguments.delta","item_id":"item-1","delta":"{\"q\":"}`,
+		`{"type":"response.function_call_arguments.delta","item_id":"item-2","delta":"{\"q\":"}`,
+		`{"type":"response.function_call_arguments.delta","item_id":"item-1","delta":"\"A\"}"}`,
+		`{"type":"response.function_call_arguments.delta","item_id":"item-2","delta":"\"B\"}"}`,
+		`{"type":"response.completed","response":{"id":"resp-1","model":"gpt-5","output":[{"type":"function_call","id":"item-1","call_id":"call-1","name":"lookup","arguments":"{\"q\":\"A\"}"},{"type":"function_call","id":"item-2","call_id":"call-2","name":"lookup","arguments":"{\"q\":\"B\"}"}]}}`,
+		`[DONE]`,
+	}
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		for _, event := range events {
+			_, _ = fmt.Fprintf(w, "data: %s\n\n", event)
+		}
+	}))
+	t.Cleanup(server.Close)
+	provider := New(types.ProviderConfig{APIKey: "test-key", BaseURL: server.URL, UseResponsesAPI: true})
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	stream, err := provider.Stream(ctx, types.TextRequest{
+		BaseRequest: types.BaseRequest{Model: "gpt-5"},
+		Messages:    []types.Message{types.NewUserMessage("look up A and B")},
+	})
+	require.NoError(t, err)
+	var calls []types.ToolCall
+	for chunk := range stream {
+		require.NoError(t, chunk.Error)
+		assert.Nil(t, chunk.ToolCall)
+		if chunk.Delta != nil {
+			assert.Empty(t, chunk.Delta.ToolCalls)
+		}
+		calls = append(calls, chunk.ToolCalls...)
+	}
+	require.Len(t, calls, 2)
+	for i, q := range []string{"A", "B"} {
+		assert.Equal(t, fmt.Sprintf("call-%d", i+1), calls[i].ID)
+		assert.Equal(t, "lookup", calls[i].Name)
+		assert.Equal(t, map[string]any{"q": q}, calls[i].Arguments)
+	}
 }

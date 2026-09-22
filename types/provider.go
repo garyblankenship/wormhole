@@ -17,6 +17,11 @@ type Provider interface {
 
 	// Text generation
 	Text(ctx context.Context, request TextRequest) (*TextResponse, error)
+
+	// Stream returns chunks until the channel closes. Callers must inspect Error
+	// on every chunk, including after a finish reason, and cancel ctx if they stop
+	// reading early. EOF without a provider completion event or supported end
+	// marker is a stream error; a completed response may contain no text.
 	Stream(ctx context.Context, request TextRequest) (<-chan TextChunk, error)
 
 	// Structured output

@@ -14,9 +14,18 @@ import (
 
 // processStreamCandidate extracts chunks from a candidate response
 func (g *Gemini) processStreamCandidate(candidate candidate) []types.TextChunk {
+	callIndex := 0
+	return g.processStreamCandidateWithIndex(candidate, &callIndex)
+}
+
+// processStreamCandidateWithIndex uses a request-scoped call counter. Gemini
+// does not provide function-call IDs, and each SSE frame resets its part
+// indexes, so the counter must live for the whole stream rather than one
+// candidate frame.
+func (g *Gemini) processStreamCandidateWithIndex(candidate candidate, callIndex *int) []types.TextChunk {
 	chunks := make([]types.TextChunk, 0, len(candidate.Content.Parts)+1)
 
-	for idx, part := range candidate.Content.Parts {
+	for _, part := range candidate.Content.Parts {
 		if part.Text != "" {
 			if part.Thought {
 				chunks = append(chunks, types.TextChunk{
@@ -35,13 +44,14 @@ func (g *Gemini) processStreamCandidate(candidate candidate) []types.TextChunk {
 			// transformTextResponse for rationale.
 			chunks = append(chunks, types.TextChunk{
 				ToolCall: &types.ToolCall{
-					ID:               fmt.Sprintf("gemini-call-%d-%s", idx, part.FunctionCall.Name),
+					ID:               fmt.Sprintf("gemini-call-%d-%s", *callIndex, part.FunctionCall.Name),
 					Name:             part.FunctionCall.Name,
 					Arguments:        part.FunctionCall.Args,
 					ThoughtSignature: part.ThoughtSignature,
 				},
 				Model: "gemini",
 			})
+			*callIndex++
 		}
 	}
 
@@ -58,41 +68,8 @@ func (g *Gemini) processStreamCandidate(candidate candidate) []types.TextChunk {
 
 // parseStreamEvent parses an SSE event and returns chunks or an error
 func (g *Gemini) parseStreamEvent(data string) ([]types.TextChunk, bool, error) {
-	if data == "" {
-		return nil, false, nil
-	}
-	if strings.TrimSpace(data) == streamDoneMarker {
-		return nil, true, nil // done
-	}
-
-	var response geminiTextResponse
-	if err := json.Unmarshal([]byte(data), &response); err != nil {
-		return nil, false, err
-	}
-	if response.Error != nil {
-		return nil, false, g.ProviderError(response.Error.Message)
-	}
-	if len(response.Candidates) == 0 {
-		if promptBlockReason(&response) != "" {
-			return nil, false, g.noCandidatesError(&response)
-		}
-		return nil, false, nil
-	}
-
-	chunks := g.processStreamCandidate(response.Candidates[0])
-
-	// usageMetadata is top-level on the Gemini response (not on the candidate)
-	// and the non-streaming path reads it via convertUsage; the stream path
-	// otherwise drops it. Append a usage-bearing chunk when present so streamed
-	// consumers see token counts.
-	if usage := convertUsage(response.UsageMetadata); usage != nil {
-		chunks = append(chunks, types.TextChunk{
-			Usage: usage,
-			Model: "gemini",
-		})
-	}
-
-	return chunks, false, nil
+	callIndex := 0
+	return g.parseStreamEventWithIndex(data, &callIndex)
 }
 
 // handleStream processes streaming responses. Every send is guarded by
@@ -109,9 +86,9 @@ func (g *Gemini) handleStream(ctx context.Context, stream io.ReadCloser) <-chan 
 
 		scanner := providerstream.NewSSEScanner(stream)
 		terminal := false
-		sawEvent := false
+		callIndex := 0
 		for scanner.Scan() {
-			chunks, done, err := g.parseStreamEvent(scanner.Event().Data)
+			chunks, done, err := g.parseStreamEventWithIndex(scanner.Event().Data, &callIndex)
 			if err != nil {
 				select {
 				case ch <- types.TextChunk{Error: err}:
@@ -123,7 +100,6 @@ func (g *Gemini) handleStream(ctx context.Context, stream io.ReadCloser) <-chan 
 				return
 			}
 			for _, chunk := range chunks {
-				sawEvent = true
 				if chunk.FinishReason != nil {
 					terminal = true
 				}
@@ -142,7 +118,7 @@ func (g *Gemini) handleStream(ctx context.Context, stream io.ReadCloser) <-chan 
 			}
 			return
 		}
-		if sawEvent && !terminal {
+		if !terminal {
 			select {
 			case ch <- types.TextChunk{Error: fmt.Errorf("Gemini stream ended before terminal event")}:
 			case <-ctx.Done():
@@ -151,6 +127,35 @@ func (g *Gemini) handleStream(ctx context.Context, stream io.ReadCloser) <-chan 
 	}()
 
 	return ch
+}
+
+func (g *Gemini) parseStreamEventWithIndex(data string, callIndex *int) ([]types.TextChunk, bool, error) {
+	if data == "" {
+		return nil, false, nil
+	}
+	if strings.TrimSpace(data) == streamDoneMarker {
+		return nil, true, nil
+	}
+	var response geminiTextResponse
+	if err := json.Unmarshal([]byte(data), &response); err != nil {
+		return nil, false, err
+	}
+	if response.Error != nil {
+		return nil, false, g.ProviderError(response.Error.Message)
+	}
+	if len(response.Candidates) == 0 {
+		if promptBlockReason(&response) != "" {
+			return nil, false, g.noCandidatesError(&response)
+		}
+		return nil, false, nil
+	}
+	// usageMetadata is top-level on the Gemini response; preserve it on the
+	// stream alongside candidate chunks.
+	chunks := g.processStreamCandidateWithIndex(response.Candidates[0], callIndex)
+	if usage := convertUsage(response.UsageMetadata); usage != nil {
+		chunks = append(chunks, types.TextChunk{Usage: usage, Model: "gemini"})
+	}
+	return chunks, false, nil
 }
 
 // geminiCallName recovers the function name from a synthetic

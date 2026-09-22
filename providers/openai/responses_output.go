@@ -107,21 +107,11 @@ func (p *Provider) parseResponsesStreamChunk(data []byte) (*types.TextChunk, err
 				Content: event.Delta,
 			},
 		}, nil
-	case responsesEventOutputItemAdded:
-		if event.Item == nil || event.Item.Type != responsesItemFunctionCall {
-			return nil, nil
-		}
-		toolCall := responseFunctionCallToToolCall(*event.Item)
-		return responsesToolCallChunk(event.ItemID, event.responseModel(), toolCall), nil
-	case responsesEventFunctionArgsDelta:
-		toolCall := types.ToolCall{
-			ID:   event.ItemID,
-			Type: "function",
-			Function: &types.ToolCallFunction{
-				Arguments: event.Delta,
-			},
-		}
-		return responsesToolCallChunk(event.ItemID, event.responseModel(), toolCall), nil
+	case responsesEventOutputItemAdded, responsesEventFunctionArgsDelta:
+		// Like Chat Completions, expose only complete tool calls. The terminal
+		// response contains authoritative arguments and call IDs; forwarding
+		// fragments in any carrier would duplicate them for stream consumers.
+		return nil, nil
 	case responsesEventReasoningDelta:
 		thinking := &types.Thinking{Content: event.Delta}
 		return &types.TextChunk{
@@ -160,14 +150,4 @@ func (p *Provider) parseResponsesStreamChunk(data []byte) (*types.TextChunk, err
 	}
 
 	return nil, nil
-}
-
-func responsesToolCallChunk(itemID, model string, toolCall types.ToolCall) *types.TextChunk {
-	return &types.TextChunk{
-		ID:        itemID,
-		Model:     model,
-		ToolCall:  &toolCall,
-		ToolCalls: []types.ToolCall{toolCall},
-		Delta:     &types.ChunkDelta{ToolCalls: []types.ToolCall{toolCall}},
-	}
 }

@@ -1,7 +1,10 @@
 package gemini
 
 import (
+	"context"
+	"io"
 	"net/url"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -243,6 +246,35 @@ func TestProcessStreamCandidate_SyntheticToolCallIDs(t *testing.T) {
 		}
 	}
 	assert.Equal(t, []string{"gemini-call-0-lookup", "gemini-call-1-lookup"}, ids)
+}
+
+func TestHandleStream_SyntheticToolCallIDsSpanFramesAndIsolateStreams(t *testing.T) {
+	t.Parallel()
+	provider := New("test-key", types.ProviderConfig{})
+	const events = `data: {"candidates":[{"content":{"parts":[{"functionCall":{"name":"lookup","args":{"q":"a"}}}]}}]}
+
+data: {"candidates":[{"content":{"parts":[{"functionCall":{"name":"lookup","args":{"q":"b"}}}]},"finishReason":"STOP"}]}
+
+`
+	for _, name := range []string{"first stream", "second stream"} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			var calls []types.ToolCall
+			for chunk := range provider.handleStream(ctx, io.NopCloser(strings.NewReader(events))) {
+				require.NoError(t, chunk.Error)
+				if chunk.ToolCall != nil {
+					calls = append(calls, *chunk.ToolCall)
+				}
+			}
+			require.Len(t, calls, 2)
+			assert.Equal(t, "gemini-call-0-lookup", calls[0].ID)
+			assert.Equal(t, "gemini-call-1-lookup", calls[1].ID)
+			assert.Equal(t, map[string]any{"q": "a"}, calls[0].Arguments)
+			assert.Equal(t, map[string]any{"q": "b"}, calls[1].Arguments)
+		})
+	}
 }
 
 func TestTransformTextResponse_ThoughtPartsRouteToThinking(t *testing.T) {

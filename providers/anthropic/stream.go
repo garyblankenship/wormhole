@@ -28,7 +28,7 @@ func (p *Provider) parseStreamChunk(data []byte) (*types.StreamChunk, error) {
 		// Anthropic delivers input_tokens + cache_read/creation tokens here on
 		// message_start; only output_tokens arrives later on message_delta.
 		// Capture them now so streamed usage isn't dropped.
-		if u := event.Message.Usage; u.InputTokens > 0 ||
+		if u := event.Message.Usage; u.InputTokens > 0 || u.OutputTokens > 0 ||
 			u.CacheReadInputTokens > 0 || u.CacheCreationInputTokens > 0 {
 			chunk.Usage = p.convertUsage(u)
 		}
@@ -92,7 +92,11 @@ func (p *Provider) parseStreamChunk(data []byte) (*types.StreamChunk, error) {
 			reason := p.mapStopReason(event.Delta.StopReason)
 			chunk.FinishReason = &reason
 		}
-		if event.Delta.Usage.InputTokens > 0 || event.Delta.Usage.OutputTokens > 0 {
+		// Native events carry usage beside delta. Retain support for the
+		// nested form accepted by earlier versions and compatible gateways.
+		if event.Usage != nil {
+			chunk.Usage = p.convertUsage(*event.Usage)
+		} else if event.Delta.Usage.InputTokens > 0 || event.Delta.Usage.OutputTokens > 0 {
 			chunk.Usage = p.convertUsage(event.Delta.Usage)
 		}
 

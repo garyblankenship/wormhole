@@ -204,7 +204,9 @@ func TestOllamaStreamingTransformer(t *testing.T) {
 		"message": {
 			"content": "Hello world"
 		},
-		"done": true
+		"done": true,
+		"prompt_eval_count": 7,
+		"eval_count": 3
 	}`)
 
 	chunk, err := transformer.ParseChunk(data)
@@ -217,6 +219,10 @@ func TestOllamaStreamingTransformer(t *testing.T) {
 	assert.Equal(t, "Hello world", chunk.Delta.Content)
 	require.NotNil(t, chunk.FinishReason)
 	assert.Equal(t, types.FinishReasonOther, *chunk.FinishReason)
+	require.NotNil(t, chunk.Usage)
+	assert.Equal(t, 7, chunk.Usage.PromptTokens)
+	assert.Equal(t, 3, chunk.Usage.CompletionTokens)
+	assert.Equal(t, 10, chunk.Usage.TotalTokens)
 }
 
 func TestStreamingTransformer_EmptyData(t *testing.T) {

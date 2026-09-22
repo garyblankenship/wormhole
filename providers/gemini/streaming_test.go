@@ -599,12 +599,13 @@ func TestGeminiProvider_StreamErrorScenarios(t *testing.T) {
 		stream, err := provider.Stream(ctx, request)
 		require.NoError(t, err)
 
-		// Collect chunks - should be empty
+		// EOF without a completion event is an error, even without partial text.
 		chunks := make([]types.TextChunk, 0, 10)
 		for chunk := range stream {
 			chunks = append(chunks, chunk)
 		}
 
-		assert.Empty(t, chunks)
+		require.Len(t, chunks, 1)
+		require.ErrorContains(t, chunks[0].Error, "ended before terminal event")
 	})
 }

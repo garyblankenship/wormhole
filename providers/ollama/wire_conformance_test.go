@@ -61,6 +61,7 @@ func TestOllamaStreamWireConformance(t *testing.T) {
 		for i, chunk := range chunks[:len(chunks)-1] {
 			assert.False(t, chunk.IsDone(), "intermediate chunk %d must not be done", i)
 			assert.Nil(t, chunk.FinishReason, "intermediate chunk %d must not have FinishReason", i)
+			assert.Nil(t, chunk.Usage, "intermediate chunk %d has no usage fields", i)
 		}
 
 		// Terminal chunk: IsDone() must be true with FinishReasonStop.
@@ -68,6 +69,8 @@ func TestOllamaStreamWireConformance(t *testing.T) {
 		assert.True(t, last.IsDone(), "terminal chunk must be done")
 		require.NotNil(t, last.FinishReason, "terminal chunk must have FinishReason")
 		assert.Equal(t, types.FinishReasonStop, *last.FinishReason)
+		require.NotNil(t, last.Usage)
+		assert.Equal(t, types.Usage{PromptTokens: 10, CompletionTokens: 5, TotalTokens: 15}, *last.Usage)
 
 		// Merged text sanity check.
 		merged := testutil.MergeTextChunks(chunks)
