@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"errors"
 	"io"
 	"net"
 	"net/http"
@@ -84,6 +85,20 @@ func TestProxyGracefulShutdownWaitsForWormholeShutdown(t *testing.T) {
 		t.Skip("SIGTERM process signaling is not portable on Windows")
 	}
 
+	for _, shutdownError := range []string{"", "cleanup failed", context.DeadlineExceeded.Error()} {
+		name := shutdownError
+		if name == "" {
+			name = "success"
+		}
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			testProxyGracefulShutdown(t, shutdownError)
+		})
+	}
+}
+
+func testProxyGracefulShutdown(t *testing.T, shutdownError string) {
+	t.Helper()
 	addr := reserveLoopbackAddr(t)
 	dir := t.TempDir()
 	markerPath := filepath.Join(dir, "shutdown-complete")
@@ -97,6 +112,7 @@ func TestProxyGracefulShutdownWaitsForWormholeShutdown(t *testing.T) {
 		"WORMHOLE_TEST_HELPER=1",
 		"WORMHOLE_SHUTDOWN_MARKER="+markerPath,
 		"WORMHOLE_SHUTDOWN_RELEASE="+releasePath,
+		"WORMHOLE_SHUTDOWN_ERROR="+shutdownError,
 	)
 	require.NoError(t, cmd.Start())
 	waitCh := make(chan error, 1)
@@ -127,7 +143,14 @@ func TestProxyGracefulShutdownWaitsForWormholeShutdown(t *testing.T) {
 	require.NoError(t, os.WriteFile(releasePath, []byte("release"), 0o644))
 	select {
 	case err := <-waitCh:
-		require.NoError(t, err, "stdout=%s\nstderr=%s", stdout.String(), stderr.String())
+		if shutdownError == "" {
+			require.NoError(t, err, "stdout=%s\nstderr=%s", stdout.String(), stderr.String())
+		} else {
+			var exitErr *exec.ExitError
+			require.ErrorAs(t, err, &exitErr, "stdout=%s\nstderr=%s", stdout.String(), stderr.String())
+			assert.Equal(t, 1, exitErr.ExitCode())
+			assert.Contains(t, stdout.String(), shutdownError)
+		}
 	case <-time.After(5 * time.Second):
 		t.Fatalf("proxy did not exit after releasing shutdown hook\nstdout=%s\nstderr=%s", stdout.String(), stderr.String())
 	}
@@ -140,11 +163,16 @@ func TestProxyGracefulShutdownHelperProcess(t *testing.T) {
 
 	markerPath := os.Getenv("WORMHOLE_SHUTDOWN_MARKER")
 	releasePath := os.Getenv("WORMHOLE_SHUTDOWN_RELEASE")
+	var shutdownErr error
+	if message := os.Getenv("WORMHOLE_SHUTDOWN_ERROR"); message != "" {
+		shutdownErr = errors.New(message)
+	}
 	newProxyServer = func(cfg server.Config) proxyServer {
 		return shutdownMarkerProxy{
 			proxyServer: server.New(cfg),
 			markerPath:  markerPath,
 			releasePath: releasePath,
+			shutdownErr: shutdownErr,
 		}
 	}
 
@@ -161,6 +189,7 @@ type shutdownMarkerProxy struct {
 	proxyServer
 	markerPath  string
 	releasePath string
+	shutdownErr error
 }
 
 func (p shutdownMarkerProxy) Shutdown(ctx context.Context) error {
@@ -171,7 +200,7 @@ func (p shutdownMarkerProxy) Shutdown(ctx context.Context) error {
 	if p.releasePath != "" {
 		waitForRelease(ctx, p.releasePath)
 	}
-	return err
+	return errors.Join(err, p.shutdownErr)
 }
 
 func waitForRelease(ctx context.Context, path string) {

@@ -115,17 +115,21 @@ func runServe(args []string, stdout, stderr io.Writer, getenv func(string) strin
 
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
+	defer signal.Stop(sigCh)
 
-	shutdownDone := make(chan struct{})
+	serveDone := make(chan struct{})
+	defer close(serveDone)
+	shutdownDone := make(chan error, 1)
 	go func() {
-		defer close(shutdownDone)
-		<-sigCh
+		select {
+		case <-sigCh:
+		case <-serveDone:
+			return
+		}
 		logger.Info("shutting down")
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
-		if err := srv.Shutdown(ctx); err != nil {
-			logger.Error("shutdown error", "error", err)
-		}
+		shutdownDone <- srv.Shutdown(ctx)
 	}()
 
 	if err := srv.Start(); err != nil && !errors.Is(err, http.ErrServerClosed) {
@@ -134,6 +138,9 @@ func runServe(args []string, stdout, stderr io.Writer, getenv func(string) strin
 	}
 	// ErrServerClosed means Shutdown was invoked; wait for the shutdown
 	// goroutine to finish wh.Shutdown before exiting.
-	<-shutdownDone
+	if err := <-shutdownDone; err != nil {
+		logger.Error("shutdown error", "error", err)
+		return 1
+	}
 	return 0
 }
