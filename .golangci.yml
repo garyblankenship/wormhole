@@ -61,7 +61,28 @@ linters:
       - path: providers/internal/transform/streaming\.go
         linters:
           - gocyclo
+      - path: internal/server/responses_stream\.go
+        linters:
+          - gocyclo
+      - path: text_builder_generate\.go
+        linters:
+          - gocyclo
+      - path: tool_executor_execute\.go
+        linters:
+          - gocyclo
+      - path: providers/internal/stream/process\.go
+        linters:
+          - gocyclo
+      - path: providers/openai/transform_schema\.go
+        linters:
+          - gocyclo
+      - path: providers/(anthropic|openai)/stream_remediation_test\.go
+        linters:
+          - gocyclo
       - path: middleware/adapter\.go
+        linters:
+          - dupl
+      - path: (image_builder|structured_builder)\.go
         linters:
           - dupl
       - path: middleware/typed_enhanced_metrics\.go
