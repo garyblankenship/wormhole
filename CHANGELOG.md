@@ -1,5 +1,43 @@
 # Changelog
 
+## v3.1.0 (2026-10-04)
+
+SDK and proxy hardening release: provider-scoped model lookup, exact
+schema-number validation, occurrence-based tool message pairing, terminal
+SSE error handling, tool stream wire-index accumulation under the published
+fragments-consumed contract, strict structured-output schemas, idempotency
+panic safety, lifecycle and provider-state fixes, generation cancellation
+discipline, agent loop guarantees, tool executor policies and output limits,
+typed schema generation via encoding/json rules, proxy auth and stream
+hardening.
+
+### Fixes
+- CLI: return failure when proxy shutdown fails.
+- Providers: preserve streaming completion and usage contracts.
+- Types: provider-scoped model lookup and exact schema-number validation.
+- Providers: occurrence-based tool message pairing and bounded retry delays.
+- Stream: treat SSE error frames as terminal.
+- Providers: tool stream indices and strict structured-output schemas,
+  including pre-HTTP rejection of permissive objects and omitted required
+  fields.
+- Core: lifecycle, provider state, idempotency, and cache semantics.
+- Core: cancellation discipline, prompt preparation, agent loop guarantees,
+  and step-limit results that retain accumulated history.
+- Tools: executor policies, admission bounds, normalized per-tool breakers,
+  raw JSON tool results, and typed schema generation via encoding/json rules.
+- Proxy: case-insensitive auth schemes with constant-time token comparison,
+  bounded error responses, and stream cancellation on write failure.
+- Stream: honor published stream contracts for fragments and cancellation.
+
+### Documentation
+- Document hardened SDK and proxy behaviors, including raw JSON results,
+  strict nullable fields, live tool deltas, proxy fallback codes, and TLS
+  deployment guidance.
+
+### Other
+- Bump testify to v1.12.1.
+- Scope gocyclo and dupl lint exclusions for linear dispatchers.
+
 ## v3.0.2 (2026-08-29)
 
 ### Features
