@@ -187,3 +187,6 @@ recommendations.
 - Zero new dependencies: proxy uses stdlib only (`net/http`, `encoding/json`, `log/slog`)
 - Agent builder lives in `agent_builder.go` + `wormhole_agent.go` — scoped tool registry merges with global, agent tools override globals
 - `AgentAddTool` is a package-level generic function (Go disallows generic methods on structs)
+Read and apply `/Users/vampire/.agents/AGENTS.md` completely, then
+`/Users/vampire/code/go/src/AGENTS.md`, before this file. This file contains
+repository-specific guidance only.

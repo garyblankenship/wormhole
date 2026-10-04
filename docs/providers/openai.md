@@ -144,6 +144,13 @@ For typed extraction, keep using `client.Structured()`. It is routed through the
 configured OpenAI provider and receives the same normalized `StructuredResponse`
 shape as other providers.
 
+Strict structured output clones the schema before dispatch. Each object gains
+`additionalProperties: false` when absent. Explicitly permissive
+`additionalProperties` and properties omitted from `required` are rejected with
+a schema field path before HTTP I/O. Represent an optional value as a required
+nullable field, for example `"type": ["string", "null"]`; the property must still
+appear in `required`. Nonstrict schemas remain unchanged.
+
 ## Tool Calling
 
 Responses mode translates Wormhole tools into the Responses function-tool shape
@@ -193,3 +200,7 @@ for chunk := range stream {
 
 The final chunk carries provider, response ID, finish reason, and usage when the
 upstream response includes them.
+
+OpenAI tool streams expose incremental fragments in `Delta.ToolCalls` and
+complete calls in terminal `ToolCalls`. Preserve each fragment's wire index
+when correlating interleaved calls. See [tool streaming](../tool-calling.md#streaming-with-tools).

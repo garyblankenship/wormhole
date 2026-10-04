@@ -521,6 +521,13 @@ result, err := client.Agent().
 	Run(ctx, "Compare today's provider options for a low-latency chat app.")
 ```
 
+The default step limit is ten. `MaxSteps` must be positive; zero and negative
+values fail before provider/tool execution or admission. Agent middleware is
+applied once around the loop. When the step limit is reached, `Run` returns the
+step-limit error together with the accumulated `AgentResult`, including completed
+steps, tool results, and the latest response. Inspect that result even when
+`err` is nonnil.
+
 Agent-scoped tools are available through `AgentAddTool`:
 
 ```go
@@ -568,7 +575,13 @@ snapshot, so callers cannot mutate the live counters.
 Circuit-breaker state is isolated by provider and operation, so a failed text
 route cannot block a healthy fallback, another provider, or embeddings on the
 same provider. Direct middleware calls without provider metadata share one
-stable default circuit.
+stable default circuit. Caller cancellation is neutral; a provider deadline
+with a live caller counts as failure.
+
+The LRU middleware cache replaces both value and expiry on `Set`, removes
+expired entries on access, and expires nonpositive TTLs immediately. `Get`
+promotes entries and therefore uses exclusive locking. Rate admission bounds
+waiting and rejects excess callers; it does not promise FIFO ordering.
 
 ```go
 openAIConfig := types.NewProviderConfig(os.Getenv("OPENAI_API_KEY")).
@@ -599,7 +612,10 @@ client.EnableAdaptiveConcurrency(&wormhole.EnhancedAdaptiveConfig{
 Configure adaptive concurrency with the stable high-level controls: `TargetLatency`,
 `MinCapacity`, `MaxCapacity`, and `InitialCapacity`. Wormhole will continue to
 own the low-level controller tuning rather than replacing it with another
-public tuning API.
+public tuning API. The original controller retains its idle-only adjustment
+safeguard; controller redesign is deferred. The enhanced controller bounds
+latency history and preserves actual occupied permits across capacity resizes.
+Enabling adaptive concurrency after shutdown is a no-op.
 
 Graceful shutdown closes request and provider admission immediately, then drains
 in-flight requests and provider construction before cleaning up shared resources:
@@ -632,6 +648,11 @@ the oldest completed entry but never an in-flight owner. If every entry is
 in-flight, a new distinct request fails before provider execution with a
 retryable HTTP 503-classified capacity error. `GetIdempotencyCacheStats()`
 reports current entries, capacity, evictions, and rejections.
+
+Implicit and explicit selection of the same effective provider share the same
+idempotency scope. If an owner panics, the panic remains visible to that owner
+and followers receive a generic nonretryable failure retained for the normal
+TTL. The uncertain external effect is not replayed.
 
 Direct provider access uses `ProviderWithHandle(name)`. Close the returned
 handle when the provider is no longer in use so cache cleanup can evict it
@@ -709,6 +730,12 @@ also rejects empty tool names, malformed or undeclared `tool_choice` values,
 and malformed assistant tool-call arguments before provider I/O. No-argument
 function calls are normalized to `{}`.
 
+Responses tool streaming opens a stable function item on its first fragment,
+emits argument deltas immediately, and finishes each item once. Chat streaming
+emits the assistant role once and preserves provider tool indices. Both routes
+cancel upstream work on cancellation or encoding/write failure and stop further
+completion output after a failure.
+
 Every Responses SSE event has a monotonically increasing `sequence_number`.
 Text streams emit item/content creation, text deltas, final text/content, and
 item completion before the terminal response; refusals use the matching
@@ -721,7 +748,11 @@ The proxy binds `127.0.0.1:8080` by default. To expose it on another interface
 non-loopback bind is refused at startup. Setting the key requires
 `Authorization: Bearer <token>` on `/v1/` requests. When the key is unset on a
 loopback bind the proxy logs a startup warning and serves `/v1/` endpoints
-without authentication. The token is compared in constant time. Upstream
+without authentication. Authentication scheme matching is case-insensitive, while tokens match exactly;
+fixed-size SHA-256 token digests are compared in constant time. Authenticated
+non-loopback cleartext serving logs one startup warning. Deploy it behind a
+trusted TLS reverse proxy and restrict direct access to the cleartext listener.
+Upstream
 provider errors are mapped to bounded client messages. Default proxy and
 middleware logs contain only bounded error classification and safe request
 metadata; they do not emit raw upstream bodies, prompts, credential-bearing

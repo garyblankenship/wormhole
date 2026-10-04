@@ -307,3 +307,14 @@ response, err := client.Text().
 - [Anthropic Messages API](https://docs.anthropic.com/en/api/messages)
 - [Claude Models](https://platform.claude.com/docs/en/about-claude/models/overview)
 - [Tool Use](https://docs.anthropic.com/en/docs/tool-use)
+
+## Tool stream fragments and headers
+
+Live tool fragments are available in `Delta.ToolCalls`; terminal `ToolCalls`
+contain the completed calls. Correlate fragments using their wire indices,
+which preserve Anthropic content-block indices rather than renumbering only
+tools. See [tool streaming](../tool-calling.md#streaming-with-tools).
+
+`tool_choice: none` remains supported. Beta header requirements depend on the
+model and feature; Wormhole preserves explicitly configured provider headers
+instead of adding blanket beta headers.

@@ -207,6 +207,29 @@ and retries. The executable
 [`examples/tool_calling`](../examples/tool_calling/main.go) example also turns
 handler failures into correlated tool-result messages before continuing.
 
+### Generated schemas and validation
+
+Typed schemas recurse through slices, fixed arrays, and nested pointers. Cyclic
+types return a schema-generation error. Embedded struct fields follow
+`encoding/json` tag, depth, and conflict selection. Numeric constraint tags must
+parse completely and be finite. Integer validation accepts finite integral
+numbers; enums also enforce their declared type. Generated and JSON-decoded
+`required`/`enum` lists are supported. An array schema without `items` accepts
+unconstrained JSON array contents.
+
+### Tool result messages
+
+Successful automatically generated tool-result messages contain raw JSON in
+`Content`: a string result `hello` becomes `"hello"`, a nil result becomes
+`null`, and objects remain JSON objects. Decode `Content` as JSON when consuming
+successful results. Handler and serialization failures populate `Error` and
+provide readable failure text in `Content`; a value that cannot be serialized
+is an execution failure even when the output byte limit is disabled.
+
+Circuit-breaker state is isolated by normalized tool name. Retries track the
+current attempt separately from historical metrics, so cancellation during
+backoff does not leave an active-handler state.
+
 ### Max Iteration Limits
 
 Prevent infinite loops by setting a maximum number of tool execution rounds:
@@ -235,18 +258,26 @@ client := wormhole.New(
 The client shares this admission budget across automatic text and agent tool
 execution. A provider response with too many tool calls is rejected before any
 handler starts. Once the concurrency limit is full, `ToolQueueTimeout` bounds
-the wait for a permit; `ToolTimeout` starts only after admission.
+the wait for a permit; `ToolTimeout` starts only after admission. A timed-out
+handler keeps its permit until it actually returns. Remaining accepted calls
+continue through shared admission and receive a result or an explicit
+admission/cancellation error. Admission is bounded and does not promise FIFO
+ordering.
 
 | Option | Go type | Default | Behavior | Source |
 |--------|---------|---------|----------|--------|
 | `MaxToolCallsPerRound` | `int` | `32` | Maximum tool calls accepted from one provider response; non-positive values use the default. | `tool_executor_config.go` |
 | `MaxConcurrentTools` | `int` | `10` | Maximum handlers running for one client; `0` is unlimited. | `tool_executor_config.go` |
 | `ToolQueueTimeout` | `time.Duration` | `30s` | Maximum wait for shared admission; non-positive values use the default. | `tool_executor_config.go` |
-| `ToolTimeout` | `time.Duration` | `30s` | Maximum handler execution time after admission; `0` disables it. | `tool_executor_config.go` |
+| `ToolTimeout` | `time.Duration` | `30s` | Maximum time Wormhole waits for a handler after admission; `0` disables it. | `tool_executor_config.go` |
+| `MaxToolOutputSize` | `int` | `10 MiB` | Maximum serialized JSON output bytes, including quotes and `null`; `0` uses the default and a negative value disables the limit. | `tool_executor_config.go` |
 
 `WithToolSafetyConfig` is defined in `options_runtime.go`. Timed-out or canceled
 handlers must still return when their context is canceled; see
 [Handler Isolation](#handler-isolation).
+
+The output limit applies to single and batch execution. It does not bound
+handler allocations or memory used before or during serialization.
 
 Run untrusted tools in a separately isolated process; process isolation is
 outside Wormhole's provider-bridge scope.
@@ -545,14 +576,23 @@ for chunk := range stream {
         continue
     }
 
-    // Process tool calls as they arrive
+    // Incremental fragments: accumulate by the provider's wire index.
+    if chunk.Delta != nil && len(chunk.Delta.ToolCalls) > 0 {
+        // Handle live ID, name, and argument fragments.
+    }
     if len(chunk.ToolCalls) > 0 {
-        // Tool calls in streaming mode
+        // Complete tool calls on the terminal chunk.
     }
 
     fmt.Print(chunk.Content())
 }
 ```
+
+OpenAI and Anthropic emit live fragments through `Delta.ToolCalls`, preserving
+provider wire indices (including Anthropic content-block indices). Interleaved
+calls may use sparse indices. Terminal `ToolCalls` contain complete calls and
+are not replayed as live fragments. Execute complete calls, rather than partial
+argument JSON.
 
 ### Manual Tool Execution
 

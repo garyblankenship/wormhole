@@ -301,6 +301,31 @@ The following errors are considered retryable by default:
 | `ErrRateLimited` | Wormhole rate limit error |
 | Network errors | Connection failures |
 
+### Stream lifetime and failures
+
+The provider HTTP timeout covers the full stream lifetime, including response
+body reads. A nonpositive precise HTTP timeout disables that deadline; the
+caller context still controls cancellation. There is no separate stream-timeout
+API. Close the stream body when using direct HTTP/provider infrastructure.
+
+SSE `event: error` frames are terminal even when their payload is empty or
+opaque. Existing provider error transformations are preserved, and cancellation
+closes the body once. Wormhole does not automatically retry after partial stream
+output. HTTP retry backoff clamps its deterministic delay before applying
+jitter, then keeps the final delay positive and within the maximum.
+
+Caller cancellation stops fallback before additional provider/model work.
+Circuit-breaker middleware treats caller cancellation as neutral; a provider
+deadline while the caller context is live counts as failure.
+
+### Proxy error contract
+
+The proxy emits bounded, sanitized messages and lowercase error codes, including
+SDK fallback classifications. Raw upstream response bodies are not exposed.
+Streaming handlers cancel upstream work on caller cancellation, encoding
+failure, or write failure. After a write failure they stop emitting events,
+including completion events and Chat `[DONE]`.
+
 ### Fallback Routing
 
 Provider or model fallback is explicit request behavior, separate from

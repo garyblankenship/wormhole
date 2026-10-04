@@ -421,3 +421,6 @@ room and structured visible output.
 - [Gemini Models](https://ai.google.dev/gemini-api/docs/models)
 - [Function Calling](https://ai.google.dev/gemini-api/docs/function-calling)
 - [Embeddings](https://ai.google.dev/gemini-api/docs/models/text-embedding)
+
+Schema conversion preserves descriptions recursively on nested properties and
+array items, so generated tool and structured-output guidance reaches Gemini.

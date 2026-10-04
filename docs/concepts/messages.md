@@ -92,8 +92,18 @@ msg := types.NewToolResultMessage(toolCallID, "Execution successful")
 
 **Fields:**
 
-- `Content string` - The tool's output
+- `Content string` - Automatically generated successes contain raw JSON, including quoted strings and `null`; failures contain readable error text.
+- `Error string` - Failure information for generated tool results, including serialization failures.
 - `ToolCallID string` - Links to the original tool call
+
+Wormhole prepares SDK system prompts into the message history once. The
+provider dispatch copy clears `SystemPrompt` after that preparation; caller
+inputs remain unchanged. Direct provider calls retain their own prompt handling.
+
+Tool history is matched in order: each result consumes one unmatched earlier
+call. Reusing an ID later is valid, but duplicate normalized IDs within one
+assistant group fail validation. History repair preserves retained assistant
+text, thinking, and signatures.
 
 ## Multi-Turn Conversations
 
