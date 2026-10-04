@@ -75,16 +75,16 @@ func TestLRUCache(t *testing.T) {
 	t.Parallel()
 	cache := NewLRUCache(2)
 	t.Cleanup(func() { _ = cache.Close() })
-	cache.Set("key1", "value1", 0)
-	cache.Set("key2", "value2", 0)
+	cache.Set("key1", "value1", time.Hour)
+	cache.Set("key2", "value2", time.Hour)
 	if value, found := cache.Get("key1"); !found || value != "value1" {
 		t.Fatalf("Get(key1) = (%v, %t)", value, found)
 	}
-	cache.Set("key3", "value3", 0)
+	cache.Set("key3", "value3", time.Hour)
 	if _, found := cache.Get("key2"); found {
 		t.Error("least-recently-used key was not evicted")
 	}
-	cache.Set("key1", "updated_value1", 0)
+	cache.Set("key1", "updated_value1", time.Hour)
 	if value, found := cache.Get("key1"); !found || value != "updated_value1" {
 		t.Fatalf("updated key = (%v, %t)", value, found)
 	}

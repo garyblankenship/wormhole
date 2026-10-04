@@ -126,7 +126,9 @@ func New(opts ...Option) *Wormhole {
 
 	// Apply all provided options
 	for _, opt := range opts {
-		opt(&config)
+		if opt != nil {
+			opt(&config)
+		}
 	}
 	toolConfigErr := config.ToolSafety.Validate()
 

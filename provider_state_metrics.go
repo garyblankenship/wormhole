@@ -31,8 +31,11 @@ type ProviderAdaptiveState struct {
 	key ProviderKey
 
 	// Current concurrency limiter
-	limiter         *ConcurrencyLimiter
-	currentCapacity int
+	limiter           *ConcurrencyLimiter
+	currentCapacity   int
+	activeByLimiter   map[*ConcurrencyLimiter]int
+	reserved          int
+	generationChanged chan struct{}
 
 	// Latency tracking
 	latencies      []time.Duration // Slice for percentiles
@@ -70,17 +73,19 @@ func NewProviderAdaptiveState(key ProviderKey, targetLatency time.Duration,
 	})
 
 	return &ProviderAdaptiveState{
-		key:             key,
-		limiter:         NewConcurrencyLimiter(config.InitialCapacity),
-		currentCapacity: config.InitialCapacity,
-		latencies:       make([]time.Duration, 0, config.LatencyWindowSize),
-		latencyRing:     ring.New(config.LatencyWindowSize),
-		errorRates:      ring.New(config.LatencyWindowSize),
-		pidController:   newPIDController(defaultPIDConfig()),
-		targetLatency:   config.TargetLatency,
-		minCapacity:     config.MinCapacity,
-		maxCapacity:     config.MaxCapacity,
-		lastSeen:        time.Now(),
+		key:               key,
+		limiter:           NewConcurrencyLimiter(config.InitialCapacity),
+		currentCapacity:   config.InitialCapacity,
+		activeByLimiter:   make(map[*ConcurrencyLimiter]int),
+		generationChanged: make(chan struct{}),
+		latencies:         make([]time.Duration, 0, config.LatencyWindowSize),
+		latencyRing:       ring.New(config.LatencyWindowSize),
+		errorRates:        ring.New(config.LatencyWindowSize),
+		pidController:     newPIDController(defaultPIDConfig()),
+		targetLatency:     config.TargetLatency,
+		minCapacity:       config.MinCapacity,
+		maxCapacity:       config.MaxCapacity,
+		lastSeen:          time.Now(),
 	}
 }
 
@@ -102,12 +107,12 @@ func (s *ProviderAdaptiveState) RecordLatency(latency time.Duration, err error) 
 	s.latencyRing = s.latencyRing.Next()
 
 	// Update latency slice (for percentiles)
-	if len(s.latencies) < cap(s.latencies) {
+	if len(s.latencies) < s.latencyRing.Len() {
 		s.latencies = append(s.latencies, latency)
 	} else {
 		// Replace oldest entry (simple FIFO for percentile calculation)
-		s.latencies = s.latencies[1:]
-		s.latencies = append(s.latencies, latency)
+		copy(s.latencies, s.latencies[1:])
+		s.latencies[len(s.latencies)-1] = latency
 	}
 
 	// Update error ring buffer. totalSamples/totalErrors are windowed to

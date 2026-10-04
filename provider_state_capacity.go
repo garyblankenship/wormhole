@@ -39,7 +39,10 @@ func (s *ProviderAdaptiveState) AdjustCapacity() (newCapacity int, changed bool)
 	if errorRate > errorRateThreshold {
 		errorRatePenalty := errorRateMultiplier * (errorRate - errorRateThreshold)
 		// More aggressive reduction when error rates are high
-		controlSignal *= (1.0 + errorRatePenalty)
+		if controlSignal < 0 {
+			controlSignal = 0
+		}
+		controlSignal += errorRatePenalty
 	}
 
 	// Calculate new capacity
@@ -52,13 +55,7 @@ func (s *ProviderAdaptiveState) AdjustCapacity() (newCapacity int, changed bool)
 
 	if newCapacity != s.currentCapacity {
 		oldCapacity := s.currentCapacity
-		oldLimiter := s.limiter
-		newLimiter := NewConcurrencyLimiter(newCapacity)
-		if newCapacity < oldCapacity {
-			carryOccupancy(oldLimiter, newLimiter)
-		}
-		s.limiter = newLimiter
-		s.currentCapacity = newCapacity
+		s.resizeLocked(newCapacity)
 		s.lastAdjustment = now
 
 		// Reset tracking after significant change (20% or more)

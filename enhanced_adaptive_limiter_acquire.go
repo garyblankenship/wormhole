@@ -159,7 +159,7 @@ func (l *EnhancedAdaptiveLimiter) unpinState(state *ProviderAdaptiveState) {
 
 // getOrCreateStateLocked requires l.mu to be held for writing.
 func (l *EnhancedAdaptiveLimiter) getOrCreateStateLocked(provider, model string) *ProviderAdaptiveState {
-	if !l.config.EnableModelLevel && model != "" {
+	if !l.config.EnableModelLevel {
 		if state := l.providerStates[provider]; state != nil {
 			return state
 		}
@@ -195,7 +195,7 @@ func (l *EnhancedAdaptiveLimiter) newProviderState(key ProviderKey) *ProviderAda
 // Uses double-checked locking to prevent duplicate state creation races.
 func (l *EnhancedAdaptiveLimiter) getOrCreateState(provider, model string) *ProviderAdaptiveState {
 	// Check provider-level state first (if model-level is disabled)
-	if !l.config.EnableModelLevel && model != "" {
+	if !l.config.EnableModelLevel {
 		// Use provider-level state for all models of this provider
 		l.mu.RLock()
 		state, exists := l.providerStates[provider]

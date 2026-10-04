@@ -77,6 +77,7 @@ func executeTrackedRequest[T any](ctx context.Context, p *Wormhole, operation st
 			return cachedIdempotentValue[T](entry)
 		}
 
+		defer p.settleIdempotencyPanic(entry, ttl)
 		result, err := fn(ctx)
 		if ctx.Err() != nil {
 			p.abandonIdempotencyEntry(cacheKey, entry)

@@ -7,7 +7,7 @@ import (
 
 // LRUCache implements a Least Recently Used cache
 type LRUCache struct {
-	mu       sync.RWMutex
+	mu       sync.Mutex
 	capacity int
 	cache    map[string]*lruNode
 	head     *lruNode
@@ -15,10 +15,11 @@ type LRUCache struct {
 }
 
 type lruNode struct {
-	key   string
-	value any
-	prev  *lruNode
-	next  *lruNode
+	key       string
+	value     any
+	expiresAt time.Time
+	prev      *lruNode
+	next      *lruNode
 }
 
 // NewLRUCache creates a new LRU cache
@@ -47,28 +48,46 @@ func (lru *LRUCache) Get(key string) (any, bool) {
 		return nil, false
 	}
 
-	// Move to front
+	if !time.Now().Before(node.expiresAt) {
+		lru.removeNode(node)
+		delete(lru.cache, key)
+		return nil, false
+	}
+
+	// Get promotes entries, so it requires exclusive locking.
 	lru.moveToFront(node)
 
 	return node.value, true
 }
 
-// Set stores a value in the LRU cache
+// Set stores a value in the LRU cache until ttl elapses.
+// A nonpositive ttl expires immediately, including replacement of an existing key.
 func (lru *LRUCache) Set(key string, value any, ttl time.Duration) {
 	lru.mu.Lock()
 	defer lru.mu.Unlock()
 
+	if ttl <= 0 {
+		if node, exists := lru.cache[key]; exists {
+			lru.removeNode(node)
+			delete(lru.cache, key)
+		}
+		return
+	}
+	expiresAt := time.Now().Add(ttl)
+
 	if node, exists := lru.cache[key]; exists {
 		// Update existing node
 		node.value = value
+		node.expiresAt = expiresAt
 		lru.moveToFront(node)
 		return
 	}
 
 	// Add new node
 	node := &lruNode{
-		key:   key,
-		value: value,
+		key:       key,
+		value:     value,
+		expiresAt: expiresAt,
 	}
 
 	lru.cache[key] = node

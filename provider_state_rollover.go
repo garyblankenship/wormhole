@@ -2,7 +2,6 @@ package wormhole
 
 import (
 	"container/ring"
-	"context"
 	"time"
 )
 
@@ -15,46 +14,39 @@ func (s *ProviderAdaptiveState) resetTracking() {
 	s.pidController.reset()
 }
 
-// carryOccupancy reserves room on newLimiter for operations still in
-// flight on oldLimiter when capacity shrinks, then releases those
-// reservations as oldLimiter drains. Without this, requests already
-// running against oldLimiter keep occupying real resources while
-// newLimiter -- created empty -- hands out up to its full capacity on
-// top of them, so actual concurrency can run to oldInFlight+newCapacity
-// instead of the intended newCapacity ceiling.
-func carryOccupancy(oldLimiter, newLimiter *ConcurrencyLimiter) {
-	inFlight := oldLimiter.InUse()
-	if inFlight <= 0 {
-		return
+// resizeLocked replaces the semaphore while retaining all admitted operations.
+// Caller holds s.mu. Blocked acquisitions wake and retry the new generation.
+func (s *ProviderAdaptiveState) resizeLocked(capacity int) {
+	old := s.limiter
+	for s.reserved > 0 {
+		old.Release()
+		s.reserved--
 	}
+	close(s.generationChanged)
+	s.generationChanged = make(chan struct{})
+	s.limiter = NewConcurrencyLimiter(capacity)
+	s.currentCapacity = capacity
+	s.updateReservationsLocked()
+}
 
-	reserve := min(inFlight, newLimiter.Capacity())
-	acquired := 0
-	for ; acquired < reserve; acquired++ {
-		if !newLimiter.Acquire(context.Background()) {
-			break
+// updateReservationsLocked keeps room reserved for every retired generation.
+// A deep shrink stays fully reserved until actual retired occupancy drops below
+// the new capacity, rather than admitting one call for every retired release.
+func (s *ProviderAdaptiveState) updateReservationsLocked() {
+	retired := 0
+	for limiter, count := range s.activeByLimiter {
+		if limiter != s.limiter {
+			retired += count
 		}
 	}
-	if acquired == 0 {
-		return
+	want := min(retired, s.currentCapacity)
+	for s.reserved > want {
+		s.limiter.Release()
+		s.reserved--
 	}
-
-	go func() {
-		ticker := time.NewTicker(50 * time.Millisecond)
-		defer ticker.Stop()
-		deadline := time.Now().Add(5 * time.Minute)
-		released := 0
-		for released < acquired && time.Now().Before(deadline) {
-			<-ticker.C
-			drained := inFlight - oldLimiter.InUse()
-			for drained > released && released < acquired {
-				newLimiter.Release()
-				released++
-			}
-		}
-		for released < acquired {
-			newLimiter.Release()
-			released++
-		}
-	}()
+	for s.reserved < want {
+		// Reservations grow only on resize, when the new semaphore is empty.
+		s.limiter.sem <- struct{}{}
+		s.reserved++
+	}
 }

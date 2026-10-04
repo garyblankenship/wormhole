@@ -2,6 +2,7 @@ package wormhole
 
 import (
 	"context"
+	"sync"
 	"time"
 )
 
@@ -17,18 +18,46 @@ func (s *ProviderAdaptiveState) Capacity() int {
 // preventing a race condition if AdjustCapacity swaps the limiter between
 // acquire and release.
 func (s *ProviderAdaptiveState) AcquireToken(ctx context.Context) (release func(), ok bool) {
-	s.mu.RLock()
-	limiter := s.limiter
-	s.mu.RUnlock()
+	for {
+		if ctx.Err() != nil {
+			return nil, false
+		}
+		s.mu.RLock()
+		limiter, changed := s.limiter, s.generationChanged
+		s.mu.RUnlock()
 
-	if !limiter.Acquire(ctx) {
-		return nil, false
+		select {
+		case <-ctx.Done():
+			return nil, false
+		case <-changed:
+			continue
+		case limiter.sem <- struct{}{}:
+		}
+
+		s.mu.Lock()
+		if ctx.Err() != nil || limiter != s.limiter {
+			limiter.Release()
+			s.mu.Unlock()
+			continue
+		}
+		s.activeByLimiter[limiter]++
+		s.lastSeen = time.Now()
+		s.mu.Unlock()
+
+		var once sync.Once
+		return func() {
+			once.Do(func() {
+				s.mu.Lock()
+				defer s.mu.Unlock()
+				limiter.Release()
+				s.activeByLimiter[limiter]--
+				if s.activeByLimiter[limiter] == 0 {
+					delete(s.activeByLimiter, limiter)
+				}
+				s.updateReservationsLocked()
+			})
+		}, true
 	}
-
-	s.mu.Lock()
-	s.lastSeen = time.Now()
-	s.mu.Unlock()
-	return limiter.Release, true
 }
 
 // LastSeen returns the last time this state observed activity.
@@ -42,8 +71,9 @@ func (s *ProviderAdaptiveState) LastSeen() time.Time {
 func (s *ProviderAdaptiveState) InUse() int {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	if s.limiter == nil {
-		return 0
+	active := 0
+	for _, count := range s.activeByLimiter {
+		active += count
 	}
-	return s.limiter.InUse()
+	return active
 }

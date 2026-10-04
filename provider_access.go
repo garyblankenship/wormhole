@@ -12,8 +12,12 @@ func (p *Wormhole) releaseProvider(name string) {
 	defer p.providersMutex.RUnlock()
 	cp, exists := p.providers[name]
 
-	if exists && atomic.AddInt32(&cp.refCount, -1) < 0 {
-		atomic.StoreInt32(&cp.refCount, 0)
+	if exists {
+		for count := atomic.LoadInt32(&cp.refCount); count > 0; count = atomic.LoadInt32(&cp.refCount) {
+			if atomic.CompareAndSwapInt32(&cp.refCount, count, count-1) {
+				break
+			}
+		}
 	}
 }
 

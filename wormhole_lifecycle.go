@@ -48,13 +48,14 @@ func (p *Wormhole) runShutdown() {
 	var errs []error
 
 	p.providersMutex.Lock()
-	for name, cp := range p.providers {
+	providers := p.providers
+	p.providers = make(map[string]*cachedProvider)
+	p.providersMutex.Unlock()
+	for name, cp := range providers {
 		if err := cp.provider.Close(); err != nil {
 			errs = append(errs, fmt.Errorf("provider %s: %w", name, err))
 		}
-		delete(p.providers, name)
 	}
-	p.providersMutex.Unlock()
 
 	if p.discoveryService != nil {
 		if err := p.discoveryService.Stop(); err != nil {
@@ -144,7 +145,7 @@ func (p *Wormhole) ClearIdempotencyCache() {
 // CleanupStaleProviders cleans up providers that haven't been used for a while.
 func (p *Wormhole) CleanupStaleProviders(maxAge time.Duration, maxCount int) {
 	p.providersMutex.Lock()
-	defer p.providersMutex.Unlock()
+	evicted := make(map[string]*cachedProvider)
 
 	now := time.Now()
 	staleKeys := []string{}
@@ -158,9 +159,7 @@ func (p *Wormhole) CleanupStaleProviders(maxAge time.Duration, maxCount int) {
 
 	for _, name := range staleKeys {
 		if cp, ok := p.providers[name]; ok {
-			if err := cp.provider.Close(); err != nil && p.config.Logger != nil {
-				p.config.Logger.Warn("error closing stale provider", "provider", name, "error", err)
-			}
+			evicted[name] = cp
 			delete(p.providers, name)
 			p.cacheEvictions.Add(1)
 		}
@@ -190,9 +189,7 @@ func (p *Wormhole) CleanupStaleProviders(maxAge time.Duration, maxCount int) {
 		for i := 0; i < neededEvictions && i < len(unusedProviders); i++ {
 			name := unusedProviders[i].name
 			if cp, ok := p.providers[name]; ok {
-				if err := cp.provider.Close(); err != nil && p.config.Logger != nil {
-					p.config.Logger.Warn("error closing provider during LRU eviction", "provider", name, "error", err)
-				}
+				evicted[name] = cp
 				delete(p.providers, name)
 				p.cacheEvictions.Add(1)
 			}
@@ -201,6 +198,12 @@ func (p *Wormhole) CleanupStaleProviders(maxAge time.Duration, maxCount int) {
 		if len(p.providers) > maxCount && p.config.Logger != nil {
 			p.config.Logger.Warn("provider cache exceeds max count but all providers are in use",
 				"current", len(p.providers), "max", maxCount)
+		}
+	}
+	p.providersMutex.Unlock()
+	for name, cp := range evicted {
+		if err := cp.provider.Close(); err != nil && p.config.Logger != nil {
+			p.config.Logger.Warn("error closing evicted provider", "provider", name, "error", err)
 		}
 	}
 }
@@ -235,8 +238,15 @@ func (p *Wormhole) EnableAdaptiveConcurrency(config *EnhancedAdaptiveConfig) {
 		normalized = normalizeEnhancedAdaptiveConfig(*config)
 	}
 
+	p.requestAdmissionMu.Lock()
+	if p.shuttingDown.Load() {
+		p.requestAdmissionMu.Unlock()
+		return
+	}
 	newLimiter := NewEnhancedAdaptiveLimiter(normalized)
-	if old := p.adaptiveLimiter.Swap(newLimiter); old != nil {
+	old := p.adaptiveLimiter.Swap(newLimiter)
+	p.requestAdmissionMu.Unlock()
+	if old != nil {
 		old.Stop()
 	}
 }

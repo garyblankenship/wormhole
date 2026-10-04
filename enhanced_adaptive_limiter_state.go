@@ -45,7 +45,7 @@ func (l *EnhancedAdaptiveLimiter) resolveProviderSettings(provider string) (
 
 // getState gets existing state for provider/model
 func (l *EnhancedAdaptiveLimiter) getState(provider, model string) *ProviderAdaptiveState {
-	if !l.config.EnableModelLevel && model != "" {
+	if !l.config.EnableModelLevel {
 		l.mu.RLock()
 		state, ok := l.providerStates[provider]
 		l.mu.RUnlock()
