@@ -24,36 +24,50 @@ func (p *Provider) accumulatingStream(ctx context.Context, in <-chan types.TextC
 	go func() {
 		defer close(out)
 		acc := newStreamFragmentAccumulator()
-		for chunk := range in {
-			// Fold any tool-call fragments out of the delta; they are buffered,
-			// not forwarded mid-stream (a partial fragment is not a usable call).
-			if chunk.Delta != nil && len(chunk.Delta.ToolCalls) > 0 {
-				acc.add(chunk.Delta.ToolCalls)
-				chunk.Delta.ToolCalls = nil
-			}
-			if len(chunk.ToolCalls) > 0 {
-				acc.add(chunk.ToolCalls)
-				chunk.ToolCalls = nil
-			}
-			// The default transformer path also stamps the singular ToolCall
-			// pointer with the same per-fragment call. The plural slice above
-			// already fed the accumulator, so drop the singular to stop the raw
-			// fragment from leaking into MergeTextChunks (which folds singular
-			// ToolCall from every chunk). Without this, fragments surface as N
-			// separate tool calls instead of the one accumulated call.
-			chunk.ToolCall = nil
-			// On the terminal chunk, attach the assembled, parsed tool calls.
-			// Also flush on an error chunk so buffered fragments are not silently
-			// dropped when a stream ends prematurely.
-			if chunk.IsDone() || chunk.Error != nil {
-				if calls := acc.finish(); len(calls) > 0 {
-					chunk.ToolCalls = calls
-				}
-			}
+		flushed := false
+		for {
+			var chunk types.TextChunk
 			select {
 			case <-ctx.Done():
 				return
-			default:
+			case next, ok := <-in:
+				if !ok {
+					return
+				}
+				chunk = next
+			}
+			// Delta is authoritative when the parser also exposes compatibility aliases.
+			var fragments []types.ToolCall
+			if chunk.Delta != nil {
+				fragments = chunk.Delta.ToolCalls
+			}
+			if len(fragments) == 0 && !chunk.IsDone() && chunk.Error == nil {
+				fragments = chunk.ToolCalls
+				if len(fragments) == 0 && chunk.ToolCall != nil {
+					fragments = []types.ToolCall{*chunk.ToolCall}
+				}
+				if len(fragments) > 0 {
+					delta := types.ChunkDelta{}
+					if chunk.Delta != nil {
+						delta = *chunk.Delta
+					}
+					delta.ToolCalls = fragments
+					chunk.Delta = &delta
+				}
+			}
+			if !flushed {
+				acc.add(fragments)
+			}
+			// Top-level calls are complete terminal results, never live fragments.
+			chunk.ToolCall = nil
+			terminalCalls := chunk.ToolCalls
+			chunk.ToolCalls = nil
+			if (chunk.IsDone() || chunk.Error != nil) && !flushed {
+				chunk.ToolCalls = acc.finish()
+				if len(chunk.ToolCalls) == 0 {
+					chunk.ToolCalls = terminalCalls
+				}
+				flushed = true
 			}
 			select {
 			case out <- chunk:

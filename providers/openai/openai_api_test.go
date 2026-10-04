@@ -307,7 +307,8 @@ func TestStructuredStrictEmitsJSONSchema(t *testing.T) {
 	t.Parallel()
 
 	schema := map[string]any{
-		"type": "object",
+		"type":     "object",
+		"required": []string{"name"},
 		"properties": map[string]any{
 			"name": map[string]any{"type": "string"},
 		},
@@ -327,7 +328,9 @@ func TestStructuredStrictEmitsJSONSchema(t *testing.T) {
 		assert.Equal(t, true, jsonSchema["strict"])
 		schemaData, ok := jsonSchema["schema"].(map[string]any)
 		require.True(t, ok)
-		assert.Equal(t, schema, schemaData)
+		assert.Equal(t, false, schemaData["additionalProperties"])
+		assert.Equal(t, []any{"name"}, schemaData["required"])
+		assert.Equal(t, schema["properties"], schemaData["properties"])
 
 		w.Header().Set("Content-Type", "application/json")
 		require.NoError(t, json.NewEncoder(w).Encode(chatCompletionResponse{

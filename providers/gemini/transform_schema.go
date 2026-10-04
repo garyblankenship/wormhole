@@ -172,6 +172,9 @@ func (g *Gemini) schemaInterfaceToMap(schemaIface types.SchemaInterface) map[str
 // schemaTypeToMap handles specific schema types
 func (g *Gemini) schemaTypeToMap(schema types.Schema) map[string]any {
 	result := map[string]any{}
+	if described, ok := schema.(types.SchemaInterface); ok && described.GetDescription() != "" {
+		result["description"] = described.GetDescription()
+	}
 
 	switch s := schema.(type) {
 	case *types.ObjectSchema:

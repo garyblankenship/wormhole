@@ -99,10 +99,11 @@ func TestSchemaToMapActualSchemaTypes(t *testing.T) {
 	}, scoreResult)
 
 	assert.Equal(t, map[string]any{
-		"type":      "string",
-		"minLength": minLength,
-		"maxLength": maxLength,
-		"pattern":   "^[a-z]+$",
+		"type":        "string",
+		"description": "display name",
+		"minLength":   minLength,
+		"maxLength":   maxLength,
+		"pattern":     "^[a-z]+$",
 	}, properties["name"])
 	assert.Equal(t, map[string]any{
 		"type":    "number",

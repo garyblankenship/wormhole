@@ -25,7 +25,7 @@ func (p *Provider) Structured(ctx context.Context, request types.StructuredReque
 		// Native OpenAI strict structured output: emit a json_schema response_format.
 		// This is the Chat Completions (nested) shape; buildResponsesPayload reshapes
 		// it to the flattened Responses API shape when that transport is active.
-		schemaMap, err := schemaToMap(request.Schema)
+		schemaMap, err := strictSchemaToMap(request.Schema)
 		if err != nil {
 			return nil, err
 		}

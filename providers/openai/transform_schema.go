@@ -2,6 +2,8 @@ package openai
 
 import (
 	"encoding/json"
+	"fmt"
+	"sort"
 	"strings"
 
 	"github.com/garyblankenship/wormhole/v3/types"
@@ -65,4 +67,95 @@ func isGPT5Model(model string) bool {
 	// Handles: gpt-5, gpt-5-mini, openai/gpt-5-mini, etc.
 	model = strings.ToLower(model)
 	return strings.Contains(model, "gpt-5")
+}
+
+// strictSchemaToMap clones before enforcing OpenAI's strict object contract.
+// Optional values must be required nullable fields, rather than omitted fields.
+func strictSchemaToMap(schema types.Schema) (map[string]any, error) {
+	result, err := schemaToMap(schema)
+	if err != nil {
+		return nil, err
+	}
+	if result == nil {
+		return nil, fmt.Errorf("strict schema at $: expected an object schema")
+	}
+	if err := normalizeStrictSchema(result, "$"); err != nil {
+		return nil, err
+	}
+	return result, nil
+}
+
+func normalizeStrictSchema(schema map[string]any, path string) error {
+	object := schema["type"] == "object"
+	if types, ok := schema["type"].([]any); ok {
+		for _, value := range types {
+			if value == "object" {
+				object = true
+			}
+		}
+	}
+	properties, hasProperties := schema["properties"].(map[string]any)
+	if object || hasProperties {
+		if additional, exists := schema["additionalProperties"]; exists {
+			if allowed, ok := additional.(bool); !ok || allowed {
+				return fmt.Errorf("strict schema at %s.additionalProperties: must be false", path)
+			}
+		} else {
+			schema["additionalProperties"] = false
+		}
+		required := make(map[string]bool)
+		if fields, ok := schema["required"].([]any); ok {
+			for _, field := range fields {
+				if name, ok := field.(string); ok {
+					required[name] = true
+				}
+			}
+		}
+		keys := sortedSchemaKeys(properties)
+		for _, name := range keys {
+			if !required[name] {
+				return fmt.Errorf("strict schema at %s.properties.%s: property must be required; use a required nullable field for optional values", path, name)
+			}
+		}
+	}
+	// Traverse schema-bearing keywords only: arbitrary examples/defaults are data.
+	for _, keyword := range []string{"properties", "$defs", "definitions", "patternProperties", "dependentSchemas"} {
+		if children, ok := schema[keyword].(map[string]any); ok {
+			for _, name := range sortedSchemaKeys(children) {
+				if child, ok := children[name].(map[string]any); ok {
+					if err := normalizeStrictSchema(child, path+"."+keyword+"."+name); err != nil {
+						return err
+					}
+				}
+			}
+		}
+	}
+	for _, keyword := range []string{"items", "contains", "not", "if", "then", "else", "propertyNames", "unevaluatedItems"} {
+		if child, ok := schema[keyword].(map[string]any); ok {
+			if err := normalizeStrictSchema(child, path+"."+keyword); err != nil {
+				return err
+			}
+		}
+	}
+	for _, keyword := range []string{"anyOf", "oneOf", "allOf", "prefixItems", "items"} {
+		if children, ok := schema[keyword].([]any); ok {
+			for index, value := range children {
+				if child, ok := value.(map[string]any); ok {
+					if err := normalizeStrictSchema(child, fmt.Sprintf("%s.%s[%d]", path, keyword, index)); err != nil {
+						return err
+					}
+				}
+			}
+		}
+	}
+	return nil
+}
+
+func sortedSchemaKeys(values map[string]any) []string {
+	keys := make([]string, 0, len(values))
+	for key := range values {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	return keys
 }

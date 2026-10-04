@@ -15,49 +15,58 @@ type accumulatedToolCall struct {
 	args []byte // accumulated partial_json fragments
 }
 
-// streamFragmentAccumulator stitches tool-call fragments emitted by
-// parseStreamChunk into complete tool calls. Anthropic opens each tool_use block
-// with a content_block_start fragment carrying id+name; subsequent
-// input_json_delta fragments carry empty id and only an argument substring on
-// Function.Arguments. A fragment WITH a non-empty ID opens a new slot; a
-// fragment with empty ID appends its raw args to the most-recently-opened slot.
+// streamFragmentAccumulator correlates Anthropic fragments by their wire
+// content-block index, which may include gaps occupied by text or thinking.
 type streamFragmentAccumulator struct {
-	calls []*accumulatedToolCall
-	usage *types.Usage
+	calls     map[int]*accumulatedToolCall
+	order     []int
+	usage     *types.Usage
+	ambiguous bool // wire indices are not distinguishable; follow recency
+	synthetic int  // next synthetic slot key for collided indices
 }
 
 func newStreamFragmentAccumulator() *streamFragmentAccumulator {
-	return &streamFragmentAccumulator{}
+	return &streamFragmentAccumulator{calls: make(map[int]*accumulatedToolCall)}
 }
 
 func (s *streamFragmentAccumulator) add(frags []types.ToolCall) {
-	for _, f := range frags {
-		raw := ""
-		if f.Function != nil {
-			raw = f.Function.Arguments
+	for _, fragment := range frags {
+		index := fragment.Index
+		call, exists := s.calls[index]
+		if fragment.ID != "" && exists && call.id != "" && call.id != fragment.ID {
+			// A second distinct tool_use block reuses this index: the wire omits
+			// distinguishable indices. Separate calls by identity from here on.
+			s.ambiguous = true
+			s.synthetic--
+			index = s.synthetic
+			call, exists = nil, false
+		} else if fragment.ID == "" && s.ambiguous {
+			// Continuations after a detected collision follow the most recent call.
+			if len(s.order) > 0 {
+				index = s.order[len(s.order)-1]
+				call, exists = s.calls[index], true
+			}
 		}
-		if f.ID != "" {
-			s.calls = append(s.calls, &accumulatedToolCall{
-				id:   f.ID,
-				typ:  f.Type,
-				name: f.Name,
-				args: append([]byte(nil), raw...),
-			})
-			continue
+		if !exists {
+			call = &accumulatedToolCall{}
+			s.calls[index] = call
+			s.order = append(s.order, index)
 		}
-		if len(s.calls) == 0 {
-			s.calls = append(s.calls, &accumulatedToolCall{
-				typ:  f.Type,
-				name: f.Name,
-				args: append([]byte(nil), raw...),
-			})
-			continue
+		if fragment.ID != "" {
+			call.id = fragment.ID
 		}
-		last := s.calls[len(s.calls)-1]
-		if f.Name != "" && last.name == "" {
-			last.name = f.Name
+		if fragment.Type != "" {
+			call.typ = fragment.Type
 		}
-		last.args = append(last.args, raw...)
+		if fragment.Name != "" {
+			call.name = fragment.Name
+		}
+		if fragment.Function != nil {
+			if fragment.Function.Name != "" && call.name == "" {
+				call.name = fragment.Function.Name
+			}
+			call.args = append(call.args, fragment.Function.Arguments...)
+		}
 	}
 }
 
@@ -66,9 +75,16 @@ func (s *streamFragmentAccumulator) finish() []types.ToolCall {
 		return nil
 	}
 	out := make([]types.ToolCall, 0, len(s.calls))
-	for _, acc := range s.calls {
+	for position, index := range s.order {
+		acc := s.calls[index]
+		if index < 0 {
+			// Synthetic slots come from streams without distinguishable indices;
+			// emit sequential positions for them.
+			index = position
+		}
 		argsMap, parseErrMsg := types.ParseToolArgs(string(acc.args), map[string]any{})
 		toolCall := types.ToolCall{
+			Index:     index,
 			ID:        acc.id,
 			Type:      acc.typ,
 			Name:      acc.name,
@@ -94,7 +110,20 @@ func (p *Provider) accumulatingStream(ctx context.Context, in <-chan types.Strea
 	go func() {
 		defer close(out)
 		acc := newStreamFragmentAccumulator()
-		for chunk := range in {
+		flushed := false
+	loop:
+		for {
+			var chunk types.StreamChunk
+			select {
+			case <-ctx.Done():
+				return
+			case next, ok := <-in:
+				if !ok {
+					// Upstream closed without a terminal chunk; flush below.
+					break loop
+				}
+				chunk = next
+			}
 			if chunk.Usage != nil {
 				if acc.usage == nil {
 					copy := *chunk.Usage
@@ -113,21 +142,38 @@ func (p *Provider) accumulatingStream(ctx context.Context, in <-chan types.Strea
 				copy := *acc.usage
 				chunk.Usage = &copy
 			}
-			if chunk.Delta != nil && len(chunk.Delta.ToolCalls) > 0 {
-				acc.add(chunk.Delta.ToolCalls)
-				chunk.Delta.ToolCalls = nil
+			// Delta is authoritative when the parser also exposes compatibility aliases.
+			var fragments []types.ToolCall
+			if chunk.Delta != nil {
+				fragments = chunk.Delta.ToolCalls
 			}
-			if len(chunk.ToolCalls) > 0 {
-				acc.add(chunk.ToolCalls)
-				chunk.ToolCalls = nil
-			}
-			// On the terminal chunk, attach assembled tool calls. Also flush on
-			// an error chunk so buffered fragments are not silently dropped when
-			// a stream ends prematurely.
-			if chunk.IsDone() || chunk.Error != nil {
-				if calls := acc.finish(); len(calls) > 0 {
-					chunk.ToolCalls = calls
+			if len(fragments) == 0 && !chunk.IsDone() && chunk.Error == nil {
+				fragments = chunk.ToolCalls
+				if len(fragments) == 0 && chunk.ToolCall != nil {
+					fragments = []types.ToolCall{*chunk.ToolCall}
 				}
+				if len(fragments) > 0 {
+					delta := types.ChunkDelta{}
+					if chunk.Delta != nil {
+						delta = *chunk.Delta
+					}
+					delta.ToolCalls = fragments
+					chunk.Delta = &delta
+				}
+			}
+			if !flushed {
+				acc.add(fragments)
+			}
+			// Top-level calls are complete terminal results, never live fragments.
+			chunk.ToolCall = nil
+			terminalCalls := chunk.ToolCalls
+			chunk.ToolCalls = nil
+			if (chunk.IsDone() || chunk.Error != nil) && !flushed {
+				chunk.ToolCalls = acc.finish()
+				if len(chunk.ToolCalls) == 0 {
+					chunk.ToolCalls = terminalCalls
+				}
+				flushed = true
 			}
 			select {
 			case out <- chunk:

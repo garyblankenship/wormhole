@@ -43,9 +43,10 @@ func (p *Provider) parseStreamChunk(data []byte) (*types.StreamChunk, error) {
 		if event.ContentBlock.Type == "tool_use" {
 			chunk.Delta = &types.ChunkDelta{
 				ToolCalls: []types.ToolCall{{
-					ID:   event.ContentBlock.ID,
-					Type: "tool_use",
-					Name: event.ContentBlock.Name,
+					Index: event.Index,
+					ID:    event.ContentBlock.ID,
+					Type:  "tool_use",
+					Name:  event.ContentBlock.Name,
 					Function: &types.ToolCallFunction{
 						Name:      event.ContentBlock.Name,
 						Arguments: "",
@@ -76,6 +77,7 @@ func (p *Provider) parseStreamChunk(data []byte) (*types.StreamChunk, error) {
 			// Tool-call argument fragment; carries no id/name (continuation).
 			chunk.Delta = &types.ChunkDelta{
 				ToolCalls: []types.ToolCall{{
+					Index: event.Index,
 					Function: &types.ToolCallFunction{
 						Arguments: event.Delta.PartialJSON,
 					},
