@@ -31,6 +31,29 @@ func ValidateAgainstSchema(data map[string]any, schema map[string]any) error {
 
 // parseSchema converts a map[string]any (JSON Schema) into a SchemaInterface
 func parseSchema(schemaMap map[string]any) (types.SchemaInterface, error) {
+	base, err := parseTypedSchema(schemaMap)
+	if err != nil {
+		return nil, err
+	}
+	if _, exists := schemaMap["enum"]; exists && base.GetType() != "enum" {
+		return &enumConstraint{SchemaInterface: base, enum: parseEnumSchema(schemaMap)}, nil
+	}
+	return base, nil
+}
+
+type enumConstraint struct {
+	types.SchemaInterface
+	enum *types.EnumSchema
+}
+
+func (s *enumConstraint) Validate(data any) error {
+	if err := s.SchemaInterface.Validate(data); err != nil {
+		return err
+	}
+	return s.enum.Validate(data)
+}
+
+func parseTypedSchema(schemaMap map[string]any) (types.SchemaInterface, error) {
 	if schemaMap == nil {
 		return nil, fmt.Errorf("schema map is nil")
 	}
@@ -59,8 +82,10 @@ func parseSchema(schemaMap map[string]any) (types.SchemaInterface, error) {
 		return parseArraySchema(schemaMap)
 	case "string":
 		return parseStringSchema(schemaMap), nil
-	case "number":
-		return parseNumberSchema(schemaMap), nil
+	case "number", "integer":
+		n := parseNumberSchema(schemaMap)
+		n.Type = typeField
+		return n, nil
 	case "boolean":
 		return parseBooleanSchema(schemaMap), nil
 	case "enum":
@@ -81,6 +106,9 @@ func parseObjectSchema(schemaMap map[string]any) (*types.ObjectSchema, error) {
 	}
 
 	// Parse required fields
+	if required, ok := schemaMap["required"].([]string); ok {
+		schema.Required = append([]string(nil), required...)
+	}
 	if required, ok := schemaMap["required"].([]any); ok {
 		schema.Required = make([]string, len(required))
 		for i, req := range required {
@@ -186,6 +214,11 @@ func parseEnumSchema(schemaMap map[string]any) *types.EnumSchema {
 	}
 
 	// Parse enum values
+	if enum, ok := schemaMap["enum"].([]string); ok {
+		for _, value := range enum {
+			schema.Enum = append(schema.Enum, value)
+		}
+	}
 	if enum, ok := schemaMap["enum"].([]any); ok {
 		schema.Enum = enum
 	}

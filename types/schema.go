@@ -2,6 +2,7 @@ package types
 
 import (
 	"fmt"
+	"math"
 	"reflect"
 	"regexp"
 	"strings"
@@ -140,6 +141,10 @@ func (s *ArraySchema) Validate(data any) error {
 		return NewWormholeError(ErrorCodeValidation, "data must be an array", false)
 	}
 
+	if s.Items == nil {
+		return nil
+	}
+
 	// Validate each item
 	for i := 0; i < value.Len(); i++ {
 		item := value.Index(i).Interface()
@@ -204,20 +209,12 @@ func (s *NumberSchema) Validate(data any) error {
 		return NewWormholeError(ErrorCodeValidation, "data cannot be nil", false)
 	}
 
-	var num float64
-	switch v := data.(type) {
-	case float64:
-		num = v
-	case float32:
-		num = float64(v)
-	case int:
-		num = float64(v)
-	case int32:
-		num = float64(v)
-	case int64:
-		num = float64(v)
-	default:
-		return NewWormholeError(ErrorCodeValidation, "data must be a number", false)
+	num, ok := schemaNumber(data)
+	if !ok || math.IsNaN(num) || math.IsInf(num, 0) {
+		return NewWormholeError(ErrorCodeValidation, "data must be a finite number", false)
+	}
+	if s.Type == "integer" && math.Trunc(num) != num {
+		return NewWormholeError(ErrorCodeValidation, "data must be an integer", false)
 	}
 
 	// Check range constraints
@@ -262,7 +259,7 @@ func (s *EnumSchema) Validate(data any) error {
 
 	// Check if data matches any enum value
 	for _, enumValue := range s.Enum {
-		if reflect.DeepEqual(data, enumValue) {
+		if reflect.DeepEqual(data, enumValue) || equalSchemaNumbers(data, enumValue) {
 			return nil
 		}
 	}

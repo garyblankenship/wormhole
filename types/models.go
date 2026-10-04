@@ -1,7 +1,6 @@
 package types
 
 import (
-	"fmt"
 	"strings"
 	"sync"
 )
@@ -164,29 +163,7 @@ func (r *ModelRegistry) ValidateModel(modelID string, requiredCapabilities []Mod
 		return ErrModelNotFound.WithModel(modelID)
 	}
 
-	if model.Deprecated {
-		return NewWormholeError(ErrorCodeModel, "model is deprecated", false).
-			WithModel(modelID).
-			WithDetails("consider using a newer model")
-	}
-
-	// Check capabilities
-	for _, required := range requiredCapabilities {
-		found := false
-		for _, cap := range model.Capabilities {
-			if cap == required {
-				found = true
-				break
-			}
-		}
-		if !found {
-			return ErrModelNotSupported.
-				WithModel(modelID).
-				WithDetails(fmt.Sprintf("missing capability: %s", required))
-		}
-	}
-
-	return nil
+	return validateModelInfo(model, requiredCapabilities)
 }
 
 // EstimateCost calculates the estimated cost for a request
