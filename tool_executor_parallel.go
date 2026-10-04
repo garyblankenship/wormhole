@@ -2,31 +2,25 @@ package wormhole
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"sync"
 	"sync/atomic"
 
-	"github.com/garyblankenship/wormhole/v3/internal/pool"
 	"github.com/garyblankenship/wormhole/v3/providers"
 	"github.com/garyblankenship/wormhole/v3/types"
 )
 
 // validateOutputSize checks if the tool output exceeds configured size limits
 func (e *ToolExecutor) validateOutputSize(result any) error {
-	if result == nil {
-		return nil
-	}
 
-	// Try to estimate size by marshaling to JSON using pooled buffer
-	jsonData, err := pool.Marshal(result)
+	// Measure the raw JSON bytes sent in tool-result messages.
+	jsonData, err := json.Marshal(result)
 	if err != nil {
-		// If we can't marshal, we can't validate - log warning but allow
-		// In production, you might want to handle this differently
-		return nil
+		return fmt.Errorf("failed to serialize tool output: %w", err)
 	}
-	defer pool.Return(jsonData)
 
-	if len(jsonData) > e.safetyConfig.MaxToolOutputSize {
+	if e.safetyConfig.HasOutputSizeLimit() && len(jsonData) > e.safetyConfig.MaxToolOutputSize {
 		return fmt.Errorf("output size %d bytes exceeds limit of %d bytes", len(jsonData), e.safetyConfig.MaxToolOutputSize)
 	}
 
@@ -45,13 +39,6 @@ func (e *ToolExecutor) ExecuteAll(ctx context.Context, toolCalls []types.ToolCal
 		return nil
 	}
 	results := make([]types.ToolResult, len(toolCalls))
-	for i := range results {
-		results[i] = types.ToolResult{
-			ToolCallID: toolCalls[i].ID,
-			Name:       toolCalls[i].Name,
-			Error:      "tool execution not started because an earlier handler outlived cancellation",
-		}
-	}
 
 	workerCount := len(toolCalls)
 	if max := e.safetyConfig.MaxConcurrentTools; max > 0 && workerCount > max {
@@ -68,12 +55,8 @@ func (e *ToolExecutor) ExecuteAll(ctx context.Context, toolCalls []types.ToolCal
 				if idx >= len(toolCalls) {
 					return
 				}
-				result, handlerRunning := e.execute(ctx, toolCalls[idx])
-				result.Name = toolCalls[idx].Name
+				result, _ := e.execute(ctx, toolCalls[idx])
 				results[idx] = result
-				if handlerRunning {
-					return
-				}
 			}
 		}()
 	}

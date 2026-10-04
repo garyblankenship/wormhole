@@ -3,88 +3,68 @@ package wormhole
 import (
 	"fmt"
 	"reflect"
-	"strings"
 )
 
-// SchemaFromStruct generates a JSON Schema from a struct type using reflection.
-// This is useful when you need the schema separately from tool registration.
-//
-// Example:
-//
-//	type SearchArgs struct {
-//	    Query    string   `json:"query" tool:"required" desc:"Search query"`
-//	    MaxItems int      `json:"max_items" tool:"min=1,max=100" desc:"Maximum results"`
-//	    Tags     []string `json:"tags" desc:"Filter by tags"`
-//	}
-//
-//	schema := wormhole.SchemaFromStruct(SearchArgs{})
+// SchemaFromStruct generates a JSON Schema using encoding/json field selection
+// and tool/desc tags. Recursive Go types return an error rather than recursing indefinitely.
 func SchemaFromStruct(v any) (map[string]any, error) {
 	t := reflect.TypeOf(v)
-	if t.Kind() == reflect.Pointer {
+	if t == nil {
+		return nil, fmt.Errorf("expected struct, got nil")
+	}
+	for t.Kind() == reflect.Pointer {
 		t = t.Elem()
 	}
-
 	if t.Kind() != reflect.Struct {
 		return nil, fmt.Errorf("expected struct, got %s", t.Kind())
 	}
+	return schemaForType(t, make(map[reflect.Type]bool))
+}
 
-	properties := make(map[string]any)
-	var required []string
-
-	for i := 0; i < t.NumField(); i++ {
-		field := t.Field(i)
-
-		// Skip unexported fields
-		if !field.IsExported() {
-			continue
+func schemaForType(t reflect.Type, visiting map[reflect.Type]bool) (map[string]any, error) {
+	for t.Kind() == reflect.Pointer {
+		t = t.Elem()
+	}
+	if visiting[t] {
+		return nil, fmt.Errorf("recursive schema type %s", t)
+	}
+	visiting[t] = true
+	defer delete(visiting, t)
+	schema := map[string]any{"type": goTypeToJSONType(t)}
+	switch t.Kind() {
+	case reflect.Array, reflect.Slice:
+		items, err := schemaForType(t.Elem(), visiting)
+		if err != nil {
+			return nil, err
 		}
-
-		// Get JSON field name
-		jsonTag := field.Tag.Get("json")
-		fieldName := field.Name
-		if jsonTag != "" {
-			parts := strings.Split(jsonTag, ",")
-			if parts[0] != "" && parts[0] != "-" {
-				fieldName = parts[0]
-			} else if parts[0] == "-" {
-				continue // Skip this field
+		schema["items"] = items
+	case reflect.Map:
+		items, err := schemaForType(t.Elem(), visiting)
+		if err != nil {
+			return nil, err
+		}
+		schema["additionalProperties"] = items
+	case reflect.Struct:
+		properties := make(map[string]any)
+		var required []string
+		for _, selected := range schemaJSONFields(t) {
+			field := selected.field
+			prop, err := schemaForType(field.Type, visiting)
+			if err != nil {
+				return nil, fmt.Errorf("field %s: %w", selected.name, err)
 			}
+			if err := parseToolTag(field.Tag.Get("tool"), prop, &required, selected.name); err != nil {
+				return nil, fmt.Errorf("field %s: %w", selected.name, err)
+			}
+			if desc := field.Tag.Get("desc"); desc != "" {
+				prop["description"] = desc
+			}
+			properties[selected.name] = prop
 		}
-
-		// Build property schema
-		propSchema := make(map[string]any)
-
-		// Set type based on Go type
-		propSchema["type"] = goTypeToJSONType(field.Type)
-
-		// Handle array types
-		if field.Type.Kind() == reflect.Slice {
-			itemType := goTypeToJSONType(field.Type.Elem())
-			propSchema["items"] = map[string]any{"type": itemType}
+		schema["properties"] = properties
+		if len(required) > 0 {
+			schema["required"] = required
 		}
-
-		// Parse tool tag for constraints
-		toolTag := field.Tag.Get("tool")
-		if toolTag != "" {
-			parseToolTag(toolTag, propSchema, &required, fieldName)
-		}
-
-		// Add description from desc tag
-		if desc := field.Tag.Get("desc"); desc != "" {
-			propSchema["description"] = desc
-		}
-
-		properties[fieldName] = propSchema
 	}
-
-	schema := map[string]any{
-		"type":       "object",
-		"properties": properties,
-	}
-
-	if len(required) > 0 {
-		schema["required"] = required
-	}
-
 	return schema, nil
 }

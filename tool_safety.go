@@ -230,6 +230,9 @@ func (r *RetryExecutor) ExecuteWithRetry(ctx context.Context, fn func(ctx contex
 	var lastErr error
 
 	for attempt := 0; attempt <= r.maxRetries; attempt++ {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
 		if err := fn(ctx); err != nil {
 			lastErr = err
 

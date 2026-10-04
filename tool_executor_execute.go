@@ -6,7 +6,6 @@ import (
 	"sync"
 	"sync/atomic"
 
-	"github.com/garyblankenship/wormhole/v3/internal/schemavalidation"
 	"github.com/garyblankenship/wormhole/v3/types"
 )
 
@@ -16,7 +15,8 @@ type ToolExecutor struct {
 	safetyConfig    ToolSafetyConfig
 	limiter         *ConcurrencyLimiter
 	adaptiveLimiter *AdaptiveLimiter
-	circuitBreaker  *SimpleCircuitBreaker
+	breakerMu       sync.Mutex
+	circuitBreakers map[string]*SimpleCircuitBreaker
 	retryExecutor   *RetryExecutor
 	configErr       error
 	admission       *toolAdmissionBudget
@@ -71,7 +71,19 @@ func (e *ToolExecutor) Execute(ctx context.Context, toolCall types.ToolCall) typ
 	return result
 }
 
-func (e *ToolExecutor) execute(ctx context.Context, toolCall types.ToolCall) (types.ToolResult, bool) {
+func (e *ToolExecutor) execute(ctx context.Context, toolCall types.ToolCall) (returned types.ToolResult, running bool) {
+	name := toolCall.Name
+	if name == "" && toolCall.Function != nil {
+		name = toolCall.Function.Name
+	}
+	defer func() { returned.Name = name }()
+	normalized, normalizationErr := types.NormalizeToolCall(toolCall)
+	if normalizationErr != nil {
+		e.recordCircuitFailure(name)
+		return types.ToolResult{ToolCallID: toolCall.ID, Error: normalizationErr.Error()}, false
+	}
+	toolCall = normalized
+	name = toolCall.Name
 	if e.configErr != nil {
 		return types.ToolResult{
 			ToolCallID: toolCall.ID,
@@ -83,7 +95,7 @@ func (e *ToolExecutor) execute(ctx context.Context, toolCall types.ToolCall) (ty
 	}
 
 	// Check circuit breaker if enabled
-	if e.circuitBreaker != nil && e.circuitBreaker.IsTripped() {
+	if breaker := e.breakerForTool(name); breaker != nil && breaker.IsTripped() {
 		return types.ToolResult{
 			ToolCallID: toolCall.ID,
 			Error:      "circuit breaker tripped - tool execution temporarily disabled",
@@ -98,7 +110,7 @@ func (e *ToolExecutor) execute(ctx context.Context, toolCall types.ToolCall) (ty
 	definition := e.registry.getStored(toolCall.Name)
 	if definition == nil {
 		// Record failure for circuit breaker
-		e.recordCircuitFailure()
+		e.recordCircuitFailure(toolCall.Name)
 		return types.ToolResult{
 			ToolCallID: toolCall.ID,
 			Error:      fmt.Sprintf("tool %q not found in registry", toolCall.Name),
@@ -148,9 +160,10 @@ func (e *ToolExecutor) execute(ctx context.Context, toolCall types.ToolCall) (ty
 	var result any
 	var err error
 	var handlerState atomic.Uint32
+	var everStarted atomic.Bool
 
 	callHandler := func(ctx context.Context) (res any, rerr error) {
-		return callToolHandler(ctx, definition, args, &handlerState)
+		return callToolHandler(ctx, definition, args, &handlerState, &everStarted)
 	}
 
 	execute := func() (any, error) {
@@ -185,7 +198,7 @@ func (e *ToolExecutor) execute(ctx context.Context, toolCall types.ToolCall) (ty
 	}
 	go func() {
 		defer func() {
-			release(handlerState.Load() == toolHandlerStarted)
+			release(everStarted.Load())
 		}()
 		r, e := execute()
 		done <- outcome{result: r, err: e}
@@ -195,15 +208,19 @@ func (e *ToolExecutor) execute(ctx context.Context, toolCall types.ToolCall) (ty
 		result, err = o.result, o.err
 	case <-ctx.Done():
 		if handlerState.CompareAndSwap(toolHandlerPending, toolHandlerCanceled) {
-			release(false)
+			if !everStarted.Load() {
+				release(false)
+			}
 			return e.admissionCanceledResult(toolCall), false
 		}
 		if handlerState.Load() != toolHandlerStarted {
-			release(false)
+			if !everStarted.Load() {
+				release(false)
+			}
 			return e.admissionCanceledResult(toolCall), false
 		}
 		err = fmt.Errorf("tool %q timed out or was canceled: %w", toolCall.Name, ctx.Err())
-		e.recordCircuitFailure()
+		e.recordCircuitFailure(toolCall.Name)
 		return types.ToolResult{
 			ToolCallID: toolCall.ID,
 			Error:      err.Error(),
@@ -216,7 +233,7 @@ func (e *ToolExecutor) execute(ctx context.Context, toolCall types.ToolCall) (ty
 			return e.admissionCanceledResult(toolCall), false
 		}
 		// Record failure for circuit breaker
-		e.recordCircuitFailure()
+		e.recordCircuitFailure(toolCall.Name)
 		return types.ToolResult{
 			ToolCallID: toolCall.ID,
 			Error:      err.Error(),
@@ -229,7 +246,7 @@ func (e *ToolExecutor) execute(ctx context.Context, toolCall types.ToolCall) (ty
 	}
 
 	// Record success for circuit breaker
-	e.recordCircuitSuccess()
+	e.recordCircuitSuccess(toolCall.Name)
 
 	return types.ToolResult{
 		ToolCallID: toolCall.ID,
@@ -241,120 +258,5 @@ func (e *ToolExecutor) admissionCanceledResult(toolCall types.ToolCall) types.To
 	return types.ToolResult{
 		ToolCallID: toolCall.ID,
 		Error:      "concurrency limit exceeded or context canceled while waiting for tool execution permit",
-	}
-}
-
-func callToolHandler(
-	ctx context.Context,
-	definition *types.ToolDefinition,
-	args map[string]any,
-	state *atomic.Uint32,
-) (res any, rerr error) {
-	if err := ctx.Err(); err != nil {
-		return nil, err
-	}
-	for state.Load() == toolHandlerPending {
-		if state.CompareAndSwap(toolHandlerPending, toolHandlerStarted) {
-			break
-		}
-	}
-	if state.Load() == toolHandlerCanceled {
-		return nil, context.Canceled
-	}
-	defer func() {
-		if recovered := recover(); recovered != nil {
-			rerr = fmt.Errorf("tool handler panicked: %v", recovered)
-		}
-	}()
-	return definition.Handler(ctx, args)
-}
-
-func (e *ToolExecutor) rejectMalformedArguments(toolCall types.ToolCall) (types.ToolResult, bool) {
-	if !toolCall.ArgsInvalid {
-		return types.ToolResult{}, false
-	}
-	e.recordCircuitFailure()
-	parseError := toolCall.ArgsParseError
-	if parseError == "" {
-		parseError = "provider could not parse the arguments as JSON"
-	}
-	return types.ToolResult{
-		ToolCallID: toolCall.ID,
-		Error:      fmt.Sprintf("tool %q has malformed arguments: %s", toolCall.Name, parseError),
-	}, true
-}
-
-func (e *ToolExecutor) rejectInvalidArguments(definition *types.ToolDefinition, toolCall types.ToolCall) (types.ToolResult, bool) {
-	if !e.safetyConfig.EnableInputValidation || definition.Tool.InputSchema == nil {
-		return types.ToolResult{}, false
-	}
-	if err := schemavalidation.ValidateAgainstSchema(toolCall.Arguments, definition.Tool.InputSchema); err != nil {
-		e.recordCircuitFailure()
-		return types.ToolResult{
-			ToolCallID: toolCall.ID,
-			Error:      fmt.Sprintf("schema validation failed: %v", err),
-		}, true
-	}
-	return types.ToolResult{}, false
-}
-
-func (e *ToolExecutor) rejectOversizedOutput(toolCall types.ToolCall, result any) (types.ToolResult, bool) {
-	if !e.safetyConfig.HasOutputSizeLimit() || result == nil {
-		return types.ToolResult{}, false
-	}
-	if err := e.validateOutputSize(result); err != nil {
-		e.recordCircuitFailure()
-		return types.ToolResult{
-			ToolCallID: toolCall.ID,
-			Error:      fmt.Sprintf("output size limit exceeded: %v", err),
-		}, true
-	}
-	return types.ToolResult{}, false
-}
-
-func (e *ToolExecutor) recordCircuitFailure() {
-	if e.circuitBreaker != nil {
-		e.circuitBreaker.RecordFailure()
-	}
-}
-
-func (e *ToolExecutor) recordCircuitSuccess() {
-	if e.circuitBreaker != nil {
-		e.circuitBreaker.RecordSuccess()
-	}
-}
-
-func (e *ToolExecutor) acquirePermit(ctx context.Context) (release func(handlerStarted bool), ok bool) {
-	return e.admission.acquire(ctx)
-}
-
-func (p *Wormhole) newToolExecutor(registry *ToolRegistry) *ToolExecutor {
-	config := p.config.ToolSafety
-	executor := &ToolExecutor{
-		registry:      registry,
-		safetyConfig:  config,
-		configErr:     p.toolConfigErr,
-		admission:     p.toolBudget,
-		ownsAdmission: false,
-	}
-	if p.toolBudget != nil {
-		executor.limiter = p.toolBudget.limiter
-		executor.adaptiveLimiter = p.toolBudget.adaptiveLimiter
-	}
-	if p.toolConfigErr == nil {
-		executor.initializeExecutionPolicies()
-	}
-	return executor
-}
-
-func (e *ToolExecutor) initializeExecutionPolicies() {
-	if e.safetyConfig.EnableCircuitBreaker {
-		e.circuitBreaker = NewSimpleCircuitBreaker(
-			e.safetyConfig.CircuitBreakerThreshold,
-			e.safetyConfig.CircuitBreakerResetTimeout,
-		)
-	}
-	if e.safetyConfig.MaxRetriesPerTool > 0 {
-		e.retryExecutor = NewRetryExecutor(e.safetyConfig.MaxRetriesPerTool)
 	}
 }

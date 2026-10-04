@@ -15,15 +15,17 @@ func buildToolResultMessage(result types.ToolResult) *types.ToolResultMessage {
 	if result.Error != "" {
 		content = fmt.Sprintf("Tool %s failed: %s", result.ToolCallID, result.Error)
 	} else if resultJSON, err := json.Marshal(result.Result); err != nil {
-		content = fmt.Sprintf("Tool %s failed to serialize: %v", result.ToolCallID, err)
+		result.Error = fmt.Sprintf("failed to serialize tool output: %v", err)
+		content = fmt.Sprintf("Tool %s failed: %s", result.ToolCallID, result.Error)
 	} else {
-		content = fmt.Sprintf("Tool %s result: %s", result.ToolCallID, resultJSON)
+		content = string(resultJSON)
 	}
 
 	return &types.ToolResultMessage{
 		Content:      content,
 		ToolCallID:   result.ToolCallID,
 		FunctionName: result.Name,
+		Error:        result.Error,
 	}
 }
 

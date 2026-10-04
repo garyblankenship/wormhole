@@ -168,6 +168,7 @@ func TestToolExecutorStopsWorkerWhenHandlerOutlivesCancellation(t *testing.T) {
 	config.MaxConcurrentTools = 1
 	config.MaxToolCallsPerRound = 4
 	config.ToolTimeout = 10 * time.Millisecond
+	config.ToolQueueTimeout = 10 * time.Millisecond
 	executor := NewToolExecutorWithConfig(registry, config)
 	t.Cleanup(executor.Stop)
 
@@ -179,7 +180,7 @@ func TestToolExecutorStopsWorkerWhenHandlerOutlivesCancellation(t *testing.T) {
 	if !strings.Contains(results[0].Error, "timed out") {
 		t.Fatalf("first result = %#v", results[0])
 	}
-	if !strings.Contains(results[1].Error, "not started") {
+	if !strings.Contains(results[1].Error, "waiting for tool execution permit") {
 		t.Fatalf("second result = %#v", results[1])
 	}
 }

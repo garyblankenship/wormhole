@@ -328,7 +328,8 @@ func TestToolLoopResultSerializationCount(t *testing.T) {
 	})
 }
 
-func TestToolLoopMarshalFailureUsesMessageBuilderRetry(t *testing.T) {
+// C2-07: serialization failure is an execution failure, not a message-builder retry.
+func TestToolLoopMarshalFailureIsExecutionFailure(t *testing.T) {
 	t.Parallel()
 	result := &retrySerializedToolResult{}
 	registry := NewToolRegistry()
@@ -348,8 +349,13 @@ func TestToolLoopMarshalFailureUsesMessageBuilderRetry(t *testing.T) {
 	require.Len(t, provider.requests, 2)
 	message, ok := provider.requests[1].Messages[2].(*types.ToolResultMessage)
 	require.True(t, ok)
-	assert.Contains(t, message.Content, `"second attempt"`)
-	assert.Equal(t, int32(2), result.calls.Load())
+	assert.Contains(t, message.Error, "first marshal failed")
+	assert.Contains(t, message.Content, "Tool call failed:")
+	assert.Contains(t, message.Content, message.Error)
+	assert.NotContains(t, message.Content, "second attempt")
+	assert.Equal(t, "call", message.ToolCallID)
+	assert.Equal(t, "tool", message.FunctionName)
+	assert.Equal(t, int32(1), result.calls.Load())
 }
 
 func TestToolExecutor_ExecuteWithTools_SingleRound(t *testing.T) {

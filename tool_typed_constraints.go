@@ -44,7 +44,7 @@ func goTypeToJSONType(t reflect.Type) string {
 //   - tool:"required;enum=a,b,c"
 //   - tool:"min=0;max=100"
 //   - tool:"enum=active,inactive,pending"
-func parseToolTag(tag string, schema map[string]any, required *[]string, fieldName string) {
+func parseToolTag(tag string, schema map[string]any, required *[]string, fieldName string) error {
 	// Split by semicolon first (preferred delimiter)
 	// Fall back to comma only if no semicolon found AND no enum= present
 	var parts []string
@@ -83,24 +83,32 @@ func parseToolTag(tag string, schema map[string]any, required *[]string, fieldNa
 			schema["enum"] = values
 
 		case strings.HasPrefix(part, "min="):
-			if min := parseFloat(strings.TrimPrefix(part, "min=")); min != nil {
-				schema["minimum"] = *min
+			min := parseFloat(strings.TrimPrefix(part, "min="))
+			if min == nil {
+				return fmt.Errorf("invalid min constraint %q", part)
 			}
+			schema["minimum"] = *min
 
 		case strings.HasPrefix(part, "max="):
-			if max := parseFloat(strings.TrimPrefix(part, "max=")); max != nil {
-				schema["maximum"] = *max
+			max := parseFloat(strings.TrimPrefix(part, "max="))
+			if max == nil {
+				return fmt.Errorf("invalid max constraint %q", part)
 			}
+			schema["maximum"] = *max
 
 		case strings.HasPrefix(part, "minLength="):
-			if minLen := parseInt(strings.TrimPrefix(part, "minLength=")); minLen != nil {
-				schema["minLength"] = *minLen
+			minLen := parseInt(strings.TrimPrefix(part, "minLength="))
+			if minLen == nil {
+				return fmt.Errorf("invalid minLength constraint %q", part)
 			}
+			schema["minLength"] = *minLen
 
 		case strings.HasPrefix(part, "maxLength="):
-			if maxLen := parseInt(strings.TrimPrefix(part, "maxLength=")); maxLen != nil {
-				schema["maxLength"] = *maxLen
+			maxLen := parseInt(strings.TrimPrefix(part, "maxLength="))
+			if maxLen == nil {
+				return fmt.Errorf("invalid maxLength constraint %q", part)
 			}
+			schema["maxLength"] = *maxLen
 
 		case strings.HasPrefix(part, "pattern="):
 			schema["pattern"] = strings.TrimPrefix(part, "pattern=")
@@ -109,6 +117,7 @@ func parseToolTag(tag string, schema map[string]any, required *[]string, fieldNa
 			schema["default"] = strings.TrimPrefix(part, "default=")
 		}
 	}
+	return nil
 }
 
 // parseToolTagWithEnum handles the special case of parsing tool tags that contain enum=.

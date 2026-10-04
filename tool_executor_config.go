@@ -70,7 +70,7 @@ type ToolSafetyConfig struct {
 	EnableInputValidation bool `json:"enable_input_validation" yaml:"enable_input_validation"`
 
 	// MaxToolOutputSize limits the size of tool output in bytes
-	// Prevents memory exhaustion from large tool outputs
+	// Bounds serialized output; handler allocations and serialization memory remain unbounded.
 	// Default: 10MB (10 * 1024 * 1024)
 	MaxToolOutputSize int `json:"max_tool_output_size" yaml:"max_tool_output_size"`
 }

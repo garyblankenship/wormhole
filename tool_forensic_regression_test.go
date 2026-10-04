@@ -157,9 +157,9 @@ func TestToolExecutorPreCanceledContextsNeverStartHandlers(t *testing.T) {
 			if got := toolExecutorPermitsInUse(executor); got != 0 {
 				t.Fatalf("permits in use = %d, want 0", got)
 			}
-			executor.circuitBreaker.mu.RLock()
-			failures := executor.circuitBreaker.failureCount
-			executor.circuitBreaker.mu.RUnlock()
+			executor.breakerForTool("side-effect").mu.RLock()
+			failures := executor.breakerForTool("side-effect").failureCount
+			executor.breakerForTool("side-effect").mu.RUnlock()
 			if failures != 0 {
 				t.Fatalf("circuit breaker failures = %d, want 0", failures)
 			}

@@ -1,23 +1,24 @@
 package wormhole
 
 import (
-	"fmt"
+	"math"
+	"strconv"
 )
 
-// parseFloat parses a string to float64, returning nil if parsing fails.
+// parseFloat parses a complete finite float, returning nil on invalid input.
 func parseFloat(s string) *float64 {
-	var f float64
-	if _, err := fmt.Sscanf(s, "%f", &f); err == nil {
-		return &f
+	f, err := strconv.ParseFloat(s, 64)
+	if err != nil || math.IsNaN(f) || math.IsInf(f, 0) {
+		return nil
 	}
-	return nil
+	return &f
 }
 
-// parseInt parses a string to int, returning nil if parsing fails.
+// parseInt parses a complete integer, returning nil on invalid input.
 func parseInt(s string) *int {
-	var i int
-	if _, err := fmt.Sscanf(s, "%d", &i); err == nil {
-		return &i
+	i, err := strconv.Atoi(s)
+	if err != nil {
+		return nil
 	}
-	return nil
+	return &i
 }
