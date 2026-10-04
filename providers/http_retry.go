@@ -196,26 +196,29 @@ func (r *retryableHTTPClient) calculateDelay(attempt int, retryAfter time.Durati
 		return retryAfter
 	}
 
-	// Calculate exponential backoff
-	delay := float64(r.Config.InitialDelay) * math.Pow(r.Config.BackoffMultiple, float64(attempt))
-
-	// Apply jitter to prevent thundering herd
+	jitter := 0.0
 	if r.Config.Jitter {
-		// Add ±20% jitter using cryptographically secure randomness
-		jitter := delay * 0.2 * secureRandomFloat()
-		delay += jitter
+		jitter = secureRandomFloat()
 	}
+	return r.backoffDelay(attempt, jitter)
+}
 
-	// Cap at maximum delay
-	if delay > float64(r.Config.MaxDelay) {
-		delay = float64(r.Config.MaxDelay)
+// backoffDelay clamps deterministic backoff before applying ±20% jitter.
+// A negative sample therefore remains effective on the first retry and after
+// exponential backoff reaches its cap. The resulting wait stays positive and
+// never exceeds MaxDelay.
+func (r *retryableHTTPClient) backoffDelay(attempt int, jitter float64) time.Duration {
+	maximum := max(float64(time.Nanosecond), float64(r.Config.MaxDelay))
+	initial := max(float64(time.Nanosecond), float64(r.Config.InitialDelay))
+	delay := initial * math.Pow(r.Config.BackoffMultiple, float64(attempt))
+	delay = min(max(delay, initial), maximum)
+	if r.Config.Jitter {
+		delay += delay * 0.2 * jitter
 	}
-
-	// Ensure minimum delay
-	if delay < float64(r.Config.InitialDelay) {
-		delay = float64(r.Config.InitialDelay)
+	delay = min(max(delay, float64(time.Nanosecond)), maximum)
+	if delay >= maximum {
+		return max(time.Nanosecond, r.Config.MaxDelay)
 	}
-
 	return time.Duration(delay)
 }
 

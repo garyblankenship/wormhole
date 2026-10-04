@@ -54,8 +54,7 @@ func PrepareMessages(messages []types.Message) ([]types.Message, []string, error
 		return nil, nil, err
 	}
 	normalizeToolResultIDs(prepared, normalizedIDs)
-	callIDs, resultIDs := collectToolMessageIDs(prepared)
-	return filterUnmatchedToolMessages(prepared, callIDs, resultIDs)
+	return filterUnmatchedToolMessages(prepared)
 }
 
 func prepareMessageCopies(messages []types.Message) ([]types.Message, map[string]string, error) {
@@ -116,57 +115,54 @@ func normalizeToolResultIDs(messages []types.Message, normalizedIDs map[string]s
 	}
 }
 
-func collectToolMessageIDs(messages []types.Message) (map[string]struct{}, map[string]struct{}) {
-	callIDs := make(map[string]struct{})
-	resultIDs := make(map[string]struct{})
-	for _, message := range messages {
-		switch message := message.(type) {
+// filterUnmatchedToolMessages pairs each result with one earlier unmatched call.
+// Occurrences, rather than global IDs, make later reuse and ordering explicit.
+func filterUnmatchedToolMessages(messages []types.Message) ([]types.Message, []string, error) {
+	type occurrence struct{ message, call int }
+	pending := make(map[string][]occurrence)
+	matched := make(map[occurrence]bool)
+	keptResults := make(map[int]bool)
+	for i, message := range messages {
+		switch m := message.(type) {
 		case *types.AssistantMessage:
-			for _, toolCall := range message.ToolCalls {
-				callIDs[toolCall.ID] = struct{}{}
+			for j, call := range m.ToolCalls {
+				pending[call.ID] = append(pending[call.ID], occurrence{i, j})
 			}
 		case *types.ToolResultMessage:
-			resultIDs[message.ToolCallID] = struct{}{}
+			queue := pending[m.ToolCallID]
+			if len(queue) > 0 {
+				matched[queue[0]] = true
+				keptResults[i] = true
+				pending[m.ToolCallID] = queue[1:]
+			}
 		}
 	}
-	return callIDs, resultIDs
-}
-
-func filterUnmatchedToolMessages(messages []types.Message, callIDs, resultIDs map[string]struct{}) ([]types.Message, []string, error) {
-	warnings := make([]string, 0)
+	var warnings []string
 	repaired := make([]types.Message, 0, len(messages))
 	for i, message := range messages {
-		switch message := message.(type) {
+		switch m := message.(type) {
 		case *types.AssistantMessage:
-			kept, droppedWarnings := matchedToolCalls(message.ToolCalls, resultIDs, i)
-			message.ToolCalls = kept
-			warnings = append(warnings, droppedWarnings...)
-			repaired = append(repaired, message)
-		case *types.ToolResultMessage:
-			if _, matched := callIDs[message.ToolCallID]; matched {
-				repaired = append(repaired, message)
-				continue
+			kept := make([]types.ToolCall, 0, len(m.ToolCalls))
+			for j, call := range m.ToolCalls {
+				if matched[occurrence{i, j}] {
+					kept = append(kept, call)
+				} else {
+					warnings = append(warnings, fmt.Sprintf("dropped orphaned tool call %s at assistant message index %d", call.ID, i))
+				}
 			}
-			warnings = append(warnings, fmt.Sprintf("dropped stranded tool result %s at index %d", message.ToolCallID, i))
+			if len(m.ToolCalls) > 0 {
+				m.ToolCalls = kept
+			}
+			repaired = append(repaired, m)
+		case *types.ToolResultMessage:
+			if keptResults[i] {
+				repaired = append(repaired, m)
+			} else {
+				warnings = append(warnings, fmt.Sprintf("dropped stranded tool result %s at index %d", m.ToolCallID, i))
+			}
 		default:
-			repaired = append(repaired, message)
+			repaired = append(repaired, m)
 		}
 	}
 	return repaired, warnings, nil
-}
-
-func matchedToolCalls(toolCalls []types.ToolCall, resultIDs map[string]struct{}, messageIndex int) ([]types.ToolCall, []string) {
-	if len(toolCalls) == 0 {
-		return toolCalls, nil
-	}
-	kept := make([]types.ToolCall, 0, len(toolCalls))
-	var warnings []string
-	for _, toolCall := range toolCalls {
-		if _, matched := resultIDs[toolCall.ID]; matched {
-			kept = append(kept, toolCall)
-			continue
-		}
-		warnings = append(warnings, fmt.Sprintf("dropped orphaned tool call %s at assistant message index %d", toolCall.ID, messageIndex))
-	}
-	return kept, warnings
 }

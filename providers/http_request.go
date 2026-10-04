@@ -13,6 +13,9 @@ import (
 	"github.com/garyblankenship/wormhole/v3/types"
 )
 
+// StreamRequest applies the configured HTTP timeout to the full stream lifetime,
+// including body reads. A nonpositive timeout disables this deadline; the caller
+// context still governs cancellation. Closing the body releases the deadline.
 func (w *HTTPClientWrapper) StreamRequest(ctx context.Context, method, url string, body any) (io.ReadCloser, error) {
 	reqCtx, cancel := w.requestContext(ctx)
 	req, err := w.buildRequest(reqCtx, method, url, body)
