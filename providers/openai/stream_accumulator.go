@@ -25,6 +25,7 @@ func (p *Provider) accumulatingStream(ctx context.Context, in <-chan types.TextC
 		defer close(out)
 		acc := newStreamFragmentAccumulator()
 		flushed := false
+	loop:
 		for {
 			var chunk types.TextChunk
 			select {
@@ -32,7 +33,8 @@ func (p *Provider) accumulatingStream(ctx context.Context, in <-chan types.TextC
 				return
 			case next, ok := <-in:
 				if !ok {
-					return
+					// Upstream closed without a terminal chunk; flush below.
+					break loop
 				}
 				chunk = next
 			}
@@ -46,19 +48,14 @@ func (p *Provider) accumulatingStream(ctx context.Context, in <-chan types.TextC
 				if len(fragments) == 0 && chunk.ToolCall != nil {
 					fragments = []types.ToolCall{*chunk.ToolCall}
 				}
-				if len(fragments) > 0 {
-					delta := types.ChunkDelta{}
-					if chunk.Delta != nil {
-						delta = *chunk.Delta
-					}
-					delta.ToolCalls = fragments
-					chunk.Delta = &delta
-				}
 			}
 			if !flushed {
 				acc.add(fragments)
 			}
-			// Top-level calls are complete terminal results, never live fragments.
+			// Fragments are consumed here; only completed calls leave the accumulator.
+			if chunk.Delta != nil {
+				chunk.Delta.ToolCalls = nil
+			}
 			chunk.ToolCall = nil
 			terminalCalls := chunk.ToolCalls
 			chunk.ToolCalls = nil
@@ -68,6 +65,12 @@ func (p *Provider) accumulatingStream(ctx context.Context, in <-chan types.TextC
 					chunk.ToolCalls = terminalCalls
 				}
 				flushed = true
+			}
+			// Cancel wins deterministically over a waiting receiver.
+			select {
+			case <-ctx.Done():
+				return
+			default:
 			}
 			select {
 			case out <- chunk:

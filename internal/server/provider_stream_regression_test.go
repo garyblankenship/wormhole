@@ -8,11 +8,12 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
 	wormhole "github.com/garyblankenship/wormhole/v3"
 	"github.com/garyblankenship/wormhole/v3/providers/openai"
 	"github.com/garyblankenship/wormhole/v3/types"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
 
 func TestProxyOpenAIResponsesStreamEmitsCompletedToolCallsOnce(t *testing.T) {

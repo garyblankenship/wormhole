@@ -101,6 +101,29 @@ func (s *streamFragmentAccumulator) finish() []types.ToolCall {
 	return out
 }
 
+// mergeUsage folds cumulative usage counts into the accumulator and attaches
+// the merged snapshot to usage and terminal chunks.
+func (s *streamFragmentAccumulator) mergeUsage(chunk *types.StreamChunk) {
+	if chunk.Usage != nil {
+		if s.usage == nil {
+			copy := *chunk.Usage
+			s.usage = &copy
+		} else {
+			// Usage events contain cumulative counts, not increments.
+			// Preserve input/cache counts omitted by later output updates.
+			s.usage.PromptTokens = max(s.usage.PromptTokens, chunk.Usage.PromptTokens)
+			s.usage.CompletionTokens = max(s.usage.CompletionTokens, chunk.Usage.CompletionTokens)
+			s.usage.CacheReadTokens = max(s.usage.CacheReadTokens, chunk.Usage.CacheReadTokens)
+			s.usage.CacheWriteTokens = max(s.usage.CacheWriteTokens, chunk.Usage.CacheWriteTokens)
+			s.usage.TotalTokens = s.usage.PromptTokens + s.usage.CompletionTokens
+		}
+	}
+	if s.usage != nil && (chunk.Usage != nil || chunk.IsDone()) {
+		copy := *s.usage
+		chunk.Usage = &copy
+	}
+}
+
 // accumulatingStream wraps a raw Anthropic chunk channel and stitches streaming
 // tool-call fragments. Sole closer of out; every send is ctx-guarded so the
 // goroutine exits if the consumer stops reading. On the terminal chunk
@@ -124,24 +147,7 @@ func (p *Provider) accumulatingStream(ctx context.Context, in <-chan types.Strea
 				}
 				chunk = next
 			}
-			if chunk.Usage != nil {
-				if acc.usage == nil {
-					copy := *chunk.Usage
-					acc.usage = &copy
-				} else {
-					// Usage events contain cumulative counts, not increments.
-					// Preserve input/cache counts omitted by later output updates.
-					acc.usage.PromptTokens = max(acc.usage.PromptTokens, chunk.Usage.PromptTokens)
-					acc.usage.CompletionTokens = max(acc.usage.CompletionTokens, chunk.Usage.CompletionTokens)
-					acc.usage.CacheReadTokens = max(acc.usage.CacheReadTokens, chunk.Usage.CacheReadTokens)
-					acc.usage.CacheWriteTokens = max(acc.usage.CacheWriteTokens, chunk.Usage.CacheWriteTokens)
-					acc.usage.TotalTokens = acc.usage.PromptTokens + acc.usage.CompletionTokens
-				}
-			}
-			if acc.usage != nil && (chunk.Usage != nil || chunk.IsDone()) {
-				copy := *acc.usage
-				chunk.Usage = &copy
-			}
+			acc.mergeUsage(&chunk)
 			// Delta is authoritative when the parser also exposes compatibility aliases.
 			var fragments []types.ToolCall
 			if chunk.Delta != nil {
@@ -152,19 +158,14 @@ func (p *Provider) accumulatingStream(ctx context.Context, in <-chan types.Strea
 				if len(fragments) == 0 && chunk.ToolCall != nil {
 					fragments = []types.ToolCall{*chunk.ToolCall}
 				}
-				if len(fragments) > 0 {
-					delta := types.ChunkDelta{}
-					if chunk.Delta != nil {
-						delta = *chunk.Delta
-					}
-					delta.ToolCalls = fragments
-					chunk.Delta = &delta
-				}
 			}
 			if !flushed {
 				acc.add(fragments)
 			}
-			// Top-level calls are complete terminal results, never live fragments.
+			// Fragments are consumed here; only completed calls leave the accumulator.
+			if chunk.Delta != nil {
+				chunk.Delta.ToolCalls = nil
+			}
 			chunk.ToolCall = nil
 			terminalCalls := chunk.ToolCalls
 			chunk.ToolCalls = nil
@@ -174,6 +175,12 @@ func (p *Provider) accumulatingStream(ctx context.Context, in <-chan types.Strea
 					chunk.ToolCalls = terminalCalls
 				}
 				flushed = true
+			}
+			// Cancel wins deterministically over a waiting receiver.
+			select {
+			case <-ctx.Done():
+				return
+			default:
 			}
 			select {
 			case out <- chunk:

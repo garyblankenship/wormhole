@@ -201,6 +201,7 @@ for chunk := range stream {
 The final chunk carries provider, response ID, finish reason, and usage when the
 upstream response includes them.
 
-OpenAI tool streams expose incremental fragments in `Delta.ToolCalls` and
-complete calls in terminal `ToolCalls`. Preserve each fragment's wire index
-when correlating interleaved calls. See [tool streaming](../tool-calling.md#streaming-with-tools).
+OpenAI tool streams consume fragments internally; complete calls arrive
+once in the terminal chunk's `ToolCalls`, each stamped with its wire index.
+Reused or trailing events do not re-emit them. See
+[tool streaming](../tool-calling.md#streaming-with-tools).

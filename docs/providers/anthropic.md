@@ -310,10 +310,11 @@ response, err := client.Text().
 
 ## Tool stream fragments and headers
 
-Live tool fragments are available in `Delta.ToolCalls`; terminal `ToolCalls`
-contain the completed calls. Correlate fragments using their wire indices,
-which preserve Anthropic content-block indices rather than renumbering only
-tools. See [tool streaming](../tool-calling.md#streaming-with-tools).
+Tool fragments are consumed by the SDK; complete calls arrive once in the
+terminal chunk's `ToolCalls`, each stamped with its Anthropic content-block
+index rather than a tools-only position. Streams that omit distinguishable
+block indices still separate calls by identity. See
+[tool streaming](../tool-calling.md#streaming-with-tools).
 
 `tool_choice: none` remains supported. Beta header requirements depend on the
 model and feature; Wormhole preserves explicitly configured provider headers

@@ -7,9 +7,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/garyblankenship/wormhole/v3/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/garyblankenship/wormhole/v3/types"
 )
 
 func collectToolContractStream(t *testing.T, events []string) []types.TextChunk {

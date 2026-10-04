@@ -576,23 +576,21 @@ for chunk := range stream {
         continue
     }
 
-    // Incremental fragments: accumulate by the provider's wire index.
-    if chunk.Delta != nil && len(chunk.Delta.ToolCalls) > 0 {
-        // Handle live ID, name, and argument fragments.
-    }
+    // Complete tool calls arrive once on the terminal chunk.
     if len(chunk.ToolCalls) > 0 {
-        // Complete tool calls on the terminal chunk.
+        // Execute the completed calls.
     }
 
     fmt.Print(chunk.Content())
 }
 ```
 
-OpenAI and Anthropic emit live fragments through `Delta.ToolCalls`, preserving
-provider wire indices (including Anthropic content-block indices). Interleaved
-calls may use sparse indices. Terminal `ToolCalls` contain complete calls and
-are not replayed as live fragments. Execute complete calls, rather than partial
-argument JSON.
+OpenAI and Anthropic consume tool fragments internally and emit each complete
+call exactly once on the terminal chunk, stamped with the provider wire index
+(including Anthropic content-block indices, with identity separation for
+streams that omit indices). Custom providers may still surface fragments in
+`Delta.ToolCalls`; consumers must treat them as partial and must not execute
+them. Execute complete calls, rather than partial argument JSON.
 
 ### Manual Tool Execution
 

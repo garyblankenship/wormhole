@@ -10,8 +10,9 @@ import (
 	"github.com/garyblankenship/wormhole/v3/types"
 )
 
-// C4-02: interleaved fragments are observable before the terminal is available.
-func TestRemediationC402LiveInterleavedToolFragments(t *testing.T) {
+// C4-02: interleaved fragments are consumed, never exposed; completes carry
+// the provider wire indices and are emitted exactly once.
+func TestRemediationC402InterleavedToolFragments(t *testing.T) {
 	t.Parallel()
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -26,8 +27,20 @@ func TestRemediationC402LiveInterleavedToolFragments(t *testing.T) {
 			}
 			return chunk
 		case <-time.After(time.Second):
-			t.Fatal("live fragment withheld until completion")
+			t.Fatal("chunk withheld until completion")
 			return types.StreamChunk{}
+		}
+	}
+	emptyOfFragments := func(chunk types.StreamChunk, stage string) {
+		t.Helper()
+		if chunk.ToolCall != nil {
+			t.Fatalf("%s: singular fragment escaped: %#v", stage, chunk.ToolCall)
+		}
+		if len(chunk.ToolCalls) != 0 {
+			t.Fatalf("%s: fragments escaped as calls: %#v", stage, chunk.ToolCalls)
+		}
+		if chunk.Delta != nil && len(chunk.Delta.ToolCalls) != 0 {
+			t.Fatalf("%s: fragments escaped as deltas: %#v", stage, chunk.Delta.ToolCalls)
 		}
 	}
 	rawA, _ := json.Marshal(map[string]int{"a": 1})
@@ -39,29 +52,26 @@ func TestRemediationC402LiveInterleavedToolFragments(t *testing.T) {
 	input <- types.StreamChunk{Delta: &types.ChunkDelta{ToolCalls: first}, ToolCalls: first, ToolCall: &first[0]}
 	chunk := receive()
 	all := []types.StreamChunk{chunk}
-	if chunk.Delta == nil || len(chunk.Delta.ToolCalls) != 2 || chunk.Delta.ToolCalls[0].Index != 3 || chunk.Delta.ToolCalls[1].Index != 7 || len(chunk.ToolCalls) != 0 || chunk.ToolCall != nil {
-		t.Fatalf("first chunk=%#v", chunk)
-	}
+	emptyOfFragments(chunk, "first")
 	for _, call := range []types.ToolCall{fragment(7, "", "", string(rawB[len(rawB)-2:])), fragment(3, "", "", string(rawA[len(rawA)-2:]))} {
 		input <- types.StreamChunk{Delta: &types.ChunkDelta{ToolCalls: []types.ToolCall{call}}}
 		chunk = receive()
 		all = append(all, chunk)
-		if chunk.Delta == nil || len(chunk.Delta.ToolCalls) != 1 || chunk.Delta.ToolCalls[0].Index != call.Index || chunk.Delta.ToolCalls[0].Function.Arguments != call.Function.Arguments || len(chunk.ToolCalls) != 0 {
-			t.Fatalf("continuation=%#v", chunk)
-		}
+		emptyOfFragments(chunk, "continuation")
 	}
 	reason := types.FinishReasonToolCalls
 	input <- types.StreamChunk{FinishReason: &reason}
 	terminal := receive()
 	all = append(all, terminal)
-	if terminal.Delta != nil && len(terminal.Delta.ToolCalls) > 0 {
-		t.Fatal("terminal aggregate replayed as delta")
-	}
 	if len(terminal.ToolCalls) != 2 {
 		t.Fatalf("terminal=%#v", terminal)
 	}
-	if terminal.ToolCalls[0].Index != 3 || terminal.ToolCalls[0].ID != "call_a" || terminal.ToolCalls[0].Arguments["a"] != float64(1) || terminal.ToolCalls[1].Index != 7 || terminal.ToolCalls[1].Arguments["b"] != float64(2) {
+	if terminal.ToolCalls[0].Index != 3 || terminal.ToolCalls[0].ID != "call_a" || terminal.ToolCalls[0].Arguments["a"] != float64(1) || terminal.ToolCalls[1].Index != 7 || terminal.ToolCalls[1].ID != "call_b" || terminal.ToolCalls[1].Arguments["b"] != float64(2) {
 		t.Fatalf("calls=%#v", terminal.ToolCalls)
+	}
+	input <- types.StreamChunk{FinishReason: &reason}
+	if again := receive(); len(again.ToolCalls) != 0 {
+		t.Fatalf("repeated finish re-emitted calls: %#v", again.ToolCalls)
 	}
 	merged := testutil.MergeTextChunks(all)
 	if len(merged.ToolCalls) != 2 {

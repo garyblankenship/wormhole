@@ -8,10 +8,11 @@ import (
 	"strconv"
 	"testing"
 
-	"github.com/garyblankenship/wormhole/v3/providers/anthropic"
-	"github.com/garyblankenship/wormhole/v3/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/garyblankenship/wormhole/v3/providers/anthropic"
+	"github.com/garyblankenship/wormhole/v3/types"
 )
 
 func TestAnthropicStreamMalformedToolArgumentsRemainNonExecutable(t *testing.T) {

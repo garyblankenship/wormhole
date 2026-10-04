@@ -730,8 +730,8 @@ also rejects empty tool names, malformed or undeclared `tool_choice` values,
 and malformed assistant tool-call arguments before provider I/O. No-argument
 function calls are normalized to `{}`.
 
-Responses tool streaming opens a stable function item on its first fragment,
-emits argument deltas immediately, and finishes each item once. Chat streaming
+Responses tool streaming opens a stable function item per completed tool
+call, emits its arguments once, and finishes each item once. Chat streaming
 emits the assistant role once and preserves provider tool indices. Both routes
 cancel upstream work on cancellation or encoding/write failure and stop further
 completion output after a failure.
