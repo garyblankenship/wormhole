@@ -38,9 +38,10 @@ func TestSSEScanner_Creation(t *testing.T) {
 	scanner := NewSSEScanner(reader)
 
 	assert.NotNil(t, scanner)
-	assert.NotNil(t, scanner.scanner)
-	assert.Nil(t, scanner.event)
-	assert.Nil(t, scanner.err)
+	assert.Nil(t, scanner.Event())
+	assert.NoError(t, scanner.Err())
+	assert.False(t, scanner.Scan(), "input without SSE fields produces no event")
+	assert.NoError(t, scanner.Err())
 }
 
 func TestSSEScanner_BasicEventParsing(t *testing.T) {

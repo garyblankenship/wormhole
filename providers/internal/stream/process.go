@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"sync"
 
 	"github.com/garyblankenship/wormhole/v3/types"
 )
@@ -29,7 +30,10 @@ func NewStreamProcessor(r io.Reader, transformer func([]byte) (*types.TextChunk,
 // the upstream body open).
 func (p *StreamProcessor) Process(ctx context.Context, chunks chan<- types.TextChunk) {
 	defer close(chunks)
+	p.process(ctx, chunks)
+}
 
+func (p *StreamProcessor) process(ctx context.Context, chunks chan<- types.TextChunk) {
 	var finished bool
 
 	for {
@@ -47,6 +51,25 @@ func (p *StreamProcessor) Process(ctx context.Context, chunks chan<- types.TextC
 				case chunks <- types.TextChunk{Error: err}:
 				case <-ctx.Done():
 				}
+			}
+			return
+		}
+
+		// Error events are terminal even when their payload is empty or opaque.
+		// Give provider transformers the first opportunity to preserve typed errors.
+		if event.Event == "error" {
+			failure := fmt.Errorf("upstream SSE error event")
+			if event.Data != "" {
+				chunk, transformErr := p.transformer([]byte(event.Data))
+				if chunk != nil && chunk.Error != nil {
+					failure = chunk.Error
+				} else if transformErr != nil {
+					failure = fmt.Errorf("failed to parse chunk: %w", transformErr)
+				}
+			}
+			select {
+			case chunks <- types.TextChunk{Error: failure}:
+			case <-ctx.Done():
 			}
 			return
 		}
@@ -80,6 +103,9 @@ func (p *StreamProcessor) Process(ctx context.Context, chunks chan<- types.TextC
 			case <-ctx.Done():
 				return
 			}
+			if chunk.Error != nil {
+				return
+			}
 		}
 	}
 }
@@ -95,11 +121,16 @@ func ProcessSSE(
 ) <-chan types.TextChunk {
 	chunks := make(chan types.TextChunk, bufferSize)
 	go func() {
-		defer func() {
-			_ = body.Close()
-		}()
+		// Both cancellation and normal termination close the body exactly once.
+		// Close it before publishing channel closure so consumers observe cleanup.
+		var once sync.Once
+		closeBody := func() { once.Do(func() { _ = body.Close() }) }
+		stop := context.AfterFunc(ctx, closeBody)
+		defer close(chunks)
+		defer closeBody()
+		defer stop()
 		processor := NewStreamProcessor(body, transformer)
-		processor.Process(ctx, chunks)
+		processor.process(ctx, chunks)
 	}()
 	return chunks
 }

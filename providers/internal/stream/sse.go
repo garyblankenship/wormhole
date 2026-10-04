@@ -1,7 +1,6 @@
 package stream
 
 import (
-	"bufio"
 	"errors"
 	"io"
 	"strings"
@@ -24,9 +23,9 @@ var errSSEFrameTooLarge = errors.New("SSE frame exceeds 10 MiB limit")
 
 // SSEScanner provides a simple interface for reading Server-Sent Events
 type SSEScanner struct {
-	scanner *bufio.Scanner
-	event   *SSEEvent
-	err     error
+	parser *SSEParser
+	event  *SSEEvent
+	err    error
 }
 
 // SSEEvent represents a server-sent event
@@ -38,82 +37,23 @@ type SSEEvent struct {
 
 // NewSSEScanner creates a new SSE scanner
 func NewSSEScanner(r io.Reader) *SSEScanner {
-	scanner := bufio.NewScanner(r)
-	// Raise the per-token cap above the default 64 KB so large SSE frames
-	// (e.g. Gemini functionCall args) are not truncated with ErrTooLong.
-	// Scanner includes line delimiters when deciding whether its buffer is large
-	// enough. Allow CRLF beyond the policy limit, then enforce the content limit
-	// explicitly below.
-	scanner.Buffer(make([]byte, 0, 64*1024), maxSSEBufferBytes+2)
-	return &SSEScanner{
-		scanner: scanner,
-	}
+	return &SSEScanner{parser: NewSSEParser(r)}
 }
 
-// Scan reads the next SSE event
+// Scan reads the next SSE event through the shared framing engine.
 func (s *SSEScanner) Scan() bool {
 	if s.err != nil {
 		return false
 	}
-
-	event := &SSEEvent{}
-	hasDataOrEvent := false
-
-	for s.scanner.Scan() {
-		physicalLine := strings.TrimSuffix(s.scanner.Text(), "\r")
-		if len(physicalLine) > maxSSEBufferBytes {
-			s.err = errSSEFrameTooLarge
-			return false
-		}
-		// Strip only \r (for CRLF lines); leading spaces/tabs are significant
-		// for field-name trimming inside parseSSEField, trailing are preserved.
-		raw := strings.TrimRight(s.scanner.Text(), "\r")
-		// Trim leading spaces/tabs only for empty-line and comment detection.
-		trimmed := strings.TrimLeft(raw, " \t")
-
-		// Empty line signals end of event
-		if trimmed == "" {
-			// An event is valid if it has data or event fields (even if empty)
-			// This allows empty data/event fields but excludes ID-only events
-			if hasDataOrEvent {
-				s.event = event
-				return true
-			}
-			continue
-		}
-
-		// Skip comments
-		if strings.HasPrefix(trimmed, ":") {
-			continue
-		}
-
-		// event/data fields make the event valid; id alone does not.
-		if colonIndex := strings.Index(raw, ":"); colonIndex != -1 {
-			if field := strings.Trim(raw[:colonIndex], " \t"); field == sseFieldEvent || field == sseFieldData {
-				hasDataOrEvent = true
-			}
-		}
-
-		// Parse and apply the field via the shared helper (single source of truth).
-		if err := parseSSEField(raw, event); err != nil {
+	event, err := s.parser.parseEvent(true)
+	if err != nil {
+		if err != io.EOF {
 			s.err = err
-			return false
 		}
-	}
-	scanErr := s.scanner.Err()
-	if scanErr != nil && strings.Contains(scanErr.Error(), "token too long") {
-		s.err = errSSEFrameTooLarge
 		return false
 	}
-
-	// Check for final event without trailing newline
-	if hasDataOrEvent {
-		s.event = event
-		return true
-	}
-
-	s.err = scanErr
-	return false
+	s.event = event
+	return true
 }
 
 // Event returns the current event

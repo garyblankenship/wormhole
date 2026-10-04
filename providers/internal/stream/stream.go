@@ -2,10 +2,8 @@ package stream
 
 import (
 	"bufio"
-	"bytes"
-	"errors"
-	"fmt"
 	"io"
+	"strings"
 	"sync"
 )
 
@@ -23,7 +21,8 @@ var lineBufferPool = sync.Pool{
 
 // SSEParser parses Server-Sent Events streams
 type SSEParser struct {
-	reader *bufio.Reader
+	reader     *bufio.Reader
+	pendingErr error
 }
 
 // sseReaderBufferSize keeps common lines in the reader without eagerly reserving
@@ -40,145 +39,124 @@ func NewSSEParser(r io.Reader) *SSEParser {
 
 // Remove duplicate SSEEvent type - using the one from sse.go
 
-// Parse reads and parses the next SSE event
+// Parse reads and parses the next SSE event.
 func (p *SSEParser) Parse() (*SSEEvent, error) {
-	event := &SSEEvent{}
+	return p.parseEvent(false)
+}
 
+// parseEvent is the framing engine for both public facades. The scanner policy
+// retains its empty-field events, whitespace boundaries and deferred read errors.
+func (p *SSEParser) parseEvent(scanner bool) (*SSEEvent, error) {
+	event := &SSEEvent{}
+	hasFields := false
 	for {
-		line, eof, err := p.readLine()
+		buf, eof, err := p.readLine(scanner)
 		if err != nil {
+			if scanner && hasFields && err != errSSEFrameTooLarge {
+				p.pendingErr = err
+				return event, nil
+			}
 			return nil, err
 		}
-
-		// Check if we should return the event (EOF or empty line with data)
-		shouldReturn, returnErr := p.shouldReturnWithError(line, event, eof)
-		if returnErr != nil {
-			p.returnToPool(line)
-			return nil, returnErr
+		line := string(*buf)
+		p.returnToPool(buf)
+		boundary := line
+		if scanner {
+			line = strings.TrimRight(line, "\r")
+			boundary = strings.TrimLeft(line, " \t")
 		}
-		if shouldReturn {
-			p.returnToPool(line)
-			return event, nil
+		valid := event.Data != "" || event.Event != ""
+		if scanner {
+			valid = hasFields
 		}
-
-		// Skip empty lines and comments, but check for EOF first
-		if p.shouldSkip(line) {
-			// If we hit EOF while skipping empty lines, return EOF if no event data
-			if eof && !p.hasEventData(event) {
-				p.returnToPool(line)
+		if boundary == "" {
+			if valid {
+				return event, nil
+			}
+			if eof {
 				return nil, io.EOF
 			}
-			p.returnToPool(line)
 			continue
 		}
-
-		// Parse and apply field to event
-		if err := p.parseField(line, event); err != nil {
-			p.returnToPool(line)
-			if errors.Is(err, errSSEFrameTooLarge) {
+		if strings.HasPrefix(boundary, ":") {
+			if eof {
+				if valid {
+					return event, nil
+				}
+				return nil, io.EOF
+			}
+			continue
+		}
+		if colon := strings.IndexByte(line, ':'); colon >= 0 {
+			field := strings.Trim(line[:colon], " \t")
+			if field == sseFieldData || field == sseFieldEvent {
+				hasFields = true
+			}
+			if err := parseSSEField(line, event); err != nil {
 				return nil, err
 			}
-			continue // Invalid field format, skip
-		}
-		p.returnToPool(line)
-
-		// Return event if we reached EOF after processing
-		if eof {
-			return event, nil
+			if eof {
+				if scanner && !hasFields {
+					return nil, io.EOF
+				}
+				return event, nil
+			}
+		} else if eof {
+			if valid {
+				return event, nil
+			}
+			return nil, io.EOF
 		}
 	}
 }
 
-// readLine reads next line and handles EOF
-func (p *SSEParser) readLine() ([]byte, bool, error) {
-	bufPtr := lineBufferPool.Get().(*[]byte)
-	line := (*bufPtr)[:0]
-	release := func() {
-		line = line[:0]
-		*bufPtr = line
-		lineBufferPool.Put(bufPtr)
+// readLine retains the original pool pointer through every success/error path.
+// Scanner exposes a partial final line before its reader error; Parser preserves
+// its historical immediate reader-error behavior.
+func (p *SSEParser) readLine(scanner bool) (*[]byte, bool, error) {
+	if p.pendingErr != nil {
+		err := p.pendingErr
+		p.pendingErr = nil
+		return nil, false, err
 	}
-
+	buf := lineBufferPool.Get().(*[]byte)
+	*buf = (*buf)[:0]
 	for {
 		fragment, err := p.reader.ReadSlice('\n')
-		// Permit the maximum line content plus CRLF while ensuring an upstream
-		// peer can never make this buffer grow without bound.
-		if len(line)+len(fragment) > maxSSEBufferBytes+2 {
-			release()
+		if len(*buf)+len(fragment) > maxSSEBufferBytes+2 {
+			p.returnToPool(buf)
 			return nil, false, errSSEFrameTooLarge
 		}
-		line = append(line, fragment...)
-
-		switch err {
-		case bufio.ErrBufferFull:
+		*buf = append(*buf, fragment...)
+		if err == bufio.ErrBufferFull {
 			continue
-		case io.EOF:
-			if len(line) == 0 {
-				release()
-				return nil, true, io.EOF
+		}
+		if err != nil && err != io.EOF {
+			if !scanner || len(*buf) == 0 {
+				p.returnToPool(buf)
+				return nil, false, err
 			}
-		case nil:
-		default:
-			release()
-			return nil, false, err
+			p.pendingErr = err
 		}
-
-		if len(line) > 0 && line[len(line)-1] == '\n' {
-			line = line[:len(line)-1]
+		if err == io.EOF && len(*buf) == 0 {
+			p.returnToPool(buf)
+			return nil, true, io.EOF
 		}
-		if len(line) > 0 && line[len(line)-1] == '\r' {
-			line = line[:len(line)-1]
+		if n := len(*buf); n > 0 && (*buf)[n-1] == '\n' {
+			*buf = (*buf)[:n-1]
 		}
-		if len(line) > maxSSEBufferBytes {
-			release()
+		if n := len(*buf); n > 0 && (*buf)[n-1] == '\r' {
+			*buf = (*buf)[:n-1]
+		}
+		if len(*buf) > maxSSEBufferBytes {
+			p.returnToPool(buf)
 			return nil, false, errSSEFrameTooLarge
 		}
-		return line, err == io.EOF, nil
+		return buf, err != nil, nil
 	}
 }
 
-// returnToPool returns a buffer to the pool
-// This should be called by Parse after processing a line
-func (p *SSEParser) returnToPool(buf []byte) {
-	buf = buf[:0]
-	lineBufferPool.Put(&buf)
-}
-
-// shouldReturn checks if event is complete and should be returned
-// Returns (shouldReturn bool, returnError error)
-func (p *SSEParser) shouldReturnWithError(line []byte, event *SSEEvent, isEOF bool) (bool, error) {
-	// Empty line signals end of event
-	if len(line) == 0 {
-		if p.hasEventData(event) {
-			return true, nil
-		}
-		// At EOF with no data, return EOF error
-		if isEOF {
-			if event.Data != "" || event.Event != "" || event.ID != "" {
-				return true, nil
-			}
-			return false, io.EOF
-		}
-	}
-	return false, nil
-}
-
-// shouldSkip checks if line should be skipped (comments)
-func (p *SSEParser) shouldSkip(line []byte) bool {
-	return len(line) == 0 || (len(line) > 0 && line[0] == ':')
-}
-
-// hasEventData checks if event has meaningful data
-func (p *SSEParser) hasEventData(event *SSEEvent) bool {
-	return event.Data != "" || event.Event != ""
-}
-
-// parseField parses a field line and updates the event via the shared
-// parseSSEField helper (single source of truth for SSE field semantics).
-func (p *SSEParser) parseField(line []byte, event *SSEEvent) error {
-	if !bytes.Contains(line, []byte(":")) {
-		return fmt.Errorf("invalid field format")
-	}
-
-	return parseSSEField(string(line), event)
+func (p *SSEParser) returnToPool(buf *[]byte) {
+	*buf = (*buf)[:0]
+	lineBufferPool.Put(buf)
 }
