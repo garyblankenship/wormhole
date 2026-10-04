@@ -31,18 +31,16 @@ func (p *Wormhole) validateModelAttempt(providerName, modelID string, anyOf, req
 		return nil
 	}
 
-	model, ok := p.modelRegistry.Get(modelID)
+	model, ok := p.modelRegistry.GetForProvider(resolvedProvider, modelID)
 	if !ok {
-		return types.ErrModelNotFound.WithModel(modelID)
-	}
-	if model.Provider != "" && model.Provider != resolvedProvider {
-		return types.ErrModelNotFound.
-			WithModel(modelID).
-			WithProvider(resolvedProvider).
-			WithDetails(fmt.Sprintf("model is registered for provider %q", model.Provider))
+		if other, exists := p.modelRegistry.Get(modelID); exists && other.Provider != "" && other.Provider != resolvedProvider {
+			return types.ErrModelNotSupported.WithModel(modelID).WithProvider(resolvedProvider).
+				WithDetails(fmt.Sprintf("model is registered for provider %q", other.Provider))
+		}
+		return types.ErrModelNotFound.WithModel(modelID).WithProvider(resolvedProvider)
 	}
 
-	if err := p.modelRegistry.ValidateModel(modelID, required); err != nil {
+	if err := p.modelRegistry.ValidateModelForProvider(resolvedProvider, modelID, required); err != nil {
 		return err
 	}
 	if len(anyOf) == 0 {

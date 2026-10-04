@@ -24,7 +24,7 @@ type StepEvent struct {
 
 // AgentResult is the final result of an agent run.
 type AgentResult struct {
-	// Response is the final text response after all tool executions.
+	// Response is the most recent response, including when the step limit is reached.
 	Response *types.TextResponse
 
 	// Steps contains the event for each step in the agent loop.
@@ -82,7 +82,8 @@ func (b *AgentBuilder) System(prompt string) *AgentBuilder {
 	return b
 }
 
-// MaxSteps sets the maximum number of LLM call rounds (default: 10).
+// MaxSteps sets the positive maximum number of LLM call rounds (default: 10).
+// Run rejects zero and negative values before acquiring execution resources.
 func (b *AgentBuilder) MaxSteps(n int) *AgentBuilder {
 	b.maxSteps = n
 	return b

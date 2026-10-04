@@ -93,9 +93,9 @@ func executeProviderOperation[T any](
 }
 
 func (cb *CommonBuilder) idempotencyScope(operation string) string {
-	providerName := cb.getProvider()
-	if providerName == "" {
-		providerName = cb.getWormhole().config.DefaultProvider
+	providerName, err := cb.getWormhole().resolveProviderName(cb.getProvider())
+	if err != nil {
+		providerName = cb.getProvider()
 	}
 	return operation + ":" + providerName + ":" + cb.getBaseURL()
 }

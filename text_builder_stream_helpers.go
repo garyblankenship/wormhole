@@ -113,4 +113,5 @@ func prepareTextExecutionRequest(request *types.TextRequest) {
 		return
 	}
 	request.Messages = prepareExecutionMessages(request.SystemPrompt, request.Messages)
+	request.SystemPrompt = ""
 }

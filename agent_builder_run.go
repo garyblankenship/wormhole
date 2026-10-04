@@ -10,6 +10,9 @@ import (
 // Run executes the agent loop with the given prompt.
 // It returns the final result after all tool executions complete, or an error.
 func (b *AgentBuilder) Run(ctx context.Context, prompt string) (*AgentResult, error) {
+	if b.maxSteps <= 0 {
+		return nil, fmt.Errorf("agent: max steps must be positive, got %d", b.maxSteps)
+	}
 	if b.model == "" {
 		return nil, fmt.Errorf("agent: model is required")
 	}
@@ -59,26 +62,25 @@ func (b *AgentBuilder) Run(ctx context.Context, prompt string) (*AgentResult, er
 
 	// Prepare messages (inject system prompt)
 	request.Messages = prepareExecutionMessages(request.SystemPrompt, request.Messages)
+	request.SystemPrompt = ""
 
 	// Create executor for tool calls
 	executor := b.wormhole.newToolExecutor(mergedRegistry)
 
 	var steps []StepEvent
 	ctx = contextWithProviderOperation(ctx, provider, "agent")
+	handler := provider.Text
+	if b.wormhole.providerMiddleware != nil {
+		handler = b.wormhole.providerMiddleware.ApplyText(handler)
+	}
 
 	for step := 1; step <= maxSteps; step++ {
 		if err := ctx.Err(); err != nil {
 			return nil, fmt.Errorf("agent step %d: %w", step, err)
 		}
 
-		// Call the LLM (through middleware if configured)
-		var resp *types.TextResponse
-		if b.wormhole.providerMiddleware != nil {
-			handler := b.wormhole.providerMiddleware.ApplyText(provider.Text)
-			resp, err = handler(ctx, request)
-		} else {
-			resp, err = provider.Text(ctx, request)
-		}
+		// Reuse the same middleware state for every step in this run.
+		resp, err := handler(ctx, request)
 		if err != nil {
 			return nil, fmt.Errorf("agent step %d: %w", step, err)
 		}
@@ -129,5 +131,9 @@ func (b *AgentBuilder) Run(ctx context.Context, prompt string) (*AgentResult, er
 		}
 	}
 
-	return nil, fmt.Errorf("agent: max steps (%d) reached without final response", maxSteps)
+	return &AgentResult{
+		Response:   steps[len(steps)-1].Response,
+		Steps:      steps,
+		TotalSteps: len(steps),
+	}, fmt.Errorf("agent: max steps (%d) reached without final response", maxSteps)
 }

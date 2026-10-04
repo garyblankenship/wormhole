@@ -183,7 +183,7 @@ func TestModelValidationDuplicateIDUsesCurrentProviderRegistration(t *testing.T)
 		WithDiscovery(false),
 	)
 
-	if err := client.validateModelAttempt("alpha", "shared-id", textModelCapabilities, nil); err == nil || !strings.Contains(err.Error(), "registered for provider \"beta\"") {
+	if err := client.validateModelAttempt("alpha", "shared-id", textModelCapabilities, nil); err != nil {
 		t.Fatalf("alpha validation error = %v", err)
 	}
 	if err := client.validateModelAttempt("beta", "shared-id", textModelCapabilities, nil); err != nil {

@@ -9,6 +9,9 @@ import (
 
 // Generate executes the request and returns a response
 func (b *TextRequestBuilder) Generate(ctx context.Context) (*types.TextResponse, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	baseRequest := cloneTextRequest(b.request)
 	prepareTextExecutionRequest(baseRequest)
 
@@ -32,6 +35,9 @@ func (b *TextRequestBuilder) Generate(ctx context.Context) (*types.TextResponse,
 	toolsEnabled := b.shouldAutoExecuteTools(wormhole)
 	if len(b.fallbackModels) == 0 && len(b.providerFallbacks) == 0 {
 		if err := wormhole.validateModelAttempt(b.getProvider(), baseRequest.Model, textModelCapabilities, textRequiredCapabilities(baseRequest, toolsEnabled, false)); err != nil {
+			if ctxErr := ctx.Err(); ctxErr != nil {
+				return nil, ctxErr
+			}
 			providerName, _ := wormhole.resolveProviderName(b.getProvider())
 			wormhole.emitAttempt(ctx, AttemptEvent{Operation: "text.generate", Phase: AttemptStarted, Provider: providerName, Model: baseRequest.Model, Attempt: 1})
 			wormhole.emitAttempt(ctx, AttemptEvent{Operation: "text.generate", Phase: AttemptError, Provider: providerName, Model: baseRequest.Model, Attempt: 1, Error: err})
@@ -40,6 +46,9 @@ func (b *TextRequestBuilder) Generate(ctx context.Context) (*types.TextResponse,
 	}
 
 	return executeTrackedRequest(ctx, wormhole, b.idempotencyScope("text.generate"), idempotencyRequest, func(ctx context.Context) (*types.TextResponse, error) {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
 		provider, release, err := b.getProviderWithBaseURL()
 		if err != nil {
 			return nil, err
@@ -49,6 +58,9 @@ func (b *TextRequestBuilder) Generate(ctx context.Context) (*types.TextResponse,
 
 		var lastErr error
 		for attempt, model := range modelsToTry {
+			if err := ctx.Err(); err != nil {
+				return nil, err
+			}
 			request := cloneTextRequest(baseRequest)
 			request.Model = model
 			wormhole.emitAttempt(ctx, AttemptEvent{
@@ -60,9 +72,15 @@ func (b *TextRequestBuilder) Generate(ctx context.Context) (*types.TextResponse,
 				Fallback:  attempt > 0,
 			})
 
+			if err := ctx.Err(); err != nil {
+				return nil, err
+			}
 			err := wormhole.validateModelAttempt(b.getProvider(), model, textModelCapabilities, textRequiredCapabilities(request, toolsEnabled, false))
 			var resp *types.TextResponse
 			if err == nil {
+				if err := ctx.Err(); err != nil {
+					return nil, err
+				}
 				resp, err = b.executeGenerate(ctx, provider, request)
 			}
 			if err == nil {
@@ -76,6 +94,9 @@ func (b *TextRequestBuilder) Generate(ctx context.Context) (*types.TextResponse,
 				})
 				return resp, nil
 			}
+			if ctxErr := ctx.Err(); ctxErr != nil {
+				return nil, ctxErr
+			}
 			wormhole.emitAttempt(ctx, AttemptEvent{
 				Operation: "text.generate",
 				Phase:     AttemptError,
@@ -88,11 +109,14 @@ func (b *TextRequestBuilder) Generate(ctx context.Context) (*types.TextResponse,
 			lastErr = err
 		}
 		release()
-		if ctx.Err() != nil {
-			return nil, lastErr
+		if err := ctx.Err(); err != nil {
+			return nil, err
 		}
 
 		for routeIndex, route := range b.providerFallbacks {
+			if err := ctx.Err(); err != nil {
+				return nil, err
+			}
 			attempt := len(modelsToTry) + routeIndex + 1
 			wormhole.emitAttempt(ctx, AttemptEvent{
 				Operation: "text.generate",
@@ -104,9 +128,15 @@ func (b *TextRequestBuilder) Generate(ctx context.Context) (*types.TextResponse,
 			})
 
 			response, err := func() (*types.TextResponse, error) {
+				if err := ctx.Err(); err != nil {
+					return nil, err
+				}
 				request := cloneTextRequest(baseRequest)
 				request.Model = route.Model
 				if err := wormhole.validateModelAttempt(route.Provider, route.Model, textModelCapabilities, textRequiredCapabilities(request, toolsEnabled, false)); err != nil {
+					return nil, err
+				}
+				if err := ctx.Err(); err != nil {
 					return nil, err
 				}
 				provider, release, err := wormhole.leaseProvider(route.Provider)
@@ -114,6 +144,9 @@ func (b *TextRequestBuilder) Generate(ctx context.Context) (*types.TextResponse,
 					return nil, err
 				}
 				defer release()
+				if err := ctx.Err(); err != nil {
+					return nil, err
+				}
 				return b.executeGenerate(ctx, provider, request)
 			}()
 			if err == nil {
@@ -128,6 +161,9 @@ func (b *TextRequestBuilder) Generate(ctx context.Context) (*types.TextResponse,
 				return response, nil
 			}
 
+			if ctxErr := ctx.Err(); ctxErr != nil {
+				return nil, ctxErr
+			}
 			wormhole.emitAttempt(ctx, AttemptEvent{
 				Operation: "text.generate",
 				Phase:     AttemptError,
@@ -138,8 +174,8 @@ func (b *TextRequestBuilder) Generate(ctx context.Context) (*types.TextResponse,
 				Error:     err,
 			})
 			lastErr = err
-			if ctx.Err() != nil {
-				return nil, lastErr
+			if err := ctx.Err(); err != nil {
+				return nil, err
 			}
 		}
 

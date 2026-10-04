@@ -232,4 +232,5 @@ func prepareStructuredExecutionRequest(request *types.StructuredRequest) {
 		return
 	}
 	request.Messages = prepareExecutionMessages(request.SystemPrompt, request.Messages)
+	request.SystemPrompt = ""
 }
