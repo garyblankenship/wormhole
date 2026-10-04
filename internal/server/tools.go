@@ -163,6 +163,7 @@ type streamToolState struct {
 	opened map[int]bool   // indices that have already emitted id+name
 	last   int            // last index touched, for empty-ID continuations
 	next   int            // next index to assign
+	live   bool           // Delta.ToolCalls uses provider wire indices
 }
 
 func newStreamToolState() *streamToolState {
@@ -190,6 +191,12 @@ func (s *streamToolState) indexFor(id string) int {
 
 // delta maps a chunk's tool-call fragments to OpenAI streaming tool_call deltas.
 func (s *streamToolState) delta(chunk types.TextChunk) []ChatToolCall {
+	if chunk.Delta != nil && len(chunk.Delta.ToolCalls) > 0 {
+		s.live = true
+	} else if s.live {
+		// Complete terminal ToolCalls are aggregates, not another live delta.
+		return nil
+	}
 	frags := chunkToolFragments(chunk)
 	if len(frags) == 0 {
 		return nil
@@ -197,10 +204,17 @@ func (s *streamToolState) delta(chunk types.TextChunk) []ChatToolCall {
 	out := make([]ChatToolCall, 0, len(frags))
 	for _, f := range frags {
 		idx := s.indexFor(f.ID)
+		if s.live {
+			idx = f.Index
+		}
 		i := idx
 		var args string
 		if f.Function != nil {
 			args = f.Function.Arguments
+		} else if f.Arguments != nil {
+			if encoded, err := json.Marshal(f.Arguments); err == nil {
+				args = string(encoded)
+			}
 		}
 		tc := ChatToolCall{Index: &i, Function: ChatToolCallFunction{Arguments: args}}
 		if !s.opened[idx] {
@@ -208,6 +222,9 @@ func (s *streamToolState) delta(chunk types.TextChunk) []ChatToolCall {
 			tc.ID = f.ID
 			tc.Type = "function"
 			tc.Function.Name = f.Name
+			if tc.Function.Name == "" && f.Function != nil {
+				tc.Function.Name = f.Function.Name
+			}
 		}
 		out = append(out, tc)
 	}

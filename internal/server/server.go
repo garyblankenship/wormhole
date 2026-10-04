@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"crypto/sha256"
 	"crypto/subtle"
 	"errors"
 	"fmt"
@@ -9,6 +10,7 @@ import (
 	"net"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 
 	wormhole "github.com/garyblankenship/wormhole/v3"
@@ -26,11 +28,12 @@ type Config struct {
 }
 
 type proxy struct {
-	wh              *wormhole.Wormhole
-	server          *http.Server
-	logger          *slog.Logger
-	apiKey          string
-	defaultProvider string
+	wh               *wormhole.Wormhole
+	server           *http.Server
+	logger           *slog.Logger
+	apiKey           string
+	defaultProvider  string
+	cleartextWarning sync.Once
 }
 
 type proxyRoute struct {
@@ -105,6 +108,11 @@ func (p *proxy) Start() error {
 	if p.apiKey == "" && !isLoopbackAddr(p.server.Addr) {
 		return fmt.Errorf("refusing to bind %q without authentication: set WORMHOLE_API_KEY, or bind to localhost", p.server.Addr)
 	}
+	if p.apiKey != "" && !isLoopbackAddr(p.server.Addr) {
+		p.cleartextWarning.Do(func() {
+			p.logger.Warn("authenticated proxy serving cleartext HTTP on a nonloopback address; deploy behind a trusted TLS proxy", "addr", p.server.Addr)
+		})
+	}
 	p.logger.Info("starting wormhole proxy", "addr", p.server.Addr)
 	return p.server.ListenAndServe()
 }
@@ -137,8 +145,12 @@ func (p *proxy) auth(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if p.apiKey != "" && strings.HasPrefix(r.URL.Path, "/v1/") {
 			auth := r.Header.Get("Authorization")
-			token := strings.TrimPrefix(auth, "Bearer ")
-			if token == auth || subtle.ConstantTimeCompare([]byte(token), []byte(p.apiKey)) != 1 {
+			scheme, token, found := strings.Cut(auth, " ")
+			// Hash per request so comparison stays fixed-size and constant-time
+			// regardless of token length, without pinning the key at construction.
+			expected := sha256.Sum256([]byte(p.apiKey))
+			actual := sha256.Sum256([]byte(token))
+			if !found || !strings.EqualFold(scheme, "Bearer") || subtle.ConstantTimeCompare(actual[:], expected[:]) != 1 {
 				writeError(w, http.StatusUnauthorized, "invalid_api_key",
 					"Invalid or missing API key", "authentication_error")
 				return

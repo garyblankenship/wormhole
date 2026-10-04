@@ -295,6 +295,7 @@ func TestStreamToolStateDelta(t *testing.T) {
 		d4 := state.delta(types.TextChunk{Delta: &types.ChunkDelta{
 			ToolCalls: []types.ToolCall{{
 				ID:       "call_2",
+				Index:    1,
 				Name:     "forecast",
 				Function: &types.ToolCallFunction{Name: "forecast", Arguments: ""},
 			}},

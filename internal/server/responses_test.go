@@ -302,13 +302,13 @@ func TestResponsesMessagesAcceptsUserImage(t *testing.T) {
 	assert.Len(t, user.Media, 1)
 }
 
-func TestResponsesErrorCodePreservesSafeProviderCode(t *testing.T) {
+func TestResponsesErrorCodePreservesSafeProviderCodeAndLowercasesSDKFallback(t *testing.T) {
 	t.Parallel()
 
 	err := types.ProviderError("openai", "failed", "context_length_exceeded")
 	assert.Equal(t, "context_length_exceeded", responsesErrorCode(err))
 	unsafe := types.ProviderError("openai", "failed", `{"secret":"value"}`)
-	assert.Equal(t, string(types.ErrorCodeProvider), responsesErrorCode(unsafe))
+	assert.Equal(t, "provider_error", responsesErrorCode(unsafe))
 }
 
 func TestCompletedResponsesEnvelopeReportsTruncation(t *testing.T) {

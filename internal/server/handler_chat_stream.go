@@ -1,8 +1,10 @@
 package server
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"time"
 
@@ -18,7 +20,9 @@ func (p *proxy) streamChat(w http.ResponseWriter, r *http.Request, builder *worm
 		return
 	}
 
-	stream, err := builder.Stream(r.Context())
+	ctx, cancel := context.WithCancel(r.Context())
+	defer cancel()
+	stream, err := builder.Stream(ctx)
 	if err != nil {
 		p.logger.Error("stream creation failed", "error", types.SafeErrorValue(err), "model", types.SafeLogString(model))
 		writeUpstreamError(w, err)
@@ -28,8 +32,22 @@ func (p *proxy) streamChat(w http.ResponseWriter, r *http.Request, builder *worm
 	id := fmt.Sprintf("wh-%d", time.Now().UnixNano())
 	toolState := newStreamToolState()
 	committed := false
+	roleSent := false
 
-	for chunk := range stream {
+	for {
+		var chunk types.TextChunk
+		select {
+		case <-ctx.Done():
+			return
+		case next, open := <-stream:
+			if !open {
+				goto finished
+			}
+			chunk = next
+		}
+		if ctx.Err() != nil {
+			return
+		}
 		if chunk.Error != nil {
 			p.logger.Error("stream chunk error", "error", types.SafeErrorValue(chunk.Error))
 			if !committed {
@@ -49,7 +67,11 @@ func (p *proxy) streamChat(w http.ResponseWriter, r *http.Request, builder *worm
 			committed = true
 		}
 
-		delta := &ChatMessage{Role: "assistant", Content: chunk.Content(), Refusal: chunk.Refusal}
+		delta := &ChatMessage{Content: chunk.Content(), Refusal: chunk.Refusal}
+		if !roleSent {
+			delta.Role = "assistant"
+			roleSent = true
+		}
 		if tcs := toolState.delta(chunk); len(tcs) > 0 {
 			delta.ToolCalls = tcs
 		}
@@ -75,15 +97,19 @@ func (p *proxy) streamChat(w http.ResponseWriter, r *http.Request, builder *worm
 		data, marshalErr := json.Marshal(chunkResp)
 		if marshalErr != nil {
 			p.logger.Error("failed to marshal chunk", "error", types.SafeErrorValue(marshalErr))
-			break
+			return
 		}
-		if _, err := fmt.Fprintf(w, "data: %s\n\n", data); err != nil {
+		if err := writeChatFrame(w, fmt.Sprintf("data: %s\n\n", data)); err != nil {
 			p.logger.Error("failed to write stream chunk", "error", types.SafeErrorValue(err))
-			break
+			return
 		}
 		flusher.Flush()
 	}
 
+finished:
+	if ctx.Err() != nil {
+		return
+	}
 	if !committed {
 		w.Header().Set("Content-Type", "text/event-stream")
 		w.Header().Set("Cache-Control", "no-cache")
@@ -92,7 +118,7 @@ func (p *proxy) streamChat(w http.ResponseWriter, r *http.Request, builder *worm
 		flusher.Flush()
 	}
 
-	if _, err := fmt.Fprint(w, "data: [DONE]\n\n"); err != nil {
+	if err := writeChatFrame(w, "data: [DONE]\n\n"); err != nil {
 		p.logger.Error("failed to write stream terminator", "error", types.SafeErrorValue(err))
 		return
 	}
@@ -142,6 +168,16 @@ func writeStreamError(w http.ResponseWriter, flusher http.Flusher, err error) {
 	if marshalErr != nil {
 		return
 	}
-	_, _ = fmt.Fprintf(w, "data: %s\n\n", data)
+	if err := writeChatFrame(w, fmt.Sprintf("data: %s\n\n", data)); err != nil {
+		return
+	}
 	flusher.Flush()
+}
+
+func writeChatFrame(w http.ResponseWriter, frame string) error {
+	n, err := w.Write([]byte(frame))
+	if err == nil && n != len(frame) {
+		return io.ErrShortWrite
+	}
+	return err
 }
