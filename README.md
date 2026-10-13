@@ -80,7 +80,8 @@ this one special client" taped to the side of your service.
 | --- | --- |
 | Text generation | `client.Text().Model("gpt-5.6").Prompt("...").Generate(ctx)` |
 | Streaming | `client.Text().Model("gpt-5.6").Prompt("...").Stream(ctx)` |
-| Stream and collect | `chunks, fullText, err := builder.StreamAndAccumulate(ctx)` |
+| Stream and collect text | `chunks, fullText, err := builder.StreamAndAccumulate(ctx)` |
+| Stream and collect response | `chunks, result, err := builder.StreamAndCollect(ctx)` |
 | [Direct Jev Decisions (OpenRouter alpha)](docs/providers/openrouter.md#jev-chat-router-and-direct-decisions) | `client.Decisions().Using("openrouter").Model("typesafe/jev-1.13").State(state).Questions(questions).Evaluate(ctx)` |
 | Structured output | `client.Structured().Model("gpt-5.6").Schema(schema).GenerateAs(ctx, &out)` |
 | Embeddings | `client.Embeddings().Model("text-embedding-3-small").Input("...").Generate(ctx)` |
@@ -884,6 +885,89 @@ func TestSummarize(t *testing.T) {
 	require.Equal(t, "mock response", resp.Content())
 }
 ```
+
+For ordered scenarios, `wormholetest.NewScriptedProvider` takes a shared sequence
+of `ScriptText` responses and `ScriptStream` chunk fixtures. Register it with
+`WithCustomProvider` and `ScriptedProviderFactory`, just like the mock above:
+
+```go
+stop := types.FinishReasonStop
+scripted, err := wmtest.NewScriptedProvider("fixture", wmtest.Script{
+	Operation: wmtest.ScriptStream,
+	Chunks: []types.TextChunk{
+		{Text: "Hello "},
+		{Text: "world", FinishReason: &stop},
+		{Usage: &types.Usage{PromptTokens: 4, CompletionTokens: 1}},
+	},
+})
+if err != nil { return err }
+client := wormhole.New(
+	wormhole.WithCustomProvider("fixture", wmtest.ScriptedProviderFactory(scripted)),
+	wormhole.WithProviderConfig("fixture", types.ProviderConfig{}),
+	wormhole.WithDefaultProvider("fixture"),
+)
+defer client.Close()
+chunks, result, err := client.Text().Model("offline").Prompt("hello").StreamAndCollect(ctx)
+if err != nil { return err }
+for chunk := range chunks { fmt.Print(chunk.Content()) }
+full, err := result() // drain chunks, or cancel ctx, before waiting for the result
+if err != nil { return err } // full retains any collected partial response
+fmt.Println(full.Text, full.Usage)
+```
+
+`StreamAndCollect` retains text, refusal, thinking, tools, usage and terminal
+fields available in the stream. It continues through finish markers to retain
+usage trailers and errors; each result and delivered chunk owns detached data.
+Cumulative usage snapshots use the maximum reported value for each field.
+Completed tool calls take precedence over raw argument fragments, and terminal
+tool lists replace earlier lists. ID-less completed calls with ambiguous identity
+cannot reliably be deduplicated. Streams do not expose response `Created` or
+`Metadata`; the scalar thinking type cannot preserve multiple block boundaries
+or signatures. `StreamAndAccumulate` keeps its existing text-only behavior.
+
+Scripts run without network calls, invented responses or timing defaults.
+Mismatched operations return `ErrScriptMismatch` without consuming the next
+entry; exhaustion returns `ErrScriptExhausted`. An immediate `Script.Error`
+consumes its matching entry; use a chunk error for partial stream failures.
+A stream lacking a finish marker or chunk error emits `io.ErrUnexpectedEOF`.
+Pre-canceled calls consume nothing; cancellation after reservation consumes the
+entry. Concurrent callers reserve atomically in lock acquisition order, with
+no guarantee about which caller wins. Cancel contexts to stop pending streams;
+`Close` is a no-op. Unsupported operations leave the sequence untouched.
+JSON-like fixtures are copied; opaque values follow `types.CloneValue` ownership.
+
+### Cache-aware usage estimates
+
+`types.EstimateUsageCost` accepts base rates and explicit cache rates per 1,000
+tokens in the same currency. Choose `PromptTokensInclusiveCache` when reported
+prompt tokens include cache reads/writes, or `PromptTokensUncached` when prompt
+tokens already exclude them. This prevents charging cached input twice.
+
+```go
+// Illustrative caller-supplied rates; use your provider's applicable rates.
+readRate, writeRate := 0.2, 2.0
+estimate, err := types.EstimateUsageCost(
+	&types.ModelCost{InputTokens: 1, OutputTokens: 3, Currency: "USD"},
+	types.Usage{PromptTokens: 1000, CompletionTokens: 100, CacheReadTokens: 200, CacheWriteTokens: 300},
+	types.UsageCostOptions{
+		PromptAccounting: types.PromptTokensInclusiveCache,
+		CacheReadRate: &readRate, CacheWriteRate: &writeRate,
+	},
+)
+if err != nil { return err }
+if estimate.Known { fmt.Println(estimate.Currency, *estimate.Total) }
+```
+
+The estimate exposes separate input, output, cache-read and cache-write charges.
+A nil price means unknown; a nonnil zero means priced as free. Missing cache
+rates matter only when that category has tokens. Missing base pricing leaves
+the total unknown. Invalid accounting, token counts and rates return errors.
+Reasoning tokens are not charged again on top of completion tokens. Registry
+lookups are available through `ModelRegistry.EstimateUsageCost` and
+`types.EstimateModelUsageCost`; missing models return an error. Existing
+`EstimateCost` APIs keep their prior behavior. Estimates use supplied data and
+do not promise invoice accuracy. The offline examples in
+`pi_ai_adoption_example_test.go` exercise both APIs.
 
 Project checks:
 
