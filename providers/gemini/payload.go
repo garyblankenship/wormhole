@@ -104,9 +104,15 @@ func geminiThinkingConfig(reasoning *types.Reasoning) map[string]any {
 	if reasoning == nil {
 		return nil
 	}
-	out := make(map[string]any, 2)
+	out := make(map[string]any, 3)
 	if reasoning.MaxTokens > 0 {
 		out["thinkingBudget"] = reasoning.MaxTokens
+	}
+	// Gemini 3-series models control reasoning through thinkingLevel; 2.5-series
+	// models use thinkingBudget. Levels: minimal/low/medium/high per model —
+	// https://aistudio.google.com/docs/thinking#thinking-levels
+	if effort := strings.ToLower(strings.TrimSpace(string(reasoning.Effort))); effort != "" && effort != string(types.ReasoningEffortNone) {
+		out["thinkingLevel"] = effort
 	}
 	if reasoning.Enabled != nil {
 		out["includeThoughts"] = *reasoning.Enabled

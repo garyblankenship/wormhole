@@ -96,7 +96,9 @@ func streamingExample(ctx context.Context, p *wormhole.Wormhole) {
 			log.Printf("\nStream error: %v\n", chunk.Error)
 			break
 		}
-		fmt.Print(chunk.Delta)
+		if chunk.Delta != nil {
+			fmt.Print(chunk.Delta.Content)
+		}
 	}
 	fmt.Println()
 }

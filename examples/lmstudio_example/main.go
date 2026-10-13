@@ -12,12 +12,13 @@ import (
 func main() {
 	// Create a new Wormhole client with LMStudio provider
 	p := wormhole.New(
-		wormhole.WithLMStudio(types.ProviderConfig{}), // default: http://localhost:1234/v1
+		wormhole.WithLMStudio(types.ProviderConfig{NoAuth: true}), // default: http://localhost:1234/v1
 	)
 
 	// You can also use a custom configuration:
 	// p := wormhole.New(
 	//     wormhole.WithLMStudio(types.ProviderConfig{
+	//         NoAuth: true, // Local server without authentication; omit when using an API key
 	//         BaseURL: "http://192.168.1.100:1234/v1", // Custom LMStudio server
 	//         Timeout: 60, // 60 seconds timeout
 	//     }),

@@ -15,6 +15,11 @@ func registerProvider(c *Config, name, apiKey string, cfgs ...types.ProviderConf
 	if len(cfgs) > 0 {
 		cfg = cfgs[0]
 	}
+	if cfg.BaseURL == "" {
+		if profile, ok := providerProfile(name); ok {
+			cfg.BaseURL = configuredBaseURL(profile)
+		}
+	}
 	applyProviderProfileConfig(name, &cfg)
 	cfg.APIKey = apiKey
 	c.Providers[name] = cfg

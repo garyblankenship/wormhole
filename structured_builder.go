@@ -62,6 +62,9 @@ func (b *StructuredRequestBuilder) SystemPrompt(prompt string) *StructuredReques
 
 // Schema sets the JSON schema for the response
 func (b *StructuredRequestBuilder) Schema(schema any) *StructuredRequestBuilder {
+	if raw, ok := schema.([]byte); ok {
+		schema = json.RawMessage(raw)
+	}
 	schemaBytes, err := pool.Marshal(schema)
 	if err != nil {
 		b.schemaErr = fmt.Errorf("failed to marshal schema: %w", err)
@@ -73,7 +76,7 @@ func (b *StructuredRequestBuilder) Schema(schema any) *StructuredRequestBuilder 
 		// for later use, so we need to make a copy.
 		copiedBytes := make([]byte, len(schemaBytes))
 		copy(copiedBytes, schemaBytes)
-		b.request.Schema = copiedBytes
+		b.request.Schema = json.RawMessage(copiedBytes)
 		pool.Return(schemaBytes)
 	}
 	return b
@@ -94,6 +97,29 @@ func (b *StructuredRequestBuilder) Mode(mode types.StructuredMode) *StructuredRe
 // Temperature sets the temperature
 func (b *StructuredRequestBuilder) Temperature(temp float32) *StructuredRequestBuilder {
 	b.request.Temperature = &temp
+	return b
+}
+
+// TopP sets nucleus sampling probability.
+func (b *StructuredRequestBuilder) TopP(topP float32) *StructuredRequestBuilder {
+	b.request.TopP = &topP
+	return b
+}
+
+// ProviderOptions sets detached provider-specific request options.
+func (b *StructuredRequestBuilder) ProviderOptions(options map[string]any) *StructuredRequestBuilder {
+	b.request.ProviderOptions = types.CloneMap(options)
+	return b
+}
+
+// Reasoning sets provider-neutral reasoning controls. ProviderOptions may
+// override provider wire fields, subject to provider compatibility rules.
+func (b *StructuredRequestBuilder) Reasoning(reasoning types.Reasoning) *StructuredRequestBuilder {
+	if reasoning.Enabled != nil {
+		enabled := *reasoning.Enabled
+		reasoning.Enabled = &enabled
+	}
+	b.request.Reasoning = &reasoning
 	return b
 }
 
@@ -165,6 +191,7 @@ func (b *StructuredRequestBuilder) GenerateAs(ctx context.Context, result any) e
 //   - Model is specified
 //   - Schema is provided
 //   - Temperature is in valid range (0.0-2.0) if specified
+//   - TopP is in valid range (0.0-1.0) if specified
 //   - MaxTokens is positive if specified
 //
 // Example:
@@ -193,6 +220,9 @@ func (b *StructuredRequestBuilder) Validate() error {
 
 	if b.request.MaxTokens != nil && *b.request.MaxTokens <= 0 {
 		errs.Add("max_tokens", "positive", *b.request.MaxTokens, "must be a positive integer")
+	}
+	if b.request.TopP != nil && (*b.request.TopP < 0 || *b.request.TopP > 1) {
+		errs.Add("top_p", "range", *b.request.TopP, "must be between 0.0 and 1.0")
 	}
 
 	return errs.Error()

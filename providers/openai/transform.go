@@ -71,6 +71,12 @@ func (p *Provider) addGenerationParams(payload map[string]any, request *types.Te
 }
 
 func (p *Provider) addReasoningParams(payload map[string]any, request *types.TextRequest) {
+	if p.Name() == "openai" {
+		if request.Reasoning != nil && request.Reasoning.Effort != "" {
+			payload["reasoning_effort"] = string(request.Reasoning.Effort)
+		}
+		return
+	}
 	if reasoning := reasoningPayload(request.Reasoning); len(reasoning) > 0 {
 		payload["reasoning"] = reasoning
 	}

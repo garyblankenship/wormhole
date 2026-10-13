@@ -276,7 +276,7 @@ func executeStream(ctx context.Context, client *wormhole.Wormhole, config CLICon
 			break
 		}
 
-		if chunk.Delta.Content != "" {
+		if chunk.Delta != nil && chunk.Delta.Content != "" {
 			fmt.Print(chunk.Delta.Content)
 			tokenCount++
 		}

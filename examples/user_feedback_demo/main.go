@@ -32,14 +32,15 @@ func main() {
 	fmt.Println("Before: Silent failures with err == nil but response.Text == \"\"")
 	fmt.Println("After: Detailed errors with HTTP status, URL, response body")
 
-	// Let's simulate what better errors look like (without API key)
+	// Use a deliberately invalid placeholder with the expected OpenRouter key
+	// prefix so the example reaches the upstream authentication error response.
 	ctx := context.Background()
 
-	// This will fail without API key, but now with better error messages
+	// This placeholder is not a real credential.
 	client := wormhole.New(
 		wormhole.WithDefaultProvider("openrouter"),
 		wormhole.WithOpenAICompatible("openrouter", "https://openrouter.ai/api/v1", types.ProviderConfig{
-			APIKey: "invalid-key-for-demo",
+			APIKey: "sk-or-invalid-key-for-demo",
 		}),
 	)
 
@@ -50,7 +51,10 @@ func main() {
 		Generate(ctx)
 
 	if err != nil {
-		fmt.Printf("✅ Enhanced error (includes HTTP status, URL, response):\n   %v\n", err)
+		fmt.Printf("✅ Enhanced error:\n   %v\n", err)
+		if wormholeErr, ok := types.AsWormholeError(err); ok && wormholeErr.StatusCode > 0 {
+			fmt.Printf("   HTTP status: %d\n", wormholeErr.StatusCode)
+		}
 	} else if response.Text == "" {
 		fmt.Println("❌ This would have been a silent failure before our fix!")
 	}

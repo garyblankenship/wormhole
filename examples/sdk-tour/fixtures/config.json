@@ -1,0 +1,81 @@
+{
+  "prompt": "Read the fixture and preserve source attribution.",
+  "system": "Return only the source-specific fixture answer.",
+  "answer": "SDK tour: the fixture confirms five.",
+  "structured": {
+    "name": "fixture-person",
+    "age": 37
+  },
+  "models": {
+    "text": "gpt-5-tour",
+    "fallback": "gpt-5-tour-fallback",
+    "fail": "gpt-5-tour-unavailable",
+    "embedding": "tour-embedding",
+    "image": "tour-image",
+    "audio": "tour-audio",
+    "anthropic": "claude-tour",
+    "gemini": "gemini-tour",
+    "ollama": "tour-local"
+  },
+  "inputs": [
+    "alpha",
+    "beta",
+    "gamma"
+  ],
+  "vectors": [
+    [
+      0.25,
+      0.5
+    ],
+    [
+      0.75,
+      1
+    ],
+    [
+      1.25,
+      1.5
+    ]
+  ],
+  "documents": [
+    "The fixture says three.",
+    "The fixture says five."
+  ],
+  "scores": [
+    0.125,
+    0.875
+  ],
+  "tool": {
+    "name": "add",
+    "description": "Add two fixture integers.",
+    "args": {
+      "a": 2,
+      "b": 3
+    },
+    "result": {
+      "sum": 5
+    }
+  },
+  "image": "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aFz8AAAAASUVORK5CYII=",
+  "audio": "UklGRiYAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQIAAAAAAA==",
+  "fake_keys": ["dummy-fixture-key-a", "dummy-fixture-key-b"],
+  "settings": {
+    "poll_ms": 10,
+    "safety_steps": 1,
+    "idle_ms": 20,
+    "timeout_seconds": 120,
+    "agent_steps": 4,
+    "batch_concurrency": 2,
+    "cache_capacity": 16,
+    "ttl_seconds": 60,
+    "retries": 1,
+    "retry_delay_ms": 1,
+    "rate_per_second": 100,
+    "temperature": 0.25,
+    "top_p": 0.75,
+    "seed": 7,
+    "max_tokens": 4096,
+    "voice": "alloy",
+    "audio_format": "wav",
+    "image_size": "1024x1024"
+  }
+}

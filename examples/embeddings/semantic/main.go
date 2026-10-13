@@ -46,8 +46,8 @@ func cosineSimilarity(a, b []float64) float64 {
 }
 
 func main() {
-	// Create a new Wormhole client
-	client := wormhole.New()
+	// Register OpenAI from its documented environment settings.
+	client := wormhole.New(wormhole.WithProviderFromEnv("openai"))
 
 	// Ensure we have an OpenAI API key for this example
 	if os.Getenv("OPENAI_API_KEY") == "" {

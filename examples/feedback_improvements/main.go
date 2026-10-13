@@ -43,7 +43,13 @@ func main() {
 	// 1. Model Discovery - See what's available
 	fmt.Println("=== Model Discovery ===")
 	openAIModels := types.ListAvailableModels("openai")
-	for _, model := range openAIModels[:3] { // Show first 3
+	if len(openAIModels) == 0 {
+		fmt.Println("No OpenAI models discovered yet; continuing with explicit model IDs.")
+	}
+	for i, model := range openAIModels {
+		if i == 3 { // Show up to the first 3 available models.
+			break
+		}
 		fmt.Printf("Model: %s\n", model.ID)
 		fmt.Printf("  Description: %s\n", model.Description)
 		fmt.Printf("  Context: %d tokens\n", model.ContextLength)
@@ -112,7 +118,7 @@ func main() {
 			log.Printf("Generic error: %v", err)
 		}
 	} else {
-		fmt.Printf("Response: %s\n", response.Text[:100]+"...")
+		fmt.Printf("Response: %s\n", previewText(response.Text))
 	}
 
 	// 6. Streaming with Error Handling
@@ -136,8 +142,8 @@ func main() {
 		}
 
 		// Print the content
-		if chunk.Text != "" {
-			fmt.Print(chunk.Text)
+		if chunk.Delta != nil {
+			fmt.Print(chunk.Delta.Content)
 		}
 
 		// Check for completion
@@ -155,7 +161,7 @@ func main() {
 	if err != nil {
 		log.Printf("Provider request failed: %v", err)
 	} else {
-		fmt.Printf("Primary response: %s\n", primaryResponse.Text[:100]+"...")
+		fmt.Printf("Primary response: %s\n", previewText(primaryResponse.Text))
 	}
 
 	// 8. Request Validation
@@ -171,6 +177,16 @@ func main() {
 	}
 
 	fmt.Println("\n=== All Examples Complete ===")
+}
+
+// previewText preserves short responses and truncates long responses at a rune
+// boundary, so valid empty or multibyte text never causes a slice panic.
+func previewText(text string) string {
+	runes := []rune(text)
+	if len(runes) > 100 {
+		return string(runes[:100]) + "..."
+	}
+	return text
 }
 
 // attemptWithErrorHandling demonstrates error handling without automatic fallback

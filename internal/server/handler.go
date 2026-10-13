@@ -176,6 +176,9 @@ func (p *proxy) handleChatCompletions(w http.ResponseWriter, r *http.Request) {
 }
 
 func applyChatGenerationControls(builder *wormhole.TextRequestBuilder, req ChatCompletionRequest) *wormhole.TextRequestBuilder {
+	if req.ReasoningEffort != nil {
+		builder = builder.Reasoning(types.Reasoning{Effort: *req.ReasoningEffort})
+	}
 	if req.Temperature != nil {
 		builder = builder.Temperature(float32(*req.Temperature))
 	}
@@ -206,6 +209,13 @@ func applyChatGenerationControls(builder *wormhole.TextRequestBuilder, req ChatC
 }
 
 func validateChatControls(req ChatCompletionRequest, provider string) error {
+	if req.ReasoningEffort != nil {
+		switch *req.ReasoningEffort {
+		case types.ReasoningEffortNone, types.ReasoningEffortLow, types.ReasoningEffortMedium, types.ReasoningEffortHigh:
+		default:
+			return fmt.Errorf("unsupported reasoning_effort %q", *req.ReasoningEffort)
+		}
+	}
 	if req.N != nil && *req.N != 1 {
 		return fmt.Errorf("n=%d is unsupported; the proxy currently returns exactly one choice", *req.N)
 	}

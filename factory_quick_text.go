@@ -31,7 +31,9 @@ func QuickText(model, prompt, apiKey string) (*types.TextResponse, error) {
 //	defer cancel()
 //	response, err := wormhole.QuickTextWithContext(ctx, "gpt-4o", "What is Go?", apiKey)
 func QuickTextWithContext(ctx context.Context, model, prompt, apiKey string) (*types.TextResponse, error) {
-	return QuickOpenAI(apiKey).Text().
+	client := QuickOpenAI(apiKey)
+	defer func() { _ = client.Close() }()
+	return client.Text().
 		Model(model).
 		Prompt(prompt).
 		Generate(ctx)
@@ -54,7 +56,9 @@ func QuickChat(model, systemPrompt, userMessage, apiKey string) (*types.TextResp
 
 // QuickChatWithContext generates a chat response with context support.
 func QuickChatWithContext(ctx context.Context, model, systemPrompt, userMessage, apiKey string) (*types.TextResponse, error) {
-	return QuickOpenAI(apiKey).Text().
+	client := QuickOpenAI(apiKey)
+	defer func() { _ = client.Close() }()
+	return client.Text().
 		Model(model).
 		SystemPrompt(systemPrompt).
 		Prompt(userMessage).
@@ -78,8 +82,5 @@ func QuickStream(model, prompt, apiKey string) (<-chan types.TextChunk, error) {
 
 // QuickStreamWithContext streams text with context support for cancellation.
 func QuickStreamWithContext(ctx context.Context, model, prompt, apiKey string) (<-chan types.TextChunk, error) {
-	return QuickOpenAI(apiKey).Text().
-		Model(model).
-		Prompt(prompt).
-		Stream(ctx)
+	return quickStreamWithClient(ctx, QuickOpenAI(apiKey), model, prompt)
 }

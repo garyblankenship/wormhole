@@ -58,11 +58,14 @@ err := p.Structured().
     Tools(weatherTool).
     Generate(ctx)`)
 
-	// Show builder pattern
+	// Use explicit messages for the JSON illustration. SystemPrompt is an
+	// execution convenience field and is not included by ToJSON.
 	req := p.Text().
 		Model("gpt-5").
-		SystemPrompt("You are a helpful assistant").
-		Prompt("Explain the builder pattern")
+		Messages(
+			types.NewSystemMessage("You are a helpful assistant"),
+			types.NewUserMessage("Explain the builder pattern"),
+		)
 
 	json, _ := req.ToJSON()
 	fmt.Println("\n5. Request JSON:")

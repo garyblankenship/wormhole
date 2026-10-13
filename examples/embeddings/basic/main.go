@@ -10,8 +10,12 @@ import (
 )
 
 func main() {
-	// Create a new Wormhole client
-	client := wormhole.New()
+	// Register the providers used below from their documented environment settings.
+	client := wormhole.New(
+		wormhole.WithProviderFromEnv("openai"),
+		wormhole.WithProviderFromEnv("ollama"),
+		wormhole.WithProviderFromEnv("gemini"),
+	)
 
 	// Ensure we have an OpenAI API key for this example
 	if os.Getenv("OPENAI_API_KEY") == "" {

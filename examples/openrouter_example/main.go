@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log"
 	"os"
@@ -184,7 +185,13 @@ func main() {
 		log.Printf("Structured output error: %v", err)
 	} else {
 		fmt.Printf("🧠 Model: openai/gpt-5.6-sol\n")
-		fmt.Printf("✅ JSON Response: %s\n", structuredResponse.Raw)
+		// Parsed Data is available for both JSON and forced-tool structured modes.
+		data, err := json.MarshalIndent(structuredResponse.Data, "", "  ")
+		if err != nil {
+			log.Printf("Structured output rendering error: %v", err)
+		} else {
+			fmt.Printf("✅ JSON Response: %s\n", data)
+		}
 	}
 
 	// Example 5: Embeddings

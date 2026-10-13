@@ -87,3 +87,12 @@ func (w *ProviderWrapper) TextToSpeech(ctx context.Context, request TextToSpeech
 func (w *ProviderWrapper) Unwrap() Provider {
 	return w.provider
 }
+
+// Decisions forwards the optional capability without applying chat middleware.
+func (w *ProviderWrapper) Decisions(ctx context.Context, request DecisionsRequest) (*DecisionsResponse, error) {
+	provider, ok := w.provider.(DecisionsProvider)
+	if !ok {
+		return nil, NotImplementedError(w.Name(), "Decisions")
+	}
+	return provider.Decisions(ctx, request)
+}

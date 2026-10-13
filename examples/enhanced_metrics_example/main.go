@@ -39,9 +39,10 @@ func main() {
 	collector.RecordRequest(labels2, 75*time.Millisecond, fmt.Errorf("rate limit exceeded"), 2, 50, 0)
 	fmt.Println("Recorded failed request for Anthropic Claude-3")
 
-	// Get statistics
-	stats1 := collector.GetStats(labels1)
-	fmt.Printf("\nOpenAI GPT-4 Stats:\n")
+	// The default configuration aggregates globally. Passing nil makes that
+	// scope explicit; enable LabelAggregation for separate per-label buckets.
+	stats1 := collector.GetStats(nil)
+	fmt.Printf("\nGlobal Stats (OpenAI + Anthropic):\n")
 	fmt.Printf("  Requests: %d\n", stats1["requests"])
 	fmt.Printf("  Errors: %d\n", stats1["errors"])
 	fmt.Printf("  Input Tokens: %d\n", stats1["input_tokens"])

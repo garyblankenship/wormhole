@@ -150,7 +150,7 @@ func main() {
 	types.DefaultModelRegistry.Register(&types.ModelInfo{
 		ID:           "example-streaming-model",
 		Provider:     "example",
-		Capabilities: []types.ModelCapability{types.CapabilityStream},
+		Capabilities: []types.ModelCapability{types.CapabilityText, types.CapabilityStream},
 		MaxTokens:    4096,
 		Description:  "Custom example model for streaming",
 	})

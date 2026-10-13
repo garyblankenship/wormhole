@@ -54,6 +54,29 @@ client := wormhole.New(
 | Hard to add defaults | Sensible defaults built-in |
 | Breaking changes add fields | New options are non-breaking |
 
+## Per-request structured controls
+
+Structured requests expose the same `TopP`, `Reasoning`, and `ProviderOptions`
+controls as text requests:
+
+```go
+builder := client.Structured().Model("gpt-5.6").Schema(schema).
+    TopP(0.9).
+    Reasoning(types.Reasoning{Effort: types.ReasoningEffortLow}).
+    ProviderOptions(map[string]any{"service_tier": "default"})
+```
+
+Provider options follow defaults < model options < request options, and may
+override typed provider wire fields. The builder snapshots caller options and
+reasoning controls. Omitted controls retain existing provider behavior; model
+and provider restrictions still apply, including reasoning with forced tools.
+
+The Chat Completions proxy accepts `reasoning_effort` values `none`, `low`,
+`medium`, and `high` on both ordinary and streaming requests. Other values return
+HTTP 400. Omission leaves reasoning unspecified; translation uses the selected
+provider's existing SDK semantics. `none` does not guarantee reasoning is disabled
+on every provider.
+
 ## Available Options
 
 ### Provider Configuration

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/garyblankenship/wormhole/v3"
@@ -143,9 +144,10 @@ func getWeather(ctx context.Context, args map[string]any) (any, error) {
 	}
 
 	// Normalize city name
+	normalizedCity := strings.ToLower(city)
 	cityLower := ""
 	for key := range weatherData {
-		if key == city || key == city+" city" {
+		if key == normalizedCity || key == normalizedCity+" city" {
 			cityLower = key
 			break
 		}

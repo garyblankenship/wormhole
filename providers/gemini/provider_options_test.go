@@ -31,6 +31,43 @@ func TestProviderOptionsMergedIntoTextPayload(t *testing.T) {
 	}
 }
 
+func TestReasoningEffortMapsThinkingLevel(t *testing.T) {
+	t.Parallel()
+	provider := New("key", types.NewProviderConfig("key"))
+
+	payload, err := provider.buildTextPayload(types.TextRequest{
+		BaseRequest: types.BaseRequest{
+			Model:     "gemini-test",
+			Reasoning: &types.Reasoning{Effort: types.ReasoningEffortMedium},
+		},
+		Messages: []types.Message{types.NewUserMessage("hi")},
+	})
+	if err != nil {
+		t.Fatalf("buildTextPayload returned error: %v", err)
+	}
+	thinkingConfig := payload["generationConfig"].(map[string]any)["thinkingConfig"].(map[string]any)
+	if thinkingConfig["thinkingLevel"] != "medium" {
+		t.Fatalf("thinkingLevel = %v, want medium", thinkingConfig["thinkingLevel"])
+	}
+	if _, ok := thinkingConfig["thinkingBudget"]; ok {
+		t.Fatalf("unexpected thinkingBudget: %#v", thinkingConfig)
+	}
+
+	nonePayload, err := provider.buildTextPayload(types.TextRequest{
+		BaseRequest: types.BaseRequest{
+			Model:     "gemini-test",
+			Reasoning: &types.Reasoning{Effort: types.ReasoningEffortNone},
+		},
+		Messages: []types.Message{types.NewUserMessage("hi")},
+	})
+	if err != nil {
+		t.Fatalf("buildTextPayload returned error: %v", err)
+	}
+	if config, ok := nonePayload["generationConfig"].(map[string]any); ok && config["thinkingConfig"] != nil {
+		t.Fatalf("none effort emitted thinking config: %#v", config)
+	}
+}
+
 func TestTypedReasoningMergedIntoGenerationConfig(t *testing.T) {
 	t.Parallel()
 	include := true

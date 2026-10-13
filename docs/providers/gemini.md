@@ -414,6 +414,14 @@ assistant-visible text was produced. Use a larger `MaxTokens` budget or Gemini
 `generationConfig.thinkingConfig.thinkingBudget` when a task needs both thinking
 room and structured visible output.
 
+Set `Reasoning{Effort: types.ReasoningEffortLow | ReasoningEffortMedium | ReasoningEffortHigh}`
+to emit `generationConfig.thinkingConfig.thinkingLevel` (`minimal`, `low`,
+`medium`, or `high` on models that support them). Gemini 3-series models are
+level-controlled; 2.5-series models use `thinkingBudget` via `Reasoning.MaxTokens`.
+ProviderOptions `generationConfig.thinkingConfig` still overrides both for
+advanced use. See the
+[Gemini thinking levels documentation](https://aistudio.google.com/docs/thinking#thinking-levels).
+
 ## Reference
 
 - [Google Gemini API](https://ai.google.dev/gemini-api/docs)

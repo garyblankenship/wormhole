@@ -30,6 +30,11 @@ func (p *Provider) transformToolChoice(choice *types.ToolChoice) any {
 // schemaToMap converts a Schema (any) into a map[string]any via JSON round-trip.
 // Single source of truth for schema->wire-map, reused by structured-output paths.
 func schemaToMap(schema types.Schema) (map[string]any, error) {
+	// The SDK builder snapshots schemas as raw bytes. Preserve the JSON
+	// object instead of encoding those bytes as a base64 string.
+	if raw, ok := schema.([]byte); ok {
+		schema = json.RawMessage(raw)
+	}
 	schemaBytes, err := json.Marshal(schema)
 	if err != nil {
 		return nil, err
@@ -51,14 +56,7 @@ func (p *Provider) schemaToTool(schema types.Schema, name string) (*types.Tool, 
 		return nil, err
 	}
 
-	return &types.Tool{
-		Type: "function",
-		Function: &types.ToolFunction{
-			Name:        name,
-			Description: "Extract structured data",
-			Parameters:  params,
-		},
-	}, nil
+	return types.NewTool(name, "Extract structured data", params), nil
 }
 
 // isGPT5Model determines if a model requires GPT-5 API parameters

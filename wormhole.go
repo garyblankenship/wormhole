@@ -235,6 +235,11 @@ func (p *Wormhole) Rerank() *RerankRequestBuilder {
 	}
 }
 
+// Decisions creates a direct Jev Decisions request builder (OpenRouter alpha).
+func (p *Wormhole) Decisions() *DecisionsRequestBuilder {
+	return &DecisionsRequestBuilder{CommonBuilder: newCommonBuilder(p), request: &types.DecisionsRequest{}}
+}
+
 // Image creates a new image generation request builder
 func (p *Wormhole) Image() *ImageRequestBuilder {
 	return &ImageRequestBuilder{

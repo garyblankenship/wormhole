@@ -76,12 +76,12 @@ func main() {
 		}
 
 		// Track first token for TTFT (Time To First Token) metric
-		if tokenCount == 0 && chunk.Delta.Content != "" {
+		if tokenCount == 0 && chunk.Delta != nil && chunk.Delta.Content != "" {
 			firstTokenTime = time.Now()
 		}
 
 		// Display the streaming content with visual indicator
-		if chunk.Delta.Content != "" {
+		if chunk.Delta != nil && chunk.Delta.Content != "" {
 			fmt.Print(chunk.Delta.Content)
 			tokenCount++
 
@@ -100,7 +100,10 @@ func main() {
 
 	// Calculate and display quantum metrics
 	streamDuration := time.Since(streamStart)
-	ttft := firstTokenTime.Sub(streamStart)
+	var ttft time.Duration
+	if !firstTokenTime.IsZero() {
+		ttft = firstTokenTime.Sub(streamStart)
+	}
 
 	fmt.Println("\n" + strings.Repeat("━", 50))
 	fmt.Println("📊 QUANTUM STREAMING METRICS:")

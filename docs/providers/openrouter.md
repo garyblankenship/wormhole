@@ -544,6 +544,68 @@ img, err := client.Image().
 
 For embeddings, set `ProviderOptions` on the `types.EmbeddingsRequest` to forward routing fields like `provider` and `route`.
 
+## Jev: chat router and direct Decisions
+
+These are separate APIs. [`typesafe/jev-router`](https://openrouter.ai/docs/guides/routing/routers/jev-router) routes ordinary chat requests and uses the existing text builder:
+
+```go
+response, err := client.Text().Using("openrouter").
+    Model("typesafe/jev-router").Prompt("Explain this Go function").Generate(ctx)
+```
+
+The [direct Jev Decisions API](https://docs.typesafe.ai/api) is an alpha endpoint for typed decisions over a shared state. Use `Decisions()` with `typesafe/jev-1.13` or the pass-through alias [`~typesafe/jev-latest`](https://openrouter.ai/~typesafe/jev-latest), preserving its leading tilde. It sends `POST /api/alpha/decisions` rather than chat completions:
+
+```go
+client := wormhole.New(
+    wormhole.WithDefaultProvider("openrouter"),
+    wormhole.WithOpenAICompatible("openrouter", "https://openrouter.ai/api/v1",
+        types.ProviderConfig{APIKey: os.Getenv("OPENROUTER_API_KEY")}),
+)
+defer client.Close()
+
+result, err := client.Decisions().Using("openrouter").
+    Model("typesafe/jev-1.13").
+    State(map[string]any{"message": "Please review this change"}).
+    Questions(map[string]types.DecisionQuestion{
+        "approve": {
+            Type: types.DecisionNoul,
+            Instructions: "Is the change ready to approve?",
+        },
+        "route": {
+            Type: types.DecisionChoice,
+            Instructions: "Choose the next step",
+            Criteria: map[string]any{"review": "Needs human review", "merge": nil},
+        },
+        "quality": {
+            Type: types.DecisionScore,
+            Instructions: "Assess the quality of the change",
+            Criteria: []string{"Needs work", "Ready"},
+        },
+    }).Evaluate(ctx)
+if err != nil {
+    return err
+}
+fmt.Printf("approval probability: %.3f\n", *result.Answers["approve"].Noul)
+fmt.Printf("route: %s, probabilities: %v\n",
+    *result.Answers["route"].Choice, result.Answers["route"].Probabilities)
+fmt.Printf("quality: %.3f, legend: %v\n",
+    *result.Answers["quality"].Score, result.Answers["quality"].Legend)
+```
+
+State and every question's required instructions must serialize to a JSON string, object or array; typed maps, slices, structs and `json.RawMessage` work. Call `.Validate()` to check the payload without making a request. The three primitives have different criteria:
+
+| Primitive | Criteria | Answer |
+|---|---|---|
+| [Noul](https://docs.typesafe.ai/primitives/noul) | Optional object with `true`/`false` descriptions | Probability in `[0, 1]` |
+| [Choice](https://docs.typesafe.ai/primitives/choice) | Object with 1–255 option keys; descriptions may be null | Selected option, full probability distribution and confidence |
+| [Score](https://docs.typesafe.ai/primitives/score) | Ordered array of 2–10 level descriptions | Fractional score in `[0, levels-1]`, full distribution, confidence and index legend |
+
+Non-null descriptions accept JSON strings, objects or arrays. Pointer answer fields distinguish a missing/null answer from a valid zero; optional `Usage.Cost` also preserves zero. Responses missing requested answers or required family fields, with invalid ranges or incomplete distribution/legend keys, return errors. Probabilities and fractional scores are preserved without rounding or recalibration.
+
+Direct Decisions shares provider authentication, configured headers, HTTP retries/errors, cancellation, client shutdown tracking and opt-in idempotency. `.BaseURL(...)` overrides the endpoint for one request: a terminal `/v1` is removed and `/alpha/decisions` is appended, preserving the host and earlier path. It does not use the chat model catalog or text/structured middleware. Only the provider named `openrouter` supports the built-in adapter; custom providers may implement the optional `types.DecisionsProvider` interface. The existing `types.Provider` interface is unchanged. There is no decision streaming, proxy endpoint or native TypeSafe endpoint in this adapter.
+
+The alpha contract is documented and covered by local HTTP fixtures; those checks do not establish live model quality or service availability.
+
 ## Reference
 
 - [OpenRouter Documentation](https://openrouter.ai/docs)

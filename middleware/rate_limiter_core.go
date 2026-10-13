@@ -44,6 +44,9 @@ func NewRateLimiter(requestsPerSecond int) *RateLimiter {
 
 // Wait blocks until a token is available or context is canceled.
 func (rl *RateLimiter) Wait(ctx context.Context) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	if rl.closed.Load() {
 		return ErrRateLimitExceeded
 	}

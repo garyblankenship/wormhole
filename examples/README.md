@@ -5,6 +5,7 @@ Welcome to the comprehensive example collection for Wormhole, the ultra-fast Go 
 ## 🚀 Getting Started
 
 ### Quick Examples
+- **[sdk-tour/](./sdk-tour/)** - Runnable offline SDK workflows with exact result and native-protocol checks; no credentials or provider spend
 - **[basic/](./basic/)** - Simple API showcase without external dependencies
 - **[comprehensive/](./comprehensive/)** - Full-featured demonstration with real API calls
 

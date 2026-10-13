@@ -81,6 +81,7 @@ this one special client" taped to the side of your service.
 | Text generation | `client.Text().Model("gpt-5.6").Prompt("...").Generate(ctx)` |
 | Streaming | `client.Text().Model("gpt-5.6").Prompt("...").Stream(ctx)` |
 | Stream and collect | `chunks, fullText, err := builder.StreamAndAccumulate(ctx)` |
+| [Direct Jev Decisions (OpenRouter alpha)](docs/providers/openrouter.md#jev-chat-router-and-direct-decisions) | `client.Decisions().Using("openrouter").Model("typesafe/jev-1.13").State(state).Questions(questions).Evaluate(ctx)` |
 | Structured output | `client.Structured().Model("gpt-5.6").Schema(schema).GenerateAs(ctx, &out)` |
 | Embeddings | `client.Embeddings().Model("text-embedding-3-small").Input("...").Generate(ctx)` |
 | Image generation | `client.Image().Model("gpt-image-1").Prompt("...").Generate(ctx)` |
@@ -603,9 +604,11 @@ emotionally available:
 
 ```go
 client.EnableAdaptiveConcurrency(&wormhole.EnhancedAdaptiveConfig{
-	MinCapacity:   2,
-	MaxCapacity:   50,
-	TargetLatency: 500 * time.Millisecond,
+	AdaptiveConfig: wormhole.AdaptiveConfig{
+		MinCapacity:   2,
+		MaxCapacity:   50,
+		TargetLatency: 500 * time.Millisecond,
+	},
 })
 ```
 

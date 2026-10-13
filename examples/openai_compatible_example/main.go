@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"os"
 
 	"github.com/garyblankenship/wormhole/v3"
 )
@@ -35,9 +36,14 @@ func main() {
 	}
 
 	// Example 2: vLLM (local/remote) - just change BaseURL!
+	// Set VLLM_BASE_URL to use another endpoint; empty/unset keeps the local default.
+	vllmBaseURL := os.Getenv("VLLM_BASE_URL")
+	if vllmBaseURL == "" {
+		vllmBaseURL = "http://localhost:8000/v1"
+	}
 	fmt.Println("--- Example 2: vLLM (local/remote) ---")
 	_, err = client.Text().
-		BaseURL("http://localhost:8000/v1"). // ✨ That's it!
+		BaseURL(vllmBaseURL). // ✨ That's it!
 		Model("codellama-13b").
 		Prompt("Write a Python function to calculate fibonacci numbers").
 		Temperature(0.2).

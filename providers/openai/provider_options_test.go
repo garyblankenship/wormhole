@@ -102,12 +102,21 @@ func TestTypedReasoningMergedIntoPayloads(t *testing.T) {
 	}
 	chatPayload := provider.buildChatPayload(chatRequest, chatRequest.Messages)
 
-	reasoning, ok := chatPayload["reasoning"].(map[string]any)
-	if !ok {
-		t.Fatalf("chat reasoning = %#v, want map", chatPayload["reasoning"])
+	if chatPayload["reasoning_effort"] != "low" || chatPayload["reasoning"] != nil {
+		t.Fatalf("native chat reasoning = %#v", chatPayload)
 	}
-	if reasoning["effort"] != "low" || reasoning["max_tokens"] != 256 || reasoning["enabled"] != true {
-		t.Fatalf("chat reasoning = %#v", reasoning)
+	compatible := NewWithName("openrouter", types.NewProviderConfig("key"))
+	reasoning, ok := compatible.buildChatPayload(chatRequest, chatRequest.Messages)["reasoning"].(map[string]any)
+	if !ok || reasoning["effort"] != "low" || reasoning["max_tokens"] != 256 || reasoning["enabled"] != true {
+		t.Fatalf("compatible chat reasoning = %#v", reasoning)
+	}
+	chatRequest.Reasoning.Effort = types.ReasoningEffortNone
+	if payload := provider.buildChatPayload(chatRequest, chatRequest.Messages); payload["reasoning_effort"] != "none" {
+		t.Fatalf("explicit none effort = %#v", payload)
+	}
+	chatRequest.ProviderOptions = map[string]any{"reasoning_effort": "high"}
+	if payload := provider.buildChatPayload(chatRequest, chatRequest.Messages); payload["reasoning_effort"] != "high" {
+		t.Fatalf("reasoning override = %#v", payload)
 	}
 
 	responsesRequest := &types.TextRequest{
