@@ -37,38 +37,58 @@ func decisionsFixtureClient(t *testing.T, handler http.HandlerFunc, options ...O
 	return client
 }
 
+func writeDecisionsFixture(t *testing.T, w http.ResponseWriter, body string) {
+	t.Helper()
+	if _, err := fmt.Fprint(w, body); err != nil {
+		t.Error(err)
+	}
+}
+
 func TestDecisionsBuilderWireAndAnswers(t *testing.T) {
 	t.Parallel()
 	client := decisionsFixtureClient(t, func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != "POST" || r.URL.Path != "/api/alpha/decisions" || r.Header.Get("Authorization") != "Bearer sk-or-v1-fixture" || r.Header.Get("X-Title") != "fixture" {
-			t.Errorf("unexpected request: %s %s %v", r.Method, r.URL.Path, r.Header)
-		}
-		var payload map[string]json.RawMessage
-		if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
-			t.Error(err)
-			w.WriteHeader(400)
+		if !assertDecisionsWireRequest(t, w, r) {
 			return
 		}
-		if len(payload) != 3 || string(payload["model"]) != `"typesafe/jev-1.13"` || !strings.Contains(string(payload["state"]), "9007199254740993") {
-			t.Errorf("wrong payload: %s", payload)
-		}
-		var questions map[string]struct {
-			Type         string          `json:"type"`
-			Instructions json.RawMessage `json:"instructions"`
-			Criteria     json.RawMessage `json:"criteria"`
-		}
-		if err := json.Unmarshal(payload["questions"], &questions); err != nil {
-			t.Error(err)
-		}
-		if len(questions) != 3 || questions["accept"].Type != "noul" || string(questions["route"].Instructions) != `{"task":"route"}` || string(questions["route"].Criteria) != `{"allow":"safe","review":null}` || string(questions["quality"].Criteria) != `["low",{"description":"high"}]` {
-			t.Errorf("wrong questions: %s", payload["questions"])
-		}
-		fmt.Fprint(w, decisionsFixture)
+		writeDecisionsFixture(t, w, decisionsFixture)
 	})
 	response, err := client.Decisions().Model("typesafe/jev-1.13").State(json.RawMessage(`{"id":9007199254740993}`)).Questions(decisionsQuestions()).Evaluate(t.Context())
 	if err != nil {
 		t.Fatal(err)
 	}
+	assertDecisionsWireAnswers(t, response)
+}
+
+func assertDecisionsWireRequest(t *testing.T, w http.ResponseWriter, r *http.Request) bool {
+	t.Helper()
+	if r.Method != "POST" || r.URL.Path != "/api/alpha/decisions" || r.Header.Get("Authorization") != "Bearer sk-or-v1-fixture" || r.Header.Get("X-Title") != "fixture" {
+		t.Errorf("unexpected request: %s %s %v", r.Method, r.URL.Path, r.Header)
+	}
+	var payload map[string]json.RawMessage
+	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+		t.Error(err)
+		w.WriteHeader(400)
+		return false
+	}
+	if len(payload) != 3 || string(payload["model"]) != `"typesafe/jev-1.13"` || !strings.Contains(string(payload["state"]), "9007199254740993") {
+		t.Errorf("wrong payload: %s", payload)
+	}
+	var questions map[string]struct {
+		Type         string          `json:"type"`
+		Instructions json.RawMessage `json:"instructions"`
+		Criteria     json.RawMessage `json:"criteria"`
+	}
+	if err := json.Unmarshal(payload["questions"], &questions); err != nil {
+		t.Error(err)
+	}
+	if len(questions) != 3 || questions["accept"].Type != "noul" || string(questions["route"].Instructions) != `{"task":"route"}` || string(questions["route"].Criteria) != `{"allow":"safe","review":null}` || string(questions["quality"].Criteria) != `["low",{"description":"high"}]` {
+		t.Errorf("wrong questions: %s", payload["questions"])
+	}
+	return true
+}
+
+func assertDecisionsWireAnswers(t *testing.T, response *types.DecisionsResponse) {
+	t.Helper()
 	if response.ID != "decision-1" || response.Provider != "openrouter" || response.Model != "typesafe/jev-1.13" || response.Usage.InputTokens != 7 || response.Usage.OutputTokens != 3 || response.Usage.Cost == nil || *response.Usage.Cost != 0 {
 		t.Fatalf("metadata lost: %+v", response)
 	}
@@ -86,7 +106,10 @@ func TestDecisionsBuilderWireAndAnswers(t *testing.T) {
 func TestDecisionsBuilderValidationBeforeHTTP(t *testing.T) {
 	t.Parallel()
 	var calls atomic.Int32
-	client := decisionsFixtureClient(t, func(w http.ResponseWriter, r *http.Request) { calls.Add(1); fmt.Fprint(w, decisionsFixture) })
+	client := decisionsFixtureClient(t, func(w http.ResponseWriter, r *http.Request) {
+		calls.Add(1)
+		writeDecisionsFixture(t, w, decisionsFixture)
+	})
 	for _, state := range []any{nil, true, 42, json.RawMessage(`null`), make(chan int)} {
 		if _, err := client.Decisions().Model("typesafe/jev-1.13").State(state).Questions(decisionsQuestions()).Evaluate(t.Context()); err == nil {
 			t.Fatalf("accepted invalid state %T", state)
@@ -115,10 +138,10 @@ func TestDecisionsBuilderIdempotencyAndChatRoute(t *testing.T) {
 		switch r.URL.Path {
 		case "/api/alpha/decisions":
 			decisions.Add(1)
-			fmt.Fprint(w, decisionsFixture)
+			writeDecisionsFixture(t, w, decisionsFixture)
 		case "/api/v1/chat/completions":
 			chat.Add(1)
-			fmt.Fprint(w, `{"id":"chat-1","choices":[{"message":{"role":"assistant","content":"routed"},"finish_reason":"stop"}],"usage":{}}`)
+			writeDecisionsFixture(t, w, `{"id":"chat-1","choices":[{"message":{"role":"assistant","content":"routed"},"finish_reason":"stop"}],"usage":{}}`)
 		default:
 			t.Errorf("unexpected path %s", r.URL.Path)
 			w.WriteHeader(404)
@@ -252,7 +275,7 @@ func TestDecisionsBuilderBaseURLOverride(t *testing.T) {
 		if r.URL.Path != "/isolated/alpha/decisions" {
 			t.Errorf("override path=%s", r.URL.Path)
 		}
-		fmt.Fprint(w, decisionsFixture)
+		writeDecisionsFixture(t, w, decisionsFixture)
 	}))
 	t.Cleanup(server.Close)
 	if _, err := client.Decisions().BaseURL(server.URL + "/isolated/v1").Model("typesafe/jev-1.13").State("x").Questions(decisionsQuestions()).Evaluate(t.Context()); err != nil {
@@ -266,7 +289,7 @@ func TestDecisionsBuilderBaseURLOverride(t *testing.T) {
 // This example is compiled but intentionally does not execute a live provider.
 func ExampleWormhole_Decisions() {
 	client := New(WithDefaultProvider("openrouter"), WithOpenAICompatible("openrouter", "https://openrouter.ai/api/v1", types.ProviderConfig{APIKey: "sk-or-v1-placeholder"}))
-	defer client.Close()
+	defer func() { _ = client.Close() }()
 	result, err := client.Decisions().Model("typesafe/jev-1.13").State(map[string]any{"message": "Review this change"}).Questions(map[string]types.DecisionQuestion{
 		"approve": {Type: types.DecisionNoul, Instructions: "Is this ready?"},
 		"route":   {Type: types.DecisionChoice, Instructions: "Choose the next step", Criteria: map[string]any{"review": "Needs review", "merge": nil}},

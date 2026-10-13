@@ -40,7 +40,7 @@ func main() {
 	client := wormhole.New(
 		wormhole.WithDefaultProvider("openrouter"),
 		wormhole.WithOpenAICompatible("openrouter", "https://openrouter.ai/api/v1", types.ProviderConfig{
-			APIKey: "sk-or-invalid-key-for-demo",
+			APIKey: "sk-or-invalid-key-for-demo", // #nosec G101 -- intentionally invalid placeholder demonstrating upstream authentication diagnostics.
 		}),
 	)
 

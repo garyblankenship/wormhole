@@ -91,25 +91,7 @@ func TestStructuredOptionsReachProviderPayload(t *testing.T) {
 				t.Fatal(err)
 			}
 			payload := <-payloads
-			if payload["metadata"].(map[string]any)["source"] != "request" || payload["store"] != false {
-				t.Fatalf("option precedence/isolation lost: %#v", payload)
-			}
-			if provider == "gemini" {
-				gen := payload["generationConfig"].(map[string]any)
-				if gen["topP"] != 0.75 || gen["thinkingConfig"].(map[string]any)["thinkingLevel"] != "low" {
-					t.Fatalf("generation controls lost: %#v", gen)
-				}
-			} else {
-				if payload["top_p"] != 0.75 {
-					t.Fatalf("top_p lost: %#v", payload)
-				}
-				if provider == "openai" && payload["reasoning_effort"] != "low" {
-					t.Fatalf("reasoning effort lost: %#v", payload)
-				}
-				if provider == "compatible" && payload["reasoning"].(map[string]any)["effort"] != "low" {
-					t.Fatalf("compatible reasoning lost: %#v", payload)
-				}
-			}
+			assertStructuredOptionsPayload(t, provider, payload)
 			// Per-request provider fields retain precedence over typed controls.
 			override := map[string]any{"reasoning_effort": "high", "top_p": 0.25}
 			if provider == "compatible" {
@@ -122,22 +104,50 @@ func TestStructuredOptionsReachProviderPayload(t *testing.T) {
 				t.Fatal(err)
 			}
 			payload = <-payloads
-			if provider == "gemini" {
-				gen := payload["generationConfig"].(map[string]any)
-				if gen["topP"] != 0.25 || gen["thinkingConfig"].(map[string]any)["thinkingLevel"] != "high" {
-					t.Fatalf("request override lost: %#v", gen)
-				}
-			} else {
-				if payload["top_p"] != 0.25 {
-					t.Fatalf("request sampling override lost: %#v", payload)
-				}
-				if provider == "openai" && payload["reasoning_effort"] != "high" {
-					t.Fatalf("request reasoning override lost: %#v", payload)
-				}
-				if provider == "compatible" && payload["reasoning"].(map[string]any)["effort"] != "high" {
-					t.Fatalf("request reasoning override lost: %#v", payload)
-				}
-			}
+			assertStructuredOptionsOverride(t, provider, payload)
 		})
+	}
+}
+
+func assertStructuredOptionsPayload(t *testing.T, provider string, payload map[string]any) {
+	t.Helper()
+	if payload["metadata"].(map[string]any)["source"] != "request" || payload["store"] != false {
+		t.Fatalf("option precedence/isolation lost: %#v", payload)
+	}
+	if provider == "gemini" {
+		gen := payload["generationConfig"].(map[string]any)
+		if gen["topP"] != 0.75 || gen["thinkingConfig"].(map[string]any)["thinkingLevel"] != "low" {
+			t.Fatalf("generation controls lost: %#v", gen)
+		}
+	} else {
+		if payload["top_p"] != 0.75 {
+			t.Fatalf("top_p lost: %#v", payload)
+		}
+		if provider == "openai" && payload["reasoning_effort"] != "low" {
+			t.Fatalf("reasoning effort lost: %#v", payload)
+		}
+		if provider == "compatible" && payload["reasoning"].(map[string]any)["effort"] != "low" {
+			t.Fatalf("compatible reasoning lost: %#v", payload)
+		}
+	}
+}
+
+func assertStructuredOptionsOverride(t *testing.T, provider string, payload map[string]any) {
+	t.Helper()
+	if provider == "gemini" {
+		gen := payload["generationConfig"].(map[string]any)
+		if gen["topP"] != 0.25 || gen["thinkingConfig"].(map[string]any)["thinkingLevel"] != "high" {
+			t.Fatalf("request override lost: %#v", gen)
+		}
+	} else {
+		if payload["top_p"] != 0.25 {
+			t.Fatalf("request sampling override lost: %#v", payload)
+		}
+		if provider == "openai" && payload["reasoning_effort"] != "high" {
+			t.Fatalf("request reasoning override lost: %#v", payload)
+		}
+		if provider == "compatible" && payload["reasoning"].(map[string]any)["effort"] != "high" {
+			t.Fatalf("request reasoning override lost: %#v", payload)
+		}
 	}
 }

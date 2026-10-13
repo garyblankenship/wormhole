@@ -46,54 +46,66 @@ func (r DecisionsRequest) Validate() error {
 		errs.Add("questions", "required", nil, "at least one question must be provided")
 	}
 	for name, q := range r.Questions {
-		field := "questions." + name
-		instructions, err := decisionJSON(q.Instructions)
-		if err != nil || !decisionDescription(instructions, false) {
-			errs.Add(field+".instructions", "json_shape", nil, "instructions must serialize to a JSON string, object or array")
-		}
-		criteria, err := decisionJSON(q.Criteria)
-		if err != nil {
-			errs.Add(field+".criteria", "json_shape", nil, "criteria must be valid JSON")
-			continue
-		}
-		valid := true
-		switch q.Type {
-		case DecisionNoul:
-			if criteria == nil {
-				break
-			}
-			object, ok := criteria.(map[string]any)
-			valid = ok
-			for key, description := range object {
-				if (key != "true" && key != "false") || !decisionDescription(description, false) {
-					valid = false
-				}
-			}
-		case DecisionChoice:
-			object, ok := criteria.(map[string]any)
-			valid = ok && len(object) > 0 && len(object) <= 255
-			for _, description := range object {
-				if !decisionDescription(description, true) {
-					valid = false
-				}
-			}
-		case DecisionScore:
-			levels, ok := criteria.([]any)
-			valid = ok && len(levels) >= 2 && len(levels) <= 10
-			for _, description := range levels {
-				if !decisionDescription(description, false) {
-					valid = false
-				}
-			}
-		default:
-			errs.Add(field+".type", "enum", nil, "type must be noul, choice or score")
-			continue
-		}
-		if !valid {
-			errs.Add(field+".criteria", "decision_criteria", nil, "criteria do not match the decision family")
-		}
+		validateDecisionQuestion(&errs, name, q)
 	}
 	return errs.Error()
+}
+
+func validateDecisionQuestion(errs *ValidationErrors, name string, q DecisionQuestion) {
+	field := "questions." + name
+	instructions, err := decisionJSON(q.Instructions)
+	if err != nil || !decisionDescription(instructions, false) {
+		errs.Add(field+".instructions", "json_shape", nil, "instructions must serialize to a JSON string, object or array")
+	}
+	criteria, err := decisionJSON(q.Criteria)
+	if err != nil {
+		errs.Add(field+".criteria", "json_shape", nil, "criteria must be valid JSON")
+		return
+	}
+	valid, known := validDecisionCriteria(q.Type, criteria)
+	if !known {
+		errs.Add(field+".type", "enum", nil, "type must be noul, choice or score")
+		return
+	}
+	if !valid {
+		errs.Add(field+".criteria", "decision_criteria", nil, "criteria do not match the decision family")
+	}
+}
+
+func validDecisionCriteria(kind DecisionType, criteria any) (bool, bool) {
+	valid := true
+	switch kind {
+	case DecisionNoul:
+		if criteria == nil {
+			break
+		}
+		object, ok := criteria.(map[string]any)
+		valid = ok
+		for key, description := range object {
+			if (key != "true" && key != "false") || !decisionDescription(description, false) {
+				valid = false
+			}
+		}
+	case DecisionChoice:
+		object, ok := criteria.(map[string]any)
+		valid = ok && len(object) > 0 && len(object) <= 255
+		for _, description := range object {
+			if !decisionDescription(description, true) {
+				valid = false
+			}
+		}
+	case DecisionScore:
+		levels, ok := criteria.([]any)
+		valid = ok && len(levels) >= 2 && len(levels) <= 10
+		for _, description := range levels {
+			if !decisionDescription(description, false) {
+				valid = false
+			}
+		}
+	default:
+		return false, false
+	}
+	return valid, true
 }
 
 func decisionUnit(value float64) bool {
@@ -112,58 +124,12 @@ func (r DecisionsResponse) ValidateFor(request DecisionsRequest) error {
 		if err != nil {
 			return fmt.Errorf("invalid request criteria for %q", name)
 		}
-		keys := make(map[string]bool)
-		switch question.Type {
-		case DecisionNoul:
-			if answer.Noul == nil || !decisionUnit(*answer.Noul) {
-				return fmt.Errorf("answer %q requires noul in [0,1]", name)
-			}
-		case DecisionChoice:
-			options, ok := criteria.(map[string]any)
-			if !ok {
-				return fmt.Errorf("invalid choice criteria for %q", name)
-			}
-			for key := range options {
-				keys[key] = true
-			}
-			if answer.Choice == nil || !keys[*answer.Choice] {
-				return fmt.Errorf("answer %q requires a choice from its criteria", name)
-			}
-		case DecisionScore:
-			levels, ok := criteria.([]any)
-			if !ok {
-				return fmt.Errorf("invalid score criteria for %q", name)
-			}
-			if answer.Score == nil || math.IsNaN(*answer.Score) || math.IsInf(*answer.Score, 0) || *answer.Score < 0 || *answer.Score > float64(len(levels)-1) {
-				return fmt.Errorf("answer %q has an invalid score", name)
-			}
-			for i := range levels {
-				keys[strconv.Itoa(i)] = true
-			}
-			if len(answer.Legend) != len(keys) {
-				return fmt.Errorf("answer %q requires a complete legend", name)
-			}
-			for key := range keys {
-				if _, ok := answer.Legend[key]; !ok {
-					return fmt.Errorf("answer %q is missing legend level %q", name, key)
-				}
-			}
-		default:
-			return fmt.Errorf("answer %q has an unknown decision type", name)
+		keys, err := decisionAnswerKeys(name, question.Type, criteria, answer)
+		if err != nil {
+			return err
 		}
-		if question.Type != DecisionNoul {
-			if answer.Confidence == nil || !decisionUnit(*answer.Confidence) {
-				return fmt.Errorf("answer %q requires confidence in [0,1]", name)
-			}
-			if len(answer.Probabilities) != len(keys) {
-				return fmt.Errorf("answer %q requires a complete probability distribution", name)
-			}
-			for key := range keys {
-				value, ok := answer.Probabilities[key]
-				if !ok || !decisionUnit(value) {
-					return fmt.Errorf("answer %q has an invalid probability for %q", name, key)
-				}
-			}
+		if err := validateDecisionDistribution(name, question.Type, keys, answer); err != nil {
+			return err
 		}
 		// Even optional known confidence/probability fields must have valid ranges.
 		if answer.Confidence != nil && !decisionUnit(*answer.Confidence) {
@@ -176,4 +142,71 @@ func (r DecisionsResponse) ValidateFor(request DecisionsRequest) error {
 		}
 	}
 	return nil
+}
+
+func decisionAnswerKeys(name string, kind DecisionType, criteria any, answer DecisionAnswer) (map[string]bool, error) {
+	keys := make(map[string]bool)
+	switch kind {
+	case DecisionNoul:
+		if answer.Noul == nil || !decisionUnit(*answer.Noul) {
+			return nil, fmt.Errorf("answer %q requires noul in [0,1]", name)
+		}
+	case DecisionChoice:
+		options, ok := criteria.(map[string]any)
+		if !ok {
+			return nil, fmt.Errorf("invalid choice criteria for %q", name)
+		}
+		for key := range options {
+			keys[key] = true
+		}
+		if answer.Choice == nil || !keys[*answer.Choice] {
+			return nil, fmt.Errorf("answer %q requires a choice from its criteria", name)
+		}
+	case DecisionScore:
+		return decisionScoreKeys(name, criteria, answer)
+	default:
+		return nil, fmt.Errorf("answer %q has an unknown decision type", name)
+	}
+	return keys, nil
+}
+
+func validateDecisionDistribution(name string, kind DecisionType, keys map[string]bool, answer DecisionAnswer) error {
+	if kind != DecisionNoul {
+		if answer.Confidence == nil || !decisionUnit(*answer.Confidence) {
+			return fmt.Errorf("answer %q requires confidence in [0,1]", name)
+		}
+		if len(answer.Probabilities) != len(keys) {
+			return fmt.Errorf("answer %q requires a complete probability distribution", name)
+		}
+		for key := range keys {
+			value, ok := answer.Probabilities[key]
+			if !ok || !decisionUnit(value) {
+				return fmt.Errorf("answer %q has an invalid probability for %q", name, key)
+			}
+		}
+	}
+	return nil
+}
+
+func decisionScoreKeys(name string, criteria any, answer DecisionAnswer) (map[string]bool, error) {
+	keys := make(map[string]bool)
+	levels, ok := criteria.([]any)
+	if !ok {
+		return nil, fmt.Errorf("invalid score criteria for %q", name)
+	}
+	if answer.Score == nil || math.IsNaN(*answer.Score) || math.IsInf(*answer.Score, 0) || *answer.Score < 0 || *answer.Score > float64(len(levels)-1) {
+		return nil, fmt.Errorf("answer %q has an invalid score", name)
+	}
+	for i := range levels {
+		keys[strconv.Itoa(i)] = true
+	}
+	if len(answer.Legend) != len(keys) {
+		return nil, fmt.Errorf("answer %q requires a complete legend", name)
+	}
+	for key := range keys {
+		if _, ok := answer.Legend[key]; !ok {
+			return nil, fmt.Errorf("answer %q is missing legend level %q", name, key)
+		}
+	}
+	return keys, nil
 }

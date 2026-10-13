@@ -28,7 +28,9 @@ func TestDecisionsEndpointAndUnsupported(t *testing.T) {
 				if r.URL.Path != tc.path {
 					t.Errorf("path=%s want %s", r.URL.Path, tc.path)
 				}
-				fmt.Fprint(w, adapterDecisionBody)
+				if _, err := fmt.Fprint(w, adapterDecisionBody); err != nil {
+					t.Error(err)
+				}
 			}))
 			t.Cleanup(server.Close)
 			p := NewWithName("openrouter", types.ProviderConfig{BaseURL: server.URL + tc.base, NoAuth: true})
@@ -70,7 +72,9 @@ func TestDecisionsHTTPErrorAndRetry(t *testing.T) {
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				w.Header().Set("Retry-After", "2")
 				w.WriteHeader(status)
-				fmt.Fprint(w, `{"error":{"message":"fixture rejected"}}`)
+				if _, err := fmt.Fprint(w, `{"error":{"message":"fixture rejected"}}`); err != nil {
+					t.Error(err)
+				}
 			}))
 			t.Cleanup(server.Close)
 			zero := 0
@@ -96,10 +100,14 @@ func TestDecisionsHTTPErrorAndRetry(t *testing.T) {
 			if calls.Add(1) == 1 {
 				w.Header().Set("Retry-After", "0")
 				w.WriteHeader(429)
-				fmt.Fprint(w, `{"error":{"message":"retry"}}`)
+				if _, err := fmt.Fprint(w, `{"error":{"message":"retry"}}`); err != nil {
+					t.Error(err)
+				}
 				return
 			}
-			fmt.Fprint(w, adapterDecisionBody)
+			if _, err := fmt.Fprint(w, adapterDecisionBody); err != nil {
+				t.Error(err)
+			}
 		}))
 		t.Cleanup(server.Close)
 		one := 1
@@ -122,7 +130,9 @@ func TestDecisionsHTTPErrorAndRetry(t *testing.T) {
 			calls.Add(1)
 			w.Header().Set("Retry-After", "60")
 			w.WriteHeader(429)
-			fmt.Fprint(w, `{"error":{"message":"retry"}}`)
+			if _, err := fmt.Fprint(w, `{"error":{"message":"retry"}}`); err != nil {
+				t.Error(err)
+			}
 			cancel()
 		}))
 		t.Cleanup(server.Close)
@@ -144,7 +154,11 @@ func TestDecisionsRejectsMalformedSuccess(t *testing.T) {
 	for _, body := range []string{``, `null`, `{}`, `{"answers":{}}`, `{"answers":{"q":{"type":"noul","noul":null}}}`, `{"answers":{"q":{"type":"noul","noul":"yes"}}}`, `{"answers":{"q":{"type":"noul","noul":2}}}`} {
 		t.Run(body, func(t *testing.T) {
 			t.Parallel()
-			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { fmt.Fprint(w, body) }))
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if _, err := fmt.Fprint(w, body); err != nil {
+					t.Error(err)
+				}
+			}))
 			t.Cleanup(server.Close)
 			p := NewWithName("openrouter", types.ProviderConfig{BaseURL: server.URL, NoAuth: true})
 			t.Cleanup(func() { _ = p.Close() })

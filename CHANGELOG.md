@@ -1,5 +1,20 @@
 # Changelog
 
+## v3.2.0 (2026-10-13)
+
+### Features
+- OpenRouter: add direct Jev Decisions requests with typed noul, choice and score answers, probabilities and confidence, plus request and response validation.
+- Structured output: add `ProviderOptions`, `Reasoning` and `TopP` builder controls.
+- Proxy: accept and forward Chat Completions `reasoning_effort` through the existing provider reasoning controls.
+
+### Fixes
+- Harden SDK lifecycle, structured schema handling and request cancellation.
+- Repair example provider setup, terminal stream handling, tool results and diagnostic output; allow the OpenAI-compatible example endpoint to be configured with `VLLM_BASE_URL`.
+
+### Other
+- Add the SDK tour and focused regression coverage for the new request controls and Decisions adapter.
+- Document the separate Jev router and direct Decisions workflows, and refresh example usage guidance.
+
 ## v3.1.0 (2026-10-04)
 
 SDK and proxy hardening release: provider-scoped model lookup, exact

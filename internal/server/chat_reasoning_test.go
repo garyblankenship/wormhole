@@ -80,37 +80,43 @@ func TestChatReasoningEffortProviderMapping(t *testing.T) {
 					default:
 						t.Fatal("request never reached provider")
 					}
-					if provider == "openai" {
-						if effort == "omitted" {
-							if _, ok := payload["reasoning_effort"]; ok {
-								t.Fatal("omitted effort emitted")
-							}
-						} else if payload["reasoning_effort"] != effort {
-							t.Fatalf("effort = %#v", payload)
-						}
-					} else if provider == "compatible" {
-						if effort == "omitted" || effort == "none" {
-							if _, ok := payload["reasoning"]; ok {
-								t.Fatalf("unexpected reasoning: %#v", payload)
-							}
-						} else if payload["reasoning"].(map[string]any)["effort"] != effort {
-							t.Fatalf("reasoning = %#v", payload)
-						}
-					} else {
-						gen, _ := payload["generationConfig"].(map[string]any)
-						if effort == "omitted" || effort == "none" {
-							if gen["thinkingConfig"] != nil {
-								t.Fatalf("unexpected thinking config: %#v", gen)
-							}
-						} else if gen["thinkingConfig"].(map[string]any)["thinkingLevel"] != effort {
-							t.Fatalf("thinking = %#v", gen)
-						}
-					}
+					assertChatReasoningPayload(t, provider, effort, payload)
 					if stream && rec.Header().Get("Content-Type") != "text/event-stream" {
 						t.Fatalf("missing streamed response: %s", rec.Body.String())
 					}
 				})
 			}
+		}
+	}
+}
+
+func assertChatReasoningPayload(t *testing.T, provider, effort string, payload map[string]any) {
+	t.Helper()
+	switch provider {
+	case "openai":
+		if effort == "omitted" {
+			if _, ok := payload["reasoning_effort"]; ok {
+				t.Fatal("omitted effort emitted")
+			}
+		} else if payload["reasoning_effort"] != effort {
+			t.Fatalf("effort = %#v", payload)
+		}
+	case "compatible":
+		if effort == "omitted" || effort == "none" {
+			if _, ok := payload["reasoning"]; ok {
+				t.Fatalf("unexpected reasoning: %#v", payload)
+			}
+		} else if payload["reasoning"].(map[string]any)["effort"] != effort {
+			t.Fatalf("reasoning = %#v", payload)
+		}
+	default:
+		gen, _ := payload["generationConfig"].(map[string]any)
+		if effort == "omitted" || effort == "none" {
+			if gen["thinkingConfig"] != nil {
+				t.Fatalf("unexpected thinking config: %#v", gen)
+			}
+		} else if gen["thinkingConfig"].(map[string]any)["thinkingLevel"] != effort {
+			t.Fatalf("thinking = %#v", gen)
 		}
 	}
 }
