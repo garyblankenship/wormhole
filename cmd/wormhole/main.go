@@ -94,6 +94,7 @@ func runServe(args []string, stdout, stderr io.Writer, getenv func(string) strin
 
 	var opts []wormhole.Option
 	opts = append(opts, wormhole.WithAllProvidersFromEnv())
+	opts = append(opts, explicitLocalProviderOptions(getenv)...)
 
 	if profile, ok := wormhole.ProviderProfileByName("ollama"); ok && profile.BaseURLEnv != "" {
 		if ollamaURL := getenv(profile.BaseURLEnv); ollamaURL != "" {
