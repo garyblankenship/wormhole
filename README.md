@@ -129,7 +129,25 @@ flags, and discovery mode; Go code keeps the routing logic generic.
 
 - Core concepts: [errors](docs/concepts/errors.md), [messages](docs/concepts/messages.md), and [options](docs/concepts/options.md)
 - App workflows: [model discovery](docs/model-discovery.md) and [tool calling](docs/tool-calling.md)
+- Application controls: [metadata, caching, reasoning, tools plus JSON, citations, and provider-owned file references](docs/guides/provider-fidelity.md)
 - Providers: [OpenAI](docs/providers/openai.md), [Anthropic](docs/providers/anthropic.md), [Gemini](docs/providers/gemini.md), [OpenRouter](docs/providers/openrouter.md), [DeepSeek](docs/providers/deepseek.md), and [Z.AI](docs/providers/zai.md)
+
+Generation responses expose filtered `ResponseMetadata`, normalized `Sources`
+and `Citations`, and condition-specific `Warnings`. Proxy clients opt into these
+additions without changing ordinary Chat Completions responses:
+
+```json
+{
+  "model": "openai/gpt-5.6",
+  "messages": [{"role": "user", "content": "Explain prompt caching."}],
+  "wormhole": {"include": ["response_metadata", "usage_details", "warnings"]}
+}
+```
+
+Structured requests can also return application tool calls. Your application
+executes them and supplies their results before requesting final JSON; Wormhole
+does not run tools through `Structured().Generate()`. See the
+[caller-controlled round trip](docs/guides/provider-fidelity.md#tools-plus-json).
 
 OpenAI text generation uses Chat Completions by default. Opt into the Responses
 API when you want OpenAI's newer `/v1/responses` wire format:
@@ -176,7 +194,9 @@ result, err := wormhole.RunOpenAICompatibleSmoke(ctx, wormhole.OpenAICompatibleS
 
 The smoke uses the same adapter as normal generation, sends one chat completion,
 parses the response, and returns errors that include the underlying network
-cause when connection setup fails.
+cause when connection setup fails. Requested-versus-reported model identity,
+finish reason, usage, thinking diagnostics and the optional caller-defined
+`ValidateResponse` hook are described in [Smoke checks](docs/guides/smoke-checks.md).
 
 ### What The Portal Does Not Do
 
@@ -599,6 +619,16 @@ client := wormhole.New(
 )
 ```
 
+Provider HTTP retry budgets count retries after the initial attempt: `MaxRetries: 2`
+allows up to three attempts; `0` disables retries. With key rotation enabled, an
+explicit `APIKey` selects the initial key, and HTTP 429 retries may select another
+available key. See [retry and key configuration](docs/concepts/options.md#http-retries-and-key-rotation).
+
+An exhausted HTTP 429 preserves the final upstream error details, request ID,
+and rate-limit headers. Exhaustion alone does not close the client; later
+successful requests receive fresh response metadata. See
+[error inspection and recovery](docs/concepts/errors.md#exhausted-http-retries-and-recovery).
+
 Adaptive concurrency can be enabled per client. It watches latency and adjusts
 capacity instead of sleeping for a random second and hoping the universe becomes
 emotionally available:
@@ -918,11 +948,14 @@ fmt.Println(full.Text, full.Usage)
 `StreamAndCollect` retains text, refusal, thinking, tools, usage and terminal
 fields available in the stream. It continues through finish markers to retain
 usage trailers and errors; each result and delivered chunk owns detached data.
-Cumulative usage snapshots use the maximum reported value for each field.
+Metadata, sources, citations and warnings are retained; terminal reference
+snapshots replace prior additions. Native metadata is merged by key with later
+values taking precedence. Cumulative usage snapshots use the maximum reported
+value for each field and cache-write lifetime.
 Completed tool calls take precedence over raw argument fragments, and terminal
 tool lists replace earlier lists. ID-less completed calls with ambiguous identity
-cannot reliably be deduplicated. Streams do not expose response `Created` or
-`Metadata`; the scalar thinking type cannot preserve multiple block boundaries
+cannot reliably be deduplicated. Streams do not expose response `Created`;
+the scalar thinking type cannot preserve multiple block boundaries
 or signatures. `StreamAndAccumulate` keeps its existing text-only behavior.
 
 Scripts run without network calls, invented responses or timing defaults.

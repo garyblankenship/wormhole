@@ -1,5 +1,30 @@
 # Changelog
 
+## v3.3.0 (Unreleased)
+
+### Features
+- Add response-scoped provider request IDs, status codes, filtered headers, and response warnings without changing the provider interface.
+- Preserve provider cache accounting, including cache-write lifetime breakdowns, and support explicit OpenAI Responses prewarming that bypasses local response memoization.
+- Preserve explicit reasoning controls and add `IncludeThoughts` for summary visibility separately from generation settings.
+- Combine structured output with caller-controlled application tool turns, including a validated synthetic-result-tool fallback and typed `ToolCallsRequiredError` from `GenerateAs`.
+- Normalize provider-returned sources and citations, with optional UTF-8 byte ranges and provider annotations retained for details that cannot be normalized.
+- Accept references to files already owned by a registered provider, validate native representations, and prevent references crossing incompatible fallback routes.
+- Add opt-in proxy response extensions for metadata, usage details, sources, citations, and warnings, plus explicit structured-tools and prewarm controls.
+- Register eligible local OpenAI-compatible profiles only when their documented base-URL environment variable is explicitly set; forward compatible proxy `thinking` and `chat_template_kwargs` controls.
+
+### Fixes
+- Bound local schema validation, reject unsupported assertions clearly, and preserve application tool names that prefix the structured-result tool.
+- Keep upstream success statuses in response metadata while returning gateway errors for malformed provider responses.
+- Preserve generation on malformed optional citations, expose OpenAI reasoning summaries, and keep streamed source IDs stable across content items.
+- Recognize supported numeric zero values consistently for explicit cache prewarming.
+
+### Documentation
+- Document application controls, tools-plus-JSON round trips, provider limitations, and unchanged provider-bridge boundaries in the [provider fidelity guide](docs/guides/provider-fidelity.md).
+- Keep local endpoint setup explicit and use exact server model IDs.
+
+### Release preparation
+- This entry prepares the additive `/v3` release. It does not indicate publication or live-provider performance or billing verification.
+
 ## v3.2.0 (2026-10-13)
 
 ### Features

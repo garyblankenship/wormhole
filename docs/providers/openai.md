@@ -151,6 +151,100 @@ a schema field path before HTTP I/O. Represent an optional value as a required
 nullable field, for example `"type": ["string", "null"]`; the property must still
 appear in `required`. Nonstrict schemas remain unchanged.
 
+## oMLX Thinking Controls
+
+Use the existing `ProviderOptions()` escape hatch for oMLX's model-specific
+chat-template fields. Supply `baseURL`, `modelID`, and `prompt` from your
+application configuration/input; `baseURL` is the OpenAI-compatible API root
+(normally ending in `/v1`).
+
+```go
+client := wormhole.New(
+    wormhole.WithLocalOpenAI(baseURL),
+    wormhole.WithDiscovery(false),
+)
+defer client.Close()
+
+resp, err := client.Text().
+    Model(modelID).
+    Prompt(prompt).
+    ResponseFormat(map[string]any{"type": "json_object"}).
+    ProviderOptions(map[string]any{
+        "chat_template_kwargs": map[string]any{
+            "enable_thinking": false,
+        },
+    }).
+    Generate(ctx)
+```
+
+This sends `"chat_template_kwargs":{"enable_thinking":false}` at the top level
+of the chat-completions request body. The same `ProviderOptions()` field works
+with `Stream()` and `Structured()` requests. Explicit `false` remains a JSON
+boolean; omitting the field leaves the server's behavior unchanged when no
+provider or model defaults supply it.
+
+Provider options follow **defaults < model < request** precedence. Configure
+those layers with `ProviderConfig.WithDefaultProviderOptions()`,
+`ProviderConfig.WithProviderOptionsForModel()`, and the request's
+`ProviderOptions()`. Each top-level key is replaced, not recursively merged:
+a request's `chat_template_kwargs` replaces that entire model/default value,
+so include every template kwarg you want to retain.
+
+Important limits:
+
+- The loaded model's chat template must support `enable_thinking`. Wormhole
+  forwards the field; it cannot guarantee the server or model honors it.
+  [Upstream oMLX discussion #1108](https://github.com/jundot/omlx/discussions/1108)
+  reports this control working for Qwen; that is not LFM 24B acceptance evidence.
+- `Reasoning(types.Reasoning{Effort: types.ReasoningEffortNone})` is a separate,
+  provider-dependent effort hint, not a replacement for this template flag.
+- `response_format` requests JSON output independently of thinking controls.
+  Valid JSON does not establish application-schema compliance; validate the
+  returned object against your contract, or use strict structured output when
+  the server supports it.
+- `WithLocalOpenAI` names the SDK provider `local`; it does not create a model
+  alias. `Model(modelID)` sends the supplied ID or server-configured alias.
+  A reported model name alone does not attest which underlying weights ran.
+
+## Proxy Chat-Template Pass-Through
+
+The standalone OpenAI-compatible proxy (`cmd/wormhole`) accepts the
+`chat_template_kwargs` extension at the top level of `/v1/chat/completions`
+bodies and forwards it to OpenAI-chat-compatible upstreams — the same field the
+`ProviderOptions()` escape hatch sends for direct SDK use. Normal and streaming
+chat handle the field identically.
+
+```json
+{
+  "model": "vllm/qwen3-32b",
+  "messages": [{"role": "user", "content": "hi"}],
+  "chat_template_kwargs": {"enable_thinking": false}
+}
+```
+
+The proxy validates the extension before contacting any upstream:
+
+- `chat_template_kwargs` must be a JSON object; an explicit `null`, scalar, or
+  array value is rejected with `400 invalid_request_error`.
+- `enable_thinking`, when present, must be a JSON boolean; strings, numbers,
+  objects, and null are rejected the same way.
+- Native `anthropic/`, `gemini/`, and `ollama/` routes (and an equivalent
+  default provider) are rejected with `unsupported_parameter`: those APIs never
+  read the field, so a passthrough would silently drop the caller's intent.
+  OpenAI and all OpenAI-chat-compatible routes accept it.
+
+Other template kwargs pass through unchanged inside the object. Only this one
+nested field is merged into the upstream body through provider options, so
+routing, model, messages, authentication, and limits cannot be overridden
+through it.
+
+The same model/template boundary as direct SDK use applies: the upstream server
+decides whether a template kwarg is meaningful for the loaded model's chat
+template, and the proxy cannot make a model honor `enable_thinking`. A request's
+`chat_template_kwargs` replaces any provider- or model-configured value as a
+whole (top-level key replacement, not a recursive merge), so include every
+template kwarg you want to retain.
+
 ## Tool Calling
 
 Responses mode translates Wormhole tools into the Responses function-tool shape

@@ -170,10 +170,43 @@ client := wormhole.New(
 )
 ```
 
+#### HTTP retries and key rotation
+
 `ProviderConfig.APIKey` takes precedence when set. Otherwise Wormhole uses
 `APIKeys[0]` consistently for initial runtime authentication, configuration
-validation, and model discovery; remaining entries stay available for key
-rotation.
+validation, and model discovery. This also holds when `APIKeys` has multiple
+entries: the explicit key selects the pool's initial key even if it is absent
+from, or appears later in, that list. Caller-supplied key slices are not mutated.
+
+More than one `APIKeys` entry enables stateful round-robin rotation on HTTP 429
+within the transport retry path; `MaxRetries` must be greater than zero for a
+retry to occur. A lone key does not enable rotation. Other retryable statuses,
+such as HTTP 500 or 503, do not themselves trigger key rotation. After rotation,
+later requests may continue using the selected key rather than reset to
+`APIKey` on every call.
+
+```go
+maxRetries := 2
+retryDelay := time.Second
+retryMaxDelay := 30 * time.Second
+
+client := wormhole.New(
+    wormhole.WithOpenAI(primaryKey, types.ProviderConfig{
+        APIKeys:       []string{primaryKey, secondaryKey},
+        MaxRetries:    &maxRetries,
+        RetryDelay:    &retryDelay,
+        RetryMaxDelay: &retryMaxDelay,
+    }),
+)
+```
+
+`MaxRetries` counts retries **after** the initial request, so `2` permits up to
+three attempts and an explicit `0` disables retries. Nil pointers inherit
+configured defaults. Caller cancellation can stop the sequence earlier.
+`RetryMaxDelay` caps each transport backoff wait, including provider
+`Retry-After` hints; it does not rewrite the hint retained on the final error.
+See [exhausted retries and recovery](errors.md#exhausted-http-retries-and-recovery)
+for error metadata and client reuse.
 
 **Common OpenAI-compatible providers:**
 
@@ -236,6 +269,9 @@ default for faster local diagnostics. Pass the OpenAI-compatible API root;
 Wormhole appends `/chat/completions`, so most local servers should use
 `http://host:port/v1`. If the server requires bearer auth, use
 `WithOpenAICompatible("local", baseURL, types.ProviderConfig{APIKey: key})`.
+
+For oMLX's model-specific thinking flag with this helper, see
+[oMLX thinking controls](../providers/openai.md#omlx-thinking-controls).
 
 #### WithVLLM
 
