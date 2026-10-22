@@ -14,14 +14,16 @@ Core structured error type with rich context:
 
 ```go
 type WormholeError struct {
-    Code       ErrorCode     // Error categorization
-    Message    string        // Human-readable description
-    Retryable  bool          // Can this error be retried?
-    StatusCode int           // HTTP status code (if applicable)
-    Provider   string        // Provider name (e.g., "openai", "gemini")
-    Model      string        // Model name (e.g., "gpt-5.6")
-    Details    string        // Additional context
-    Cause      error         // Underlying error
+    Code             ErrorCode         // Error categorization
+    Message          string            // Human-readable description
+    Retryable        bool              // Can this error be retried?
+    StatusCode       int               // HTTP status code (if applicable)
+    Provider         string            // Provider name (e.g., "openai", "gemini")
+    Model            string            // Model name (e.g., "gpt-5.6")
+    Details          string            // Additional context
+    Cause            error             // Underlying error
+    RetryAfter       time.Duration     // Provider retry hint when available
+    ResponseMetadata *ResponseMetadata // Filtered HTTP response metadata, if available
 }
 ```
 
@@ -285,6 +287,47 @@ Retries are provider-transport behavior in v3. Configure them on
 Wormhole retries only requests the provider transport classifies as safe and
 retryable; application-level fallback belongs on the request builder.
 
+### Exhausted HTTP retries and recovery
+
+`MaxRetries` counts retries after the initial request: `1` allows up to two
+attempts, and `0` disables automatic retries. See
+[retry budgets and key rotation](options.md#http-retries-and-key-rotation).
+
+When an HTTP 429 exhausts the configured retry budget, inspect the returned
+`*types.WormholeError` with `errors.As`. It retains the final response's HTTP
+status and provider, a bounded copy of the upstream error body in `Details`,
+and filtered `ResponseMetadata` containing the request ID and safe rate-limit
+headers. These describe the **last failed attempt**, not the first one. If the
+last attempt fails without an HTTP response, response metadata may be absent.
+
+```go
+var providerErr *types.WormholeError
+if errors.As(err, &providerErr) {
+    requestID := ""
+    if providerErr.ResponseMetadata != nil {
+        requestID = providerErr.ResponseMetadata.RequestID
+    }
+    slog.Warn("provider request failed",
+        "error", providerErr,
+        "request_id", requestID,
+        "retry_after", providerErr.RetryAfter,
+    )
+}
+```
+
+`WormholeError` implements structured `slog` logging without emitting `Details`
+or `Cause`. Treat `Details` and raw `err.Error()` output as potentially sensitive
+upstream content, not safe production log messages.
+
+`RetryAfter` preserves the provider hint even when transport waits are capped
+by `RetryMaxDelay`; reaching that cap does not mean the full provider cooldown
+has elapsed. Exhaustion alone does not close the client. After the provider
+recovers, the same client and text builder can be reused: a later successful
+response gets its own metadata without stale failure headers, and does not
+mutate the earlier error. Respect provider retry hints, caller context, and any
+configured circuit-breaker or routing policy before another application-level
+attempt; this is not a guarantee of immediate recovery.
+
 ### Default Retryable Errors
 
 The following errors are considered retryable by default:
@@ -318,6 +361,24 @@ Caller cancellation stops fallback before additional provider/model work.
 Circuit-breaker middleware treats caller cancellation as neutral; a provider
 deadline while the caller context is live counts as failure.
 
+#### Collecting interrupted streams
+
+With `StreamAndCollect`, drain the returned chunk channel, or cancel its context,
+before calling the result function: that function waits for collection to end.
+An interrupted stream returns the partial `TextResponse` together with an error;
+check both. Partial text and HTTP 200 response metadata do not mean generation
+completed successfully. For example, a truncated OpenAI-compatible HTTP body
+can preserve the received text while returning an error that matches
+`io.ErrUnexpectedEOF` via `errors.Is`.
+
+After a chunk has been delivered, Wormhole does not automatically retry or
+switch to a fallback model/provider. An application-level retry is a new
+request, not a continuation of the partial answer; decide how to present or
+discard earlier output rather than blindly appending another generation.
+Once the interrupted operation has ended and the upstream is healthy, the same
+client and builder can issue a fresh request. Its response has fresh metadata
+and does not mutate the retained partial result.
+
 ### Proxy error contract
 
 The proxy emits bounded, sanitized messages and lowercase error codes, including
@@ -325,6 +386,45 @@ SDK fallback classifications. Raw upstream response bodies are not exposed.
 Streaming handlers cancel upstream work on caller cancellation, encoding
 failure, or write failure. After a write failure they stop emitting events,
 including completion events and Chat `[DONE]`.
+
+#### Errors after streaming begins
+
+For streamed `POST /v1/chat/completions`, HTTP 200 means the stream has started,
+not that generation succeeded. If the upstream fails after the proxy has sent
+response headers, the status cannot change. Instead, the proxy attempts to send a
+sanitized SSE error frame and closes the stream without adding a successful
+finish or `[DONE]`.
+For example, an upstream HTTP body truncated after partial text produces:
+
+```text
+data: {"error":{"message":"upstream provider error","type":"api_error","code":"upstream_error"}}
+
+```
+
+Inspect each SSE payload for `error`, even after receiving text. Treat that
+frame as a failed generation and retain any earlier text only as partial
+output. Neither HTTP 200 nor EOF alone proves success. An unexpected EOF without
+an error frame or normal completion is also incomplete, not a successful answer.
+
+An SSE error frame requires a running proxy and a writable downstream connection.
+A broken connection or process exit can prevent that final frame entirely. For
+example, if the CLI's [shutdown deadline](../guides/local-daemon-launchd.md#graceful-shutdown-and-active-streams)
+expires while generation is stalled, it can exit nonzero and truncate the
+stream without an SSE error, finish reason, or `[DONE]`. Handle transport errors
+as well as SSE errors; retain earlier text only as partial output, even when
+HTTP 200 and no error payload were received.
+
+If the proxy is still running, a fresh request can reuse it after the upstream
+recovers. If it exited, restart it before reconnecting. A new request does not
+resume the failed generation or append to its partial answer automatically.
+
+For streamed `POST /v1/chat/completions`, disconnecting the downstream HTTP
+client cancels the request context and closes the upstream response body; the
+proxy need not be restarted. A later request through the same proxy can stream
+a fresh answer with its own request metadata and normal completion. This is a
+new generation, not resumption of the disconnected stream. Cancellation does
+not guarantee that a remote provider has stopped computing or billing, nor can
+the disconnected client rely on receiving a final error or `[DONE]` event.
 
 ### Fallback Routing
 

@@ -21,7 +21,7 @@ below; read them if you are migrating from that package.
 
    ```bash
    go build -o /usr/local/bin/wormhole ./cmd/wormhole
-   wormhole --version
+   wormhole version
    ```
 
    macOS may block the binary on first run; allow it in *System Settings →
@@ -146,6 +146,32 @@ tail -f "$HOME/Library/Logs/wormhole/stderr.log"
 launchctl print "gui/$(id -u)/com.wormhole.serve" | grep -A2 "last exit code"
 ```
 
+### Graceful shutdown and active streams
+
+The CLI handles `SIGINT` and `SIGTERM` by stopping new connections, then waiting
+for active HTTP requests before shutting down the SDK client. An existing stream
+can continue on its original connection and deliver its remaining text, finish
+reason, and `[DONE]`; shutdown does not immediately cancel active generation.
+
+The CLI currently uses one **30-second shutdown deadline**, shared by HTTP
+draining and SDK cleanup, not 30 seconds for each. Streams must finish within
+the remaining deadline to drain cleanly. If shutdown returns an error, the CLI
+logs `shutdown error` and exits nonzero; do not assume a long-running stream
+will finish before process exit. This deadline is separate from provider and
+client request timeouts.
+
+Local CLI verification exercised `SIGINT` after partial text: new connections
+were refused while the process remained alive, the original stream completed
+with its exact full answer and normal terminal events, and the process exited
+successfully. This does not establish draining under forced termination or a
+service manager's own termination deadline.
+
+Do not assume `launchctl kickstart -k`, used in setup above, preserves active
+streams: it is a forced restart, not the graceful-drain path. With `KeepAlive`,
+signaling the process alone is also not a persistent way to stop the managed
+job. Use `launchctl bootout` to unload it, as below, and account for launchd's
+termination policy when planning restarts.
+
 To uninstall:
 
 ```bash
@@ -210,6 +236,22 @@ The same applies to OpenRouter if you set `OPENROUTER_API_KEY`:
 { "model": "openrouter/deepseek/deepseek-chat" }
 { "model": "openrouter/anthropic/claude-sonnet-5" }
 ```
+
+Local OpenAI-compatible profiles opt in when their base-URL environment variable
+is explicitly set in the plist. For oMLX at port 8000, set
+`VLLM_BASE_URL=http://127.0.0.1:8000/v1` and address models as
+`vllm/<exact-model-id>`. This uses the existing compatibility profile; it does
+not start a vLLM server. Unconfigured local profiles remain disabled.
+
+On the chat-completions route, OpenAI-compatible providers receive explicit
+`thinking` and `chat_template_kwargs` controls. Native Anthropic, Gemini, and
+Ollama routes reject these extensions. `reasoning_effort` uses the proxy's
+existing typed reasoning mapping and validation. `response_format` forwarding
+does not guarantee that the upstream enforces it.
+
+For bounded no-retry experiments, set `WORMHOLE_MAX_RETRIES=0` and an explicit
+`WORMHOLE_DEFAULT_TIMEOUT` duration in the daemon environment. Client deadlines
+still apply; do not infer task success from a healthy proxy.
 
 To enumerate the providers actually wired into your running daemon, query the
 model list:
