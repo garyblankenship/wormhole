@@ -41,7 +41,8 @@ type retryableError struct {
 	StatusCode  int
 	ShouldRetry bool
 	RetryAfter  time.Duration // From Retry-After header
-	Body        []byte        // Bounded copy of the error response body, for downstream classification
+	Headers     http.Header
+	Body        []byte // Bounded copy of the error response body, for downstream classification
 }
 
 func (e *retryableError) Error() string {
@@ -154,6 +155,7 @@ func (r *retryableHTTPClient) Do(req *http.Request) (*http.Response, error) {
 				ShouldRetry: isRetryableStatusCode(resp.StatusCode),
 				RetryAfter:  retryAfter,
 				Body:        body,
+				Headers:     resp.Header.Clone(),
 			}
 			if err := resp.Body.Close(); err != nil {
 				log.Printf("warning: failed to close response body: %v", err)

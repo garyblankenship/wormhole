@@ -31,12 +31,14 @@ func (g *Gemini) Embeddings(ctx context.Context, request types.EmbeddingsRequest
 	)
 
 	var response geminiEmbeddingsResponse
-	if err := g.DoRequest(ctx, "POST", endpoint, payload, &response); err != nil {
+	metadata, err := g.DoRequestWithMetadata(ctx, "POST", endpoint, payload, &response)
+	if err != nil {
 		return nil, err
 	}
 
 	resp := g.transformEmbeddingsResponse(&response, request.Model)
 	resp.Provider = g.Name()
+	resp.ResponseMetadata = metadata
 	return resp, nil
 }
 
@@ -53,6 +55,10 @@ func (g *Gemini) buildEmbeddingsPayload(request types.EmbeddingsRequest) map[str
 					{"text": input},
 				},
 			},
+		}
+
+		if request.Dimensions != nil {
+			requests[i]["outputDimensionality"] = *request.Dimensions
 		}
 
 		// Add task type if specified

@@ -72,8 +72,13 @@ func (p *Provider) addGenerationParams(payload map[string]any, request *types.Te
 
 func (p *Provider) addReasoningParams(payload map[string]any, request *types.TextRequest) {
 	if p.Name() == "openai" {
-		if request.Reasoning != nil && request.Reasoning.Effort != "" {
-			payload["reasoning_effort"] = string(request.Reasoning.Effort)
+		if request.Reasoning != nil {
+			if request.Reasoning.Effort != "" {
+				payload["reasoning_effort"] = string(request.Reasoning.Effort)
+			}
+			if request.Reasoning.Enabled != nil && !*request.Reasoning.Enabled {
+				payload["reasoning_effort"] = "none"
+			}
 		}
 		return
 	}
@@ -87,11 +92,14 @@ func reasoningPayload(reasoning *types.Reasoning) map[string]any {
 		return nil
 	}
 	out := make(map[string]any, 3)
-	if reasoning.Effort != "" && reasoning.Effort != types.ReasoningEffortNone {
+	if reasoning.Effort != "" {
 		out["effort"] = string(reasoning.Effort)
 	}
 	if reasoning.MaxTokens > 0 {
 		out["max_tokens"] = reasoning.MaxTokens
+	}
+	if reasoning.IncludeThoughts != nil {
+		out["exclude"] = !*reasoning.IncludeThoughts
 	}
 	if reasoning.Enabled != nil {
 		out["enabled"] = *reasoning.Enabled
@@ -190,6 +198,10 @@ func (p *Provider) transformUserMessageContent(msg *types.UserMessage) any {
 	}
 
 	for _, media := range msg.Media {
+		if ref, ok := media.(*types.FileReferenceMedia); ok {
+			parts = append(parts, map[string]any{"type": "file", "file": map[string]any{"file_id": ref.ID}})
+			continue
+		}
 		if image, ok := media.(*types.ImageMedia); ok {
 			url, ok := imageMediaURL(image)
 			if !ok {

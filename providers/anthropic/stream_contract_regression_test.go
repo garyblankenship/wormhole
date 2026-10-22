@@ -121,9 +121,9 @@ func TestAnthropicStreamUsageMergesMessageStartAndDelta(t *testing.T) {
 	}
 	require.NotNil(t, terminal)
 	require.NotNil(t, terminal.Usage)
-	assert.Equal(t, 10, terminal.Usage.PromptTokens)
+	assert.Equal(t, 15, terminal.Usage.PromptTokens)
 	assert.Equal(t, 5, terminal.Usage.CompletionTokens)
-	assert.Equal(t, 15, terminal.Usage.TotalTokens)
+	assert.Equal(t, 20, terminal.Usage.TotalTokens)
 	assert.Equal(t, 2, terminal.Usage.CacheReadTokens)
 	assert.Equal(t, 3, terminal.Usage.CacheWriteTokens)
 	require.Len(t, usages, 3)

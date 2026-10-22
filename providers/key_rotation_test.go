@@ -188,7 +188,7 @@ func TestKeyRotationDoesNotRotateOnServerErrorRetry(t *testing.T) {
 func TestKeyPoolConcurrentRateLimitsAdvanceOnce(t *testing.T) {
 	t.Parallel()
 
-	pool := newKeyPool([]string{"key-A", "key-B", "key-C"}, time.Minute)
+	pool := newKeyPool([]string{"key-A", "key-B", "key-C"}, time.Minute, "")
 	var wg sync.WaitGroup
 	results := make(chan string, 16)
 	now := time.Now()
@@ -211,7 +211,7 @@ func TestKeyPoolConcurrentRateLimitsAdvanceOnce(t *testing.T) {
 func TestKeyPoolCooldownMakesLimitedKeyAvailableAgain(t *testing.T) {
 	t.Parallel()
 
-	pool := newKeyPool([]string{"key-A", "key-B"}, time.Minute)
+	pool := newKeyPool([]string{"key-A", "key-B"}, time.Minute, "")
 	now := time.Now()
 	assert.Equal(t, "key-B", pool.rotateAfterRateLimit("key-A", time.Millisecond, now))
 	assert.Equal(t, "key-A", pool.rotateAfterRateLimit("key-B", time.Millisecond, now.Add(2*time.Millisecond)))
@@ -223,7 +223,7 @@ func TestKeyPoolCooldownMakesLimitedKeyAvailableAgain(t *testing.T) {
 func TestKeyPoolCooldownCapsUnboundedRetryAfter(t *testing.T) {
 	t.Parallel()
 
-	pool := newKeyPool([]string{"key-A", "key-B"}, time.Minute)
+	pool := newKeyPool([]string{"key-A", "key-B"}, time.Minute, "")
 	now := time.Now()
 	pool.rotateAfterRateLimit("key-A", 10*time.Hour, now)
 

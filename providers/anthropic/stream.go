@@ -31,6 +31,7 @@ func (p *Provider) parseStreamChunk(data []byte) (*types.StreamChunk, error) {
 		if u := event.Message.Usage; u.InputTokens > 0 || u.OutputTokens > 0 ||
 			u.CacheReadInputTokens > 0 || u.CacheCreationInputTokens > 0 {
 			chunk.Usage = p.convertUsage(u)
+			chunk.Metadata = map[string]any{"provider_usage": u.Raw}
 		}
 
 	case "content_block_start":
@@ -73,6 +74,8 @@ func (p *Provider) parseStreamChunk(data []byte) (*types.StreamChunk, error) {
 			thinking := &types.Thinking{Signature: event.Delta.Signature, Provider: "anthropic"}
 			chunk.Thinking = thinking
 			chunk.Delta = &types.ChunkDelta{Thinking: thinking}
+		case "citations_delta":
+			chunk.Metadata = map[string]any{"anthropic_citation": event.Delta.Citation}
 		case "input_json_delta":
 			// Tool-call argument fragment; carries no id/name (continuation).
 			chunk.Delta = &types.ChunkDelta{
@@ -98,6 +101,7 @@ func (p *Provider) parseStreamChunk(data []byte) (*types.StreamChunk, error) {
 		// nested form accepted by earlier versions and compatible gateways.
 		if event.Usage != nil {
 			chunk.Usage = p.convertUsage(*event.Usage)
+			chunk.Metadata = map[string]any{"provider_usage": event.Usage.Raw}
 		} else if event.Delta.Usage.InputTokens > 0 || event.Delta.Usage.OutputTokens > 0 {
 			chunk.Usage = p.convertUsage(event.Delta.Usage)
 		}

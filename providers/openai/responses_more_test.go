@@ -61,3 +61,34 @@ func TestResponseFunctionCallToToolCall_EmptyArgsAndIDFallback(t *testing.T) {
 	assert.Empty(t, tc.ArgsParseError)
 	assert.Equal(t, map[string]any{}, tc.Arguments, "empty args -> empty map (emptyVal)")
 }
+
+func TestResponsesTextIncludesAllMessages(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name, topLevel, want string
+	}{
+		{name: "native-output-items", want: "Alpha beta."},
+		{name: "top-level-output-text", topLevel: "authoritative", want: "authoritative"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			provider := &Provider{}
+			response := &responsesResponse{
+				OutputText: tc.topLevel,
+				Output: []responsesOutputItem{
+					{Type: responsesItemMessage, Content: []responsesContentPart{{Type: responsesContentOutputText, Text: "Alpha "}}},
+					{Type: "reasoning", Summary: []responsesContentPart{{Type: "summary_text", Text: "Checked the ledger."}}},
+					{Type: responsesItemFunctionCall, CallID: "lookup-b", Name: "ledger_lookup"},
+					{Type: responsesItemMessage, Content: []responsesContentPart{{Type: responsesContentOutputText, Text: "beta."}}},
+				},
+			}
+			got := provider.transformResponsesTextResponse(response)
+			require.Equal(t, tc.want, got.Text)
+			require.NotNil(t, got.Thinking)
+			require.Equal(t, "Checked the ledger.", got.Thinking.Content)
+			require.Len(t, got.ToolCalls, 1)
+			require.Equal(t, "lookup-b", got.ToolCalls[0].ID)
+			require.Equal(t, types.FinishReasonToolCalls, got.FinishReason)
+		})
+	}
+}

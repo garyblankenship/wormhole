@@ -45,6 +45,10 @@ func responsesUserMessageContent(msg *types.UserMessage) []types.MessagePart {
 		parts = append(parts, types.TextPart(msg.Content))
 	}
 	for _, media := range msg.Media {
+		if ref, ok := media.(*types.FileReferenceMedia); ok {
+			parts = append(parts, types.MessagePart{Type: "file", Data: ref})
+			continue
+		}
 		if image, ok := media.(*types.ImageMedia); ok {
 			url, ok := imageMediaURL(image)
 			if !ok {
@@ -73,6 +77,13 @@ func responsesMessageContent(content any) any {
 	out := make([]map[string]any, 0, len(parts))
 	for _, part := range parts {
 		switch part.Type {
+		case "file":
+			ref := part.Data.(*types.FileReferenceMedia)
+			typ := "input_file"
+			if ref.Kind == "image" {
+				typ = "input_image"
+			}
+			out = append(out, map[string]any{"type": typ, "file_id": ref.ID})
 		case "text":
 			out = append(out, map[string]any{
 				"type": responsesContentInputText,

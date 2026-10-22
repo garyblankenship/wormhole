@@ -2,6 +2,7 @@ package openai
 
 import (
 	"context"
+	"github.com/garyblankenship/wormhole/v3/providers"
 	"net/http"
 
 	providerstream "github.com/garyblankenship/wormhole/v3/providers/internal/stream"
@@ -33,18 +34,20 @@ func (p *Provider) responsesText(ctx context.Context, request types.TextRequest,
 	payload := p.buildResponsesPayload(&request, prepared)
 
 	var response responsesResponse
-	if err := p.DoRequest(ctx, http.MethodPost, p.responsesURL(), payload, &response); err != nil {
+	metadata, err := p.DoRequestWithMetadata(ctx, http.MethodPost, p.responsesURL(), payload, &response)
+	if err != nil {
 		return nil, err
 	}
 	if response.Error != nil {
-		return nil, p.ProviderError(response.Error.Message, response.Error.Code)
+		return nil, providers.WithResponseMetadata(p.ProviderError(response.Error.Message, response.Error.Code), metadata)
 	}
 
 	textResponse := p.transformResponsesTextResponse(&response)
+	textResponse.ResponseMetadata = metadata
 	textResponse.Provider = p.Name()
 
-	if textResponse.Text == "" && len(textResponse.ToolCalls) == 0 {
-		return nil, p.ProviderError("received empty response from OpenAI Responses API", "no output text or tool calls returned")
+	if textResponse.Text == "" && len(textResponse.ToolCalls) == 0 && !p.isPrewarm(request) {
+		return nil, providers.WithResponseMetadata(p.ProviderError("received empty response from OpenAI Responses API", "no output text or tool calls returned"), metadata)
 	}
 
 	return textResponse, nil
@@ -57,12 +60,16 @@ func (p *Provider) responsesStream(ctx context.Context, request types.TextReques
 	payload := p.buildResponsesPayload(&request, prepared)
 	payload["stream"] = true
 
-	body, err := p.StreamRequest(ctx, http.MethodPost, p.responsesURL(), payload)
+	body, metadata, err := p.StreamRequestWithMetadata(ctx, http.MethodPost, p.responsesURL(), payload)
 	if err != nil {
 		return nil, err
 	}
 
-	return p.stampProvider(ctx, providerstream.ProcessSSE(ctx, body, p.parseResponsesStreamChunk, 100)), nil
+	state := newResponsesAnnotationState()
+	parse := func(data []byte) (*types.TextChunk, error) {
+		return p.parseResponsesStreamChunkWithState(data, state)
+	}
+	return p.stampMetadata(ctx, p.stampProvider(ctx, providerstream.ProcessSSE(ctx, body, parse, 100)), metadata), nil
 }
 
 // normalizeResponsesFormat adapts a Chat Completions response_format value to the
@@ -108,7 +115,7 @@ func (p *Provider) buildResponsesPayload(request *types.TextRequest, messages []
 		payload["parallel_tool_calls"] = *request.ParallelToolCalls
 	}
 
-	if reasoning := reasoningPayload(request.Reasoning); len(reasoning) > 0 {
+	if reasoning := responsesReasoningPayload(request.Reasoning); len(reasoning) > 0 {
 		payload["reasoning"] = reasoning
 	}
 
@@ -137,4 +144,26 @@ func (p *Provider) validateResponsesSampling(request types.TextRequest) error {
 		return p.ValidationError("frequency_penalty, presence_penalty, and seed are not supported by the OpenAI Responses API")
 	}
 	return nil
+}
+
+func (p *Provider) isPrewarm(request types.TextRequest) bool {
+	request.ProviderOptions = p.Config.MergedProviderOptions(request.Model, request.ProviderOptions)
+	return types.IsCachePrewarm(request)
+}
+
+func responsesReasoningPayload(reasoning *types.Reasoning) map[string]any {
+	if reasoning == nil {
+		return nil
+	}
+	out := map[string]any{}
+	if reasoning.Effort != "" {
+		out["effort"] = string(reasoning.Effort)
+	}
+	if reasoning.Enabled != nil && !*reasoning.Enabled {
+		out["effort"] = "none"
+	}
+	if reasoning.IncludeThoughts != nil && *reasoning.IncludeThoughts {
+		out["summary"] = "auto"
+	}
+	return out
 }

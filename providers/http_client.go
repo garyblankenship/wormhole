@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"slices"
 	"sync"
 	"time"
 
@@ -110,15 +111,24 @@ type keyPool struct {
 	cooldown time.Duration
 }
 
-func newKeyPool(keys []string, cooldown time.Duration) *keyPool {
+func newKeyPool(keys []string, cooldown time.Duration, initialKey string) *keyPool {
 	if cooldown <= 0 {
 		cooldown = time.Second
 	}
-	return &keyPool{
-		keys:     append([]string(nil), keys...),
+	pool := &keyPool{
+		keys:     slices.Clone(keys),
 		limited:  make(map[int]time.Time),
 		cooldown: cooldown,
 	}
+	// Explicit APIKey owns initial authentication, even with rotation enabled.
+	if initialKey != "" {
+		if index := slices.Index(pool.keys, initialKey); index >= 0 {
+			pool.current = index
+		} else {
+			pool.keys = append([]string{initialKey}, pool.keys...)
+		}
+	}
+	return pool
 }
 
 func (kp *keyPool) currentKey(now time.Time) string {

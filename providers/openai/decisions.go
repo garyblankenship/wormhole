@@ -37,12 +37,14 @@ func (p *Provider) Decisions(ctx context.Context, request types.DecisionsRequest
 		return nil, err
 	}
 	var response types.DecisionsResponse
-	if err := p.DoRequest(ctx, http.MethodPost, endpoint, request, &response); err != nil {
+	metadata, err := p.DoRequestWithMetadata(ctx, http.MethodPost, endpoint, request, &response)
+	if err != nil {
 		return nil, err
 	}
 	if err := response.ValidateFor(request); err != nil {
 		return nil, p.ProviderError("invalid Decisions response", err.Error())
 	}
+	response.ResponseMetadata = metadata
 	response.Provider = p.Name()
 	if response.Model == "" {
 		response.Model = request.Model

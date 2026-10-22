@@ -11,7 +11,14 @@ import (
 func (p *Provider) parseStreamChunk(data []byte) (*types.TextChunk, error) {
 	// Try to use unified streaming transformer if available
 	if p.streamingTransformer != nil {
-		return p.streamingTransformer.ParseChunk(data)
+		chunk, err := p.streamingTransformer.ParseChunk(data)
+		if chunk != nil && err == nil {
+			var response streamResponse
+			if json.Unmarshal(data, &response) == nil && response.Usage != nil {
+				chunk.Metadata = map[string]any{"provider_usage": response.Usage.Raw}
+			}
+		}
+		return chunk, err
 	}
 
 	// Fall back to original implementation

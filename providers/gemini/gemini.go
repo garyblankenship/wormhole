@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	structured "github.com/garyblankenship/wormhole/v3/internal/structured"
 	"github.com/garyblankenship/wormhole/v3/providers"
 	transform "github.com/garyblankenship/wormhole/v3/providers/internal/transform"
 	"github.com/garyblankenship/wormhole/v3/types"
@@ -83,14 +84,18 @@ func (g *Gemini) Text(ctx context.Context, request types.TextRequest) (*types.Te
 	)
 
 	var response geminiTextResponse
-	if err := g.DoRequest(ctx, "POST", endpoint, payload, &response); err != nil {
+	metadata, err := g.DoRequestWithMetadata(ctx, "POST", endpoint, payload, &response)
+	if err != nil {
 		return nil, err
 	}
 
 	resp, err := g.transformTextResponse(&response)
 	if err != nil {
-		return nil, err
+		return nil, providers.WithResponseMetadata(err, metadata)
 	}
+	resp.Model = request.Model
+	resp.ResponseMetadata = metadata
+	resp.Warnings = append(resp.Warnings, geminiReasoningWarnings(request.Reasoning)...)
 	resp.Provider = g.Name()
 	return resp, nil
 }
@@ -131,16 +136,27 @@ func (g *Gemini) Stream(ctx context.Context, request types.TextRequest) (<-chan 
 		modelName,
 	)
 
-	stream, err := g.StreamRequest(ctx, "POST", endpoint, payload)
+	stream, metadata, err := g.StreamRequestWithMetadata(ctx, "POST", endpoint, payload)
 	if err != nil {
 		return nil, err
 	}
 
-	return g.stampProvider(ctx, g.handleStream(ctx, stream)), nil
+	return g.streamDetails(ctx, g.stampProvider(ctx, g.handleStream(ctx, stream)), metadata, request), nil
 }
 
 // Structured generates structured output using Gemini models
 func (g *Gemini) Structured(ctx context.Context, request types.StructuredRequest) (*types.StructuredResponse, error) {
+	if request.Mode != types.StructuredModeJSON && request.Mode != types.StructuredModeStrict {
+		text, err := structured.Prepare(request)
+		if err != nil {
+			return nil, err
+		}
+		response, err := g.Text(ctx, text)
+		if err != nil {
+			return nil, err
+		}
+		return structured.Convert(request, response)
+	}
 	payload, err := g.buildStructuredPayload(request)
 	if err != nil {
 		return nil, err
@@ -153,11 +169,19 @@ func (g *Gemini) Structured(ctx context.Context, request types.StructuredRequest
 	)
 
 	var response geminiTextResponse
-	if err := g.DoRequest(ctx, "POST", endpoint, payload, &response); err != nil {
+	metadata, err := g.DoRequestWithMetadata(ctx, "POST", endpoint, payload, &response)
+	if err != nil {
 		return nil, err
 	}
 
-	return g.transformStructuredResponse(&response, request.Schema)
+	resp, err := g.transformStructuredResponse(&response, request.Schema)
+	if err != nil {
+		return nil, providers.WithResponseMetadata(err, metadata)
+	}
+	resp.ResponseMetadata = metadata
+	resp.Warnings = append(resp.Warnings, geminiReasoningWarnings(request.Reasoning)...)
+	resp.Provider = g.Name()
+	return resp, nil
 }
 
 // Audio is not supported by Gemini
@@ -179,9 +203,15 @@ func (g *Gemini) Images(ctx context.Context, request types.ImagesRequest) (*type
 	)
 
 	var response geminiTextResponse
-	if err := g.DoRequest(ctx, "POST", endpoint, payload, &response); err != nil {
+	metadata, err := g.DoRequestWithMetadata(ctx, "POST", endpoint, payload, &response)
+	if err != nil {
 		return nil, err
 	}
 
-	return g.transformImagesResponse(&response, request.Model)
+	resp, err := g.transformImagesResponse(&response, request.Model)
+	if err != nil {
+		return nil, providers.WithResponseMetadata(err, metadata)
+	}
+	resp.ResponseMetadata = metadata
+	return resp, nil
 }

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"sync"
 	"time"
 
 	"github.com/garyblankenship/wormhole/v3/types"
@@ -12,6 +13,7 @@ import (
 // processEmbeddingsSequentially handles small batches sequentially
 func (p *Provider) processEmbeddingsSequentially(ctx context.Context, request types.EmbeddingsRequest) (*types.EmbeddingsResponse, error) {
 	embeddings := make([]types.Embedding, 0, len(request.Input))
+	var metadata *types.ResponseMetadata
 
 	for i, input := range request.Input {
 		payload := &embeddingsRequest{
@@ -22,11 +24,12 @@ func (p *Provider) processEmbeddingsSequentially(ctx context.Context, request ty
 		url := p.GetBaseURL() + "/api/embeddings"
 
 		var response embeddingsResponse
-		err := p.DoRequest(ctx, http.MethodPost, url, payload, &response)
+		responseMetadata, err := p.DoRequestWithMetadata(ctx, http.MethodPost, url, payload, &response)
 		if err != nil {
 			return nil, p.WrapError(types.ErrorCodeProvider, fmt.Sprintf("failed to get embedding for input %d", i), err)
 		}
 
+		metadata = responseMetadata
 		embeddings = append(embeddings, types.Embedding{
 			Index:     i,
 			Embedding: response.Embedding,
@@ -34,72 +37,73 @@ func (p *Provider) processEmbeddingsSequentially(ctx context.Context, request ty
 	}
 
 	return &types.EmbeddingsResponse{
-		Provider:   p.Name(),
-		Model:      request.Model,
-		Embeddings: embeddings,
-		Usage:      nil, // Ollama doesn't provide usage info for embeddings
-		Created:    time.Now(),
+		ResponseMetadata: metadata,
+		Provider:         p.Name(),
+		Model:            request.Model,
+		Embeddings:       embeddings,
+		Usage:            nil, // Ollama doesn't provide usage info for embeddings
+		Created:          time.Now(),
 	}, nil
 }
 
 // processEmbeddingsConcurrently handles larger batches with controlled concurrency
 func (p *Provider) processEmbeddingsConcurrently(ctx context.Context, request types.EmbeddingsRequest) (*types.EmbeddingsResponse, error) {
-	type result struct {
-		index     int
-		embedding types.Embedding
-		err       error
-	}
-
-	// Limit concurrency to avoid overwhelming local Ollama instance
+	// Limit concurrency to avoid overwhelming local Ollama instance.
 	const maxConcurrency = 3
-	semaphore := make(chan struct{}, maxConcurrency)
-	results := make(chan result, len(request.Input))
+	ctx, cancel := context.WithCancelCause(ctx)
+	defer cancel(nil)
 
-	// Start concurrent workers
-	for i, input := range request.Input {
-		go func(idx int, txt string) {
-			semaphore <- struct{}{}        // Acquire semaphore
-			defer func() { <-semaphore }() // Release semaphore
+	jobs := make(chan int)
+	embeddings := make([]types.Embedding, len(request.Input))
+	var metadata *types.ResponseMetadata
+	var workers sync.WaitGroup
 
-			payload := &embeddingsRequest{
-				Model:  request.Model,
-				Prompt: txt,
-			}
-
-			url := p.GetBaseURL() + "/api/embeddings"
-
-			var response embeddingsResponse
-			err := p.DoRequest(ctx, http.MethodPost, url, payload, &response)
-
-			if err != nil {
-				results <- result{index: idx, err: p.WrapError(types.ErrorCodeProvider, fmt.Sprintf("failed to get embedding for input %d", idx), err)}
-			} else {
-				results <- result{
-					index: idx,
-					embedding: types.Embedding{
-						Index:     idx,
-						Embedding: response.Embedding,
-					},
+	// Workers exit on closed jobs or batch cancellation. The producer joins all
+	// of them before returning, so no request outlives its embedding operation.
+	for range maxConcurrency {
+		workers.Go(func() {
+			for index := range jobs {
+				if ctx.Err() != nil {
+					return
+				}
+				payload := &embeddingsRequest{
+					Model:  request.Model,
+					Prompt: request.Input[index],
+				}
+				var response embeddingsResponse
+				responseMetadata, err := p.DoRequestWithMetadata(ctx, http.MethodPost, p.GetBaseURL()+"/api/embeddings", payload, &response)
+				if err != nil {
+					cancel(p.WrapError(types.ErrorCodeProvider, fmt.Sprintf("failed to get embedding for input %d", index), err))
+					return
+				}
+				embeddings[index] = types.Embedding{Index: index, Embedding: response.Embedding}
+				if index == len(request.Input)-1 {
+					metadata = responseMetadata
 				}
 			}
-		}(i, input)
+		})
 	}
 
-	// Collect results
-	embeddings := make([]types.Embedding, len(request.Input))
-	for i := 0; i < len(request.Input); i++ {
-		res := <-results
-		if res.err != nil {
-			return nil, res.err
+dispatch:
+	for index := range request.Input {
+		select {
+		case jobs <- index:
+		case <-ctx.Done():
+			break dispatch
 		}
-		embeddings[res.index] = res.embedding
+	}
+	close(jobs)
+	workers.Wait()
+	if err := context.Cause(ctx); err != nil {
+		return nil, err
 	}
 
 	return &types.EmbeddingsResponse{
-		Provider:   p.Name(),
-		Model:      request.Model,
-		Embeddings: embeddings,
-		Usage:      nil, // Ollama doesn't provide usage info for embeddings
-		Created:    time.Now(),
+		ResponseMetadata: metadata,
+		Provider:         p.Name(),
+		Model:            request.Model,
+		Embeddings:       embeddings,
+		Usage:            nil, // Ollama doesn't provide usage info for embeddings
+		Created:          time.Now(),
 	}, nil
 }

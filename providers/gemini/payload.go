@@ -1,6 +1,7 @@
 package gemini
 
 import (
+	"encoding/json"
 	"net/url"
 	"strings"
 
@@ -10,6 +11,12 @@ import (
 
 // buildTextPayload builds the request payload for text generation
 func (g *Gemini) buildTextPayload(request types.TextRequest) (map[string]any, error) {
+	if request.Reasoning != nil && request.Reasoning.Enabled != nil && !*request.Reasoning.Enabled && request.Reasoning.MaxTokens > 0 {
+		return nil, g.ValidationError("disabled thinking conflicts with a positive thinking budget")
+	}
+	if request.Reasoning != nil && request.Reasoning.Effort == types.ReasoningEffortNone && request.Reasoning.MaxTokens > 0 {
+		return nil, g.ValidationError("reasoning effort none conflicts with a positive thinking budget")
+	}
 	if request.ParallelToolCalls != nil {
 		return nil, g.ValidationError("parallel_tool_calls is not supported by Gemini")
 	}
@@ -66,6 +73,27 @@ func (g *Gemini) buildTextPayload(request types.TextRequest) (map[string]any, er
 		generationConfig["thinkingConfig"] = thinking
 	}
 
+	if request.ResponseFormat != nil {
+		encoded, err := json.Marshal(request.ResponseFormat)
+		if err != nil {
+			return nil, err
+		}
+		var format struct {
+			Type       string `json:"type"`
+			JSONSchema struct {
+				Schema any `json:"schema"`
+			} `json:"json_schema"`
+		}
+		if err := json.Unmarshal(encoded, &format); err != nil {
+			return nil, err
+		}
+		if format.Type == "json_object" || format.Type == "json_schema" {
+			generationConfig["responseMimeType"] = "application/json"
+		}
+		if format.JSONSchema.Schema != nil {
+			generationConfig["responseSchema"] = g.transformSchema(format.JSONSchema.Schema)
+		}
+	}
 	if len(generationConfig) > 0 {
 		payload["generationConfig"] = generationConfig
 	}
@@ -111,11 +139,16 @@ func geminiThinkingConfig(reasoning *types.Reasoning) map[string]any {
 	// Gemini 3-series models control reasoning through thinkingLevel; 2.5-series
 	// models use thinkingBudget. Levels: minimal/low/medium/high per model —
 	// https://aistudio.google.com/docs/thinking#thinking-levels
-	if effort := strings.ToLower(strings.TrimSpace(string(reasoning.Effort))); effort != "" && effort != string(types.ReasoningEffortNone) {
+	if effort := strings.ToLower(strings.TrimSpace(string(reasoning.Effort))); effort == string(types.ReasoningEffortNone) {
+		out["thinkingBudget"] = 0
+	} else if effort != "" {
 		out["thinkingLevel"] = effort
 	}
 	if reasoning.Enabled != nil {
 		out["includeThoughts"] = *reasoning.Enabled
+	}
+	if reasoning.IncludeThoughts != nil {
+		out["includeThoughts"] = *reasoning.IncludeThoughts
 	}
 	return out
 }
@@ -127,6 +160,8 @@ func (g *Gemini) buildStructuredPayload(request types.StructuredRequest) (map[st
 		BaseRequest:  request.BaseRequest,
 		Messages:     request.Messages,
 		SystemPrompt: request.SystemPrompt,
+		Tools:        request.Tools,
+		ToolChoice:   request.ToolChoice,
 	}
 
 	payload, err := g.buildTextPayload(textRequest)

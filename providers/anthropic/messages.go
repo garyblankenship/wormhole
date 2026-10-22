@@ -19,6 +19,9 @@ const roleUser = "user"
 
 // buildMessagePayload builds the Anthropic messages API payload.
 func (p *Provider) buildMessagePayload(request *types.TextRequest, prepared []types.Message) (map[string]any, error) {
+	if err := p.validateReferences(request.Messages); err != nil {
+		return nil, err
+	}
 	payload := map[string]any{
 		"model":    request.Model,
 		"messages": p.transformMessages(prepared),
@@ -51,6 +54,10 @@ func (p *Provider) buildMessagePayload(request *types.TextRequest, prepared []ty
 		payload["thinking"] = thinking
 	}
 
+	if request.Reasoning != nil && request.Reasoning.Effort != "" && request.Reasoning.Effort != types.ReasoningEffortNone {
+		payload["output_config"] = map[string]any{"effort": string(request.Reasoning.Effort)}
+	}
+
 	// Tools
 	if len(request.Tools) > 0 {
 		tools, err := p.transformTools(request.Tools)
@@ -73,11 +80,18 @@ func (p *Provider) buildMessagePayload(request *types.TextRequest, prepared []ty
 		}
 	}
 
+	if err := p.addResponseFormat(payload, request.ResponseFormat); err != nil {
+		return nil, err
+	}
+
 	// Provider options
 	for k, v := range p.Config.MergedProviderOptions(request.Model, request.ProviderOptions) {
 		payload[k] = v
 	}
 
+	if err := p.validateCitationFormat(payload); err != nil {
+		return nil, err
+	}
 	return payload, nil
 }
 
@@ -86,13 +100,19 @@ func anthropicThinkingPayload(reasoning *types.Reasoning) map[string]any {
 		return nil
 	}
 	out := make(map[string]any, 2)
-	if reasoning.Enabled != nil && !*reasoning.Enabled {
+	if (reasoning.Enabled != nil && !*reasoning.Enabled) || reasoning.Effort == types.ReasoningEffortNone {
 		out["type"] = "disabled"
 		return out
 	}
 	if reasoning.MaxTokens > 0 {
 		out["type"] = "enabled"
 		out["budget_tokens"] = reasoning.MaxTokens
+	}
+	if len(out) == 0 && ((reasoning.Enabled != nil && *reasoning.Enabled) || reasoning.Effort != "") {
+		out["type"] = "adaptive"
+	}
+	if reasoning.IncludeThoughts != nil && !*reasoning.IncludeThoughts && out["type"] != nil && out["type"] != "disabled" {
+		out["display"] = "omitted"
 	}
 	return out
 }
@@ -177,6 +197,14 @@ func (p *Provider) buildContent(msg types.Message) []map[string]any {
 			"type": contentTypeText,
 			"text": fmt.Sprintf("%v", content),
 		})
+	}
+
+	if user, ok := msg.(*types.UserMessage); ok {
+		for _, media := range user.Media {
+			if ref, ok := media.(*types.FileReferenceMedia); ok {
+				contentParts = append(contentParts, map[string]any{"type": ref.Kind, "source": map[string]any{"type": "file", "file_id": ref.ID}})
+			}
+		}
 	}
 
 	// Handle tool messages: Anthropic requires a distinct tool_result block,

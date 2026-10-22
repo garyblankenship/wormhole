@@ -61,12 +61,19 @@ func (g *Gemini) transformTextResponse(response *geminiTextResponse) (*types.Tex
 	}
 
 	result.Usage = convertUsage(response.UsageMetadata)
+	refs := &citationSet{}
+	refs.consume(candidate, text)
+	result.Sources, result.Citations, result.Warnings = refs.sources, refs.citations, refs.warnings
 
 	// Add metadata
 	result.Metadata = map[string]any{
-		"provider": "gemini",
+		"provider":       "gemini",
+		"provider_usage": providerUsage(response.UsageMetadata),
 	}
 
+	if candidate.CitationMetadata != nil {
+		result.Metadata["citationMetadata"] = candidate.CitationMetadata
+	}
 	if candidate.GroundingMetadata != nil {
 		result.Metadata["groundingMetadata"] = candidate.GroundingMetadata
 	}
@@ -86,15 +93,14 @@ func (g *Gemini) transformStructuredResponse(response *geminiTextResponse, schem
 
 	candidate := response.Candidates[0]
 
-	// Extract text (should be JSON) — skip thought parts (thinking models
-	// emit a thought prose part before the JSON-answer part; concatenating
-	// both corrupts the JSON).
-	var text string
-	for _, part := range candidate.Content.Parts {
-		if part.Text != "" && !part.Thought {
-			text += part.Text
-		}
+	base, err := g.transformTextResponse(response)
+	if err != nil {
+		return nil, err
 	}
+	if len(base.ToolCalls) > 0 {
+		return &types.StructuredResponse{Provider: g.Name(), ToolCalls: base.ToolCalls, FinishReason: base.FinishReason, Usage: base.Usage, Metadata: base.Metadata, Sources: base.Sources, Citations: base.Citations, Warnings: base.Warnings}, nil
+	}
+	text := base.Text
 
 	// Parse JSON
 	var data any
@@ -110,15 +116,21 @@ func (g *Gemini) transformStructuredResponse(response *geminiTextResponse, schem
 	}
 
 	result := &types.StructuredResponse{
-		Data: data,
-		Raw:  text,
+		Data:         data,
+		Raw:          text,
+		Provider:     g.Name(),
+		FinishReason: base.FinishReason,
 	}
 
 	result.Usage = convertUsage(response.UsageMetadata)
+	refs := &citationSet{}
+	refs.consume(candidate, text)
+	result.Sources, result.Citations, result.Warnings = refs.sources, refs.citations, refs.warnings
 
 	// Add metadata
 	result.Metadata = map[string]any{
-		"provider": "gemini",
+		"provider":       "gemini",
+		"provider_usage": providerUsage(response.UsageMetadata),
 	}
 
 	return result, nil

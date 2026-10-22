@@ -87,6 +87,9 @@ func (p *Provider) SupportedCapabilities() []types.ModelCapability {
 
 // Text generates a text response
 func (p *Provider) Text(ctx context.Context, request types.TextRequest) (*types.TextResponse, error) {
+	if err := p.validateV330Request(request); err != nil {
+		return nil, err
+	}
 	prepared, _, err := providers.PrepareMessages(request.Messages)
 	if err != nil {
 		return nil, err
@@ -100,12 +103,13 @@ func (p *Provider) Text(ctx context.Context, request types.TextRequest) (*types.
 	url := p.chatCompletionsURL()
 
 	var response chatCompletionResponse
-	err = p.DoRequest(ctx, http.MethodPost, url, payload, &response)
+	metadata, err := p.DoRequestWithMetadata(ctx, http.MethodPost, url, payload, &response)
 	if err != nil {
 		return nil, err
 	}
 
 	textResponse := p.transformTextResponse(&response)
+	textResponse.ResponseMetadata = metadata
 	textResponse.Provider = p.Name()
 	if textResponse.Model == "" {
 		textResponse.Model = request.Model
@@ -122,6 +126,9 @@ func (p *Provider) Text(ctx context.Context, request types.TextRequest) (*types.
 
 // Stream generates a streaming text response
 func (p *Provider) Stream(ctx context.Context, request types.TextRequest) (<-chan types.TextChunk, error) {
+	if err := p.validateV330Request(request); err != nil {
+		return nil, err
+	}
 	prepared, _, err := providers.PrepareMessages(request.Messages)
 	if err != nil {
 		return nil, err
@@ -138,12 +145,12 @@ func (p *Provider) Stream(ctx context.Context, request types.TextRequest) (<-cha
 
 	url := p.chatCompletionsURL()
 
-	body, err := p.StreamRequest(ctx, http.MethodPost, url, payload)
+	body, metadata, err := p.StreamRequestWithMetadata(ctx, http.MethodPost, url, payload)
 	if err != nil {
 		return nil, err
 	}
 
-	return p.stampProvider(ctx, p.accumulatingStream(ctx, providerstream.ProcessSSE(ctx, body, p.parseStreamChunk, 100))), nil
+	return p.stampMetadata(ctx, p.stampProvider(ctx, p.accumulatingStream(ctx, providerstream.ProcessSSE(ctx, body, p.parseStreamChunk, 100))), metadata), nil
 }
 
 // stampProvider sets Provider on the terminal chunk. Sole closer of out;

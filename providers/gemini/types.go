@@ -9,12 +9,12 @@ type geminiTextResponse struct {
 }
 
 type candidate struct {
-	Content           content            `json:"content"`
-	FinishReason      string             `json:"finishReason,omitempty"`
-	SafetyRatings     []safetyRating     `json:"safetyRatings,omitempty"`
-	CitationMetadata  *citationMetadata  `json:"citationMetadata,omitempty"`
-	TokenCount        int                `json:"tokenCount,omitempty"`
-	GroundingMetadata *groundingMetadata `json:"groundingMetadata,omitempty"`
+	Content           content        `json:"content"`
+	FinishReason      string         `json:"finishReason,omitempty"`
+	SafetyRatings     []safetyRating `json:"safetyRatings,omitempty"`
+	CitationMetadata  map[string]any `json:"citationMetadata,omitempty"`
+	TokenCount        int            `json:"tokenCount,omitempty"`
+	GroundingMetadata map[string]any `json:"groundingMetadata,omitempty"`
 }
 
 type content struct {
@@ -47,11 +47,12 @@ type functionResponse struct {
 }
 
 type usageMetadata struct {
-	PromptTokenCount        int `json:"promptTokenCount"`
-	CandidatesTokenCount    int `json:"candidatesTokenCount"`
-	TotalTokenCount         int `json:"totalTokenCount"`
-	CachedContentTokenCount int `json:"cachedContentTokenCount"`
-	ThoughtsTokenCount      int `json:"thoughtsTokenCount"`
+	Raw                     map[string]any `json:"-"`
+	PromptTokenCount        int            `json:"promptTokenCount"`
+	CandidatesTokenCount    int            `json:"candidatesTokenCount"`
+	TotalTokenCount         int            `json:"totalTokenCount"`
+	CachedContentTokenCount int            `json:"cachedContentTokenCount"`
+	ThoughtsTokenCount      int            `json:"thoughtsTokenCount"`
 }
 
 type safetyRating struct {

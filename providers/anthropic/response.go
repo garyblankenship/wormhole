@@ -36,7 +36,7 @@ func (p *Provider) transformTextResponse(response *messageResponse) *types.TextR
 		}
 	}
 
-	return &types.TextResponse{
+	result := &types.TextResponse{
 		ID:           response.ID,
 		Model:        response.Model,
 		Text:         text,
@@ -46,18 +46,41 @@ func (p *Provider) transformTextResponse(response *messageResponse) *types.TextR
 		Usage:        p.convertUsage(response.Usage),
 		Created:      time.Now(),
 	}
+	if response.Usage.Raw != nil {
+		result.Metadata = map[string]any{"provider_usage": response.Usage.Raw}
+	}
+	refs := newCitationAccumulator()
+	for _, content := range response.Content {
+		for _, raw := range content.Citations {
+			refs.add(raw)
+		}
+	}
+	result.Sources, result.Citations, result.Warnings = refs.sources, refs.citations, refs.warnings
+	return result
 }
 
 func (p *Provider) convertUsage(u messageUsage) *types.Usage {
 	return &types.Usage{
-		PromptTokens:     u.InputTokens,
-		CompletionTokens: u.OutputTokens,
-		TotalTokens:      u.InputTokens + u.OutputTokens,
-		CacheReadTokens:  u.CacheReadInputTokens,
-		CacheWriteTokens: u.CacheCreationInputTokens,
+		PromptTokens:          u.InputTokens + u.CacheReadInputTokens + u.CacheCreationInputTokens,
+		CompletionTokens:      u.OutputTokens,
+		TotalTokens:           u.InputTokens + u.CacheReadInputTokens + u.CacheCreationInputTokens + u.OutputTokens,
+		CacheReadTokens:       u.CacheReadInputTokens,
+		CacheWriteTokens:      u.CacheCreationInputTokens,
+		CacheWriteTokensByTTL: cloneTTL(u.CacheCreation),
 	}
 }
 
 func (p *Provider) mapStopReason(reason string) types.FinishReason {
 	return providerTransform.MapFinishReason(reason)
+}
+
+func cloneTTL(values map[string]int) map[string]int {
+	if len(values) == 0 {
+		return nil
+	}
+	out := make(map[string]int, len(values))
+	for key, value := range values {
+		out[key] = value
+	}
+	return out
 }

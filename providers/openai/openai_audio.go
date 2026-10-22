@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 
+	"github.com/garyblankenship/wormhole/v3/providers"
 	"github.com/garyblankenship/wormhole/v3/types"
 )
 
@@ -44,7 +45,7 @@ func (p *Provider) handleTextToSpeech(ctx context.Context, request types.AudioRe
 
 	url := p.GetBaseURL() + "/audio/speech"
 
-	body, err := p.StreamRequest(ctx, http.MethodPost, url, payload)
+	body, metadata, err := p.StreamRequestWithMetadata(ctx, http.MethodPost, url, payload)
 	if err != nil {
 		return nil, err
 	}
@@ -54,13 +55,14 @@ func (p *Provider) handleTextToSpeech(ctx context.Context, request types.AudioRe
 
 	audio, err := readLimited(body, maxTextToSpeechAudioBytes)
 	if err != nil {
-		return nil, p.RequestError("failed to read audio data", err)
+		return nil, providers.WithResponseMetadata(p.RequestError("failed to read audio data", err), metadata)
 	}
 
 	return &types.AudioResponse{
-		Model:  request.Model,
-		Audio:  audio,
-		Format: request.ResponseFormat,
+		ResponseMetadata: metadata,
+		Model:            request.Model,
+		Audio:            audio,
+		Format:           request.ResponseFormat,
 	}, nil
 }
 
@@ -87,7 +89,7 @@ func (p *Provider) handleSpeechToText(ctx context.Context, request types.AudioRe
 	}
 
 	url := p.GetBaseURL() + "/audio/transcriptions"
-	resp, err := p.DoRawRequest(ctx, http.MethodPost, url, contentType, formBody)
+	resp, metadata, err := p.DoRawRequestWithMetadata(ctx, http.MethodPost, url, contentType, formBody)
 	if err != nil {
 		return nil, err
 	}
@@ -98,7 +100,7 @@ func (p *Provider) handleSpeechToText(ctx context.Context, request types.AudioRe
 	// Parse response
 	body, err := readLimited(resp, maxSpeechToTextJSONBytes)
 	if err != nil {
-		return nil, types.Errorf("read response", err)
+		return nil, providers.WithResponseMetadata(types.Errorf("read response", err), metadata)
 	}
 
 	var sttResponse struct {
@@ -108,12 +110,13 @@ func (p *Provider) handleSpeechToText(ctx context.Context, request types.AudioRe
 	}
 
 	if err := json.Unmarshal(body, &sttResponse); err != nil {
-		return nil, types.Errorf("parse response", err)
+		return nil, providers.WithResponseMetadata(types.Errorf("parse response", err), metadata)
 	}
 
 	return &types.AudioResponse{
-		Text:   sttResponse.Text,
-		Format: "text",
+		ResponseMetadata: metadata,
+		Text:             sttResponse.Text,
+		Format:           "text",
 	}, nil
 }
 

@@ -63,8 +63,8 @@ func TestReasoningEffortMapsThinkingLevel(t *testing.T) {
 	if err != nil {
 		t.Fatalf("buildTextPayload returned error: %v", err)
 	}
-	if config, ok := nonePayload["generationConfig"].(map[string]any); ok && config["thinkingConfig"] != nil {
-		t.Fatalf("none effort emitted thinking config: %#v", config)
+	if config := nonePayload["generationConfig"].(map[string]any)["thinkingConfig"].(map[string]any); config["thinkingBudget"] != 0 {
+		t.Fatalf("none effort did not request zero budget: %#v", config)
 	}
 }
 

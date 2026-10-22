@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 
+	structured "github.com/garyblankenship/wormhole/v3/internal/structured"
 	"github.com/garyblankenship/wormhole/v3/providers"
 	providerstream "github.com/garyblankenship/wormhole/v3/providers/internal/stream"
 	transform "github.com/garyblankenship/wormhole/v3/providers/internal/transform"
@@ -66,23 +67,34 @@ func (p *Provider) Text(ctx context.Context, request types.TextRequest) (*types.
 	url := p.GetBaseURL() + "/messages"
 
 	var response messageResponse
-	err = p.DoRequest(ctx, http.MethodPost, url, payload, &response)
+	metadata, err := p.DoRequestWithMetadata(ctx, http.MethodPost, url, payload, &response)
 	if err != nil {
 		return nil, err
 	}
 
 	resp := p.transformTextResponse(&response)
 	resp.Provider = p.Name()
+	resp.ResponseMetadata = metadata
+	resp.Warnings = append(resp.Warnings, visibilityWarnings(request.Reasoning, payload)...)
 	return resp, nil
 }
 
 // stampProvider sets Provider on the terminal chunk. Sole closer of out;
 // exits when the upstream channel closes.
-func (p *Provider) stampProvider(ctx context.Context, in <-chan types.StreamChunk) <-chan types.StreamChunk {
+func (p *Provider) stampProvider(ctx context.Context, in <-chan types.StreamChunk, metadata *types.ResponseMetadata, warnings []types.ResponseWarning) <-chan types.StreamChunk {
 	out := make(chan types.StreamChunk)
 	go func() {
 		defer close(out)
+		first := true
 		for chunk := range in {
+			if first || chunk.IsDone() || chunk.Error != nil {
+				chunk.ResponseMetadata = metadata
+				chunk.Warnings = append(chunk.Warnings, warnings...)
+				first = false
+			}
+			if chunk.Error != nil {
+				chunk.Error = providers.WithResponseMetadata(chunk.Error, metadata)
+			}
 			if chunk.IsDone() {
 				chunk.Provider = p.Name()
 			}
@@ -113,15 +125,18 @@ func (p *Provider) Stream(ctx context.Context, request types.TextRequest) (<-cha
 
 	url := p.GetBaseURL() + "/messages"
 
-	body, err := p.StreamRequest(ctx, http.MethodPost, url, payload)
+	body, metadata, err := p.StreamRequestWithMetadata(ctx, http.MethodPost, url, payload)
 	if err != nil {
 		return nil, err
 	}
 
-	return p.stampProvider(ctx, p.accumulatingStream(ctx, providerstream.ProcessSSE(ctx, body, p.parseStreamChunk, 100))), nil
+	return p.stampProvider(ctx, p.accumulatingStream(ctx, providerstream.ProcessSSE(ctx, body, p.parseStreamChunk, 100)), metadata, visibilityWarnings(request.Reasoning, payload)), nil
 }
 
 func (p *Provider) validateSamplingControls(request types.TextRequest) error {
+	if r := request.Reasoning; r != nil && r.MaxTokens > 0 && ((r.Enabled != nil && !*r.Enabled) || r.Effort == types.ReasoningEffortNone) {
+		return p.ValidationError("disabled reasoning conflicts with a positive thinking budget")
+	}
 	if request.FrequencyPenalty != nil || request.PresencePenalty != nil || request.Seed != nil {
 		return p.ValidationError("frequency_penalty, presence_penalty, and seed are not supported by Anthropic")
 	}
@@ -133,51 +148,18 @@ func (p *Provider) validateSamplingControls(request types.TextRequest) error {
 
 // Structured generates a structured response
 func (p *Provider) Structured(ctx context.Context, request types.StructuredRequest) (*types.StructuredResponse, error) {
-	// Anthropic uses tool calling for structured output
-	textRequest := types.TextRequest{
-		BaseRequest:  request.BaseRequest,
-		Messages:     request.Messages,
-		SystemPrompt: request.SystemPrompt,
-	}
-
-	// Create a tool from the schema
-	schemaBytes, err := json.Marshal(request.Schema)
+	t, err := structured.Prepare(request)
 	if err != nil {
-		return nil, p.RequestError("failed to marshal schema", err)
+		return nil, p.ValidationError(err.Error())
 	}
-	tool, err := p.schemaToTool(json.RawMessage(schemaBytes), request.SchemaName)
+	if request.Mode == types.StructuredModeJSON {
+		t.ResponseFormat = map[string]any{"type": "json_schema", "json_schema": map[string]any{"schema": request.Schema}}
+	}
+	response, err := p.Text(ctx, t)
 	if err != nil {
 		return nil, err
 	}
-
-	textRequest.Tools = []types.Tool{*tool}
-	textRequest.ToolChoice = &types.ToolChoice{
-		Type:     types.ToolChoiceTypeSpecific,
-		ToolName: tool.Name,
-	}
-
-	response, err := p.Text(ctx, textRequest)
-	if err != nil {
-		return nil, err
-	}
-
-	// Extract structured data from tool call
-	if len(response.ToolCalls) == 0 {
-		return nil, p.ProviderError("no tool call in response")
-	}
-
-	data, err := p.parseStructuredToolCall(response.ToolCalls[0])
-	if err != nil {
-		return nil, err
-	}
-
-	return &types.StructuredResponse{
-		ID:      response.ID,
-		Model:   response.Model,
-		Data:    data,
-		Usage:   response.Usage,
-		Created: response.Created,
-	}, nil
+	return structured.Convert(request, response)
 }
 
 func (p *Provider) parseStructuredToolCall(toolCall types.ToolCall) (any, error) {

@@ -3,9 +3,9 @@ package ollama
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"net/http"
 
+	"github.com/garyblankenship/wormhole/v3/internal/structured"
 	"github.com/garyblankenship/wormhole/v3/providers"
 	providerstream "github.com/garyblankenship/wormhole/v3/providers/internal/stream"
 	transform "github.com/garyblankenship/wormhole/v3/providers/internal/transform"
@@ -52,6 +52,9 @@ func (p *Provider) SupportedCapabilities() []types.ModelCapability {
 
 // Text generates a text response using Ollama's chat API
 func (p *Provider) Text(ctx context.Context, request types.TextRequest) (*types.TextResponse, error) {
+	if err := p.rejectFileReferences(request.Messages); err != nil {
+		return nil, err
+	}
 	if request.ParallelToolCalls != nil {
 		return nil, p.ValidationError("parallel_tool_calls is not supported by Ollama")
 	}
@@ -64,13 +67,14 @@ func (p *Provider) Text(ctx context.Context, request types.TextRequest) (*types.
 	url := p.GetBaseURL() + "/api/chat"
 
 	var response chatResponse
-	err = p.DoRequest(ctx, http.MethodPost, url, payload, &response)
+	metadata, err := p.DoRequestWithMetadata(ctx, http.MethodPost, url, payload, &response)
 	if err != nil {
 		return nil, err
 	}
 
 	resp := p.transformTextResponse(&response)
 	resp.Provider = p.Name()
+	resp.ResponseMetadata = metadata
 	return resp, nil
 }
 
@@ -96,6 +100,9 @@ func (p *Provider) stampProvider(ctx context.Context, in <-chan types.TextChunk)
 
 // Stream generates a streaming text response using Ollama's streaming chat API
 func (p *Provider) Stream(ctx context.Context, request types.TextRequest) (<-chan types.TextChunk, error) {
+	if err := p.rejectFileReferences(request.Messages); err != nil {
+		return nil, err
+	}
 	if request.ParallelToolCalls != nil {
 		return nil, p.ValidationError("parallel_tool_calls is not supported by Ollama")
 	}
@@ -108,70 +115,46 @@ func (p *Provider) Stream(ctx context.Context, request types.TextRequest) (<-cha
 
 	url := p.GetBaseURL() + "/api/chat"
 
-	body, err := p.StreamRequest(ctx, http.MethodPost, url, payload)
+	body, metadata, err := p.StreamRequestWithMetadata(ctx, http.MethodPost, url, payload)
 	if err != nil {
 		return nil, err
 	}
 
-	return p.stampProvider(ctx, providerstream.ProcessNDJSON(ctx, body, p.parseStreamChunk, 100)), nil
+	return p.streamMetadata(ctx, p.stampProvider(ctx, providerstream.ProcessNDJSON(ctx, body, p.parseStreamChunk, 100)), metadata), nil
 }
 
 // Structured generates a structured response using JSON mode
 func (p *Provider) Structured(ctx context.Context, request types.StructuredRequest) (*types.StructuredResponse, error) {
-	// Convert to text request with JSON mode
-	textRequest := types.TextRequest{
-		BaseRequest:  request.BaseRequest,
-		Messages:     types.CloneMessages(request.Messages),
-		SystemPrompt: request.SystemPrompt,
+	if request.Mode == types.StructuredModeStrict {
+		return nil, p.ValidationError("Ollama does not support native strict structured output")
 	}
-
-	// Use JSON format for structured output
-	if request.Mode == types.StructuredModeJSON {
-		textRequest.ResponseFormat = map[string]string{"type": "json_object"}
+	if len(request.Tools) > 0 {
+		return nil, p.ValidationError("Ollama application tools are not supported by this adapter")
+	}
+	// Preserve the adapter's JSON fallback when no application tools are requested.
+	request.Mode = types.StructuredModeJSON
+	textRequest, err := structured.Prepare(request)
+	if err != nil {
+		return nil, err
+	}
+	// JSON mode constrains syntax, not shape. Deliver the caller's schema too;
+	// Prepare cloned messages, so this cannot mutate the caller's conversation.
+	schemaJSON, err := json.Marshal(request.Schema)
+	if err != nil {
+		return nil, p.RequestError("failed to marshal schema", err)
+	}
+	if textRequest.SystemPrompt != "" || len(textRequest.Messages) == 0 {
+		textRequest.SystemPrompt += "\n\n" + string(schemaJSON)
+	} else if user, ok := textRequest.Messages[len(textRequest.Messages)-1].(*types.UserMessage); ok {
+		user.Content += "\n\n" + string(schemaJSON)
 	} else {
-		// Ollama doesn't support function calling, fallback to JSON mode
-		textRequest.ResponseFormat = map[string]string{"type": "json_object"}
-
-		// Add schema instruction to system prompt or last user message
-		schemaBytes, err := json.Marshal(request.Schema)
-		if err != nil {
-			return nil, p.RequestError("failed to marshal schema", err)
-		}
-
-		schemaInstruction := fmt.Sprintf("Please respond with valid JSON that conforms to this schema: %s", string(schemaBytes))
-
-		if textRequest.SystemPrompt != "" {
-			textRequest.SystemPrompt += "\n\n" + schemaInstruction
-		} else {
-			// Add to last user message
-			if len(textRequest.Messages) > 0 {
-				lastMsg := textRequest.Messages[len(textRequest.Messages)-1]
-				if userMsg, ok := lastMsg.(*types.UserMessage); ok {
-					userMsg.Content = userMsg.Content + "\n\n" + schemaInstruction
-				}
-			}
-		}
+		textRequest.SystemPrompt = string(schemaJSON)
 	}
-
 	response, err := p.Text(ctx, textRequest)
 	if err != nil {
 		return nil, err
 	}
-
-	// Parse JSON response
-	var data any
-	err = json.Unmarshal([]byte(response.Text), &data)
-	if err != nil {
-		return nil, p.RequestError("failed to parse structured response", err)
-	}
-
-	return &types.StructuredResponse{
-		ID:      response.ID,
-		Model:   response.Model,
-		Data:    data,
-		Usage:   response.Usage,
-		Created: response.Created,
-	}, nil
+	return structured.Convert(request, response)
 }
 
 // Embeddings generates embeddings using Ollama's embeddings API

@@ -26,12 +26,13 @@ func (p *Provider) Embeddings(ctx context.Context, request types.EmbeddingsReque
 	url := p.GetBaseURL() + "/embeddings"
 
 	var response embeddingsResponse
-	err := p.DoRequest(ctx, http.MethodPost, url, payload, &response)
+	metadata, err := p.DoRequestWithMetadata(ctx, http.MethodPost, url, payload, &response)
 	if err != nil {
 		return nil, err
 	}
 
 	resp := p.transformEmbeddingsResponse(&response, request.Model)
+	resp.ResponseMetadata = metadata
 	resp.Provider = p.Name()
 	return resp, nil
 }
@@ -56,12 +57,13 @@ func (p *Provider) Rerank(ctx context.Context, request types.RerankRequest) (*ty
 	url := p.GetBaseURL() + "/rerank"
 
 	var response rerankResponse
-	err := p.DoRequest(ctx, http.MethodPost, url, payload, &response)
+	metadata, err := p.DoRequestWithMetadata(ctx, http.MethodPost, url, payload, &response)
 	if err != nil {
 		return nil, err
 	}
 
 	resp := p.transformRerankResponse(&response, request.Model)
+	resp.ResponseMetadata = metadata
 	resp.Provider = p.Name()
 	return resp, nil
 }
@@ -97,12 +99,14 @@ func (p *Provider) Images(ctx context.Context, request types.ImagesRequest) (*ty
 	url := p.imagesURL()
 
 	var response imageResponse
-	err := p.DoRequest(ctx, http.MethodPost, url, payload, &response)
+	metadata, err := p.DoRequestWithMetadata(ctx, http.MethodPost, url, payload, &response)
 	if err != nil {
 		return nil, err
 	}
 
-	return p.transformImageResponse(&response), nil
+	result := p.transformImageResponse(&response)
+	result.ResponseMetadata = metadata
+	return result, nil
 }
 
 // GenerateImage generates images through the unified image-generation interface.

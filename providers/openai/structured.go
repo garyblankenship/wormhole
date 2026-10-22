@@ -5,72 +5,29 @@ import (
 	"encoding/json"
 
 	"github.com/garyblankenship/wormhole/v3/internal/pool"
+	"github.com/garyblankenship/wormhole/v3/internal/structured"
 	"github.com/garyblankenship/wormhole/v3/types"
 )
 
 // Structured generates a structured response
 func (p *Provider) Structured(ctx context.Context, request types.StructuredRequest) (*types.StructuredResponse, error) {
-	// Convert to text request with JSON mode or function calling
-	textRequest := types.TextRequest{
-		BaseRequest:  request.BaseRequest,
-		Messages:     request.Messages,
-		SystemPrompt: request.SystemPrompt,
+	textRequest, err := structured.Prepare(request)
+	if err != nil {
+		return nil, err
 	}
-
-	// Determine the best method for structured output
-	switch request.Mode {
-	case types.StructuredModeJSON:
-		textRequest.ResponseFormat = map[string]string{"type": "json_object"}
-	case types.StructuredModeStrict:
-		// Native OpenAI strict structured output: emit a json_schema response_format.
-		// This is the Chat Completions (nested) shape; buildResponsesPayload reshapes
-		// it to the flattened Responses API shape when that transport is active.
-		schemaMap, err := strictSchemaToMap(request.Schema)
+	if request.Mode == types.StructuredModeStrict {
+		schema, err := strictSchemaToMap(request.Schema)
 		if err != nil {
 			return nil, err
 		}
-		name := request.SchemaName
-		if name == "" {
-			name = "structured_output"
-		}
-		textRequest.ResponseFormat = map[string]any{
-			"type": "json_schema",
-			"json_schema": map[string]any{
-				"name":   name,
-				"strict": true,
-				"schema": schemaMap,
-			},
-		}
-	default:
-		// Use function calling for structured output
-		tool, err := p.schemaToTool(request.Schema, request.SchemaName)
-		if err != nil {
-			return nil, err
-		}
-		textRequest.Tools = []types.Tool{*tool}
-		textRequest.ToolChoice = &types.ToolChoice{
-			Type:     types.ToolChoiceTypeSpecific,
-			ToolName: tool.Name,
-		}
+		format := textRequest.ResponseFormat.(map[string]any)
+		format["json_schema"].(map[string]any)["schema"] = schema
 	}
-
 	response, err := p.Text(ctx, textRequest)
 	if err != nil {
 		return nil, err
 	}
-
-	data, err := p.extractStructuredData(request.Mode, response)
-	if err != nil {
-		return nil, err
-	}
-
-	return &types.StructuredResponse{
-		ID:      response.ID,
-		Model:   response.Model,
-		Data:    data,
-		Usage:   response.Usage,
-		Created: response.Created,
-	}, nil
+	return structured.Convert(request, response)
 }
 
 // extractStructuredData decodes the model response into structured data per the

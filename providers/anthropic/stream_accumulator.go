@@ -2,6 +2,7 @@ package anthropic
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 
 	"github.com/garyblankenship/wormhole/v3/types"
@@ -115,11 +116,15 @@ func (s *streamFragmentAccumulator) mergeUsage(chunk *types.StreamChunk) {
 			s.usage.CompletionTokens = max(s.usage.CompletionTokens, chunk.Usage.CompletionTokens)
 			s.usage.CacheReadTokens = max(s.usage.CacheReadTokens, chunk.Usage.CacheReadTokens)
 			s.usage.CacheWriteTokens = max(s.usage.CacheWriteTokens, chunk.Usage.CacheWriteTokens)
+			if len(chunk.Usage.CacheWriteTokensByTTL) > 0 {
+				s.usage.CacheWriteTokensByTTL = cloneTTL(chunk.Usage.CacheWriteTokensByTTL)
+			}
 			s.usage.TotalTokens = s.usage.PromptTokens + s.usage.CompletionTokens
 		}
 	}
 	if s.usage != nil && (chunk.Usage != nil || chunk.IsDone()) {
 		copy := *s.usage
+		copy.CacheWriteTokensByTTL = cloneTTL(s.usage.CacheWriteTokensByTTL)
 		chunk.Usage = &copy
 	}
 }
@@ -133,6 +138,8 @@ func (p *Provider) accumulatingStream(ctx context.Context, in <-chan types.Strea
 	go func() {
 		defer close(out)
 		acc := newStreamFragmentAccumulator()
+		refs := newCitationAccumulator()
+		providerUsage := make(map[string]any)
 		flushed := false
 	loop:
 		for {
@@ -148,6 +155,34 @@ func (p *Provider) accumulatingStream(ctx context.Context, in <-chan types.Strea
 				chunk = next
 			}
 			acc.mergeUsage(&chunk)
+			if raw, ok := chunk.Metadata["provider_usage"].(map[string]any); ok {
+				for k, v := range raw {
+					providerUsage[k] = v
+				}
+			}
+			if raw, ok := chunk.Metadata["anthropic_citation"].(json.RawMessage); ok {
+				beforeSources, beforeCitations, beforeWarnings := len(refs.sources), len(refs.citations), len(refs.warnings)
+				refs.add(raw)
+				chunk.Sources = append([]types.Source(nil), refs.sources[beforeSources:]...)
+				chunk.Citations = append([]types.Citation(nil), refs.citations[beforeCitations:]...)
+				chunk.Warnings = append([]types.ResponseWarning(nil), refs.warnings[beforeWarnings:]...)
+				delete(chunk.Metadata, "anthropic_citation")
+			}
+			if chunk.IsDone() {
+				chunk.Sources = append([]types.Source(nil), refs.sources...)
+				chunk.Citations = append([]types.Citation(nil), refs.citations...)
+				chunk.Warnings = append([]types.ResponseWarning(nil), refs.warnings...)
+				if len(providerUsage) > 0 {
+					if chunk.Metadata == nil {
+						chunk.Metadata = make(map[string]any)
+					}
+					copyUsage := make(map[string]any, len(providerUsage))
+					for k, v := range providerUsage {
+						copyUsage[k] = v
+					}
+					chunk.Metadata["provider_usage"] = copyUsage
+				}
+			}
 			// Delta is authoritative when the parser also exposes compatibility aliases.
 			var fragments []types.ToolCall
 			if chunk.Delta != nil {

@@ -1,5 +1,7 @@
 package anthropic
 
+import "encoding/json"
+
 // Anthropic API types
 
 type messageResponse struct {
@@ -13,22 +15,25 @@ type messageResponse struct {
 }
 
 type contentPart struct {
-	Type      string    `json:"type"`
-	Text      string    `json:"text,omitempty"`
-	Thinking  string    `json:"thinking,omitempty"`
-	Signature string    `json:"signature,omitempty"`
-	ID        string    `json:"id,omitempty"`
-	Name      string    `json:"name,omitempty"`
-	Input     toolInput `json:"input,omitempty"`
+	Type      string            `json:"type"`
+	Text      string            `json:"text,omitempty"`
+	Thinking  string            `json:"thinking,omitempty"`
+	Signature string            `json:"signature,omitempty"`
+	ID        string            `json:"id,omitempty"`
+	Name      string            `json:"name,omitempty"`
+	Citations []json.RawMessage `json:"citations,omitempty"`
+	Input     toolInput         `json:"input,omitempty"`
 }
 
 type toolInput map[string]any
 
 type messageUsage struct {
-	InputTokens              int `json:"input_tokens"`
-	OutputTokens             int `json:"output_tokens"`
-	CacheReadInputTokens     int `json:"cache_read_input_tokens"`
-	CacheCreationInputTokens int `json:"cache_creation_input_tokens"`
+	InputTokens              int            `json:"input_tokens"`
+	OutputTokens             int            `json:"output_tokens"`
+	CacheReadInputTokens     int            `json:"cache_read_input_tokens"`
+	CacheCreationInputTokens int            `json:"cache_creation_input_tokens"`
+	CacheCreation            map[string]int `json:"cache_creation,omitempty"`
+	Raw                      map[string]any `json:"-"`
 }
 
 type streamEvent struct {
@@ -44,11 +49,12 @@ type contentBlockDeltaEvent struct {
 	Type  string `json:"type"`
 	Index int    `json:"index"`
 	Delta struct {
-		Type        string `json:"type"`
-		Text        string `json:"text"`
-		Thinking    string `json:"thinking"`
-		Signature   string `json:"signature"`
-		PartialJSON string `json:"partial_json"` // input_json_delta tool-arg fragment
+		Type        string          `json:"type"`
+		Text        string          `json:"text"`
+		Thinking    string          `json:"thinking"`
+		Signature   string          `json:"signature"`
+		Citation    json.RawMessage `json:"citation"`
+		PartialJSON string          `json:"partial_json"` // input_json_delta tool-arg fragment
 	} `json:"delta"`
 }
 type messageDeltaEvent struct {
@@ -68,4 +74,14 @@ type contentBlockStartEvent struct {
 		ID   string `json:"id"`
 		Name string `json:"name"`
 	} `json:"content_block"`
+}
+
+func (u *messageUsage) UnmarshalJSON(data []byte) error {
+	type plain messageUsage
+	var decoded plain
+	if err := json.Unmarshal(data, &decoded); err != nil {
+		return err
+	}
+	*u = messageUsage(decoded)
+	return json.Unmarshal(data, &u.Raw)
 }

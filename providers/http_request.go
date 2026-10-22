@@ -17,46 +17,55 @@ import (
 // including body reads. A nonpositive timeout disables this deadline; the caller
 // context still governs cancellation. Closing the body releases the deadline.
 func (w *HTTPClientWrapper) StreamRequest(ctx context.Context, method, url string, body any) (io.ReadCloser, error) {
+	stream, _, err := w.StreamRequestWithMetadata(ctx, method, url, body)
+	return stream, err
+}
+
+// StreamRequestWithMetadata captures headers before handing the stream body to
+// its caller. The caller owns closing the body, including after parser errors.
+func (w *HTTPClientWrapper) StreamRequestWithMetadata(ctx context.Context, method, url string, body any) (io.ReadCloser, *types.ResponseMetadata, error) {
 	reqCtx, cancel := w.requestContext(ctx)
 	req, err := w.buildRequest(reqCtx, method, url, body)
 	if err != nil {
 		cancel()
-		return nil, err
+		return nil, nil, err
 	}
 	req.Header.Set(types.HeaderAccept, types.ContentTypeEventStream)
 	req.Header.Set(types.HeaderCacheControl, "no-cache")
-
-	return w.doRawRequest(ctx, url, cancel, req)
+	return w.doRawRequestWithMetadata(ctx, url, cancel, req)
 }
 
-// DoRawRequest sends an already-encoded request body through the provider's
-// normal timeout, authentication, retry, and status-error handling path.
-// The supplied content type overrides configured Content-Type headers.
+// DoRawRequest sends encoded bytes through the normal provider request path.
 func (w *HTTPClientWrapper) DoRawRequest(ctx context.Context, method, url, contentType string, body []byte) (io.ReadCloser, error) {
+	response, _, err := w.DoRawRequestWithMetadata(ctx, method, url, contentType, body)
+	return response, err
+}
+
+// DoRawRequestWithMetadata is DoRawRequest with response-scoped metadata.
+func (w *HTTPClientWrapper) DoRawRequestWithMetadata(ctx context.Context, method, url, contentType string, body []byte) (io.ReadCloser, *types.ResponseMetadata, error) {
 	reqCtx, cancel := w.requestContext(ctx)
 	req, err := w.buildRawRequest(reqCtx, method, url, contentType, body)
 	if err != nil {
 		cancel()
-		return nil, err
+		return nil, nil, err
 	}
-
-	return w.doRawRequest(ctx, url, cancel, req)
+	return w.doRawRequestWithMetadata(ctx, url, cancel, req)
 }
 
-func (w *HTTPClientWrapper) doRawRequest(ctx context.Context, url string, cancel context.CancelFunc, req *http.Request) (io.ReadCloser, error) {
-	resp, err := w.retryClient.Do(req) //nolint:bodyclose // Successful response body ownership is returned to the caller.
+func (w *HTTPClientWrapper) doRawRequestWithMetadata(ctx context.Context, url string, cancel context.CancelFunc, req *http.Request) (io.ReadCloser, *types.ResponseMetadata, error) {
+	resp, err := w.retryClient.Do(req) //nolint:bodyclose // Successful body ownership is returned to the caller.
 	if err != nil {
 		cancel()
-		return nil, w.handleRequestError(ctx, err)
+		metadata, requestErr := w.requestErrorWithMetadata(ctx, err)
+		return nil, metadata, requestErr
 	}
-
+	metadata := w.responseMetadata(resp.StatusCode, resp.Header)
 	if resp.StatusCode >= 400 {
-		err := w.rawResponseError(resp, url)
+		err := WithResponseMetadata(w.rawResponseError(resp, url), metadata)
 		cancel()
-		return nil, err
+		return nil, metadata, err
 	}
-
-	return &cancelOnCloseReadCloser{ReadCloser: resp.Body, cancel: cancel}, nil
+	return &cancelOnCloseReadCloser{ReadCloser: resp.Body, cancel: cancel, metadata: types.CloneResponseMetadata(metadata)}, metadata, nil
 }
 
 func (w *HTTPClientWrapper) rawResponseError(resp *http.Response, url string) error {
@@ -73,13 +82,22 @@ func (w *HTTPClientWrapper) rawResponseError(resp *http.Response, url string) er
 
 type cancelOnCloseReadCloser struct {
 	io.ReadCloser
-	cancel context.CancelFunc
+	cancel   context.CancelFunc
+	metadata *types.ResponseMetadata
+}
+
+func (r *cancelOnCloseReadCloser) Read(p []byte) (int, error) {
+	n, err := r.ReadCloser.Read(p)
+	if err != nil && err != io.EOF {
+		err = WithResponseMetadata(err, r.metadata)
+	}
+	return n, err
 }
 
 func (r *cancelOnCloseReadCloser) Close() error {
 	err := r.ReadCloser.Close()
 	r.cancel()
-	return err
+	return WithResponseMetadata(err, r.metadata)
 }
 
 func (w *HTTPClientWrapper) buildRequest(ctx context.Context, method, url string, body any) (*http.Request, error) {

@@ -25,6 +25,8 @@ type HTTPClientWrapper struct {
 // Pass a non-nil httpClient to inject a custom HTTP client (useful for testing).
 // Pass nil to use the default secure HTTP client.
 func NewHTTPClientWrapper(name string, providerConfig types.ProviderConfig, tlsConfig *config.TLSConfig, authStrategy AuthStrategy, httpClient HTTPClient) *HTTPClientWrapper {
+	providerConfig.ResponseHeaderNames = append([]string(nil), providerConfig.ResponseHeaderNames...)
+
 	// Seed the first-attempt key from APIKeys[0] when only APIKeys is set, so the
 	// first request's auth uses APIKeys[0] and the pool's next() returns APIKeys[1]
 	// on the first 429.
@@ -64,7 +66,7 @@ func NewHTTPClientWrapper(name string, providerConfig types.ProviderConfig, tlsC
 		retryConfig.MaxDelay = *providerConfig.RetryMaxDelay
 	}
 	if len(providerConfig.APIKeys) > 1 {
-		w.keyPool = newKeyPool(providerConfig.APIKeys, retryConfig.InitialDelay)
+		w.keyPool = newKeyPool(providerConfig.APIKeys, retryConfig.InitialDelay, providerConfig.APIKey)
 	}
 
 	// Use injected client for retry wrapper if provided, otherwise use the concrete httpClient
@@ -116,36 +118,40 @@ func (w *HTTPClientWrapper) GetHTTPClient() *http.Client {
 	return w.transportCache.newSecureHTTPClient(0, w.tlsConfig, nil, "")
 }
 
+// DoRequest preserves the original JSON request API.
 func (w *HTTPClientWrapper) DoRequest(ctx context.Context, method, url string, body any, result any) error {
+	_, err := w.DoRequestWithMetadata(ctx, method, url, body, result)
+	return err
+}
+
+// DoRequestWithMetadata returns metadata from the individual upstream response,
+// including when decoding or reading that response fails.
+func (w *HTTPClientWrapper) DoRequestWithMetadata(ctx context.Context, method, url string, body any, result any) (*types.ResponseMetadata, error) {
 	reqCtx, cancel := w.requestContext(ctx)
 	defer cancel()
-
 	req, err := w.buildRequest(reqCtx, method, url, body)
 	if err != nil {
-		return err
+		return nil, err
 	}
-
 	resp, err := w.retryClient.Do(req)
 	if err != nil {
-		return w.handleRequestError(ctx, err)
+		return w.requestErrorWithMetadata(ctx, err)
 	}
+	metadata := w.responseMetadata(resp.StatusCode, resp.Header)
 	defer func() {
 		if err := resp.Body.Close(); err != nil {
 			slog.Warn("failed to close response body", "error", err)
 		}
 	}()
-
 	respBody, err := readResponseBodyLimited(resp.Body)
 	if err != nil {
-		return types.Errorf("read response body", err)
+		return metadata, WithResponseMetadata(types.Errorf("read response body", err), metadata)
 	}
 	defer returnResponseBuf(respBody)
-
 	if resp.StatusCode >= 400 {
-		return w.buildErrorResponse(resp.StatusCode, resp.Status, url, resp.Header, respBody)
+		return metadata, WithResponseMetadata(w.buildErrorResponse(resp.StatusCode, resp.Status, url, resp.Header, respBody), metadata)
 	}
-
-	return w.parseResponse(respBody, result)
+	return metadata, WithResponseMetadata(w.parseResponse(respBody, result), metadata)
 }
 
 func (w *HTTPClientWrapper) requestContext(ctx context.Context) (context.Context, context.CancelFunc) {

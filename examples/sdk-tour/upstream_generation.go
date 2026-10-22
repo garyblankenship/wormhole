@@ -135,8 +135,29 @@ func (u *upstream) gemini(w http.ResponseWriter, r *http.Request, body map[strin
 		return
 	}
 	if strings.Contains(u.mode, "structured") && object(body["generationConfig"])["responseSchema"] == nil {
-		u.reject(w, errors.New("gemini response schema absent"))
-		return
+		tools := array(body["tools"])
+		if len(tools) != 1 {
+			u.reject(w, errors.New("gemini structured result tool absent"))
+			return
+		}
+		declarations := array(object(tools[0])["functionDeclarations"])
+		if len(declarations) != 1 {
+			u.reject(w, errors.New("gemini structured function declaration absent"))
+			return
+		}
+		function := object(declarations[0])
+		name := str(function["name"])
+		schema := object(function["parameters"])
+		properties := object(schema["properties"])
+		choice := object(object(body["toolConfig"])["functionCallingConfig"])
+		if name != "__wormhole_structured_output" || !strings.EqualFold(str(schema["type"]), "object") ||
+			properties["name"] == nil || properties["age"] == nil ||
+			!equalJSON(choice["allowedFunctionNames"], []string{name}) || str(choice["mode"]) != "ANY" {
+			u.reject(w, errors.New("gemini structured schema or forced choice absent"))
+			return
+		}
+		parts = []any{map[string]any{"functionCall": map[string]any{"name": name, "args": u.cfg.Structured}}}
+		object(object(array(response["candidates"])[0])["content"])["parts"] = parts
 	}
 	u.json(w, response)
 }

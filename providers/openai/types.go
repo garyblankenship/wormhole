@@ -1,5 +1,7 @@
 package openai
 
+import "encoding/json"
+
 // OpenAI API response types
 
 type chatCompletionResponse struct {
@@ -40,12 +42,21 @@ type toolCall struct {
 }
 
 type usage struct {
+	Raw                     map[string]any          `json:"-"`
 	PromptTokens            int                     `json:"prompt_tokens"`
 	CompletionTokens        int                     `json:"completion_tokens"`
 	TotalTokens             int                     `json:"total_tokens"`
 	PromptCacheHitTokens    int                     `json:"prompt_cache_hit_tokens,omitempty"`
 	PromptTokensDetails     *promptTokensDetail     `json:"prompt_tokens_details,omitempty"`
 	CompletionTokensDetails *completionTokensDetail `json:"completion_tokens_details,omitempty"`
+}
+
+func (u *usage) UnmarshalJSON(data []byte) error {
+	type plain usage
+	if err := json.Unmarshal(data, (*plain)(u)); err != nil {
+		return err
+	}
+	return json.Unmarshal(data, &u.Raw)
 }
 
 type completionTokensDetail struct {
@@ -80,29 +91,48 @@ type responsesOutputItem struct {
 	Status    string                 `json:"status,omitempty"`
 	Role      string                 `json:"role,omitempty"`
 	Content   []responsesContentPart `json:"content,omitempty"`
+	Summary   []responsesContentPart `json:"summary,omitempty"`
 	CallID    string                 `json:"call_id,omitempty"`
 	Name      string                 `json:"name,omitempty"`
 	Arguments string                 `json:"arguments,omitempty"`
 }
 
 type responsesContentPart struct {
-	Type    string `json:"type"`
-	Text    string `json:"text,omitempty"`
-	Refusal string `json:"refusal,omitempty"`
+	Type        string `json:"type"`
+	Text        string `json:"text,omitempty"`
+	Refusal     string `json:"refusal,omitempty"`
+	Annotations any    `json:"annotations,omitempty"`
 }
 
 type responsesUsage struct {
-	InputTokens  int `json:"input_tokens"`
-	OutputTokens int `json:"output_tokens"`
-	TotalTokens  int `json:"total_tokens"`
+	InputTokens        int `json:"input_tokens"`
+	OutputTokens       int `json:"output_tokens"`
+	TotalTokens        int `json:"total_tokens"`
+	InputTokensDetails *struct {
+		CachedTokens int `json:"cached_tokens"`
+	} `json:"input_tokens_details,omitempty"`
+	OutputTokensDetails *completionTokensDetail `json:"output_tokens_details,omitempty"`
+	Raw                 map[string]any          `json:"-"`
+}
+
+func (u *responsesUsage) UnmarshalJSON(data []byte) error {
+	type plain responsesUsage
+	if err := json.Unmarshal(data, (*plain)(u)); err != nil {
+		return err
+	}
+	return json.Unmarshal(data, &u.Raw)
 }
 
 type responsesStreamEvent struct {
-	Type     string               `json:"type"`
-	Response *responsesResponse   `json:"response,omitempty"`
-	Delta    string               `json:"delta,omitempty"`
-	ItemID   string               `json:"item_id,omitempty"`
-	Item     *responsesOutputItem `json:"item,omitempty"`
+	Annotation      any                  `json:"annotation,omitempty"`
+	AnnotationIndex int                  `json:"annotation_index,omitempty"`
+	OutputIndex     int                  `json:"output_index,omitempty"`
+	ContentIndex    int                  `json:"content_index,omitempty"`
+	Type            string               `json:"type"`
+	Response        *responsesResponse   `json:"response,omitempty"`
+	Delta           string               `json:"delta,omitempty"`
+	ItemID          string               `json:"item_id,omitempty"`
+	Item            *responsesOutputItem `json:"item,omitempty"`
 }
 
 func (e responsesStreamEvent) responseModel() string {

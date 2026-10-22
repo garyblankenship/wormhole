@@ -20,8 +20,8 @@ func TestParseStreamChunkMessageStartCapturesUsage(t *testing.T) {
 	if chunk == nil || chunk.Usage == nil {
 		t.Fatalf("expected non-nil chunk.Usage, got chunk=%v", chunk)
 	}
-	if chunk.Usage.PromptTokens != 100 {
-		t.Fatalf("PromptTokens = %d, want 100", chunk.Usage.PromptTokens)
+	if chunk.Usage.PromptTokens != 150 {
+		t.Fatalf("PromptTokens = %d, want 150", chunk.Usage.PromptTokens)
 	}
 	if chunk.Usage.CacheReadTokens != 30 {
 		t.Fatalf("CacheReadTokens = %d, want 30", chunk.Usage.CacheReadTokens)

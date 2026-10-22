@@ -2,6 +2,7 @@ package ollama
 
 import (
 	"encoding/base64"
+	"encoding/json"
 	"fmt"
 	"strings"
 
@@ -26,10 +27,12 @@ func (p *Provider) buildChatPayload(request *types.TextRequest, prepared []types
 
 	// Set JSON format for structured output
 	if request.ResponseFormat != nil {
-		if rf, ok := request.ResponseFormat.(map[string]string); ok {
-			if rf["type"] == "json_object" {
-				payload.Format = "json"
-			}
+		encoded, _ := json.Marshal(request.ResponseFormat)
+		var format struct {
+			Type string `json:"type"`
+		}
+		if json.Unmarshal(encoded, &format) == nil && format.Type == "json_object" {
+			payload.Format = "json"
 		}
 	}
 

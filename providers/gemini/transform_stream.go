@@ -87,8 +87,30 @@ func (g *Gemini) handleStream(ctx context.Context, stream io.ReadCloser) <-chan 
 		scanner := providerstream.NewSSEScanner(stream)
 		terminal := false
 		callIndex := 0
+		refs := &citationSet{}
+		var text strings.Builder
+		var annotations []any
 		for scanner.Scan() {
-			chunks, done, err := g.parseStreamEventWithIndex(scanner.Event().Data, &callIndex)
+			data := scanner.Event().Data
+			chunks, done, err := g.parseStreamEventWithIndex(data, &callIndex)
+			var frame geminiTextResponse
+			if json.Unmarshal([]byte(data), &frame) == nil && len(frame.Candidates) > 0 {
+				for _, part := range frame.Candidates[0].Content.Parts {
+					if !part.Thought {
+						text.WriteString(part.Text)
+					}
+				}
+				oldSources, oldCitations, oldWarnings := len(refs.sources), len(refs.citations), len(refs.warnings)
+				refs.consume(frame.Candidates[0], text.String())
+				if frame.Candidates[0].GroundingMetadata != nil || frame.Candidates[0].CitationMetadata != nil {
+					annotations = append(annotations, map[string]any{"groundingMetadata": frame.Candidates[0].GroundingMetadata, "citationMetadata": frame.Candidates[0].CitationMetadata})
+				}
+				if len(chunks) > 0 {
+					chunks[0].Sources = types.CloneSources(refs.sources[oldSources:])
+					chunks[0].Citations = types.CloneCitations(refs.citations[oldCitations:])
+					chunks[0].Warnings = refs.warnings[oldWarnings:]
+				}
+			}
 			if err != nil {
 				select {
 				case ch <- types.TextChunk{Error: err}:
@@ -102,6 +124,12 @@ func (g *Gemini) handleStream(ctx context.Context, stream io.ReadCloser) <-chan 
 			for _, chunk := range chunks {
 				if chunk.FinishReason != nil {
 					terminal = true
+					chunk.Sources = types.CloneSources(refs.sources)
+					chunk.Citations = types.CloneCitations(refs.citations)
+					if len(annotations) > 0 {
+						chunk.Metadata = map[string]any{"provider_annotations": types.CloneValue(annotations)}
+					}
+					chunk.Warnings = append([]types.ResponseWarning(nil), refs.warnings...)
 				}
 				select {
 				case ch <- chunk:
@@ -143,17 +171,17 @@ func (g *Gemini) parseStreamEventWithIndex(data string, callIndex *int) ([]types
 	if response.Error != nil {
 		return nil, false, g.ProviderError(response.Error.Message)
 	}
-	if len(response.Candidates) == 0 {
-		if promptBlockReason(&response) != "" {
-			return nil, false, g.noCandidatesError(&response)
-		}
-		return nil, false, nil
+	if len(response.Candidates) == 0 && promptBlockReason(&response) != "" {
+		return nil, false, g.noCandidatesError(&response)
 	}
-	// usageMetadata is top-level on the Gemini response; preserve it on the
-	// stream alongside candidate chunks.
-	chunks := g.processStreamCandidateWithIndex(response.Candidates[0], callIndex)
+	// Usage can appear without a candidate in a trailing frame.
+	var chunks []types.TextChunk
+	if len(response.Candidates) > 0 {
+		chunks = g.processStreamCandidateWithIndex(response.Candidates[0], callIndex)
+	}
+
 	if usage := convertUsage(response.UsageMetadata); usage != nil {
-		chunks = append(chunks, types.TextChunk{Usage: usage, Model: "gemini"})
+		chunks = append(chunks, types.TextChunk{Usage: usage, Model: "gemini", Metadata: map[string]any{"provider_usage": providerUsage(response.UsageMetadata)}})
 	}
 	return chunks, false, nil
 }

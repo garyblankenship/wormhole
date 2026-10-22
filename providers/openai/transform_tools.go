@@ -39,10 +39,11 @@ func cleanJSONResponse(content string) string {
 func (p *Provider) transformTextResponse(response *chatCompletionResponse) *types.TextResponse {
 	if len(response.Choices) == 0 {
 		return &types.TextResponse{
-			ID:      response.ID,
-			Model:   response.Model,
-			Usage:   p.convertUsage(response.Usage),
-			Created: time.Unix(response.Created, 0),
+			ID:       response.ID,
+			Model:    response.Model,
+			Usage:    p.convertUsage(response.Usage),
+			Created:  time.Unix(response.Created, 0),
+			Metadata: map[string]any{"provider_usage": response.Usage.Raw},
 		}
 	}
 
@@ -64,6 +65,7 @@ func (p *Provider) transformTextResponse(response *chatCompletionResponse) *type
 		FinishReason: p.mapFinishReason(choice.FinishReason),
 		Usage:        p.convertUsage(response.Usage),
 		Created:      time.Unix(response.Created, 0),
+		Metadata:     map[string]any{"provider_usage": response.Usage.Raw},
 	}
 
 	if choice.Message.ReasoningContent != "" {

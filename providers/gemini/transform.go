@@ -201,6 +201,17 @@ func (g *Gemini) transformMessageToParts(msg types.Message, model string) ([]map
 // transformMedia converts media to Gemini format
 func (g *Gemini) transformMedia(media types.Media) (map[string]any, error) {
 	switch m := media.(type) {
+	case *types.FileReferenceMedia:
+		if err := m.Validate(); err != nil {
+			return nil, err
+		}
+		if m.Provider != g.Name() {
+			return nil, g.ValidationError("file reference belongs to a different provider")
+		}
+		if m.URI == "" || m.MimeType == "" {
+			return nil, g.ValidationError("Gemini file references require URI and MIME type")
+		}
+		return map[string]any{"fileData": map[string]any{"fileUri": m.URI, "mimeType": m.MimeType}}, nil
 	case *types.ImageMedia:
 		data := m.Base64Data
 		if data == "" && len(m.Data) > 0 {
