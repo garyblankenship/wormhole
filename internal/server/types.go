@@ -1,124 +1,17 @@
 package server
 
 import (
-	"encoding/base64"
 	"encoding/json"
 	"fmt"
-	"strings"
-
-	"github.com/garyblankenship/wormhole/v3/types"
 )
-
-// ChatCompletionRequest is the OpenAI-compatible chat completion request.
-type ChatCompletionRequest struct {
-	Model               string                         `json:"model"`
-	Messages            []ChatCompletionRequestMessage `json:"messages"`
-	Temperature         *float64                       `json:"temperature,omitempty"`
-	MaxTokens           *int                           `json:"max_tokens,omitempty"`
-	MaxCompletionTokens *int                           `json:"max_completion_tokens,omitempty"`
-	TopP                *float64                       `json:"top_p,omitempty"`
-	ReasoningEffort     *types.ReasoningEffort         `json:"reasoning_effort,omitempty"`
-	FrequencyPenalty    *float64                       `json:"frequency_penalty,omitempty"`
-	PresencePenalty     *float64                       `json:"presence_penalty,omitempty"`
-	Seed                *int                           `json:"seed,omitempty"`
-	N                   *int                           `json:"n,omitempty"`
-	ParallelToolCalls   *bool                          `json:"parallel_tool_calls,omitempty"`
-	Stop                []string                       `json:"stop,omitempty"`
-	Stream              bool                           `json:"stream,omitempty"`
-	Tools               []ChatTool                     `json:"tools,omitempty"`
-	ToolChoice          json.RawMessage                `json:"tool_choice,omitempty"`
-	ResponseFormat      json.RawMessage                `json:"response_format,omitempty"`
-}
-
-// ChatCompletionRequestMessage is a request-only chat message. OpenAI clients
-// may send content as either a plain string or a multimodal parts array.
-type ChatCompletionRequestMessage struct {
-	Role       string             `json:"role"`
-	Content    ChatMessageContent `json:"content"`
-	ToolCallID string             `json:"tool_call_id,omitempty"`
-	ToolCalls  []ChatToolCall     `json:"tool_calls,omitempty"`
-}
-
-type ChatMessageContent struct {
-	Text  string
-	Media []types.Media
-}
-
-func (c *ChatMessageContent) UnmarshalJSON(data []byte) error {
-	var text string
-	if err := json.Unmarshal(data, &text); err == nil {
-		c.Text = text
-		c.Media = nil
-		return nil
-	}
-
-	var parts []chatContentPart
-	if err := json.Unmarshal(data, &parts); err != nil {
-		return fmt.Errorf("content must be a string or array of content parts")
-	}
-
-	var textParts []string
-	var media []types.Media
-	for _, part := range parts {
-		switch part.Type {
-		case "text":
-			textParts = append(textParts, part.Text)
-		case "image_url":
-			image, err := parseImageURLPart(part.ImageURL.URL)
-			if err != nil {
-				return err
-			}
-			media = append(media, image)
-		default:
-			return fmt.Errorf("unsupported content part type %q", part.Type)
-		}
-	}
-
-	c.Text = strings.Join(textParts, "")
-	c.Media = media
-	return nil
-}
-
-type chatContentPart struct {
-	Type     string `json:"type"`
-	Text     string `json:"text,omitempty"`
-	ImageURL struct {
-		URL string `json:"url"`
-	} `json:"image_url,omitempty"`
-}
-
-func parseImageURLPart(rawURL string) (*types.ImageMedia, error) {
-	if rawURL == "" {
-		return nil, fmt.Errorf("image_url.url is required")
-	}
-	if !strings.HasPrefix(rawURL, "data:") {
-		return &types.ImageMedia{URL: rawURL}, nil
-	}
-
-	header, data, ok := strings.Cut(strings.TrimPrefix(rawURL, "data:"), ",")
-	if !ok {
-		return nil, fmt.Errorf("malformed image data URL")
-	}
-	mimeType, encoding, ok := strings.Cut(header, ";")
-	if !ok || encoding != "base64" || !strings.HasPrefix(mimeType, "image/") {
-		return nil, fmt.Errorf("malformed image data URL")
-	}
-	if _, err := base64.StdEncoding.DecodeString(data); err != nil {
-		return nil, fmt.Errorf("malformed image data URL: %w", err)
-	}
-
-	return &types.ImageMedia{
-		MimeType:   mimeType,
-		Base64Data: data,
-	}, nil
-}
 
 // ChatMessage is a message in the OpenAI chat format.
 type ChatMessage struct {
-	Role      string         `json:"role"`
-	Content   string         `json:"content"`
-	Refusal   string         `json:"refusal,omitempty"`
-	ToolCalls []ChatToolCall `json:"tool_calls,omitempty"`
+	Role        string           `json:"role"`
+	Content     string           `json:"content"`
+	Refusal     string           `json:"refusal,omitempty"`
+	Annotations []map[string]any `json:"annotations,omitempty"`
+	ToolCalls   []ChatToolCall   `json:"tool_calls,omitempty"`
 }
 
 // ChatTool is an OpenAI-format tool definition on a request.
@@ -151,12 +44,13 @@ type ChatToolCallFunction struct {
 
 // ChatCompletionResponse is the OpenAI-compatible chat completion response.
 type ChatCompletionResponse struct {
-	ID      string       `json:"id"`
-	Object  string       `json:"object"`
-	Created int64        `json:"created"`
-	Model   string       `json:"model"`
-	Choices []ChatChoice `json:"choices"`
-	Usage   *ChatUsage   `json:"usage,omitempty"`
+	ID       string         `json:"id"`
+	Object   string         `json:"object"`
+	Created  int64          `json:"created"`
+	Model    string         `json:"model"`
+	Choices  []ChatChoice   `json:"choices"`
+	Usage    *ChatUsage     `json:"usage,omitempty"`
+	Wormhole map[string]any `json:"wormhole,omitempty"`
 }
 
 // ChatChoice is a single choice in a chat completion response.

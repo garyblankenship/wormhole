@@ -12,7 +12,7 @@ import (
 	"github.com/garyblankenship/wormhole/v3/types"
 )
 
-func (p *proxy) streamChat(w http.ResponseWriter, r *http.Request, builder *wormhole.TextRequestBuilder, model string) {
+func (p *proxy) streamChat(w http.ResponseWriter, r *http.Request, builder *wormhole.TextRequestBuilder, model string, extensions ...*WormholeRequest) {
 	flusher, ok := w.(http.Flusher)
 	if !ok {
 		writeError(w, http.StatusInternalServerError, "streaming_unsupported",
@@ -33,6 +33,17 @@ func (p *proxy) streamChat(w http.ResponseWriter, r *http.Request, builder *worm
 	toolState := newStreamToolState()
 	committed := false
 	roleSent := false
+	var extension *WormholeRequest
+	if len(extensions) > 0 {
+		extension = extensions[0]
+	}
+	var metadata *types.ResponseMetadata
+	var usage *types.Usage
+	var sources []types.Source
+	var citations []types.Citation
+	var warnings []types.ResponseWarning
+	terminalSent := false
+	terminalReason := "stop"
 
 	for {
 		var chunk types.TextChunk
@@ -58,7 +69,29 @@ func (p *proxy) streamChat(w http.ResponseWriter, r *http.Request, builder *worm
 			return
 		}
 
+		if chunk.ResponseMetadata != nil {
+			metadata = chunk.ResponseMetadata
+		}
+		if chunk.Usage != nil {
+			usage = chunk.Usage
+		}
+		if chunk.FinishReason != nil {
+			if chunk.Sources != nil {
+				sources = chunk.Sources
+			}
+			if chunk.Citations != nil {
+				citations = chunk.Citations
+			}
+			if chunk.Warnings != nil {
+				warnings = chunk.Warnings
+			}
+		} else {
+			sources = append(sources, chunk.Sources...)
+			citations = append(citations, chunk.Citations...)
+			warnings = append(warnings, chunk.Warnings...)
+		}
 		if !committed {
+			forwardResponseMetadata(w, metadata)
 			w.Header().Set("Content-Type", "text/event-stream")
 			w.Header().Set("Cache-Control", "no-cache")
 			w.Header().Set("Connection", "keep-alive")
@@ -67,7 +100,7 @@ func (p *proxy) streamChat(w http.ResponseWriter, r *http.Request, builder *worm
 			committed = true
 		}
 
-		delta := &ChatMessage{Content: chunk.Content(), Refusal: chunk.Refusal}
+		delta := &ChatMessage{Content: chunk.Content(), Refusal: chunk.Refusal, Annotations: nativeChatAnnotations(chunk.Citations)}
 		if !roleSent {
 			delta.Role = "assistant"
 			roleSent = true
@@ -88,7 +121,11 @@ func (p *proxy) streamChat(w http.ResponseWriter, r *http.Request, builder *worm
 
 		if chunk.FinishReason != nil {
 			fr := string(normalizedFinishReason(*chunk.FinishReason))
-			chunkResp.Choices[0].FinishReason = &fr
+			terminalReason = fr
+			if extension == nil || len(extension.Include) == 0 {
+				chunkResp.Choices[0].FinishReason = &fr
+				terminalSent = true
+			}
 		}
 		if chunk.Usage != nil {
 			chunkResp.Usage = toChatUsage(chunk.Usage)
@@ -118,6 +155,17 @@ finished:
 		flusher.Flush()
 	}
 
+	if !terminalSent && extension != nil && len(extension.Include) > 0 {
+		fr := terminalReason
+		terminal := ChatCompletionResponse{ID: id, Object: "chat.completion.chunk", Created: time.Now().Unix(), Model: model, Choices: []ChatChoice{{Index: 0, Delta: &ChatMessage{}, FinishReason: &fr}}, Wormhole: extensionSnapshot(extension, metadata, usage, sources, citations, warnings)}
+		data, err := json.Marshal(terminal)
+		if err != nil {
+			return
+		}
+		if err := writeChatFrame(w, fmt.Sprintf("data: %s\n\n", data)); err != nil {
+			return
+		}
+	}
 	if err := writeChatFrame(w, "data: [DONE]\n\n"); err != nil {
 		p.logger.Error("failed to write stream terminator", "error", types.SafeErrorValue(err))
 		return

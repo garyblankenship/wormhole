@@ -11,6 +11,9 @@ import (
 func writeUpstreamError(w http.ResponseWriter, err error) {
 	status, errType, clientMsg := upstreamErrorStatus(err)
 	w.Header().Del("Retry-After")
+	if whErr, ok := types.AsWormholeError(err); ok {
+		forwardResponseMetadata(w, whErr.ResponseMetadata)
+	}
 	if whErr, ok := types.AsWormholeError(err); ok && whErr.RetryAfter > 0 {
 		seconds := whErr.RetryAfter / time.Second
 		if whErr.RetryAfter%time.Second != 0 {
@@ -36,6 +39,21 @@ func responseFormatUnsupported(provider string) bool {
 	}
 }
 
+// chatTemplateKwargsUnsupported reports whether the proxy must reject
+// chat_template_kwargs for a provider rather than pass it through. The field is
+// an OpenAI-compatible chat-template extension (vLLM, oMLX, and similar
+// servers): native Anthropic, Gemini, and Ollama routes never read it, so a
+// passthrough would silently ignore the caller's intent. OpenAI and all
+// OpenAI-chat-compatible providers accept it.
+func chatTemplateKwargsUnsupported(provider string) bool {
+	switch provider {
+	case "anthropic", "gemini", "ollama":
+		return true
+	default:
+		return false
+	}
+}
+
 // upstreamErrorStatus maps a provider error to an OpenAI-style HTTP status and
 // error type. When err carries a *types.WormholeError (via errors.As), its
 // StatusCode and Code drive the response so clients can distinguish a 429 rate
@@ -48,7 +66,7 @@ func upstreamErrorStatus(err error) (int, string, string) {
 	}
 
 	errType := wormholeErrorType(whErr.Code)
-	if whErr.StatusCode != 0 {
+	if whErr.StatusCode >= http.StatusBadRequest && whErr.StatusCode <= 599 {
 		return whErr.StatusCode, errType, upstreamClientMessage(errType)
 	}
 	// No upstream status (SDK-internal error). Map by code to the semantically

@@ -75,6 +75,7 @@ func (p *proxy) handleEmbeddings(w http.ResponseWriter, r *http.Request) {
 			TotalTokens:  resp.Usage.TotalTokens,
 		}
 	}
+	forwardResponseMetadata(w, resp.ResponseMetadata)
 	writeJSON(w, http.StatusOK, out)
 }
 
@@ -138,5 +139,6 @@ func (p *proxy) handleRerank(w http.ResponseWriter, r *http.Request) {
 	if resp.Usage != nil {
 		out.Usage = &RerankUsage{TotalTokens: resp.Usage.TotalTokens}
 	}
+	forwardResponseMetadata(w, resp.ResponseMetadata)
 	writeJSON(w, http.StatusOK, out)
 }
