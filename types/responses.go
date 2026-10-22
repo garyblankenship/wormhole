@@ -31,6 +31,8 @@ type Usage struct {
 	// cache (Anthropic cache_creation_input_tokens). Zero for providers that do
 	// not report cache writes.
 	CacheWriteTokens int `json:"cache_write_tokens,omitempty"`
+	// CacheWriteTokensByTTL breaks down CacheWriteTokens by provider duration labels.
+	CacheWriteTokensByTTL map[string]int `json:"cache_write_tokens_by_ttl,omitempty"`
 	// ReasoningTokens is the number of completion tokens spent on chain-of-thought
 	// reasoning (OpenAI o-series reasoning_tokens). Zero for providers/models
 	// that do not report reasoning.
@@ -42,22 +44,26 @@ type Usage struct {
 // OpenAI-compatible proxies emit on a trailing stream chunk.
 func (u Usage) IsZero() bool {
 	return u.PromptTokens == 0 && u.CompletionTokens == 0 && u.TotalTokens == 0 &&
-		u.CacheReadTokens == 0 && u.CacheWriteTokens == 0 && u.ReasoningTokens == 0
+		u.CacheReadTokens == 0 && u.CacheWriteTokens == 0 && u.ReasoningTokens == 0 && len(u.CacheWriteTokensByTTL) == 0
 }
 
 // TextResponse represents a text generation response
 type TextResponse struct {
-	ID           string         `json:"id"`
-	Provider     string         `json:"provider,omitempty"`
-	Model        string         `json:"model"`
-	Text         string         `json:"text"`
-	Refusal      string         `json:"refusal,omitempty"`
-	Thinking     *Thinking      `json:"thinking,omitempty"`
-	ToolCalls    []ToolCall     `json:"tool_calls,omitempty"`
-	FinishReason FinishReason   `json:"finish_reason"`
-	Usage        *Usage         `json:"usage,omitempty"`
-	Created      time.Time      `json:"created"`
-	Metadata     map[string]any `json:"metadata,omitempty"`
+	ResponseMetadata *ResponseMetadata `json:"response_metadata,omitempty"`
+	Warnings         []ResponseWarning `json:"warnings,omitempty"`
+	Sources          []Source          `json:"sources,omitempty"`
+	Citations        []Citation        `json:"citations,omitempty"`
+	ID               string            `json:"id"`
+	Provider         string            `json:"provider,omitempty"`
+	Model            string            `json:"model"`
+	Text             string            `json:"text"`
+	Refusal          string            `json:"refusal,omitempty"`
+	Thinking         *Thinking         `json:"thinking,omitempty"`
+	ToolCalls        []ToolCall        `json:"tool_calls,omitempty"`
+	FinishReason     FinishReason      `json:"finish_reason"`
+	Usage            *Usage            `json:"usage,omitempty"`
+	Created          time.Time         `json:"created"`
+	Metadata         map[string]any    `json:"metadata,omitempty"`
 }
 
 // Content returns the text content of the response.
@@ -84,13 +90,20 @@ func (r *TextResponse) WasTruncated() bool {
 
 // StructuredResponse represents a structured output response
 type StructuredResponse struct {
-	ID       string         `json:"id"`
-	Model    string         `json:"model"`
-	Data     any            `json:"data"`
-	Raw      string         `json:"raw,omitempty"`
-	Usage    *Usage         `json:"usage,omitempty"`
-	Created  time.Time      `json:"created"`
-	Metadata map[string]any `json:"metadata,omitempty"`
+	Provider         string            `json:"provider,omitempty"`
+	FinishReason     FinishReason      `json:"finish_reason,omitempty"`
+	ToolCalls        []ToolCall        `json:"tool_calls,omitempty"`
+	ResponseMetadata *ResponseMetadata `json:"response_metadata,omitempty"`
+	Warnings         []ResponseWarning `json:"warnings,omitempty"`
+	Sources          []Source          `json:"sources,omitempty"`
+	Citations        []Citation        `json:"citations,omitempty"`
+	ID               string            `json:"id"`
+	Model            string            `json:"model"`
+	Data             any               `json:"data"`
+	Raw              string            `json:"raw,omitempty"`
+	Usage            *Usage            `json:"usage,omitempty"`
+	Created          time.Time         `json:"created"`
+	Metadata         map[string]any    `json:"metadata,omitempty"`
 }
 
 // Content returns the parsed data from the response.
@@ -110,6 +123,9 @@ func (r *StructuredResponse) Content() any {
 //	    log.Fatal(err)
 //	}
 func (r *StructuredResponse) ContentAs(target any) error {
+	if len(r.ToolCalls) > 0 {
+		return &ToolCallsRequiredError{Response: CloneStructuredResponse(r)}
+	}
 	// Fast path: if Data is already the target type
 	if r.Data == nil {
 		return nil
@@ -129,18 +145,23 @@ type StreamChunk = TextChunk
 
 // TextChunk represents a streaming text response chunk
 type TextChunk struct {
-	ID           string        `json:"id,omitempty"`
-	Provider     string        `json:"provider,omitempty"`
-	Model        string        `json:"model,omitempty"`
-	Text         string        `json:"text,omitempty"`
-	Refusal      string        `json:"refusal,omitempty"`
-	Thinking     *Thinking     `json:"thinking,omitempty"`
-	Delta        *ChunkDelta   `json:"delta,omitempty"` // For OpenAI compatibility
-	ToolCall     *ToolCall     `json:"tool_call,omitempty"`
-	ToolCalls    []ToolCall    `json:"tool_calls,omitempty"` // For multi-tool calls
-	FinishReason *FinishReason `json:"finish_reason,omitempty"`
-	Usage        *Usage        `json:"usage,omitempty"`
-	Error        error         `json:"-"`
+	Metadata         map[string]any    `json:"metadata,omitempty"`
+	ResponseMetadata *ResponseMetadata `json:"response_metadata,omitempty"`
+	Warnings         []ResponseWarning `json:"warnings,omitempty"`
+	Sources          []Source          `json:"sources,omitempty"`
+	Citations        []Citation        `json:"citations,omitempty"`
+	ID               string            `json:"id,omitempty"`
+	Provider         string            `json:"provider,omitempty"`
+	Model            string            `json:"model,omitempty"`
+	Text             string            `json:"text,omitempty"`
+	Refusal          string            `json:"refusal,omitempty"`
+	Thinking         *Thinking         `json:"thinking,omitempty"`
+	Delta            *ChunkDelta       `json:"delta,omitempty"` // For OpenAI compatibility
+	ToolCall         *ToolCall         `json:"tool_call,omitempty"`
+	ToolCalls        []ToolCall        `json:"tool_calls,omitempty"` // For multi-tool calls
+	FinishReason     *FinishReason     `json:"finish_reason,omitempty"`
+	Usage            *Usage            `json:"usage,omitempty"`
+	Error            error             `json:"-"`
 }
 
 // Content returns the text content of the chunk.

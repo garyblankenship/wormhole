@@ -30,8 +30,13 @@ func TestCloneTextChunk(t *testing.T) {
 	t.Parallel()
 	reason := FinishReasonStop
 	failure := errors.New("fixture")
-	source := TextChunk{FinishReason: &reason, Error: failure, Usage: &Usage{PromptTokens: 4},
-		Thinking: &Thinking{Content: "original"}, ToolCall: &ToolCall{Arguments: map[string]any{"value": "original"}},
+	source := TextChunk{FinishReason: &reason, Error: failure, Usage: &Usage{PromptTokens: 4, CacheWriteTokensByTTL: map[string]int{"5m": 4}},
+		Metadata:         map[string]any{"native": []string{"original"}},
+		ResponseMetadata: &ResponseMetadata{Headers: map[string][]string{"Request-Id": {"original"}}},
+		Sources:          []Source{{ID: "source", Raw: map[string]any{"title": "original"}}},
+		Citations:        []Citation{{SourceID: "source", OutputRange: &TextRange{End: 1}}},
+		Warnings:         []ResponseWarning{{Code: WarningMalformedCitation}},
+		Thinking:         &Thinking{Content: "original"}, ToolCall: &ToolCall{Arguments: map[string]any{"value": "original"}},
 		ToolCalls: []ToolCall{{Function: &ToolCallFunction{Name: "original"}}},
 		Delta:     &ChunkDelta{Thinking: &Thinking{Content: "original"}, ToolCalls: []ToolCall{{Arguments: map[string]any{"value": "original"}}}}}
 	copy := CloneTextChunk(source)
@@ -42,6 +47,18 @@ func TestCloneTextChunk(t *testing.T) {
 	copy.ToolCalls[0].Function.Name = "changed"
 	copy.Delta.Thinking.Content = "changed"
 	copy.Delta.ToolCalls[0].Arguments["value"] = "changed"
+	copy.Usage.CacheWriteTokensByTTL["5m"] = 99
+	copy.Metadata["native"].([]string)[0] = "changed"
+	copy.ResponseMetadata.Headers["Request-Id"][0] = "changed"
+	copy.Sources[0].Raw["title"] = "changed"
+	copy.Citations[0].OutputRange.End = 99
+	copy.Warnings[0].Code = "changed"
+	require.Equal(t, 4, source.Usage.CacheWriteTokensByTTL["5m"])
+	require.Equal(t, "original", source.Metadata["native"].([]string)[0])
+	require.Equal(t, "original", source.ResponseMetadata.Headers["Request-Id"][0])
+	require.Equal(t, "original", source.Sources[0].Raw["title"])
+	require.Equal(t, 1, source.Citations[0].OutputRange.End)
+	require.Equal(t, WarningMalformedCitation, source.Warnings[0].Code)
 	require.Equal(t, FinishReasonStop, reason)
 	require.Equal(t, 4, source.Usage.PromptTokens)
 	require.Equal(t, "original", source.Thinking.Content)

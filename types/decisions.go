@@ -50,11 +50,12 @@ type DecisionUsage struct {
 
 // DecisionsResponse contains typed answers keyed by the requested question names.
 type DecisionsResponse struct {
-	ID       string                    `json:"id"`
-	Model    string                    `json:"model"`
-	Provider string                    `json:"provider,omitempty"`
-	Answers  map[string]DecisionAnswer `json:"answers"`
-	Usage    DecisionUsage             `json:"usage"`
+	ResponseMetadata *ResponseMetadata         `json:"response_metadata,omitempty"`
+	ID               string                    `json:"id"`
+	Model            string                    `json:"model"`
+	Provider         string                    `json:"provider,omitempty"`
+	Answers          map[string]DecisionAnswer `json:"answers"`
+	Usage            DecisionUsage             `json:"usage"`
 }
 
 // DecisionsProvider is an optional capability. It does not change Provider or

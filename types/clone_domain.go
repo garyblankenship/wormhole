@@ -81,6 +81,12 @@ func CloneModelInfo(src *ModelInfo) *ModelInfo {
 // CloneMedia returns a detached copy of supported media values.
 func CloneMedia(src Media) Media {
 	switch media := src.(type) {
+	case *FileReferenceMedia:
+		if media == nil {
+			return (*FileReferenceMedia)(nil)
+		}
+		dst := *media
+		return &dst
 	case *ImageMedia:
 		if media == nil {
 			return (*ImageMedia)(nil)

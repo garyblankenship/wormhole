@@ -14,9 +14,10 @@ func (e WormholeProviderError) Error() string {
 
 // OCRResponse represents an OCR (Optical Character Recognition) response
 type OCRResponse struct {
-	ID       string         `json:"id"`
-	Model    string         `json:"model"`
-	Text     string         `json:"text"`
-	Created  int64          `json:"created"`
-	Metadata map[string]any `json:"metadata,omitempty"`
+	ResponseMetadata *ResponseMetadata `json:"response_metadata,omitempty"`
+	ID               string            `json:"id"`
+	Model            string            `json:"model"`
+	Text             string            `json:"text"`
+	Created          int64             `json:"created"`
+	Metadata         map[string]any    `json:"metadata,omitempty"`
 }

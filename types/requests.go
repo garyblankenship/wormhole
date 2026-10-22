@@ -25,9 +25,10 @@ func (b BaseRequest) GetProviderOptions() map[string]any {
 // Reasoning describes provider-neutral reasoning controls for models that
 // expose thinking, effort, or token-budget controls.
 type Reasoning struct {
-	Effort    ReasoningEffort `json:"effort,omitempty"`
-	MaxTokens int             `json:"max_tokens,omitempty"`
-	Enabled   *bool           `json:"enabled,omitempty"`
+	Effort          ReasoningEffort `json:"effort,omitempty"`
+	MaxTokens       int             `json:"max_tokens,omitempty"`
+	Enabled         *bool           `json:"enabled,omitempty"`
+	IncludeThoughts *bool           `json:"include_thoughts,omitempty"`
 }
 
 // ReasoningEffort is a provider-neutral effort hint.
@@ -58,6 +59,8 @@ type StructuredRequest struct {
 	Schema       Schema         `json:"schema"`
 	SchemaName   string         `json:"schema_name,omitempty"`
 	Mode         StructuredMode `json:"mode,omitempty"`
+	Tools        []Tool         `json:"tools,omitempty"`
+	ToolChoice   *ToolChoice    `json:"tool_choice,omitempty"`
 }
 
 // StructuredMode defines how structured output is generated

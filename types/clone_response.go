@@ -10,7 +10,11 @@ func CloneTextResponse(src *TextResponse) *TextResponse {
 	dst.ToolCalls = CloneToolCalls(src.ToolCalls)
 	dst.Metadata = CloneMap(src.Metadata)
 	dst.Thinking = cloneThinking(src.Thinking)
-	dst.Usage = cloneUsage(src.Usage)
+	dst.Usage = CloneUsage(src.Usage)
+	dst.ResponseMetadata = CloneResponseMetadata(src.ResponseMetadata)
+	dst.Sources = CloneSources(src.Sources)
+	dst.Citations = CloneCitations(src.Citations)
+	dst.Warnings = CloneWarnings(src.Warnings)
 	return &dst
 }
 
@@ -23,7 +27,12 @@ func CloneTextChunk(src TextChunk) TextChunk {
 		dst.ToolCall = &call
 	}
 	dst.Thinking = cloneThinking(src.Thinking)
-	dst.Usage = cloneUsage(src.Usage)
+	dst.Usage = CloneUsage(src.Usage)
+	dst.Metadata = CloneMap(src.Metadata)
+	dst.ResponseMetadata = CloneResponseMetadata(src.ResponseMetadata)
+	dst.Sources = CloneSources(src.Sources)
+	dst.Citations = CloneCitations(src.Citations)
+	dst.Warnings = CloneWarnings(src.Warnings)
 	if src.FinishReason != nil {
 		reason := *src.FinishReason
 		dst.FinishReason = &reason
@@ -38,14 +47,6 @@ func CloneTextChunk(src TextChunk) TextChunk {
 }
 
 func cloneThinking(src *Thinking) *Thinking {
-	if src == nil {
-		return nil
-	}
-	dst := *src
-	return &dst
-}
-
-func cloneUsage(src *Usage) *Usage {
 	if src == nil {
 		return nil
 	}

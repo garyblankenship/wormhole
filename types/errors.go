@@ -69,15 +69,16 @@ var (
 
 // WormholeError provides structured error information
 type WormholeError struct {
-	Code       ErrorCode     `json:"code"`
-	Message    string        `json:"message"`
-	Retryable  bool          `json:"retryable"`
-	StatusCode int           `json:"status_code,omitempty"`
-	Provider   string        `json:"provider,omitempty"`
-	Model      string        `json:"model,omitempty"`
-	Details    string        `json:"details,omitempty"`
-	Cause      error         `json:"-"`
-	RetryAfter time.Duration `json:"retry_after,omitempty"`
+	ResponseMetadata *ResponseMetadata `json:"response_metadata,omitempty"`
+	Code             ErrorCode         `json:"code"`
+	Message          string            `json:"message"`
+	Retryable        bool              `json:"retryable"`
+	StatusCode       int               `json:"status_code,omitempty"`
+	Provider         string            `json:"provider,omitempty"`
+	Model            string            `json:"model,omitempty"`
+	Details          string            `json:"details,omitempty"`
+	Cause            error             `json:"-"`
+	RetryAfter       time.Duration     `json:"retry_after,omitempty"`
 }
 
 const maxSafeErrorFieldLength = 512
@@ -196,6 +197,7 @@ func (e *WormholeError) IsRetryable() bool {
 // WithProvider adds provider context to the error
 func (e *WormholeError) WithProvider(provider string) *WormholeError {
 	newErr := *e
+	newErr.ResponseMetadata = CloneResponseMetadata(e.ResponseMetadata)
 	newErr.Provider = provider
 	return &newErr
 }
@@ -203,6 +205,7 @@ func (e *WormholeError) WithProvider(provider string) *WormholeError {
 // WithModel adds model context to the error
 func (e *WormholeError) WithModel(model string) *WormholeError {
 	newErr := *e
+	newErr.ResponseMetadata = CloneResponseMetadata(e.ResponseMetadata)
 	newErr.Model = model
 	return &newErr
 }
@@ -210,6 +213,7 @@ func (e *WormholeError) WithModel(model string) *WormholeError {
 // WithDetails adds additional details to the error
 func (e *WormholeError) WithDetails(details string) *WormholeError {
 	newErr := *e
+	newErr.ResponseMetadata = CloneResponseMetadata(e.ResponseMetadata)
 	newErr.Details = details
 	return &newErr
 }
@@ -217,6 +221,7 @@ func (e *WormholeError) WithDetails(details string) *WormholeError {
 // WithStatusCode adds HTTP status code to the error
 func (e *WormholeError) WithStatusCode(code int) *WormholeError {
 	newErr := *e
+	newErr.ResponseMetadata = CloneResponseMetadata(e.ResponseMetadata)
 	newErr.StatusCode = code
 	return &newErr
 }
@@ -224,6 +229,7 @@ func (e *WormholeError) WithStatusCode(code int) *WormholeError {
 // WithCause adds the underlying cause
 func (e *WormholeError) WithCause(cause error) *WormholeError {
 	newErr := *e
+	newErr.ResponseMetadata = CloneResponseMetadata(e.ResponseMetadata)
 	newErr.Cause = cause
 	return &newErr
 }
@@ -231,6 +237,7 @@ func (e *WormholeError) WithCause(cause error) *WormholeError {
 // WithRetryAfter sets a normalized provider-supplied retry delay on the error.
 func (e *WormholeError) WithRetryAfter(d time.Duration) *WormholeError {
 	newErr := *e
+	newErr.ResponseMetadata = CloneResponseMetadata(e.ResponseMetadata)
 	newErr.RetryAfter = d
 	return &newErr
 }
@@ -247,6 +254,7 @@ func (e *WormholeError) WithRetryAfter(d time.Duration) *WormholeError {
 // Results in: "REQUEST_ERROR: invalid request parameters (TextRequestBuilder.Generate: no messages provided)"
 func (e *WormholeError) WithOperation(operation string) *WormholeError {
 	newErr := *e
+	newErr.ResponseMetadata = CloneResponseMetadata(e.ResponseMetadata)
 	if newErr.Details != "" {
 		newErr.Details = operation + ": " + newErr.Details
 	} else {
@@ -266,10 +274,15 @@ func NewWormholeError(code ErrorCode, message string, retryable bool) *WormholeE
 
 // WrapError wraps an existing error with Wormhole error context
 func WrapError(code ErrorCode, message string, retryable bool, cause error) *WormholeError {
+	var metadata *ResponseMetadata
+	if upstream, ok := AsWormholeError(cause); ok {
+		metadata = CloneResponseMetadata(upstream.ResponseMetadata)
+	}
 	return &WormholeError{
-		Code:      code,
-		Message:   message,
-		Retryable: retryable,
-		Cause:     cause,
+		ResponseMetadata: metadata,
+		Code:             code,
+		Message:          message,
+		Retryable:        retryable,
+		Cause:            cause,
 	}
 }

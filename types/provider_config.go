@@ -6,14 +6,16 @@ import (
 
 // ProviderConfig holds provider configuration
 type ProviderConfig struct {
-	APIKey        string            `json:"api_key"`
-	BaseURL       string            `json:"base_url,omitempty"`
-	Headers       map[string]string `json:"headers,omitempty"`
-	NoAuth        bool              `json:"no_auth,omitempty"`
-	Timeout       int               `json:"timeout,omitempty"`
-	HTTPTimeout   *time.Duration    `json:"-"`                        // precise transport request timeout; nil means use defaults
-	DynamicModels bool              `json:"dynamic_models,omitempty"` // Skip local registry validation for providers with dynamic model catalogs
-	Params        map[string]any    `json:"params,omitempty"`         // Provider-specific parameters for customization
+	// ResponseHeaderNames adds safe response headers to SDK-visible metadata.
+	ResponseHeaderNames []string          `json:"response_header_names,omitempty"`
+	APIKey              string            `json:"api_key"`
+	BaseURL             string            `json:"base_url,omitempty"`
+	Headers             map[string]string `json:"headers,omitempty"`
+	NoAuth              bool              `json:"no_auth,omitempty"`
+	Timeout             int               `json:"timeout,omitempty"`
+	HTTPTimeout         *time.Duration    `json:"-"`                        // precise transport request timeout; nil means use defaults
+	DynamicModels       bool              `json:"dynamic_models,omitempty"` // Skip local registry validation for providers with dynamic model catalogs
+	Params              map[string]any    `json:"params,omitempty"`         // Provider-specific parameters for customization
 
 	DefaultProviderOptions map[string]any            `json:"default_provider_options,omitempty"`
 	ProviderOptionsByModel map[string]map[string]any `json:"provider_options_by_model,omitempty"`
