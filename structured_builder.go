@@ -94,6 +94,18 @@ func (b *StructuredRequestBuilder) Mode(mode types.StructuredMode) *StructuredRe
 	return b
 }
 
+// Tools sets application tools without enabling automatic execution.
+func (b *StructuredRequestBuilder) Tools(tools ...types.Tool) *StructuredRequestBuilder {
+	b.request.Tools = types.CloneTools(tools)
+	return b
+}
+
+// ToolChoice selects application tools, or the final result when set to none.
+func (b *StructuredRequestBuilder) ToolChoice(choice types.ToolChoice) *StructuredRequestBuilder {
+	b.request.ToolChoice = &choice
+	return b
+}
+
 // Temperature sets the temperature
 func (b *StructuredRequestBuilder) Temperature(temp float32) *StructuredRequestBuilder {
 	b.request.Temperature = &temp
@@ -118,6 +130,10 @@ func (b *StructuredRequestBuilder) Reasoning(reasoning types.Reasoning) *Structu
 	if reasoning.Enabled != nil {
 		enabled := *reasoning.Enabled
 		reasoning.Enabled = &enabled
+	}
+	if reasoning.IncludeThoughts != nil {
+		include := *reasoning.IncludeThoughts
+		reasoning.IncludeThoughts = &include
 	}
 	b.request.Reasoning = &reasoning
 	return b
@@ -153,6 +169,11 @@ func (b *StructuredRequestBuilder) Generate(ctx context.Context) (*types.Structu
 
 	return executeTrackedRequest(ctx, b.getWormhole(), b.idempotencyScope("structured.generate"), request, func(ctx context.Context) (*types.StructuredResponse, error) {
 		return executeProviderOperation(ctx, &b.CommonBuilder, "structured", func(ctx context.Context, provider types.Provider) (*types.StructuredResponse, error) {
+			if err := b.getWormhole().validateFileOwnership(request.Messages, provider.Name()); err != nil {
+				return nil, err
+			}
+			original, _ := b.getWormhole().resolveProviderName(b.getProvider())
+			request.Messages = prepareAttemptMessages(request.Messages, original, provider.Name())
 			if b.getWormhole().providerMiddleware != nil {
 				handler := b.getWormhole().providerMiddleware.ApplyStructured(provider.Structured)
 				return handler(ctx, *request)
@@ -168,6 +189,10 @@ func (b *StructuredRequestBuilder) GenerateAs(ctx context.Context, result any) e
 	response, err := b.Generate(ctx)
 	if err != nil {
 		return err
+	}
+
+	if len(response.ToolCalls) > 0 {
+		return &types.ToolCallsRequiredError{Response: response}
 	}
 
 	// Marshal the response data to JSON then unmarshal into the result
@@ -253,6 +278,11 @@ func cloneStructuredRequest(src *types.StructuredRequest) *types.StructuredReque
 	cloneBaseRequestFields(&cloned.BaseRequest, &src.BaseRequest)
 	cloned.Messages = types.CloneMessages(src.Messages)
 	cloned.Schema = types.CloneSchema(src.Schema)
+	cloned.Tools = types.CloneTools(src.Tools)
+	if src.ToolChoice != nil {
+		choice := *src.ToolChoice
+		cloned.ToolChoice = &choice
+	}
 
 	return cloned
 }

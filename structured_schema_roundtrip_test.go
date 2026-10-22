@@ -60,7 +60,7 @@ func TestStructuredBuilderSchemaRoundTrip(t *testing.T) {
 					}
 					wireSchema = request.Tools[0].Function.Parameters
 					toolName = request.Tools[0].Function.Name
-					if toolName != "structured_output" || request.ToolChoice.Function.Name != toolName {
+					if toolName != "__wormhole_structured_output" || request.ToolChoice.Function.Name != toolName {
 						t.Errorf("tool name = %q, choice = %q", toolName, request.ToolChoice.Function.Name)
 					}
 				} else if mode == types.StructuredModeStrict {

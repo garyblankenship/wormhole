@@ -12,8 +12,10 @@ import (
 // and the delivered chunks. Interrupted streams return their partial response
 // and error. Finish markers do not discard trailing usage or errors.
 //
-// Collection retains fields present in TextChunk; Created and Metadata cannot be
-// reconstructed. Thinking uses the existing scalar representation, so distinct
+// Collection retains fields present in TextChunk, including metadata and citation
+// snapshots; Created cannot be reconstructed. Native metadata is merged by key,
+// with later values replacing earlier values. Terminal reference snapshots replace
+// prior additions. Thinking uses the existing scalar representation, so distinct
 // block boundaries and multiple signatures cannot be retained.
 func (b *TextRequestBuilder) StreamAndCollect(ctx context.Context) (<-chan types.StreamChunk, func() (*types.TextResponse, error), error) {
 	streamCtx, cancel := context.WithCancel(ctx)

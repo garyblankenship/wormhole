@@ -19,6 +19,7 @@ func (p *Wormhole) configuredProviderConfig(name string) (types.ProviderConfig, 
 
 func cloneProviderConfig(config types.ProviderConfig) types.ProviderConfig {
 	cloned := config
+	cloned.ResponseHeaderNames = append([]string(nil), config.ResponseHeaderNames...)
 	if len(config.Headers) > 0 {
 		cloned.Headers = make(map[string]string, len(config.Headers))
 		maps.Copy(cloned.Headers, config.Headers)

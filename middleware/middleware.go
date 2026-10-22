@@ -9,6 +9,9 @@ const (
 	// CtxKeyProvider identifies the LLM provider (e.g. "openai", "anthropic").
 	CtxKeyProvider contextKey = "provider"
 
+	// CtxKeyBaseURLOverride identifies the explicit endpoint override for caching.
+	CtxKeyBaseURLOverride contextKey = "base_url_override"
+
 	// CtxKeyModel identifies the model being used.
 	CtxKeyModel contextKey = "model"
 

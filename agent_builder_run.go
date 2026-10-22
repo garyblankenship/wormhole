@@ -68,7 +68,7 @@ func (b *AgentBuilder) Run(ctx context.Context, prompt string) (*AgentResult, er
 	executor := b.wormhole.newToolExecutor(mergedRegistry)
 
 	var steps []StepEvent
-	ctx = contextWithProviderOperation(ctx, provider, "agent")
+	ctx = contextWithProviderOperation(ctx, provider, "agent", "")
 	handler := provider.Text
 	if b.wormhole.providerMiddleware != nil {
 		handler = b.wormhole.providerMiddleware.ApplyText(handler)

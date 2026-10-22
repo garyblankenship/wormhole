@@ -2,6 +2,7 @@ package middleware
 
 import (
 	"context"
+	"crypto/sha256"
 	"fmt"
 
 	"github.com/garyblankenship/wormhole/v3/types"
@@ -22,12 +23,16 @@ func NewTypedCacheMiddleware(config CacheConfig) *TypedCacheMiddleware {
 }
 
 func typedCache[Req any, Resp any](m *TypedCacheMiddleware, operation string, ctx context.Context, request Req, next func(context.Context, Req) (Resp, error)) (Resp, error) {
-	if m.config.Cache == nil || (m.config.CacheableFunc != nil && !m.config.CacheableFunc(request)) {
+	if types.IsCachePrewarm(request) || m.config.Cache == nil || (m.config.CacheableFunc != nil && !m.config.CacheableFunc(request)) {
 		return next(ctx, request)
 	}
 	key, err := m.config.KeyGenerator(request)
 	if err != nil {
 		return next(ctx, request)
+	}
+	if endpoint, _ := ctx.Value(CtxKeyBaseURLOverride).(string); endpoint != "" {
+		// Hash endpoint data rather than retaining credentials or query strings in keys.
+		key = fmt.Sprintf("endpoint:%x:%s", sha256.Sum256([]byte(endpoint)), key)
 	}
 	key = fmt.Sprintf("%s:%s:%s", operation, providerIdentity(ctx), key)
 	if cached, ok := m.config.Cache.Get(key); ok {

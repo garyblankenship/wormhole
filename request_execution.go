@@ -44,7 +44,7 @@ func executeTrackedRequest[T any](ctx context.Context, p *Wormhole, operation st
 	}
 	defer p.untrackRequest()
 
-	if !p.hasIdempotency() {
+	if !p.hasIdempotency() || types.IsCachePrewarm(request) {
 		return fn(ctx)
 	}
 

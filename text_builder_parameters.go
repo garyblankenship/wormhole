@@ -78,6 +78,10 @@ func (b *TextRequestBuilder) ParallelToolCalls(enabled bool) *TextRequestBuilder
 // thinking or effort parameters. ProviderOptions can still override provider
 // wire fields for advanced use.
 func (b *TextRequestBuilder) Reasoning(reasoning types.Reasoning) *TextRequestBuilder {
+	if reasoning.IncludeThoughts != nil {
+		include := *reasoning.IncludeThoughts
+		reasoning.IncludeThoughts = &include
+	}
 	b.request.Reasoning = &reasoning
 	return b
 }

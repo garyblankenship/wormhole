@@ -89,7 +89,7 @@ func executeProviderOperation[T any](
 	}
 	defer release()
 
-	return invoke(contextWithProviderOperation(ctx, provider, operation), provider)
+	return invoke(contextWithProviderOperation(ctx, provider, operation, builder.getBaseURL()), provider)
 }
 
 func (cb *CommonBuilder) idempotencyScope(operation string) string {
@@ -131,6 +131,10 @@ func cloneBaseRequestFields(dst, src *types.BaseRequest) {
 	}
 	if src.Reasoning != nil {
 		reasoning := *src.Reasoning
+		if src.Reasoning.IncludeThoughts != nil {
+			include := *src.Reasoning.IncludeThoughts
+			reasoning.IncludeThoughts = &include
+		}
 		if src.Reasoning.Enabled != nil {
 			enabled := *src.Reasoning.Enabled
 			reasoning.Enabled = &enabled

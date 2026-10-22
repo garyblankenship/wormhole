@@ -4,6 +4,7 @@ import (
 	"context"
 	"sync"
 
+	"github.com/garyblankenship/wormhole/v3/internal/structured"
 	"github.com/garyblankenship/wormhole/v3/types"
 )
 
@@ -187,8 +188,18 @@ func (b *TextRequestBuilder) Generate(ctx context.Context) (*types.TextResponse,
 func (b *TextRequestBuilder) executeGenerate(ctx context.Context, provider types.Provider, request *types.TextRequest) (*types.TextResponse, error) {
 	// Check if we should enable automatic tool execution
 	wormhole := b.getWormhole()
-	ctx = contextWithProviderOperation(ctx, provider, "text")
-	shouldAutoExecuteTools := b.shouldAutoExecuteTools(wormhole)
+	if err := wormhole.validateFileOwnership(request.Messages, provider.Name()); err != nil {
+		return nil, err
+	}
+	original, _ := wormhole.resolveProviderName(b.getProvider())
+	request.Messages = prepareAttemptMessages(request.Messages, original, provider.Name())
+	ctx = contextWithProviderOperation(ctx, provider, "text", b.getBaseURL())
+	adapted, schema, err := structured.PrepareText(*request)
+	if err != nil {
+		return nil, err
+	}
+	request = &adapted
+	shouldAutoExecuteTools := b.shouldAutoExecuteTools(wormhole) && schema == nil
 	handler := types.TextHandler(provider.Text)
 	if wormhole.providerMiddleware != nil {
 		handler = wormhole.providerMiddleware.ApplyText(handler)
@@ -206,7 +217,11 @@ func (b *TextRequestBuilder) executeGenerate(ctx context.Context, provider types
 	}
 
 	// Standard execution without automatic tool handling
-	return handler(ctx, *request)
+	response, err := handler(ctx, *request)
+	if err != nil || schema == nil {
+		return response, err
+	}
+	return structured.FinishTools(schema, response)
 }
 
 // shouldAutoExecuteTools determines if automatic tool execution should be enabled

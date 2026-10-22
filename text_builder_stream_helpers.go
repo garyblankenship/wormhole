@@ -5,14 +5,25 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/garyblankenship/wormhole/v3/internal/structured"
 	"github.com/garyblankenship/wormhole/v3/types"
 )
 
 func (b *TextRequestBuilder) openStream(ctx context.Context, cancel context.CancelFunc, provider types.Provider, request *types.TextRequest) (<-chan types.StreamChunk, error) {
+	if err := b.getWormhole().validateFileOwnership(request.Messages, provider.Name()); err != nil {
+		return nil, err
+	}
+	original, _ := b.getWormhole().resolveProviderName(b.getProvider())
+	request.Messages = prepareAttemptMessages(request.Messages, original, provider.Name())
+	adapted, schema, adaptErr := structured.PrepareText(*request)
+	if adaptErr != nil {
+		return nil, adaptErr
+	}
+	request = &adapted
 	var stream <-chan types.StreamChunk
 	var err error
 
-	ctx = contextWithProviderOperation(ctx, provider, "stream")
+	ctx = contextWithProviderOperation(ctx, provider, "stream", b.getBaseURL())
 	if b.getWormhole().providerMiddleware != nil {
 		handler := b.getWormhole().providerMiddleware.ApplyStream(provider.Stream)
 		stream, err = handler(ctx, *request)
@@ -23,6 +34,9 @@ func (b *TextRequestBuilder) openStream(ctx context.Context, cancel context.Canc
 		return nil, err
 	}
 
+	if schema != nil {
+		stream = structured.StreamTools(ctx, schema, stream)
+	}
 	// Apply per-chunk idle timeout if configured.
 	if timeout := b.getWormhole().config.StreamIdleTimeout; timeout > 0 {
 		stream = applyStreamIdleTimeout(ctx, cancel, stream, timeout)

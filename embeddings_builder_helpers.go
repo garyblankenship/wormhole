@@ -72,10 +72,11 @@ func cloneEmbeddingsResponseHeader(src *types.EmbeddingsResponse) *types.Embeddi
 		return nil
 	}
 	cloned := &types.EmbeddingsResponse{
-		ID:       src.ID,
-		Provider: src.Provider,
-		Model:    src.Model,
-		Created:  src.Created,
+		ResponseMetadata: types.CloneResponseMetadata(src.ResponseMetadata),
+		ID:               src.ID,
+		Provider:         src.Provider,
+		Model:            src.Model,
+		Created:          src.Created,
 	}
 	if len(src.Metadata) > 0 {
 		cloned.Metadata = make(map[string]any, len(src.Metadata))

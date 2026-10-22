@@ -34,7 +34,38 @@ func (c *textResponseCollector) add(chunk types.TextChunk) {
 		c.response.FinishReason = *chunk.FinishReason
 	}
 	c.addUsage(chunk.Usage)
+	c.addFidelity(chunk)
 	c.addTools(chunk)
+}
+
+func (c *textResponseCollector) addFidelity(chunk types.TextChunk) {
+	if chunk.ResponseMetadata != nil {
+		c.response.ResponseMetadata = types.CloneResponseMetadata(chunk.ResponseMetadata)
+	}
+	if chunk.Metadata != nil {
+		if c.response.Metadata == nil {
+			c.response.Metadata = make(map[string]any)
+		}
+		for key, value := range chunk.Metadata {
+			c.response.Metadata[key] = types.CloneValue(value)
+		}
+	}
+	if chunk.IsDone() {
+		// Terminal reference snapshots replace additions already collected.
+		if chunk.Sources != nil {
+			c.response.Sources = types.CloneSources(chunk.Sources)
+		}
+		if chunk.Citations != nil {
+			c.response.Citations = types.CloneCitations(chunk.Citations)
+		}
+		if chunk.Warnings != nil {
+			c.response.Warnings = types.CloneWarnings(chunk.Warnings)
+		}
+		return
+	}
+	c.response.Sources = append(c.response.Sources, types.CloneSources(chunk.Sources)...)
+	c.response.Citations = append(c.response.Citations, types.CloneCitations(chunk.Citations)...)
+	c.response.Warnings = append(c.response.Warnings, types.CloneWarnings(chunk.Warnings)...)
 }
 
 func (c *textResponseCollector) addThinking(thinking *types.Thinking) {
@@ -67,4 +98,12 @@ func (c *textResponseCollector) addUsage(usage *types.Usage) {
 	current.CacheReadTokens = max(current.CacheReadTokens, usage.CacheReadTokens)
 	current.CacheWriteTokens = max(current.CacheWriteTokens, usage.CacheWriteTokens)
 	current.ReasoningTokens = max(current.ReasoningTokens, usage.ReasoningTokens)
+	if usage.CacheWriteTokensByTTL != nil {
+		if current.CacheWriteTokensByTTL == nil {
+			current.CacheWriteTokensByTTL = make(map[string]int)
+		}
+		for ttl, tokens := range usage.CacheWriteTokensByTTL {
+			current.CacheWriteTokensByTTL[ttl] = max(current.CacheWriteTokensByTTL[ttl], tokens)
+		}
+	}
 }
