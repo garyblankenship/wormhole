@@ -21,6 +21,16 @@ type OpenAICompatibleSmokeConfig struct {
 	ProviderOptions map[string]any
 	CheckStreaming  bool
 	CheckEmbeddings bool
+
+	// ValidateResponse optionally validates the parsed chat response after
+	// the transport-level chat check passes. It receives the same parsed
+	// *types.TextResponse the smoke inspects and reports semantic failures
+	// (JSON shape, domain rules) as an error. The smoke records it as a
+	// separate "response_validation" check, wraps its error so
+	// errors.Is matches the callback's error, and skips the optional
+	// streaming and embeddings probes when it fails. No default validator
+	// is installed; nil keeps the historical behavior exactly.
+	ValidateResponse func(*types.TextResponse) error
 }
 
 // OpenAICompatibleSmokeResult contains the parsed response and endpoint facts
@@ -30,6 +40,25 @@ type OpenAICompatibleSmokeResult struct {
 	Model   string
 	Text    string
 	Checks  []OpenAICompatibleSmokeCheck
+
+	// RequestedModel is the model the smoke asked for. Model above stays
+	// the requested-model compatibility field for existing callers.
+	RequestedModel string
+	// ReportedModel is the model identity parsed from the chat response
+	// body. It is diagnostic only: an upstream alias or mismatch never
+	// fails a check. When the upstream body omits the model field, the
+	// OpenAI-compatible provider backfills the requested model, so a
+	// missing upstream identity is reported as the requested model and
+	// cannot be distinguished from an exact echo by this smoke.
+	ReportedModel string
+	// FinishReason is the parsed stop reason from the chat response.
+	FinishReason types.FinishReason
+	// Usage carries SDK-parsed token accounting. The adapter supplies a
+	// zero-valued Usage when upstream usage is absent, so a nonnil value
+	// is not proof that the upstream reported accounting.
+	Usage *types.Usage
+	// Thinking carries the parsed reasoning block, or nil when absent.
+	Thinking *types.Thinking
 }
 
 // OpenAICompatibleSmokeCheck describes one protocol surface checked by
@@ -74,8 +103,9 @@ func RunOpenAICompatibleSmoke(ctx context.Context, cfg OpenAICompatibleSmokeConf
 	defer func() { _ = client.Close() }()
 
 	result := &OpenAICompatibleSmokeResult{
-		BaseURL: cfg.BaseURL,
-		Model:   cfg.Model,
+		BaseURL:        cfg.BaseURL,
+		Model:          cfg.Model,
+		RequestedModel: cfg.Model,
 	}
 
 	resp, err := client.Text().
@@ -93,7 +123,22 @@ func RunOpenAICompatibleSmoke(ctx context.Context, cfg OpenAICompatibleSmokeConf
 		return result, fmt.Errorf("openai-compatible smoke chat failed for %s model %q: %w", cfg.BaseURL, cfg.Model, err)
 	}
 	result.Text = resp.Text
+	result.ReportedModel = resp.Model
+	result.FinishReason = resp.FinishReason
+	result.Usage = resp.Usage
+	result.Thinking = resp.Thinking
 	result.addCheck("chat", nil)
+
+	// Caller-defined semantic validation stays distinct from the transport
+	// chat check above: protocol parsing and nonempty text have already
+	// passed, and the diagnostics above survive a validation failure.
+	if cfg.ValidateResponse != nil {
+		if err := cfg.ValidateResponse(resp); err != nil {
+			result.addCheck("response_validation", err)
+			return result, fmt.Errorf("openai-compatible smoke response validation failed for %s model %q: %w", cfg.BaseURL, cfg.Model, err)
+		}
+		result.addCheck("response_validation", nil)
+	}
 
 	if cfg.CheckStreaming {
 		if err := runOpenAICompatibleStreamCheck(ctx, client, cfg); err != nil {
