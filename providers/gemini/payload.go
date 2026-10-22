@@ -11,14 +11,8 @@ import (
 
 // buildTextPayload builds the request payload for text generation
 func (g *Gemini) buildTextPayload(request types.TextRequest) (map[string]any, error) {
-	if request.Reasoning != nil && request.Reasoning.Enabled != nil && !*request.Reasoning.Enabled && request.Reasoning.MaxTokens > 0 {
-		return nil, g.ValidationError("disabled thinking conflicts with a positive thinking budget")
-	}
-	if request.Reasoning != nil && request.Reasoning.Effort == types.ReasoningEffortNone && request.Reasoning.MaxTokens > 0 {
-		return nil, g.ValidationError("reasoning effort none conflicts with a positive thinking budget")
-	}
-	if request.ParallelToolCalls != nil {
-		return nil, g.ValidationError("parallel_tool_calls is not supported by Gemini")
+	if err := g.validateTextRequest(request); err != nil {
+		return nil, err
 	}
 	prepared, _, prepareErr := providers.PrepareMessages(request.Messages)
 	if prepareErr != nil {
@@ -41,7 +35,47 @@ func (g *Gemini) buildTextPayload(request types.TextRequest) (map[string]any, er
 		}
 	}
 
-	// Add generation config using shared utility
+	generationConfig, err := g.generationConfig(request)
+	if err != nil {
+		return nil, err
+	}
+	if len(generationConfig) > 0 {
+		payload["generationConfig"] = generationConfig
+	}
+
+	// Add tools if provided
+	if len(request.Tools) > 0 {
+		tools := g.transformTools(request.Tools)
+		payload["tools"] = tools
+
+		// Add tool config if specified
+		if request.ToolChoice != nil {
+			payload["toolConfig"] = g.transformToolChoice(request.ToolChoice)
+		}
+	}
+
+	g.applyMergedProviderOptions(payload, request)
+
+	return payload, nil
+}
+
+// validateTextRequest rejects unsupported Gemini control combinations.
+func (g *Gemini) validateTextRequest(request types.TextRequest) error {
+	if request.Reasoning != nil && request.Reasoning.Enabled != nil && !*request.Reasoning.Enabled && request.Reasoning.MaxTokens > 0 {
+		return g.ValidationError("disabled thinking conflicts with a positive thinking budget")
+	}
+	if request.Reasoning != nil && request.Reasoning.Effort == types.ReasoningEffortNone && request.Reasoning.MaxTokens > 0 {
+		return g.ValidationError("reasoning effort none conflicts with a positive thinking budget")
+	}
+	if request.ParallelToolCalls != nil {
+		return g.ValidationError("parallel_tool_calls is not supported by Gemini")
+	}
+	return nil
+}
+
+// generationConfig maps shared generation parameters onto Gemini field names,
+// including response-format mime and schema selection.
+func (g *Gemini) generationConfig(request types.TextRequest) (map[string]any, error) {
 	generationConfig := map[string]any{}
 	// Use shared utility for common parameters, then map to Gemini field names
 	stdConfig := map[string]any{}
@@ -94,21 +128,12 @@ func (g *Gemini) buildTextPayload(request types.TextRequest) (map[string]any, er
 			generationConfig["responseSchema"] = g.transformSchema(format.JSONSchema.Schema)
 		}
 	}
-	if len(generationConfig) > 0 {
-		payload["generationConfig"] = generationConfig
-	}
+	return generationConfig, nil
+}
 
-	// Add tools if provided
-	if len(request.Tools) > 0 {
-		tools := g.transformTools(request.Tools)
-		payload["tools"] = tools
-
-		// Add tool config if specified
-		if request.ToolChoice != nil {
-			payload["toolConfig"] = g.transformToolChoice(request.ToolChoice)
-		}
-	}
-
+// applyMergedProviderOptions overlays provider/model-scoped options, letting
+// them extend or replace computed payload fields.
+func (g *Gemini) applyMergedProviderOptions(payload map[string]any, request types.TextRequest) {
 	for k, v := range g.Config.MergedProviderOptions(request.Model, request.ProviderOptions) {
 		if k == "generationConfig" {
 			if opts, ok := v.(map[string]any); ok {
@@ -124,8 +149,6 @@ func (g *Gemini) buildTextPayload(request types.TextRequest) (map[string]any, er
 		}
 		payload[k] = v
 	}
-
-	return payload, nil
 }
 
 func geminiThinkingConfig(reasoning *types.Reasoning) map[string]any {

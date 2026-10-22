@@ -2,10 +2,12 @@ package server
 
 import (
 	"encoding/json"
-	wormhole "github.com/garyblankenship/wormhole/v3"
-	"github.com/stretchr/testify/require"
 	"net/http"
 	"testing"
+
+	"github.com/stretchr/testify/require"
+
+	wormhole "github.com/garyblankenship/wormhole/v3"
 )
 
 func TestProxyChatThinkingForwarding(t *testing.T) {

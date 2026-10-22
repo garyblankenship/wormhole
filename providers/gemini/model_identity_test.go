@@ -8,8 +8,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/garyblankenship/wormhole/v3/types"
 	"github.com/stretchr/testify/require"
+
+	"github.com/garyblankenship/wormhole/v3/types"
 )
 
 func TestNativeTextAndStreamRetainRequestedModel(t *testing.T) {

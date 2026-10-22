@@ -53,15 +53,33 @@ check_ignored() {
 	return 1
 }
 
-surface_tmp=$(mktemp -d "${TMPDIR:-/tmp}/wormhole-public-surface.XXXXXX")
-trap 'rm -rf "$surface_tmp"' EXIT HUP INT TERM
+surface_tracked=
+surface_archive=
+surface_archive_paths=
 
-git ls-files >"$surface_tmp/tracked"
-check_inventory "tracked files" "$surface_tmp/tracked"
+cleanup() {
+	status=$?
+	trap - EXIT HUP INT TERM
+	cleanup_status=0
+	rm -f -- "$surface_tracked" "$surface_archive" "$surface_archive_paths" || cleanup_status=$?
+	if [ "$status" -ne 0 ]; then
+		exit "$status"
+	fi
+	exit "$cleanup_status"
+}
 
-git archive --worktree-attributes --format=tar HEAD |
-	tar -tf - >"$surface_tmp/archive"
-check_inventory "source archive" "$surface_tmp/archive"
+trap cleanup EXIT
+trap 'exit 1' HUP INT TERM
+surface_tracked=$(mktemp "${TMPDIR:-/tmp}/wormhole-public-surface-tracked.XXXXXX")
+surface_archive=$(mktemp "${TMPDIR:-/tmp}/wormhole-public-surface-archive.XXXXXX")
+surface_archive_paths=$(mktemp "${TMPDIR:-/tmp}/wormhole-public-surface-paths.XXXXXX")
+
+git ls-files >"$surface_tracked"
+check_inventory "tracked files" "$surface_tracked"
+
+git archive --worktree-attributes --format=tar HEAD >"$surface_archive"
+tar -tf "$surface_archive" >"$surface_archive_paths"
+check_inventory "source archive" "$surface_archive_paths"
 
 check_ignored ".claude/public-surface-sentinel"
 check_ignored "nested/.claude/public-surface-sentinel"

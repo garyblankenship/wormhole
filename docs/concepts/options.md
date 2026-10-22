@@ -120,7 +120,7 @@ Responses-specific provider options:
 
 | Option | Type | Default | Source | Effect |
 |--------|------|---------|--------|--------|
-| `UseResponsesAPI` | `bool` | `false` | `types/provider.go` | Route OpenAI `Text()` and `Stream()` through `/responses` |
+| `UseResponsesAPI` | `bool` | `false` | `types/provider_config.go` | Route OpenAI `Text()` and `Stream()` through `/responses` |
 | `ResponsesPath` | `string` | `/responses` | `providers/openai/openai.go` | Override the path appended to `BaseURL` |
 | `ChatPath` | `string` | `/chat/completions` | `providers/openai/openai.go` | Override the Chat Completions path when Responses mode is off |
 

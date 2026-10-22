@@ -260,6 +260,7 @@ func TestProviderStructuredJSONAndTools(t *testing.T) {
 		resp, err := provider.Structured(context.Background(), types.StructuredRequest{
 			BaseRequest: types.BaseRequest{Model: "gpt-4o-mini"},
 			Messages:    []types.Message{types.NewUserMessage("json")},
+			Schema:      map[string]any{"type": "object"},
 			Mode:        types.StructuredModeJSON,
 		})
 		require.NoError(t, err)
@@ -286,7 +287,7 @@ func TestProviderStructuredJSONAndTools(t *testing.T) {
 						Function: struct {
 							Name      string `json:"name"`
 							Arguments string `json:"arguments"`
-						}{Name: "structured_output", Arguments: `{"name":"Ada"}`},
+						}{Name: "__wormhole_structured_output", Arguments: `{"name":"Ada"}`},
 					}}},
 					FinishReason: "tool_calls",
 				}},

@@ -129,6 +129,99 @@ func (s *streamFragmentAccumulator) mergeUsage(chunk *types.StreamChunk) {
 	}
 }
 
+// collectProviderUsage merges provider-native usage entries for the terminal snapshot.
+func collectProviderUsage(chunk types.StreamChunk, providerUsage map[string]any) {
+	if raw, ok := chunk.Metadata["provider_usage"].(map[string]any); ok {
+		for k, v := range raw {
+			providerUsage[k] = v
+		}
+	}
+}
+
+// attachNewCitations appends only the citations newly produced by this frame.
+func attachNewCitations(raw json.RawMessage, refs *citationAccumulator, chunk *types.StreamChunk) {
+	beforeSources, beforeCitations, beforeWarnings := len(refs.sources), len(refs.citations), len(refs.warnings)
+	refs.add(raw)
+	chunk.Sources = append([]types.Source(nil), refs.sources[beforeSources:]...)
+	chunk.Citations = append([]types.Citation(nil), refs.citations[beforeCitations:]...)
+	chunk.Warnings = append([]types.ResponseWarning(nil), refs.warnings[beforeWarnings:]...)
+	delete(chunk.Metadata, "anthropic_citation")
+}
+
+// attachTerminalSnapshot publishes the full citation and provider-usage state
+// on the terminal chunk.
+func attachTerminalSnapshot(chunk *types.StreamChunk, refs *citationAccumulator, providerUsage map[string]any) {
+	chunk.Sources = append([]types.Source(nil), refs.sources...)
+	chunk.Citations = append([]types.Citation(nil), refs.citations...)
+	chunk.Warnings = append([]types.ResponseWarning(nil), refs.warnings...)
+	if len(providerUsage) > 0 {
+		if chunk.Metadata == nil {
+			chunk.Metadata = make(map[string]any)
+		}
+		copyUsage := make(map[string]any, len(providerUsage))
+		for k, v := range providerUsage {
+			copyUsage[k] = v
+		}
+		chunk.Metadata["provider_usage"] = copyUsage
+	}
+}
+
+// pendingFragments selects inbound tool-call fragments, preferring the delta
+// contract over compatibility aliases on non-terminal chunks.
+func pendingFragments(chunk *types.StreamChunk) []types.ToolCall {
+	var fragments []types.ToolCall
+	if chunk.Delta != nil {
+		fragments = chunk.Delta.ToolCalls
+	}
+	if len(fragments) > 0 || chunk.IsDone() || chunk.Error != nil {
+		return fragments
+	}
+	if len(chunk.ToolCalls) > 0 {
+		return chunk.ToolCalls
+	}
+	if chunk.ToolCall != nil {
+		return []types.ToolCall{*chunk.ToolCall}
+	}
+	return nil
+}
+
+// settleToolCalls consumes inbound fragments and, on the terminal or error
+// chunk, swaps in the accumulated calls, retaining parser terminal calls when
+// nothing was accumulated.
+func settleToolCalls(chunk *types.StreamChunk, acc *streamFragmentAccumulator, flushed *bool) {
+	if chunk.Delta != nil {
+		chunk.Delta.ToolCalls = nil
+	}
+	// Fragments are consumed here; only completed calls leave the accumulator.
+	terminalCalls := chunk.ToolCalls
+	chunk.ToolCall = nil
+	chunk.ToolCalls = nil
+	if *flushed || (!chunk.IsDone() && chunk.Error == nil) {
+		return
+	}
+	chunk.ToolCalls = acc.finish()
+	if len(chunk.ToolCalls) == 0 {
+		chunk.ToolCalls = terminalCalls
+	}
+	*flushed = true
+}
+
+// emitChunk forwards one chunk, letting cancellation win deterministically
+// over a waiting receiver.
+func emitChunk(ctx context.Context, out chan<- types.StreamChunk, chunk types.StreamChunk) bool {
+	select {
+	case <-ctx.Done():
+		return false
+	default:
+	}
+	select {
+	case out <- chunk:
+		return true
+	case <-ctx.Done():
+		return false
+	}
+}
+
 // accumulatingStream wraps a raw Anthropic chunk channel and stitches streaming
 // tool-call fragments. Sole closer of out; every send is ctx-guarded so the
 // goroutine exits if the consumer stops reading. On the terminal chunk
@@ -155,71 +248,19 @@ func (p *Provider) accumulatingStream(ctx context.Context, in <-chan types.Strea
 				chunk = next
 			}
 			acc.mergeUsage(&chunk)
-			if raw, ok := chunk.Metadata["provider_usage"].(map[string]any); ok {
-				for k, v := range raw {
-					providerUsage[k] = v
-				}
-			}
+			collectProviderUsage(chunk, providerUsage)
 			if raw, ok := chunk.Metadata["anthropic_citation"].(json.RawMessage); ok {
-				beforeSources, beforeCitations, beforeWarnings := len(refs.sources), len(refs.citations), len(refs.warnings)
-				refs.add(raw)
-				chunk.Sources = append([]types.Source(nil), refs.sources[beforeSources:]...)
-				chunk.Citations = append([]types.Citation(nil), refs.citations[beforeCitations:]...)
-				chunk.Warnings = append([]types.ResponseWarning(nil), refs.warnings[beforeWarnings:]...)
-				delete(chunk.Metadata, "anthropic_citation")
+				attachNewCitations(raw, refs, &chunk)
 			}
 			if chunk.IsDone() {
-				chunk.Sources = append([]types.Source(nil), refs.sources...)
-				chunk.Citations = append([]types.Citation(nil), refs.citations...)
-				chunk.Warnings = append([]types.ResponseWarning(nil), refs.warnings...)
-				if len(providerUsage) > 0 {
-					if chunk.Metadata == nil {
-						chunk.Metadata = make(map[string]any)
-					}
-					copyUsage := make(map[string]any, len(providerUsage))
-					for k, v := range providerUsage {
-						copyUsage[k] = v
-					}
-					chunk.Metadata["provider_usage"] = copyUsage
-				}
+				attachTerminalSnapshot(&chunk, refs, providerUsage)
 			}
-			// Delta is authoritative when the parser also exposes compatibility aliases.
-			var fragments []types.ToolCall
-			if chunk.Delta != nil {
-				fragments = chunk.Delta.ToolCalls
-			}
-			if len(fragments) == 0 && !chunk.IsDone() && chunk.Error == nil {
-				fragments = chunk.ToolCalls
-				if len(fragments) == 0 && chunk.ToolCall != nil {
-					fragments = []types.ToolCall{*chunk.ToolCall}
-				}
-			}
+			fragments := pendingFragments(&chunk)
 			if !flushed {
 				acc.add(fragments)
 			}
-			// Fragments are consumed here; only completed calls leave the accumulator.
-			if chunk.Delta != nil {
-				chunk.Delta.ToolCalls = nil
-			}
-			chunk.ToolCall = nil
-			terminalCalls := chunk.ToolCalls
-			chunk.ToolCalls = nil
-			if (chunk.IsDone() || chunk.Error != nil) && !flushed {
-				chunk.ToolCalls = acc.finish()
-				if len(chunk.ToolCalls) == 0 {
-					chunk.ToolCalls = terminalCalls
-				}
-				flushed = true
-			}
-			// Cancel wins deterministically over a waiting receiver.
-			select {
-			case <-ctx.Done():
-				return
-			default:
-			}
-			select {
-			case out <- chunk:
-			case <-ctx.Done():
+			settleToolCalls(&chunk, acc, &flushed)
+			if !emitChunk(ctx, out, chunk) {
 				return
 			}
 		}

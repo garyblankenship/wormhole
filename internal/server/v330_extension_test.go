@@ -2,14 +2,16 @@ package server
 
 import (
 	"encoding/json"
-	wmtest "github.com/garyblankenship/wormhole/v3/wormholetest"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 
+	wmtest "github.com/garyblankenship/wormhole/v3/wormholetest"
+
+	"github.com/stretchr/testify/require"
+
 	wormhole "github.com/garyblankenship/wormhole/v3"
 	"github.com/garyblankenship/wormhole/v3/types"
-	"github.com/stretchr/testify/require"
 )
 
 func TestV330ProxyExtensionValidation(t *testing.T) {

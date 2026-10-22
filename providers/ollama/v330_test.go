@@ -2,8 +2,9 @@ package ollama
 
 import (
 	"context"
-	"github.com/garyblankenship/wormhole/v3/types"
 	"testing"
+
+	"github.com/garyblankenship/wormhole/v3/types"
 )
 
 func TestV330OllamaRejectsFileReferences(t *testing.T) {

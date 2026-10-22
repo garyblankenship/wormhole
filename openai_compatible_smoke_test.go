@@ -9,9 +9,10 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/garyblankenship/wormhole/v3/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/garyblankenship/wormhole/v3/types"
 )
 
 func TestRunOpenAICompatibleSmokeDiagnostics(t *testing.T) {

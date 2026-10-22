@@ -340,6 +340,9 @@ func TestAnthropicProvider_IntegrationStructuredOutput(t *testing.T) {
 		tools, ok := reqBody["tools"].([]any)
 		require.True(t, ok, "Request should include tools")
 		require.Len(t, tools, 1)
+		tool, ok := tools[0].(map[string]any)
+		require.True(t, ok)
+		assert.Equal(t, "__wormhole_structured_output", tool["name"])
 
 		// Verify tool choice
 		toolChoice, ok := reqBody["tool_choice"]
@@ -361,7 +364,7 @@ func TestAnthropicProvider_IntegrationStructuredOutput(t *testing.T) {
 				{
 					"type": "tool_use",
 					"id":   "tool_call_123",
-					"name": "extract_user_info",
+					"name": "__wormhole_structured_output",
 					"input": map[string]any{
 						"name": "John Doe",
 						"age":  30,

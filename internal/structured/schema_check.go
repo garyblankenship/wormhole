@@ -2,7 +2,6 @@ package structured
 
 import (
 	"fmt"
-	"regexp"
 	"strconv"
 	"strings"
 )
@@ -49,159 +48,89 @@ func resolveReference(root map[string]any, ref string) (map[string]any, error) {
 	return mapped, nil
 }
 
+func invalidKeyword(path, key string) error {
+	return fmt.Errorf("%s: invalid schema keyword %s", path, key)
+}
+
+// definitionCollector walks one schema definition, records reference edges, and
+// enforces the shared work and depth budgets across collection and cycle checks.
+type definitionCollector struct {
+	root  map[string]any
+	nodes map[string]*schemaNode
+	work  int
+}
+
 // checkDefinition rejects assertions the local validator cannot enforce before IO.
 func checkDefinition(root map[string]any) error {
-	nodes := map[string]*schemaNode{}
-	work := 0
-	var collect func(map[string]any, string, int) error
-	collect = func(s map[string]any, path string, depth int) error {
-		work += 1 + len(s)
-		if depth > maxSchemaDepth || work > maxSchemaWork {
-			return fmt.Errorf("schema complexity limit exceeded")
-		}
-		node := &schemaNode{}
-		nodes[path] = node
-		child := func(raw any, suffix string, sameValue bool) error {
-			m, ok := raw.(map[string]any)
-			if !ok {
-				return fmt.Errorf("%s%s: schema must be an object", path, suffix)
-			}
-			target := path + suffix
-			if sameValue {
-				node.edges = append(node.edges, target)
-			}
-			return collect(m, target, depth+1)
-		}
-		for key, raw := range s {
-			switch value := raw.(type) {
-			case []any:
-				work += len(value)
-			case map[string]any:
-				work += len(value)
-			}
-			if work > maxSchemaWork {
-				return fmt.Errorf("schema complexity limit exceeded")
-			}
-			bad := func() error { return fmt.Errorf("%s: invalid schema keyword %s", path, key) }
-			switch key {
-			case "$schema", "$id", "$comment", "title", "description":
-				if _, ok := raw.(string); !ok {
-					return bad()
-				}
-			case "default", "examples", "deprecated", "readOnly", "writeOnly": // Annotations only.
-			case "$ref":
-				ref, ok := raw.(string)
-				if !ok {
-					return bad()
-				}
-				if _, err := resolveReference(root, ref); err != nil {
-					return err
-				}
-				node.edges = append(node.edges, ref)
-			case "type":
-				valid := func(v any) bool {
-					t, ok := v.(string)
-					return ok && (t == "null" || t == "object" || t == "array" || t == "string" || t == "boolean" || t == "number" || t == "integer")
-				}
-				if list, ok := raw.([]any); ok {
-					if len(list) == 0 {
-						return bad()
-					}
-					for _, item := range list {
-						if !valid(item) {
-							return bad()
-						}
-					}
-				} else if !valid(raw) {
-					return bad()
-				}
-			case "const":
-			case "enum":
-				list, ok := raw.([]any)
-				if !ok || len(list) == 0 {
-					return bad()
-				}
-			case "$defs", "definitions", "properties":
-				m, ok := raw.(map[string]any)
-				if !ok {
-					return bad()
-				}
-				for name, value := range m {
-					if err := child(value, "/"+key+"/"+pointerPart(name), false); err != nil {
-						return err
-					}
-				}
-			case "allOf", "anyOf", "oneOf":
-				list, ok := raw.([]any)
-				if !ok || len(list) == 0 {
-					return bad()
-				}
-				for i, value := range list {
-					if err := child(value, fmt.Sprintf("/%s/%d", key, i), true); err != nil {
-						return err
-					}
-				}
-			case "not", "items":
-				if err := child(raw, "/"+key, key == "not"); err != nil {
-					return err
-				}
-			case "additionalProperties":
-				if _, ok := raw.(bool); !ok {
-					if err := child(raw, "/"+key, false); err != nil {
-						return err
-					}
-				}
-			case "required":
-				list, ok := raw.([]any)
-				if !ok {
-					return bad()
-				}
-				for _, item := range list {
-					if _, ok := item.(string); !ok {
-						return bad()
-					}
-				}
-			case "uniqueItems":
-				if _, ok := raw.(bool); !ok {
-					return bad()
-				}
-			case "pattern":
-				pattern, ok := raw.(string)
-				if !ok {
-					return bad()
-				}
-				if _, err := regexp.Compile(pattern); err != nil {
-					return bad()
-				}
-			case "minimum", "maximum", "exclusiveMinimum", "exclusiveMaximum", "multipleOf", "minLength", "maxLength", "minItems", "maxItems":
-				n, ok := number(raw)
-				if !ok {
-					return bad()
-				}
-				if key == "multipleOf" && n <= 0 {
-					return bad()
-				}
-				if strings.HasPrefix(key, "minL") || strings.HasPrefix(key, "maxL") || key == "minItems" || key == "maxItems" {
-					if n < 0 || float64(int64(n)) != n {
-						return bad()
-					}
-				}
-			default:
-				return fmt.Errorf("%s: unsupported schema keyword %s", path, key)
-			}
-		}
-		return nil
-	}
-	if err := collect(root, "#", 0); err != nil {
+	collector := &definitionCollector{root: root, nodes: map[string]*schemaNode{}}
+	if err := collector.collect(root, "#", 0); err != nil {
 		return err
 	}
-	// Only schema locations are valid reference targets. A cycle through a property
-	// or array item consumes data and therefore is not an edge in this graph.
+	return collector.checkReferenceCycles()
+}
+
+func (collector *definitionCollector) collect(s map[string]any, path string, depth int) error {
+	collector.work += 1 + len(s)
+	if depth > maxSchemaDepth || collector.work > maxSchemaWork {
+		return fmt.Errorf("schema complexity limit exceeded")
+	}
+	node := &schemaNode{}
+	collector.nodes[path] = node
+	for key, raw := range s {
+		switch value := raw.(type) {
+		case []any:
+			collector.work += len(value)
+		case map[string]any:
+			collector.work += len(value)
+		}
+		if collector.work > maxSchemaWork {
+			return fmt.Errorf("schema complexity limit exceeded")
+		}
+		if err := collector.checkKeyword(node, path, key, raw, depth); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// child validates a subschema location and records applicator edges that do not
+// consume instance data.
+func (collector *definitionCollector) child(node *schemaNode, target string, depth int, raw any, sameValue bool) error {
+	m, ok := raw.(map[string]any)
+	if !ok {
+		return fmt.Errorf("%s: schema must be an object", target)
+	}
+	if sameValue {
+		node.edges = append(node.edges, target)
+	}
+	return collector.collect(m, target, depth+1)
+}
+
+func (collector *definitionCollector) checkKeyword(node *schemaNode, path, key string, raw any, depth int) error {
+	handled, err := checkMetaKeyword(path, key, raw)
+	if handled || err != nil {
+		return err
+	}
+	handled, err = collector.checkApplicatorKeyword(node, path, key, raw, depth)
+	if handled || err != nil {
+		return err
+	}
+	handled, err = checkNumericBoundKeyword(path, key, raw)
+	if handled || err != nil {
+		return err
+	}
+	return fmt.Errorf("%s: unsupported schema keyword %s", path, key)
+}
+
+// checkReferenceCycles rejects reference graphs that never reach instance data.
+// Only schema locations are valid reference targets. A cycle through a property
+// or array item consumes data and therefore is not an edge in this graph.
+func (collector *definitionCollector) checkReferenceCycles() error {
 	state := map[string]uint8{}
 	var visit func(string, int) error
 	visit = func(path string, depth int) error {
-		work++
-		if depth > maxSchemaDepth || work > maxSchemaWork {
+		collector.work++
+		if depth > maxSchemaDepth || collector.work > maxSchemaWork {
 			return fmt.Errorf("schema complexity limit exceeded")
 		}
 		if state[path] == 1 {
@@ -210,7 +139,7 @@ func checkDefinition(root map[string]any) error {
 		if state[path] == 2 {
 			return nil
 		}
-		node := nodes[path]
+		node := collector.nodes[path]
 		if node == nil {
 			return fmt.Errorf("reference target is not a supported schema location: %s", path)
 		}
@@ -223,7 +152,7 @@ func checkDefinition(root map[string]any) error {
 		state[path] = 2
 		return nil
 	}
-	for path := range nodes {
+	for path := range collector.nodes {
 		if err := visit(path, 0); err != nil {
 			return err
 		}

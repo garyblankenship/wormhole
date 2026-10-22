@@ -19,11 +19,8 @@ func newResponsesAnnotationState() *responsesAnnotationState {
 	return &responsesAnnotationState{sources: map[string]string{}, seen: map[string]bool{}}
 }
 
-// Responses offsets have no guaranteed Unicode unit; retain native offsets.
-func normalizeResponsesAnnotations(response *responsesResponse, result *types.TextResponse) {
-	newResponsesAnnotationState().normalizeResponse(response, result)
-}
-
+// normalizeResponse retains native annotation offsets: Responses offsets have
+// no guaranteed Unicode unit.
 func (s *responsesAnnotationState) normalizeResponse(response *responsesResponse, result *types.TextResponse) {
 	for outputIndex, item := range response.Output {
 		for contentIndex, part := range item.Content {

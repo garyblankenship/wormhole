@@ -73,6 +73,22 @@ func (s *citationSet) consume(c candidate, text string) {
 	if c.CitationMetadata["malformed"] != nil {
 		s.malformed("citationMetadata")
 	}
+	ids := s.consumeGroundingChunks(grounding)
+	s.consumeGroundingSupports(grounding, ids, text)
+	s.consumeNativeCitations(c.CitationMetadata)
+}
+
+// groundingChunkSupported reports whether a grounding chunk carries a source
+// form this adapter normalizes.
+func groundingChunkSupported(raw map[string]any) bool {
+	if _, web := raw["web"].(map[string]any); web {
+		return true
+	}
+	_, retrieved := raw["retrievedContext"].(map[string]any)
+	return retrieved
+}
+
+func (s *citationSet) consumeGroundingChunks(grounding map[string]any) []string {
 	chunks, chunksOK := grounding["groundingChunks"].([]any)
 	if grounding["groundingChunks"] != nil && !chunksOK {
 		s.malformed("groundingChunks")
@@ -84,14 +100,16 @@ func (s *citationSet) consume(c candidate, text string) {
 			s.malformed("groundingChunks")
 			continue
 		}
-		if _, web := raw["web"].(map[string]any); !web {
-			if _, retrieved := raw["retrievedContext"].(map[string]any); !retrieved {
-				s.warnings = append(s.warnings, types.ResponseWarning{Code: types.WarningUnsupportedNormalization, Message: "Unsupported Gemini grounding source data was retained", Field: "groundingChunks"})
-				continue
-			}
+		if !groundingChunkSupported(raw) {
+			s.warnings = append(s.warnings, types.ResponseWarning{Code: types.WarningUnsupportedNormalization, Message: "Unsupported Gemini grounding source data was retained", Field: "groundingChunks"})
+			continue
 		}
 		ids[i] = s.source(raw)
 	}
+	return ids
+}
+
+func (s *citationSet) consumeGroundingSupports(grounding map[string]any, ids []string, text string) {
 	supports, supportsOK := grounding["groundingSupports"].([]any)
 	if grounding["groundingSupports"] != nil && !supportsOK {
 		s.malformed("groundingSupports")
@@ -102,42 +120,55 @@ func (s *citationSet) consume(c candidate, text string) {
 			s.malformed("groundingSupports")
 			continue
 		}
-		segment, segmentOK := raw["segment"].(map[string]any)
-		if raw["segment"] != nil && !segmentOK {
-			s.malformed("groundingSupports.segment")
-		}
-		start, hasStart := integer(segment["startIndex"])
-		end, hasEnd := integer(segment["endIndex"])
-		// Gemini grounding segment offsets are UTF-8 byte offsets. Omitted startIndex is zero.
-		if !hasStart {
-			start = 0
-		}
-		var output *types.TextRange
-		if hasEnd && start >= 0 && end >= start && end <= len(text) && utf8.ValidString(text[:start]) && utf8.ValidString(text[:end]) {
-			output = &types.TextRange{Start: start, End: end}
-		} else if hasEnd || hasStart {
-			s.malformed("groundingSupports.segment")
-		}
-		indexes, indexesOK := raw["groundingChunkIndices"].([]any)
-		if !indexesOK {
-			s.malformed("groundingChunkIndices")
-		}
-		for _, value := range indexes {
-			index, valid := integer(value)
-			if !valid || index < 0 || index >= len(ids) || ids[index] == "" {
-				s.malformed("groundingChunkIndices")
-				continue
-			}
-			s.add(types.Citation{SourceID: ids[index], OutputRange: output, Raw: raw})
-		}
+		s.consumeGroundingSupport(raw, ids, text)
 	}
-	native, nativeOK := c.CitationMetadata["citations"].([]any)
-	if c.CitationMetadata["citations"] != nil && !nativeOK {
+}
+
+func (s *citationSet) consumeGroundingSupport(raw map[string]any, ids []string, text string) {
+	segment, segmentOK := raw["segment"].(map[string]any)
+	if raw["segment"] != nil && !segmentOK {
+		s.malformed("groundingSupports.segment")
+	}
+	output := s.segmentOutputRange(segment, text)
+	indexes, indexesOK := raw["groundingChunkIndices"].([]any)
+	if !indexesOK {
+		s.malformed("groundingChunkIndices")
+	}
+	for _, value := range indexes {
+		index, valid := integer(value)
+		if !valid || index < 0 || index >= len(ids) || ids[index] == "" {
+			s.malformed("groundingChunkIndices")
+			continue
+		}
+		s.add(types.Citation{SourceID: ids[index], OutputRange: output, Raw: raw})
+	}
+}
+
+// segmentOutputRange validates UTF-8 byte offsets against the response text.
+func (s *citationSet) segmentOutputRange(segment map[string]any, text string) *types.TextRange {
+	start, hasStart := integer(segment["startIndex"])
+	end, hasEnd := integer(segment["endIndex"])
+	// Gemini grounding segment offsets are UTF-8 byte offsets. Omitted startIndex is zero.
+	if !hasStart {
+		start = 0
+	}
+	if hasEnd && start >= 0 && end >= start && end <= len(text) && utf8.ValidString(text[:start]) && utf8.ValidString(text[:end]) {
+		return &types.TextRange{Start: start, End: end}
+	}
+	if hasEnd || hasStart {
+		s.malformed("groundingSupports.segment")
+	}
+	return nil
+}
+
+func (s *citationSet) consumeNativeCitations(metadata map[string]any) {
+	native, nativeOK := metadata["citations"].([]any)
+	if metadata["citations"] != nil && !nativeOK {
 		s.malformed("citationMetadata.citations")
 	}
 	// Older generateContent responses use citationSources instead.
 	if native == nil {
-		native, _ = c.CitationMetadata["citationSources"].([]any)
+		native, _ = metadata["citationSources"].([]any)
 	}
 	for _, value := range native {
 		raw, ok := value.(map[string]any)

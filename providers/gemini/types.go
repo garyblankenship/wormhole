@@ -66,56 +66,6 @@ type promptFeedback struct {
 	SafetyRatings []safetyRating `json:"safetyRatings,omitempty"`
 }
 
-type citationMetadata struct {
-	Citations []citation `json:"citations"`
-}
-
-type citation struct {
-	StartIndex int    `json:"startIndex"`
-	EndIndex   int    `json:"endIndex"`
-	URI        string `json:"uri"`
-	Title      string `json:"title,omitempty"`
-	License    string `json:"license,omitempty"`
-}
-
-type groundingMetadata struct {
-	WebSearchQueries      []string               `json:"webSearchQueries,omitempty"`
-	SearchEntryPoint      *searchEntryPoint      `json:"searchEntryPoint,omitempty"`
-	GroundingAttributions []groundingAttribution `json:"groundingAttributions,omitempty"`
-}
-
-type searchEntryPoint struct {
-	RenderedContent string `json:"renderedContent"`
-}
-
-type groundingAttribution struct {
-	SourceID        *sourceID        `json:"sourceId"`
-	Content         string           `json:"content"`
-	CitationSources []citationSource `json:"citationSources,omitempty"`
-}
-
-type sourceID struct {
-	GroundingPassage       *groundingPassage       `json:"groundingPassage,omitempty"`
-	SemanticRetrieverChunk *semanticRetrieverChunk `json:"semanticRetrieverChunk,omitempty"`
-}
-
-type groundingPassage struct {
-	PassageID string `json:"passageId"`
-	PartIndex int    `json:"partIndex"`
-}
-
-type semanticRetrieverChunk struct {
-	Source string `json:"source"`
-	Chunk  string `json:"chunk"`
-}
-
-type citationSource struct {
-	StartIndex int    `json:"startIndex"`
-	EndIndex   int    `json:"endIndex"`
-	URI        string `json:"uri"`
-	Title      string `json:"title,omitempty"`
-}
-
 type geminiError struct {
 	Code    int    `json:"code"`
 	Message string `json:"message"`

@@ -102,20 +102,30 @@ func assertChatReasoningPayload(t *testing.T, provider, effort string, payload m
 			t.Fatalf("effort = %#v", payload)
 		}
 	case "compatible":
-		if effort == "omitted" || effort == "none" {
+		if effort == "omitted" {
 			if _, ok := payload["reasoning"]; ok {
 				t.Fatalf("unexpected reasoning: %#v", payload)
 			}
-		} else if payload["reasoning"].(map[string]any)["effort"] != effort {
+		} else if reasoning, ok := payload["reasoning"].(map[string]any); !ok || reasoning["effort"] != effort {
 			t.Fatalf("reasoning = %#v", payload)
 		}
 	default:
 		gen, _ := payload["generationConfig"].(map[string]any)
-		if effort == "omitted" || effort == "none" {
+		if effort == "omitted" {
 			if gen["thinkingConfig"] != nil {
 				t.Fatalf("unexpected thinking config: %#v", gen)
 			}
-		} else if gen["thinkingConfig"].(map[string]any)["thinkingLevel"] != effort {
+			return
+		}
+		thinking, ok := gen["thinkingConfig"].(map[string]any)
+		if !ok {
+			t.Fatalf("missing thinking config: %#v", gen)
+		}
+		if effort == "none" {
+			if thinking["thinkingBudget"] != float64(0) || thinking["thinkingLevel"] != nil {
+				t.Fatalf("disabled thinking = %#v", thinking)
+			}
+		} else if thinking["thinkingLevel"] != effort {
 			t.Fatalf("thinking = %#v", gen)
 		}
 	}

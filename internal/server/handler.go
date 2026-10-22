@@ -77,21 +77,11 @@ func parseChatToolConfig(input []ChatTool, rawChoice json.RawMessage) ([]types.T
 }
 
 func (p *proxy) handleChatCompletions(w http.ResponseWriter, r *http.Request) {
-	var req ChatCompletionRequest
-	if err := decodeRequestBody(w, r, &req); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid_json",
-			"Failed to parse request body: "+err.Error(), "invalid_request_error")
+	req, ok := decodeChatCompletion(w, r)
+	if !ok {
 		return
 	}
-
-	if req.Model == "" {
-		writeError(w, http.StatusBadRequest, "model_required",
-			"model is required", "invalid_request_error")
-		return
-	}
-	if len(req.Messages) == 0 {
-		writeError(w, http.StatusBadRequest, "messages_required",
-			"messages is required", "invalid_request_error")
+	if !requireChatBasics(w, req) {
 		return
 	}
 
@@ -100,98 +90,21 @@ func (p *proxy) handleChatCompletions(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "unsupported_parameter", err.Error(), "invalid_request_error")
 		return
 	}
-	templateKwargs, err := parseChatTemplateKwargs(req.ChatTemplateKwargs)
-	if err != nil {
-		writeError(w, http.StatusBadRequest, "invalid_request_error", err.Error(), "invalid_request_error")
+	templateKwargs, ok := p.prepareTemplateKwargs(w, req, route.effectiveProvider)
+	if !ok {
 		return
 	}
-	if templateKwargs != nil && chatTemplateKwargsUnsupported(route.effectiveProvider) {
-		writeError(w, http.StatusBadRequest, "unsupported_parameter",
-			fmt.Sprintf("chat_template_kwargs is unsupported for the %q provider; it is an OpenAI-compatible chat-template extension", route.effectiveProvider),
-			"invalid_request_error")
+	if !p.enforceWormholeExtensionGates(w, req, route) {
 		return
 	}
-
-	if req.Wormhole != nil {
-		if req.Wormhole.CachePrewarm && !p.wh.ProviderUsesResponses(route.effectiveProvider) {
-			writeError(w, http.StatusBadRequest, "unsupported_parameter", "cache_prewarm requires an OpenAI Responses route", "invalid_request_error")
-			return
-		}
-		if req.Wormhole.StructuredMode == "tools" {
-			var format struct {
-				Type       string `json:"type"`
-				JSONSchema struct {
-					Strict bool           `json:"strict"`
-					Schema map[string]any `json:"schema"`
-				} `json:"json_schema"`
-			}
-			if err := json.Unmarshal(req.ResponseFormat, &format); err != nil || format.Type != "json_schema" || format.JSONSchema.Schema == nil {
-				writeError(w, http.StatusBadRequest, "invalid_request_error", "structured_mode tools requires a schema response_format", "invalid_request_error")
-				return
-			}
-			if format.JSONSchema.Strict {
-				writeError(w, http.StatusBadRequest, "invalid_request_error", "structured_mode tools conflicts with strict:true", "invalid_request_error")
-				return
-			}
-		}
-	}
-	msgs, err := parseChatMessages(req.Messages)
-	if err != nil {
-		writeError(w, http.StatusBadRequest, chatMessageErrorCode(err), err.Error(), "invalid_request_error")
+	inputs, ok := parseChatInputs(w, req, route.effectiveProvider)
+	if !ok {
 		return
 	}
-	bindFileReferences(msgs, route.effectiveProvider)
-	tools, toolChoice, err := parseChatToolConfig(req.Tools, req.ToolChoice)
-	if err != nil {
-		writeError(w, http.StatusBadRequest, "invalid_request_error", err.Error(), "invalid_request_error")
+	builder := p.newChatBuilder(req, route, inputs, templateKwargs)
+	builder, ok = p.applyChatResponseFormat(w, builder, req, route)
+	if !ok {
 		return
-	}
-
-	builder := p.wh.Text().Model(route.model).Messages(msgs...)
-	if route.provider != "" {
-		builder = builder.Using(route.provider)
-	}
-	builder = applyChatGenerationControls(builder, req)
-	providerOptions := map[string]any{}
-	if req.Wormhole != nil {
-		if req.Wormhole.CachePrewarm {
-			providerOptions["max_output_tokens"] = 0
-		}
-		if req.Wormhole.StructuredMode != "" {
-			providerOptions["structured_mode"] = req.Wormhole.StructuredMode
-		}
-	}
-	if req.Thinking != nil {
-		providerOptions["thinking"] = req.Thinking
-	}
-	if templateKwargs != nil {
-		// Merge only this nested field: request-level provider options replace
-		// same-named top-level body keys, so nothing else may pass through here.
-		providerOptions["chat_template_kwargs"] = templateKwargs
-	}
-	if len(providerOptions) > 0 {
-		builder = builder.ProviderOptions(providerOptions)
-	}
-	if len(req.Tools) > 0 {
-		builder = builder.Tools(tools...)
-	}
-	if toolChoice != nil {
-		builder = builder.ToolChoice(toolChoice)
-	}
-	if len(req.ResponseFormat) > 0 {
-		if responseFormatUnsupported(route.effectiveProvider) && (req.Wormhole == nil || req.Wormhole.StructuredMode != "tools") {
-			writeError(w, http.StatusBadRequest, "unsupported_response_format",
-				fmt.Sprintf("response_format is not yet supported through the proxy for the %q provider; use the SDK's structured output instead", route.effectiveProvider),
-				"invalid_request_error")
-			return
-		}
-		var rf map[string]any
-		if err := json.Unmarshal(req.ResponseFormat, &rf); err != nil {
-			writeError(w, http.StatusBadRequest, "invalid_request_error",
-				"invalid response_format: "+err.Error(), "invalid_request_error")
-			return
-		}
-		builder = builder.ResponseFormat(rf)
 	}
 
 	if req.Stream {

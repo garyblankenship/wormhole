@@ -106,11 +106,12 @@ zero usage. `Thinking` is nil when absent. Omission is not a smoke error.
 
 ## Local fixture versus live model evidence
 
-The examples above prove the transport against a **local fixture** (an
-`httptest` server or your local proxy). That is the evidence this smoke is
-designed to produce without spending provider credits. Claims about a
-**specific live model's** behavior — aliasing, thinking output, usage
-accounting, JSON discipline — require running the same smoke against that
+The examples show how to invoke the smoke; they do not establish that a run
+occurred. To obtain transport evidence without spending provider credits, use
+an `httptest` server or another fully stubbed endpoint. A local proxy can still
+forward requests to a billed provider; a local address alone does not make a
+probe free. Claims about a **specific live model's** behavior — aliasing,
+thinking output, usage accounting, JSON discipline — require running the same smoke against that
 live endpoint and reading `ReportedModel`, `FinishReason`, `Usage` and
 `Thinking` from *that* run; do not generalize fixture results to live models
 or vice versa.

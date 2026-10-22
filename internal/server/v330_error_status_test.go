@@ -6,9 +6,10 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/stretchr/testify/require"
+
 	"github.com/garyblankenship/wormhole/v3/providers"
 	"github.com/garyblankenship/wormhole/v3/types"
-	"github.com/stretchr/testify/require"
 )
 
 func TestV330DecodeFailureHTTPStatus(t *testing.T) {

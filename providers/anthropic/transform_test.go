@@ -19,9 +19,9 @@ func TestConvertUsageCacheTokenMapping(t *testing.T) {
 			CacheCreationInputTokens: 20,
 		}
 		result := p.convertUsage(u)
-		assert.Equal(t, 100, result.PromptTokens)
+		assert.Equal(t, 150, result.PromptTokens)
 		assert.Equal(t, 50, result.CompletionTokens)
-		assert.Equal(t, 150, result.TotalTokens)
+		assert.Equal(t, 200, result.TotalTokens)
 		assert.Equal(t, 30, result.CacheReadTokens)
 		assert.Equal(t, 20, result.CacheWriteTokens)
 	})

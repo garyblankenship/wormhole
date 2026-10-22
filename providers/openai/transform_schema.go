@@ -46,19 +46,6 @@ func schemaToMap(schema types.Schema) (map[string]any, error) {
 	return m, nil
 }
 
-func (p *Provider) schemaToTool(schema types.Schema, name string) (*types.Tool, error) {
-	if name == "" {
-		name = "structured_output"
-	}
-
-	params, err := schemaToMap(schema)
-	if err != nil {
-		return nil, err
-	}
-
-	return types.NewTool(name, "Extract structured data", params), nil
-}
-
 // isGPT5Model determines if a model requires GPT-5 API parameters
 func isGPT5Model(model string) bool {
 	// Check if model contains "gpt-5" anywhere in the name (case-insensitive)

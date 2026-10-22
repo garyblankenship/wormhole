@@ -31,7 +31,7 @@ func (p *Provider) validateV330Request(request types.TextRequest) error {
 			if ref.ID == "" {
 				return p.ValidationError("OpenAI file references require a file ID")
 			}
-			if ref.Kind != "document" && !(p.Config.UseResponsesAPI && ref.Kind == "image") {
+			if ref.Kind != "document" && (!p.Config.UseResponsesAPI || ref.Kind != "image") {
 				return p.ValidationError(fmt.Sprintf("unsupported file reference kind %q for this OpenAI route", ref.Kind))
 			}
 		}

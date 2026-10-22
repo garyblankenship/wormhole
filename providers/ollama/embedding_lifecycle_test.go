@@ -12,9 +12,10 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/stretchr/testify/require"
+
 	"github.com/garyblankenship/wormhole/v3/providers"
 	"github.com/garyblankenship/wormhole/v3/types"
-	"github.com/stretchr/testify/require"
 )
 
 type batchLifecycleHTTPClient struct {
@@ -28,7 +29,7 @@ type batchLifecycleHTTPClient struct {
 }
 
 func (f *batchLifecycleHTTPClient) Do(r *http.Request) (*http.Response, error) {
-	defer r.Body.Close()
+	defer func() { _ = r.Body.Close() }()
 	var input embeddingsRequest
 	if err := json.NewDecoder(io.LimitReader(r.Body, 64<<10)).Decode(&input); err != nil {
 		return nil, err

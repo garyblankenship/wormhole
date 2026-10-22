@@ -261,7 +261,7 @@ data: [DONE]
 
 				// Verify chunk model
 				if chunk.Text != "" || chunk.ToolCall != nil || chunk.FinishReason != nil {
-					assert.Equal(t, "gemini", chunk.Model)
+					assert.Equal(t, tc.request.Model, chunk.Model)
 				}
 			}
 

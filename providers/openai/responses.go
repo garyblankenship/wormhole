@@ -2,8 +2,9 @@ package openai
 
 import (
 	"context"
-	"github.com/garyblankenship/wormhole/v3/providers"
 	"net/http"
+
+	"github.com/garyblankenship/wormhole/v3/providers"
 
 	providerstream "github.com/garyblankenship/wormhole/v3/providers/internal/stream"
 	"github.com/garyblankenship/wormhole/v3/types"

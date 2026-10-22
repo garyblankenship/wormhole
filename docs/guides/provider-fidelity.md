@@ -68,9 +68,10 @@ universal cache-duration setting: native options and eligibility rules differ.
 Normalized `Usage` reports available cache-read and cache-write tokens from
 OpenAI Responses, Anthropic, and Gemini. `CacheWriteTokensByTTL` contains the
 provider-reported lifetime breakdown of `CacheWriteTokens`. Do not add those
-values to the total again. Missing usage remains unknown. Additional native
-usage details are retained in `Metadata["provider_usage"]` when they cannot be
-represented by the normalized fields.
+values to the total again. Missing accounting is not evidence of zero consumption:
+some adapters retain zero-valued usage when upstream accounting is omitted.
+Additional native usage details are retained in `Metadata["provider_usage"]`
+when they cannot be represented by the normalized fields.
 
 An explicit OpenAI Responses request can prewarm eligible input:
 

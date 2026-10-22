@@ -1,8 +1,11 @@
 # Changelog
 
-## v3.3.0 (Unreleased)
+## v3.3.0 (2026-10-22)
 
 ### Features
+- Add `StreamAndCollect` with detached full-response collection, including usage trailers and terminal errors.
+- Add cache-aware usage cost estimates with explicit prompt accounting and unknown-price categories, without changing existing `EstimateCost` behavior.
+- Add `wormholetest.NewScriptedProvider` for ordered offline text and stream fixtures.
 - Add response-scoped provider request IDs, status codes, filtered headers, and response warnings without changing the provider interface.
 - Preserve provider cache accounting, including cache-write lifetime breakdowns, and support explicit OpenAI Responses prewarming that bypasses local response memoization.
 - Preserve explicit reasoning controls and add `IncludeThoughts` for summary visibility separately from generation settings.
@@ -22,8 +25,13 @@
 - Document application controls, tools-plus-JSON round trips, provider limitations, and unchanged provider-bridge boundaries in the [provider fidelity guide](docs/guides/provider-fidelity.md).
 - Keep local endpoint setup explicit and use exact server model IDs.
 
-### Release preparation
-- This entry prepares the additive `/v3` release. It does not indicate publication or live-provider performance or billing verification.
+### Compatibility notes
+- Structured requests now reject missing schemas, unsupported schema assertions and malformed definitions before provider I/O, and validate final results locally. Applications relying on previously ignored constraints must use the documented supported subset.
+- Tools-mode final results use the reserved `__wormhole_structured_output` name; update custom wire fixtures rather than relying on the previous synthetic tool name.
+
+### Release scope
+- `/v3` SDK and proxy feature release; module path and provider interface stay unchanged. The date records local preparation; publication is tracked separately by the Git tag and GitHub release.
+- No live-provider performance or billing verification is claimed.
 
 ## v3.2.0 (2026-10-13)
 

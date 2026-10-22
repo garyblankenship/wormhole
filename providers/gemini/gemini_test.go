@@ -457,6 +457,7 @@ func TestGeminiProvider_Structured(t *testing.T) {
 		{
 			name: "basic structured output",
 			request: types.StructuredRequest{
+				Mode: types.StructuredModeJSON,
 				BaseRequest: types.BaseRequest{
 					Model: "gemini-pro",
 				},
@@ -494,6 +495,7 @@ func TestGeminiProvider_Structured(t *testing.T) {
 		{
 			name: "invalid JSON response",
 			request: types.StructuredRequest{
+				Mode: types.StructuredModeJSON,
 				BaseRequest: types.BaseRequest{
 					Model: "gemini-pro",
 				},

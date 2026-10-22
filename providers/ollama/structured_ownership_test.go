@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
-	"strings"
 	"sync"
 	"testing"
 
@@ -38,7 +37,11 @@ func TestStructuredDoesNotMutateCallerMessages(t *testing.T) {
 		BaseRequest: types.BaseRequest{Model: "test"},
 		Messages:    []types.Message{user},
 		Schema:      map[string]any{"type": "object"},
-		Mode:        types.StructuredModeStrict,
+		Mode:        types.StructuredModeJSON,
+	}
+	schemaJSON, err := json.Marshal(request.Schema)
+	if err != nil {
+		t.Fatal(err)
 	}
 	const calls = 8
 	var wg sync.WaitGroup
@@ -69,8 +72,8 @@ func TestStructuredDoesNotMutateCallerMessages(t *testing.T) {
 		if !ok {
 			t.Fatalf("request %d content type = %T", i, payload.Messages[0].Content)
 		}
-		if got := strings.Count(content, "Please respond with valid JSON"); got != 1 {
-			t.Fatalf("request %d schema instructions = %d, content %q", i, got, content)
+		if want := "original\n\n" + string(schemaJSON); content != want {
+			t.Fatalf("request %d content = %q, want %q", i, content, want)
 		}
 	}
 }
@@ -91,12 +94,17 @@ func TestStructuredErrorDoesNotMutateCallerMessages(t *testing.T) {
 		http.Error(w, "failed", http.StatusInternalServerError)
 	})
 	user := types.NewUserMessage("original")
-	_, err := provider.Structured(context.Background(), types.StructuredRequest{
+	request := types.StructuredRequest{
 		BaseRequest: types.BaseRequest{Model: "test"},
 		Messages:    []types.Message{user},
 		Schema:      map[string]any{"type": "object"},
-		Mode:        types.StructuredModeStrict,
-	})
+		Mode:        types.StructuredModeJSON,
+	}
+	schemaJSON, err := json.Marshal(request.Schema)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = provider.Structured(context.Background(), request)
 	if err == nil {
 		t.Fatal("Structured returned nil error")
 	}
@@ -113,7 +121,7 @@ func TestStructuredErrorDoesNotMutateCallerMessages(t *testing.T) {
 			t.Fatalf("outbound request %d messages = %d, want 1", i, len(payload.Messages))
 		}
 		content, ok := payload.Messages[0].Content.(string)
-		if !ok || strings.Count(content, "Please respond with valid JSON") != 1 {
+		if !ok || content != "original\n\n"+string(schemaJSON) {
 			t.Fatalf("outbound request %d schema instruction content = %#v", i, payload.Messages[0].Content)
 		}
 	}

@@ -46,7 +46,11 @@ func TestV330StructuredControlledToolRoundTrip(t *testing.T) {
 	cfg := types.NewProviderConfig("fixture")
 	cfg.BaseURL = upstream.URL
 	client := New(WithOpenAI("fixture", cfg))
-	defer client.Close()
+	t.Cleanup(func() {
+		if err := client.Close(); err != nil {
+			t.Errorf("close client: %v", err)
+		}
+	})
 	builder := client.Structured().Using("openai").Model("fixture").Prompt("look up value").Schema(map[string]any{"type": "object", "properties": map[string]any{"value": map[string]any{"type": "string"}}, "required": []string{"value"}}).Mode(types.StructuredModeTools).Tools(*types.NewTool("lookup", "lookup", map[string]any{"type": "object"}))
 	var output struct {
 		Value string `json:"value"`

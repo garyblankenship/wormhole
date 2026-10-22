@@ -6,9 +6,10 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/stretchr/testify/require"
+
 	wormhole "github.com/garyblankenship/wormhole/v3"
 	"github.com/garyblankenship/wormhole/v3/discovery"
-	"github.com/stretchr/testify/require"
 )
 
 func TestExplicitLocalProviderGeneration(t *testing.T) {

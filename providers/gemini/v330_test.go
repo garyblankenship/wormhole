@@ -60,7 +60,9 @@ func TestV330GeminiMetadataUsageAndCitations(t *testing.T) {
 		w.Header().Set("X-Request-ID", "upstream-id")
 		if strings.Contains(r.URL.Path, "streamGenerateContent") {
 			body, _ := json.Marshal(frame)
-			fmt.Fprintf(w, "data: %s\n\n", body)
+			if _, err := fmt.Fprintf(w, "data: %s\n\n", body); err != nil {
+				t.Errorf("write streamed fixture: %v", err)
+			}
 			return
 		}
 		_ = json.NewEncoder(w).Encode(frame)

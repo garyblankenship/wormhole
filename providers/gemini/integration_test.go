@@ -530,6 +530,7 @@ func TestGeminiProvider_IntegrationStructuredOutput(t *testing.T) {
 			types.NewUserMessage("Generate a person profile with technical skills"),
 		},
 		Schema: schema,
+		Mode:   types.StructuredModeJSON,
 	}
 
 	// Execute request

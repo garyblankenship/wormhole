@@ -16,6 +16,202 @@ type streamedCall struct {
 	application    bool
 }
 
+// chunkDeltas normalizes the chunk's tool-call representations into one list.
+func chunkDeltas(chunk types.TextChunk) []types.ToolCall {
+	deltas := chunk.ToolCalls
+	if len(deltas) == 0 && chunk.ToolCall != nil {
+		deltas = []types.ToolCall{*chunk.ToolCall}
+	}
+	if len(deltas) == 0 && chunk.Delta != nil {
+		deltas = chunk.Delta.ToolCalls
+	}
+	return deltas
+}
+
+// reconcileCall returns the streamed call a delta belongs to. Out-of-order or
+// reindexed carriers are matched by identifier before a new slot is allocated.
+func reconcileCall(calls map[int]*streamedCall, delta types.ToolCall) *streamedCall {
+	index := delta.Index
+	call := calls[index]
+	if delta.ID != "" && call != nil && call.id != "" && call.id != delta.ID {
+		call = nil
+		for existingIndex, existing := range calls {
+			if existing.id == delta.ID {
+				index = existingIndex
+				call = existing
+				break
+			}
+		}
+		if call == nil {
+			index = len(calls)
+			for calls[index] != nil {
+				index++
+			}
+		}
+	}
+	if call == nil {
+		call = &streamedCall{}
+		calls[index] = call
+	}
+	if delta.ID != "" {
+		call.id = delta.ID
+	}
+	return call
+}
+
+func deltaName(delta types.ToolCall) string {
+	if delta.Name != "" {
+		return delta.Name
+	}
+	if delta.Function != nil {
+		return delta.Function.Name
+	}
+	return ""
+}
+
+// absorb folds one delta into the accumulated call state and enforces the
+// streaming size budget.
+func (call *streamedCall) absorb(delta types.ToolCall) error {
+	if name := deltaName(delta); name != "" {
+		if call.name == "" || strings.HasPrefix(name, call.name) {
+			call.name = name
+		} else if name != call.name {
+			call.name += name
+		}
+	}
+	if delta.Function != nil {
+		call.args += delta.Function.Arguments
+	}
+	if delta.Arguments != nil {
+		call.arguments = types.CloneMap(delta.Arguments)
+	}
+	if len(call.args)+len(call.name) > 10<<20 || len(call.pending) >= maxSchemaWork {
+		return fmt.Errorf("structured result exceeds streaming limit")
+	}
+	return nil
+}
+
+// reveal forwards application-tool deltas and keeps synthetic result deltas
+// private until the buffered arguments are validated at the terminal chunk.
+func (call *streamedCall) reveal(visible []types.ToolCall, delta types.ToolCall) []types.ToolCall {
+	if call.application {
+		return append(visible, delta)
+	}
+	call.pending = append(call.pending, types.CloneToolCalls([]types.ToolCall{delta})[0])
+	if call.name != "" && !strings.HasPrefix(ResultToolName, call.name) {
+		call.application = true
+		visible = append(visible, call.pending...)
+		call.pending = nil
+	} else if call.name == ResultToolName {
+		// The reserved name is complete; its arguments stay private.
+		call.pending = nil
+	}
+	return visible
+}
+
+// projectDeltas folds every delta into tracker state and returns the calls that
+// are forwardable so far.
+func projectDeltas(calls map[int]*streamedCall, deltas, visible []types.ToolCall) ([]types.ToolCall, error) {
+	for _, delta := range deltas {
+		call := reconcileCall(calls, delta)
+		if err := call.absorb(delta); err != nil {
+			return visible, err
+		}
+		visible = call.reveal(visible, delta)
+	}
+	return visible, nil
+}
+
+// finalizeCalls flushes buffered application calls at the terminal chunk and
+// selects the single structured result call.
+func finalizeCalls(calls map[int]*streamedCall, visible []types.ToolCall) (*streamedCall, []types.ToolCall, error) {
+	var result *streamedCall
+	var failure error
+	applications := 0
+	for _, call := range calls {
+		if call.name == ResultToolName {
+			if result != nil {
+				failure = fmt.Errorf("multiple structured result calls")
+			}
+			result = call
+			continue
+		}
+		applications++
+		visible = append(visible, call.pending...)
+		call.pending = nil
+	}
+	if failure == nil && result != nil {
+		if applications > 0 {
+			failure = fmt.Errorf("application and final result calls were mixed")
+		}
+	} else if failure == nil && applications == 0 {
+		failure = fmt.Errorf("missing structured result tool call")
+	}
+	return result, visible, failure
+}
+
+// applyFinalResult decodes, validates, and projects the buffered result
+// arguments onto the terminal chunk.
+func applyFinalResult(schema types.Schema, chunk *types.TextChunk, result *streamedCall) error {
+	var value any
+	if result.args != "" {
+		if err := json.Unmarshal([]byte(result.args), &value); err != nil {
+			return err
+		}
+	} else {
+		value = result.arguments
+	}
+	if err := Validate(schema, value); err != nil {
+		return err
+	}
+	raw, err := json.Marshal(value)
+	if err != nil {
+		return err
+	}
+	chunk.Text = string(raw)
+	if chunk.Delta != nil {
+		chunk.Delta.Content = chunk.Text
+	}
+	finish := types.FinishReasonStop
+	chunk.FinishReason = &finish
+	return nil
+}
+
+// clearFinalOutputs hides unprojected result state from a failed terminal chunk.
+func clearFinalOutputs(chunk *types.TextChunk) {
+	chunk.FinishReason = nil
+	chunk.Text = ""
+	if chunk.Delta != nil {
+		chunk.Delta.Content = ""
+	}
+}
+
+// finalizeChunk projects terminal state for the structured result, if any, and
+// reports that the stream has completed.
+func finalizeChunk(schema types.Schema, chunk *types.TextChunk, calls map[int]*streamedCall, visible []types.ToolCall) []types.ToolCall {
+	result, flushed, err := finalizeCalls(calls, visible)
+	visible = flushed
+	chunk.Error = err
+	if chunk.Error == nil && result != nil {
+		chunk.Error = applyFinalResult(schema, chunk, result)
+	}
+	if chunk.Error != nil {
+		clearFinalOutputs(chunk)
+	}
+	return visible
+}
+
+// attachVisible publishes the forwardable calls on every carrier of the chunk.
+func attachVisible(chunk *types.TextChunk, visible []types.ToolCall) {
+	chunk.ToolCall = nil
+	chunk.ToolCalls = visible
+	if chunk.Delta != nil {
+		detached := *chunk.Delta
+		detached.ToolCalls = visible
+		chunk.Delta = &detached
+	}
+}
+
 // StreamTools forwards application tool deltas but buffers and validates the
 // synthetic result arguments. Its goroutine exits on cancellation or input close.
 func StreamTools(ctx context.Context, schema types.Schema, in <-chan types.TextChunk) <-chan types.TextChunk {
@@ -54,137 +250,18 @@ func StreamTools(ctx context.Context, schema types.Schema, in <-chan types.TextC
 				send(chunk)
 				return
 			}
-			deltas := chunk.ToolCalls
-			if len(deltas) == 0 && chunk.ToolCall != nil {
-				deltas = []types.ToolCall{*chunk.ToolCall}
+			deltas := chunkDeltas(chunk)
+			visible, err := projectDeltas(calls, deltas, make([]types.ToolCall, 0, len(deltas)))
+			if err != nil {
+				send(types.TextChunk{Error: err})
+				return
 			}
-			if len(deltas) == 0 && chunk.Delta != nil {
-				deltas = chunk.Delta.ToolCalls
-			}
-			visible := make([]types.ToolCall, 0, len(deltas))
-			for _, delta := range deltas {
-				index := delta.Index
-				call := calls[index]
-				if delta.ID != "" && call != nil && call.id != "" && call.id != delta.ID {
-					call = nil
-					for existingIndex, existing := range calls {
-						if existing.id == delta.ID {
-							index = existingIndex
-							call = existing
-							break
-						}
-					}
-					if call == nil {
-						index = len(calls)
-						for calls[index] != nil {
-							index++
-						}
-					}
-				}
-				if call == nil {
-					call = &streamedCall{}
-					calls[index] = call
-				}
-				if delta.ID != "" {
-					call.id = delta.ID
-				}
-				name := delta.Name
-				if name == "" && delta.Function != nil {
-					name = delta.Function.Name
-				}
-				if name != "" {
-					if call.name == "" || strings.HasPrefix(name, call.name) {
-						call.name = name
-					} else if name != call.name {
-						call.name += name
-					}
-				}
-				if delta.Function != nil {
-					call.args += delta.Function.Arguments
-				}
-				if delta.Arguments != nil {
-					call.arguments = types.CloneMap(delta.Arguments)
-				}
-				if len(call.args)+len(call.name) > 10<<20 || len(call.pending) >= maxSchemaWork {
-					send(types.TextChunk{Error: fmt.Errorf("structured result exceeds streaming limit")})
-					return
-				}
-				if call.application {
-					visible = append(visible, delta)
-				} else {
-					call.pending = append(call.pending, types.CloneToolCalls([]types.ToolCall{delta})[0])
-					if call.name != "" && !strings.HasPrefix(ResultToolName, call.name) {
-						call.application = true
-						visible = append(visible, call.pending...)
-						call.pending = nil
-					} else if call.name == ResultToolName {
-						// The reserved name is complete; its arguments stay private.
-						call.pending = nil
-					}
-				}
-			}
-			chunk.ToolCall = nil
-			chunk.ToolCalls = visible
-			if chunk.Delta != nil {
-				detached := *chunk.Delta
-				detached.ToolCalls = visible
-				chunk.Delta = &detached
-			}
+			attachVisible(&chunk, visible)
 			if chunk.FinishReason != nil {
-				var result *streamedCall
-				applications := 0
-				for _, call := range calls {
-					if call.name == ResultToolName {
-						if result != nil {
-							chunk.Error = fmt.Errorf("multiple structured result calls")
-						}
-						result = call
-					} else {
-						applications++
-						visible = append(visible, call.pending...)
-						call.pending = nil
-					}
-				}
-				if chunk.Error == nil && result != nil {
-					if applications > 0 {
-						chunk.Error = fmt.Errorf("application and final result calls were mixed")
-					} else {
-						var value any
-						if result.args != "" {
-							chunk.Error = json.Unmarshal([]byte(result.args), &value)
-						} else {
-							value = result.arguments
-						}
-						if chunk.Error == nil {
-							chunk.Error = Validate(schema, value)
-						}
-						if chunk.Error == nil {
-							raw, err := json.Marshal(value)
-							chunk.Error = err
-							chunk.Text = string(raw)
-							if chunk.Delta != nil {
-								chunk.Delta.Content = chunk.Text
-							}
-							finish := types.FinishReasonStop
-							chunk.FinishReason = &finish
-						}
-					}
-				} else if chunk.Error == nil && applications == 0 {
-					chunk.Error = fmt.Errorf("missing structured result tool call")
-				}
-				if chunk.Error != nil {
-					chunk.FinishReason = nil
-					chunk.Text = ""
-					if chunk.Delta != nil {
-						chunk.Delta.Content = ""
-					}
-				}
+				visible = finalizeChunk(schema, &chunk, calls, visible)
 				completed = true
 			}
-			chunk.ToolCalls = visible
-			if chunk.Delta != nil {
-				chunk.Delta.ToolCalls = visible
-			}
+			attachVisible(&chunk, visible)
 			// Suppressed synthetic deltas never create metadata-only first chunks.
 			if len(deltas) > 0 && len(visible) == 0 && chunk.FinishReason == nil && chunk.Error == nil && chunk.Content() == "" && chunk.Thinking == nil {
 				continue

@@ -7,9 +7,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/require"
+
 	"github.com/garyblankenship/wormhole/v3/middleware"
 	"github.com/garyblankenship/wormhole/v3/types"
-	"github.com/stretchr/testify/require"
 )
 
 type endpointIsolationCache struct{ entries map[string]any }

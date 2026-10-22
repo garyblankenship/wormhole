@@ -122,6 +122,7 @@ func TestProviderStructuredInvalidJSON(t *testing.T) {
 	_, err := provider.Structured(context.Background(), types.StructuredRequest{
 		BaseRequest: types.BaseRequest{Model: "llama3"},
 		Messages:    []types.Message{types.NewUserMessage("json")},
+		Schema:      map[string]any{"type": "object"},
 		Mode:        types.StructuredModeJSON,
 	})
 	require.Error(t, err)
