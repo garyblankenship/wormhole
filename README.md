@@ -249,8 +249,13 @@ Common environment variables:
 | `ZAI_API_KEY` | Z.AI |
 | `ZAI_BASE_URL` | Optional Z.AI upstream override |
 | `OLLAMA_BASE_URL` | Ollama native API |
-| `LMSTUDIO_BASE_URL` | LM Studio |
-| `WORMHOLE_API_KEY` | Optional proxy bearer token |
+| `LMSTUDIO_BASE_URL` | Opt in to LM Studio in `wormhole serve` |
+| `LMSTUDIO_API_KEY` | Optional LM Studio upstream bearer token |
+| `VLLM_BASE_URL` | Opt in to a vLLM / oMLX OpenAI-compatible upstream |
+| `VLLM_API_KEY` | Optional vLLM / oMLX upstream bearer token |
+| `OLLAMA_OPENAI_BASE_URL` | Opt in to Ollama’s OpenAI-compatible API |
+| `OLLAMA_OPENAI_API_KEY` | Optional Ollama OpenAI-compatible upstream bearer token |
+| `WORMHOLE_API_KEY` | Optional proxy ingress bearer token |
 
 Never hardcode provider keys in source code. The multiverse already has enough
 ways to ruin your week; leaked credentials do not need to audition.
@@ -726,6 +731,14 @@ export OLLAMA_BASE_URL=http://localhost:11434
 # --addr :8080 AND set WORMHOLE_API_KEY (an unauthenticated non-loopback bind is refused).
 ./wormhole serve --default-provider openai
 ```
+
+Local OpenAI-compatible backends require their explicit `*_BASE_URL` to opt in.
+When the matching `*_API_KEY` above is nonempty, the proxy sends that backend’s
+`Authorization: Bearer` credential; otherwise it retains no-auth local behavior.
+A backend key alone does not enable the service. These credentials are independent
+of `WORMHOLE_API_KEY`, which authenticates callers to the proxy and is not forwarded
+as an upstream key. For an authenticated oMLX server, use `VLLM_BASE_URL` with a
+separate inference-only `VLLM_API_KEY`, not the oMLX admin key.
 
 Model prefixes select a provider:
 

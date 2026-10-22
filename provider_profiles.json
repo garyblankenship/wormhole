@@ -114,6 +114,7 @@
     "kind": "openai-compatible",
     "default_base_url": "http://localhost:1234/v1",
     "base_url_env": "LMSTUDIO_BASE_URL",
+    "api_key_env": ["LMSTUDIO_API_KEY"],
     "discovery": "openai-compatible",
     "local": true
   },
@@ -123,6 +124,7 @@
     "kind": "openai-compatible",
     "default_base_url": "http://localhost:8000/v1",
     "base_url_env": "VLLM_BASE_URL",
+    "api_key_env": ["VLLM_API_KEY"],
     "discovery": "openai-compatible",
     "local": true
   },
@@ -132,6 +134,7 @@
     "kind": "openai-compatible",
     "default_base_url": "http://localhost:11434/v1",
     "base_url_env": "OLLAMA_OPENAI_BASE_URL",
+    "api_key_env": ["OLLAMA_OPENAI_API_KEY"],
     "discovery": "openai-compatible",
     "local": true
   }

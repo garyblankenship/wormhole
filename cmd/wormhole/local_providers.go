@@ -12,9 +12,22 @@ func explicitLocalProviderOptions(getenv func(string) string) []wormhole.Option 
 		if !profile.Local || profile.Kind != "openai-compatible" || profile.BaseURLEnv == "" {
 			continue
 		}
-		if baseURL := getenv(profile.BaseURLEnv); baseURL != "" {
-			opts = append(opts, wormhole.WithProfiledOpenAICompatible(profile.Name, types.ProviderConfig{BaseURL: baseURL, NoAuth: true, DynamicModels: true}))
+		baseURL := getenv(profile.BaseURLEnv)
+		if baseURL == "" {
+			continue
 		}
+		var apiKey string
+		for _, keyEnv := range profile.APIKeyEnv {
+			if apiKey = getenv(keyEnv); apiKey != "" {
+				break
+			}
+		}
+		opts = append(opts, wormhole.WithProfiledOpenAICompatible(profile.Name, types.ProviderConfig{
+			BaseURL:       baseURL,
+			APIKey:        apiKey,
+			NoAuth:        apiKey == "",
+			DynamicModels: true,
+		}))
 	}
 	return opts
 }
