@@ -180,7 +180,7 @@ func (w *HTTPClientWrapper) isTimeoutError(err error) bool {
 }
 
 func (w *HTTPClientWrapper) Close() error {
-	if w.httpClient != nil && w.httpClient.Transport != nil {
+	if w.clientOwned && w.httpClient != nil && w.httpClient.Transport != nil {
 		if transport, ok := w.httpClient.Transport.(interface{ CloseIdleConnections() }); ok {
 			transport.CloseIdleConnections()
 		}

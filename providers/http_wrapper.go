@@ -15,6 +15,8 @@ type HTTPClientWrapper struct {
 	Config         types.ProviderConfig
 	tlsConfig      *config.TLSConfig
 	httpClient     *http.Client
+	client         HTTPClient
+	clientOwned    bool
 	retryClient    *retryableHTTPClient
 	authStrategy   AuthStrategy
 	keyPool        *keyPool
@@ -42,18 +44,17 @@ func NewHTTPClientWrapper(name string, providerConfig types.ProviderConfig, tlsC
 		transportCache: NewTransportCache(),
 	}
 
-	// Use injected client if provided, otherwise create default
-	if httpClient != nil {
-		// Type assertion to get the concrete *http.Client if possible
-		if hc, ok := httpClient.(*http.Client); ok {
-			w.httpClient = hc
-		} else {
-			// For non-standard HTTPClient implementations, create a concrete client for GetHTTPClient()
-			w.httpClient = w.transportCache.newSecureHTTPClient(0, tlsConfig, nil, providerConfig.BaseURL)
-		}
-	} else {
+	// The concrete facade must also route through a nonstandard injected client.
+	w.clientOwned = httpClient == nil
+	if httpClient == nil {
 		w.httpClient = w.transportCache.newSecureHTTPClient(0, tlsConfig, nil, providerConfig.BaseURL)
+		httpClient = w.httpClient
+	} else if hc, ok := httpClient.(*http.Client); ok {
+		w.httpClient = hc
+	} else {
+		w.httpClient = &http.Client{Transport: injectedRoundTripper{httpClient}, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
 	}
+	w.client = httpClient
 
 	retryConfig := defaultRetryConfig()
 	if providerConfig.MaxRetries != nil {

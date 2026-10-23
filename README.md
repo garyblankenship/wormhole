@@ -120,6 +120,9 @@ does not need a second garage.
 | vLLM | `WithVLLM(config)` | OpenAI-compatible local text and streaming |
 | Custom | `WithCustomProvider(name, factory)` | whatever your provider implements |
 
+For caller-owned HTTP clients and lossless nonstreaming generation evidence, see
+[Generation evidence](docs/concepts/generation-evidence.md).
+
 Known providers are described by `provider_profiles.json` and exposed through
 `KnownProviderProfiles()` / `ProviderProfileByName()`. The profile data owns
 default OpenAI-compatible base URLs, environment variable names, local-provider

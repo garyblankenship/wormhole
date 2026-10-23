@@ -25,17 +25,29 @@ var _ types.Provider = (*Provider)(nil)
 
 // New creates a new OpenAI provider
 func New(config types.ProviderConfig) *Provider {
-	return NewWithName("openai", config)
+	return NewWithNameAndHTTPClient("openai", config, nil)
 }
 
 // NewWithName creates an OpenAI-compatible provider with a caller-visible provider name.
 func NewWithName(name string, config types.ProviderConfig) *Provider {
+	return NewWithNameAndHTTPClient(name, config, nil)
+}
+
+// NewWithHTTPClient creates an OpenAI provider using a caller-owned client.
+// A nil client selects the existing secure default. Retry policy is unchanged.
+func NewWithHTTPClient(config types.ProviderConfig, client providers.HTTPClient) *Provider {
+	return NewWithNameAndHTTPClient("openai", config, client)
+}
+
+// NewWithNameAndHTTPClient creates a named provider using a caller-owned client.
+// Close never closes the supplied client or its transport.
+func NewWithNameAndHTTPClient(name string, config types.ProviderConfig, client providers.HTTPClient) *Provider {
 	if config.BaseURL == "" {
 		config.BaseURL = defaultBaseURL
 	}
 
 	return &Provider{
-		BaseProvider:         providers.NewBaseProvider(name, config),
+		BaseProvider:         providers.NewBaseProviderWithAuth(name, config, nil, nil, client),
 		requestBuilder:       providers.NewRequestBuilder(),
 		streamingTransformer: transform.NewOpenAIStreamingTransformer(),
 	}

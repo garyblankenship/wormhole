@@ -1,5 +1,12 @@
 # Changelog
 
+## v3.4.0 (2026-10-23)
+
+- Add supported OpenAI-compatible HTTP-client injection; injected clients remain caller-owned and all requests use the supplied transport.
+- Add optional nonstreaming Chat Completions generation evidence with exact bounded response bodies, all original choices/function calls, response metadata and presence-aware usage.
+- Derive normalized output and untrusted wire evidence from one request; preserve complete bodies when normalization fails. Other API families and streaming evidence are unsupported.
+- Document custom-provider factory adoption without builder fallback or orchestration changes.
+
 ## v3.3.0 (2026-10-22)
 
 ### Features
