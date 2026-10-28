@@ -28,20 +28,14 @@ func (c *ModelCache) Get(provider string) ([]*types.ModelInfo, bool) {
 
 	// L2: Check file cache (if enabled)
 	if c.enableFileCache {
-		if models, ok, migration := c.loadFromFileLifecycleHeld(provider); ok {
-			// Populate memory cache
-			entry := &CacheEntry{
-				Models:    models,
-				Timestamp: time.Now(),
-				Provider:  provider,
-			}
+		if entry, ok, migration := c.loadFromFileLifecycleHeld(provider); ok {
 			c.memoryMu.Lock()
 			c.memory[provider] = entry
 			c.memoryMu.Unlock()
 			if migration != nil {
 				releaseLifecycle = !c.scheduleMigrationLifecycleHeld(provider, migration)
 			}
-			return cloneModels(models), true
+			return cloneModels(entry.Models), true
 		}
 	}
 
@@ -96,15 +90,18 @@ func (c *ModelCache) Set(provider string, models []*types.ModelInfo) {
 // loadFromFile loads models from persistent file cache
 func (c *ModelCache) loadFromFile(provider string) ([]*types.ModelInfo, bool) {
 	c.muClosed.RLock()
-	models, ok, migration := c.loadFromFileLifecycleHeld(provider)
+	entry, ok, migration := c.loadFromFileLifecycleHeld(provider)
 	if migration != nil && c.scheduleMigrationLifecycleHeld(provider, migration) {
-		return models, ok
+		return entry.Models, ok
 	}
 	c.muClosed.RUnlock()
-	return models, ok
+	if !ok {
+		return nil, false
+	}
+	return entry.Models, true
 }
 
-func (c *ModelCache) loadFromFileLifecycleHeld(provider string) ([]*types.ModelInfo, bool, *CacheEntry) {
+func (c *ModelCache) loadFromFileLifecycleHeld(provider string) (*CacheEntry, bool, *CacheEntry) {
 	// Use a per-provider read lock for consistency.
 	lock := c.getProviderLock(provider)
 	lock.RLock()
@@ -121,7 +118,7 @@ func (c *ModelCache) loadFromFileLifecycleHeld(provider string) ([]*types.ModelI
 		if time.Since(entry.Timestamp) > c.fileTTL {
 			return c.loadFromMonolithicLifecycleHeld(provider)
 		}
-		return entry.Models, true, nil
+		return entry, true, nil
 	}
 	if !os.IsNotExist(err) {
 		lock.RUnlock()
@@ -139,7 +136,7 @@ func (c *ModelCache) loadFromFileLifecycleHeld(provider string) ([]*types.ModelI
 		if time.Since(entry.Timestamp) > c.fileTTL {
 			return c.loadFromMonolithicLifecycleHeld(provider)
 		}
-		return entry.Models, true, entry
+		return entry, true, entry
 	}
 	if !os.IsNotExist(err) {
 		return nil, false, nil
@@ -150,7 +147,7 @@ func (c *ModelCache) loadFromFileLifecycleHeld(provider string) ([]*types.ModelI
 
 // loadFromMonolithicLifecycleHeld reads the legacy cache using the same exact
 // provider/account key requested by the caller.
-func (c *ModelCache) loadFromMonolithicLifecycleHeld(provider string) ([]*types.ModelInfo, bool, *CacheEntry) {
+func (c *ModelCache) loadFromMonolithicLifecycleHeld(provider string) (*CacheEntry, bool, *CacheEntry) {
 	data, err := os.ReadFile(c.filePath) // #nosec G304 - path validated via ValidatePath
 	if err != nil {
 		return nil, false, nil // File doesn't exist or can't be read
@@ -172,7 +169,7 @@ func (c *ModelCache) loadFromMonolithicLifecycleHeld(provider string) ([]*types.
 		return nil, false, nil
 	}
 
-	return entry.Models, true, entry
+	return entry, true, entry
 }
 
 func (c *ModelCache) decodeProviderShard(data []byte, provider string) (*CacheEntry, bool) {

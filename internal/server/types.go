@@ -14,6 +14,16 @@ type ChatMessage struct {
 	ToolCalls   []ChatToolCall   `json:"tool_calls,omitempty"`
 }
 
+// ChatDelta contains only fields present in a streaming message fragment.
+// Full messages retain their required role and content fields in ChatMessage.
+type ChatDelta struct {
+	Role        string           `json:"role,omitempty"`
+	Content     string           `json:"content,omitempty"`
+	Refusal     string           `json:"refusal,omitempty"`
+	Annotations []map[string]any `json:"annotations,omitempty"`
+	ToolCalls   []ChatToolCall   `json:"tool_calls,omitempty"`
+}
+
 // ChatTool is an OpenAI-format tool definition on a request.
 type ChatTool struct {
 	Type     string           `json:"type"`
@@ -57,7 +67,7 @@ type ChatCompletionResponse struct {
 type ChatChoice struct {
 	Index        int          `json:"index"`
 	Message      *ChatMessage `json:"message,omitempty"`
-	Delta        *ChatMessage `json:"delta,omitempty"`
+	Delta        *ChatDelta   `json:"delta,omitempty"`
 	FinishReason *string      `json:"finish_reason,omitempty"`
 }
 

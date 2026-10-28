@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"net/http"
+	"net/url"
 	"sort"
 	"strings"
 
@@ -94,4 +95,16 @@ func applyHeaders(req *http.Request, headers map[string]string) {
 	for _, key := range keys {
 		req.Header.Set(key, headers[key])
 	}
+}
+
+// normalizedEndpoint keeps equivalent host casing and trailing slashes in one scope.
+func normalizedEndpoint(endpoint string) string {
+	endpoint = strings.TrimRight(endpoint, "/")
+	parsed, err := url.Parse(endpoint)
+	if err != nil {
+		return endpoint
+	}
+	parsed.Scheme = strings.ToLower(parsed.Scheme)
+	parsed.Host = strings.ToLower(parsed.Host)
+	return parsed.String()
 }

@@ -46,14 +46,37 @@ func (tc *TransportCache) get(key string) (*http.Transport, bool) {
 
 func (tc *TransportCache) set(key string, transport *http.Transport) {
 	tc.mu.Lock()
-	defer tc.mu.Unlock()
-	if existing, ok := tc.transports[key]; ok && existing.transport != nil {
-		existing.transport.CloseIdleConnections()
+	var retired []*http.Transport
+	if existing, ok := tc.transports[key]; ok && existing.transport != nil && existing.transport != transport {
+		retired = append(retired, existing.transport)
 	}
 	entry := &cachedTransport{transport: transport}
 	entry.lastUsedNano.Store(time.Now().UnixNano())
 	tc.transports[key] = entry
-	tc.evictOldestLocked()
+	retired = append(retired, tc.evictOldestLocked()...)
+	tc.mu.Unlock()
+	closeIdleTransports(retired)
+}
+
+// closeIdleConnections detaches owned transports before closing them, so network
+// cleanup never runs while the cache lock is held.
+func (tc *TransportCache) closeIdleConnections() {
+	tc.mu.Lock()
+	transports := make([]*http.Transport, 0, len(tc.transports))
+	for _, entry := range tc.transports {
+		transports = append(transports, entry.transport)
+	}
+	tc.transports = make(map[string]*cachedTransport)
+	tc.mu.Unlock()
+	closeIdleTransports(transports)
+}
+
+func closeIdleTransports(transports []*http.Transport) {
+	for _, transport := range transports {
+		if transport != nil {
+			transport.CloseIdleConnections()
+		}
+	}
 }
 
 // recordMiss increments the cache-miss counter. Call when get() returns false.
@@ -62,9 +85,9 @@ func (tc *TransportCache) recordMiss() {
 }
 
 // evictOldestLocked must be called with tc.mu held.
-func (tc *TransportCache) evictOldestLocked() {
+func (tc *TransportCache) evictOldestLocked() []*http.Transport {
 	if len(tc.transports) <= maxCachedTransports {
-		return
+		return nil
 	}
 
 	type transportInfo struct {
@@ -81,16 +104,16 @@ func (tc *TransportCache) evictOldestLocked() {
 		return entries[i].lastUsedNano < entries[j].lastUsedNano
 	})
 
+	var retired []*http.Transport
 	for len(tc.transports) > maxCachedTransports && len(entries) > 0 {
 		victim := entries[0]
 		entries = entries[1:]
 		if entry, ok := tc.transports[victim.key]; ok {
-			if entry.transport != nil {
-				entry.transport.CloseIdleConnections()
-			}
+			retired = append(retired, entry.transport)
 			delete(tc.transports, victim.key)
 		}
 	}
+	return retired
 }
 
 // TransportCacheMetrics holds transport cache performance statistics

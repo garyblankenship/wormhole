@@ -37,8 +37,12 @@ func ClassifyError(err error) ErrorClass {
 		// "RESOURCE_EXHAUSTED" is a quota cap (non-retryable), not a plain
 		// rate-limit, yet both arrive as HTTP 429. Check before the status map
 		// so the 429->rate_limit branch does not mask quota.
-		if containsAny(wormholeErr.Message+" "+wormholeErr.Details, "quota", "exhausted") {
+		if containsAny(wormholeErr.Message+" "+wormholeErr.Details, "quota", "exhausted") ||
+			(wormholeErr.Code == ErrorCodeRateLimit && !wormholeErr.Retryable) {
 			return ErrorClassQuota
+		}
+		if wormholeErr.Code == ErrorCodeAuth {
+			return ErrorClassAuth
 		}
 		if class, ok := ClassifyStatusCode(wormholeErr.StatusCode); ok {
 			return class
@@ -69,12 +73,12 @@ func ClassifyError(err error) ErrorClass {
 
 	msg := strings.ToLower(err.Error())
 	switch {
-	case containsAny(msg, "rate limit", "too many requests", "http 429"):
-		return ErrorClassRateLimit
-	case strings.Contains(msg, "quota"):
+	case containsAny(msg, "quota", "exhausted"):
 		return ErrorClassQuota
 	case containsAny(msg, "unauthorized", "forbidden", "invalid api key", "auth"):
 		return ErrorClassAuth
+	case containsAny(msg, "rate limit", "too many requests", "http 429"):
+		return ErrorClassRateLimit
 	case containsAny(msg, "not configured", "invalid request", "model not", "validation"):
 		return ErrorClassConfig
 	case containsAny(msg, "timeout", "deadline exceeded"):
@@ -94,7 +98,7 @@ func ClassifyStatusCode(statusCode int) (ErrorClass, bool) {
 	case http.StatusUnauthorized:
 		return ErrorClassAuth, true
 	case http.StatusForbidden:
-		return ErrorClassQuota, true
+		return ErrorClassAuth, true
 	case http.StatusBadRequest, http.StatusNotFound, http.StatusUnprocessableEntity:
 		return ErrorClassConfig, true
 	default:

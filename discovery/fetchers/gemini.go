@@ -45,38 +45,57 @@ func (f *GeminiFetcher) FetchModels(ctx context.Context) ([]*types.ModelInfo, er
 		return nil, fmt.Errorf("gemini API key not configured")
 	}
 
-	req, err := newGetRequest(ctx, f.baseURL+"/models?key="+url.QueryEscape(f.apiKey))
-	if err != nil {
-		return nil, err
-	}
-
-	var response struct {
-		Models []struct {
-			Name                       string   `json:"name"`
-			DisplayName                string   `json:"displayName"`
-			InputTokenLimit            int      `json:"inputTokenLimit"`
-			OutputTokenLimit           int      `json:"outputTokenLimit"`
-			SupportedGenerationMethods []string `json:"supportedGenerationMethods"`
-		} `json:"models"`
-	}
-	if err := fetchJSON(req, &response); err != nil {
-		return nil, err
-	}
-
-	models := make([]*types.ModelInfo, 0, len(response.Models))
-	for _, model := range response.Models {
-		id := strings.TrimPrefix(model.Name, "models/")
-		name := model.DisplayName
-		if name == "" {
-			name = formatModelName(id)
+	models := make([]*types.ModelInfo, 0)
+	seenModels := make(map[string]bool)
+	seenTokens := make(map[string]bool)
+	pageToken := ""
+	for {
+		query := url.Values{"key": {f.apiKey}}
+		if pageToken != "" {
+			query.Set("pageToken", pageToken)
 		}
-		models = append(models, &types.ModelInfo{
-			ID:           id,
-			Name:         name,
-			Provider:     "gemini",
-			Capabilities: inferGeminiCapabilities(model.SupportedGenerationMethods),
-			MaxTokens:    model.InputTokenLimit,
-		})
+		req, err := newGetRequest(ctx, f.baseURL+"/models?"+query.Encode())
+		if err != nil {
+			return nil, err
+		}
+		var response struct {
+			Models []struct {
+				Name                       string   `json:"name"`
+				DisplayName                string   `json:"displayName"`
+				InputTokenLimit            int      `json:"inputTokenLimit"`
+				OutputTokenLimit           int      `json:"outputTokenLimit"`
+				SupportedGenerationMethods []string `json:"supportedGenerationMethods"`
+			} `json:"models"`
+			NextPageToken string `json:"nextPageToken"`
+		}
+		if err := fetchJSON(req, &response); err != nil {
+			return nil, err
+		}
+		for _, model := range response.Models {
+			id := strings.TrimPrefix(model.Name, "models/")
+			if seenModels[id] {
+				continue
+			}
+			seenModels[id] = true
+			name := model.DisplayName
+			if name == "" {
+				name = formatModelName(id)
+			}
+			models = append(models, &types.ModelInfo{
+				ID: id, Name: name, Provider: "gemini",
+				Capabilities:  inferGeminiCapabilities(model.SupportedGenerationMethods),
+				ContextLength: model.InputTokenLimit,
+				MaxTokens:     model.OutputTokenLimit,
+			})
+		}
+		if response.NextPageToken == "" {
+			break
+		}
+		if seenTokens[response.NextPageToken] {
+			return nil, fmt.Errorf("gemini model pagination repeated page token")
+		}
+		seenTokens[response.NextPageToken] = true
+		pageToken = response.NextPageToken
 	}
 
 	return models, nil

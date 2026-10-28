@@ -111,7 +111,23 @@ func toWormholeToolCalls(in []ChatToolCall) ([]types.ToolCall, error) {
 // a response. Arguments are emitted as a JSON string per the OpenAI contract.
 func fromWormholeToolCalls(in []types.ToolCall) []ChatToolCall {
 	out := make([]ChatToolCall, 0, len(in))
+	usedIDs := make(map[string]struct{}, len(in))
 	for _, c := range in {
+		if c.ID != "" {
+			usedIDs[c.ID] = struct{}{}
+		}
+	}
+	nextID := 1
+	for _, c := range in {
+		id := c.ID
+		for id == "" {
+			candidate := fmt.Sprintf("call_%d", nextID)
+			nextID++
+			if _, exists := usedIDs[candidate]; !exists {
+				id = candidate
+				usedIDs[id] = struct{}{}
+			}
+		}
 		args := "{}"
 		name := c.Name
 		switch {
@@ -126,7 +142,7 @@ func fromWormholeToolCalls(in []types.ToolCall) []ChatToolCall {
 			name = c.Function.Name
 		}
 		out = append(out, ChatToolCall{
-			ID:   c.ID,
+			ID:   id,
 			Type: "function",
 			Function: ChatToolCallFunction{
 				Name:      name,

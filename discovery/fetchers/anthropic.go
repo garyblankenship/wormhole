@@ -3,6 +3,7 @@ package fetchers
 import (
 	"context"
 	"fmt"
+	"net/url"
 
 	"github.com/garyblankenship/wormhole/v3/types"
 )
@@ -57,53 +58,60 @@ func (f *AnthropicFetcher) FetchModels(ctx context.Context) ([]*types.ModelInfo,
 		return nil, fmt.Errorf("anthropic API key not configured")
 	}
 
-	req, err := newGetRequest(ctx, f.baseURL+"/models")
-	if err != nil {
-		return nil, err
-	}
-	if !f.noAuth {
-		req.Header.Set("x-api-key", f.apiKey)
-		req.Header.Set("anthropic-version", "2023-06-01")
-	}
-	applyHeaders(req, f.headers)
-
-	var response struct {
-		Data []struct {
-			ID          string `json:"id"`
-			DisplayName string `json:"display_name"`
-			CreatedAt   string `json:"created_at"`
-			Type        string `json:"type"`
-		} `json:"data"`
-	}
-
-	if err := fetchJSON(req, &response); err != nil {
-		return nil, err
-	}
-
-	// Convert to ModelInfo
-	models := make([]*types.ModelInfo, 0, len(response.Data))
-	for _, m := range response.Data {
-		// All Claude models have the same capabilities
-		capabilities := []types.ModelCapability{
-			types.CapabilityText,
-			types.CapabilityChat,
-			types.CapabilityStream,
-			types.CapabilityFunctions,
-			types.CapabilityStructured,
-			types.CapabilityVision,
+	models := make([]*types.ModelInfo, 0)
+	seenModels := make(map[string]bool)
+	seenCursors := make(map[string]bool)
+	afterID := ""
+	for {
+		endpoint := f.baseURL + "/models"
+		if afterID != "" {
+			endpoint += "?" + url.Values{"after_id": {afterID}}.Encode()
 		}
-
-		name := m.DisplayName
-		if name == "" {
-			name = formatClaudeName(m.ID)
+		req, err := newGetRequest(ctx, endpoint)
+		if err != nil {
+			return nil, err
 		}
-
-		models = append(models, &types.ModelInfo{
-			ID:           m.ID,
-			Name:         name,
-			Provider:     "anthropic",
-			Capabilities: capabilities,
-		})
+		if !f.noAuth {
+			req.Header.Set("x-api-key", f.apiKey)
+			req.Header.Set("anthropic-version", "2023-06-01")
+		}
+		applyHeaders(req, f.headers)
+		var response struct {
+			Data []struct {
+				ID          string `json:"id"`
+				DisplayName string `json:"display_name"`
+			} `json:"data"`
+			HasMore bool   `json:"has_more"`
+			LastID  string `json:"last_id"`
+		}
+		if err := fetchJSON(req, &response); err != nil {
+			return nil, err
+		}
+		for _, m := range response.Data {
+			if seenModels[m.ID] {
+				continue
+			}
+			seenModels[m.ID] = true
+			name := m.DisplayName
+			if name == "" {
+				name = formatClaudeName(m.ID)
+			}
+			models = append(models, &types.ModelInfo{
+				ID: m.ID, Name: name, Provider: "anthropic",
+				Capabilities: []types.ModelCapability{
+					types.CapabilityText, types.CapabilityChat, types.CapabilityStream,
+					types.CapabilityFunctions, types.CapabilityStructured, types.CapabilityVision,
+				},
+			})
+		}
+		if !response.HasMore {
+			break
+		}
+		if response.LastID == "" || seenCursors[response.LastID] {
+			return nil, fmt.Errorf("anthropic model pagination has missing or repeated continuation ID")
+		}
+		seenCursors[response.LastID] = true
+		afterID = response.LastID
 	}
 
 	return models, nil

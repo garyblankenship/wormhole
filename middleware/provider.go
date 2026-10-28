@@ -133,7 +133,7 @@ func (m *ProviderMetricsMiddleware) ApplyText(next types.TextHandler) types.Text
 
 func (m *ProviderMetricsMiddleware) ApplyStream(next types.StreamHandler) types.StreamHandler {
 	return func(ctx context.Context, request types.TextRequest) (<-chan types.TextChunk, error) {
-		return withMeasuredRequest(ctx, request, next, func(_ <-chan types.TextChunk, err error, d time.Duration) {
+		return withMeasuredStream(ctx, request, next, false, func(err error, d time.Duration, _, _ int) {
 			m.recordRequest(&m.metrics.StreamRequests, d, err)
 		})
 	}

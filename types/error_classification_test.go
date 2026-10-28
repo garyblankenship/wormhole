@@ -85,7 +85,7 @@ func TestClassifyStatusCode(t *testing.T) {
 	}{
 		{status: http.StatusTooManyRequests, want: ErrorClassRateLimit, ok: true},
 		{status: http.StatusUnauthorized, want: ErrorClassAuth, ok: true},
-		{status: http.StatusForbidden, want: ErrorClassQuota, ok: true},
+		{status: http.StatusForbidden, want: ErrorClassAuth, ok: true},
 		{status: http.StatusBadRequest, want: ErrorClassConfig, ok: true},
 		{status: http.StatusNotFound, want: ErrorClassConfig, ok: true},
 		{status: http.StatusUnprocessableEntity, want: ErrorClassConfig, ok: true},
@@ -97,6 +97,30 @@ func TestClassifyStatusCode(t *testing.T) {
 			got, ok := ClassifyStatusCode(tt.status)
 			if got != tt.want || ok != tt.ok {
 				t.Fatalf("ClassifyStatusCode(%d) = (%s, %t), want (%s, %t)", tt.status, got, ok, tt.want, tt.ok)
+			}
+		})
+	}
+}
+
+func TestClassifyErrorExplicitSignalsBeforeStatus(t *testing.T) {
+	t.Parallel()
+	for _, tt := range []struct {
+		name string
+		err  error
+		want ErrorClass
+	}{
+		{"quota 403", NewWormholeError(ErrorCodeAuth, "quota exhausted", false).WithStatusCode(http.StatusForbidden), ErrorClassQuota},
+		{"auth 403", NewWormholeError(ErrorCodeAuth, "denied", false).WithStatusCode(http.StatusForbidden), ErrorClassAuth},
+		{"unqualified 403", NewWormholeError(ErrorCodeProvider, "denied", true).WithStatusCode(http.StatusForbidden), ErrorClassAuth},
+		{"auth overrides 429", NewWormholeError(ErrorCodeAuth, "invalid key", true).WithStatusCode(http.StatusTooManyRequests), ErrorClassAuth},
+		{"quota 429", NewWormholeError(ErrorCodeRateLimit, "insufficient_quota", false).WithStatusCode(http.StatusTooManyRequests), ErrorClassQuota},
+		{"ordinary 429", NewWormholeError(ErrorCodeRateLimit, "too many requests", true).WithStatusCode(http.StatusTooManyRequests), ErrorClassRateLimit},
+		{"quota code 403", NewWormholeError(ErrorCodeRateLimit, "denied", false).WithStatusCode(http.StatusForbidden), ErrorClassQuota},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			if got := ClassifyError(tt.err); got != tt.want {
+				t.Fatalf("classification = %s, want %s", got, tt.want)
 			}
 		})
 	}

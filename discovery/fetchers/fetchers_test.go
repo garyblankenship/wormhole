@@ -114,11 +114,11 @@ func TestOpenRouterFetcher(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, models, 2)
 	assert.Equal(t, providerOpenRouter, fetcher.Name())
-	assert.Equal(t, "openai", models[0].Provider)
+	assert.Equal(t, "openrouter", models[0].Provider)
 	assert.Equal(t, 400000, models[0].ContextLength)
 	assert.Zero(t, models[0].MaxTokens)
 	assert.True(t, hasCapability(models[0], types.CapabilityChat))
-	assert.Equal(t, "google", models[1].Provider)
+	assert.Equal(t, "openrouter", models[1].Provider)
 	assert.True(t, hasCapability(models[1], types.CapabilityVision))
 }
 

@@ -2,6 +2,7 @@ package wormhole
 
 import (
 	"context"
+	"fmt"
 	"sync"
 	"time"
 
@@ -175,7 +176,11 @@ func (b *BatchBuilder) execute(ctx context.Context) <-chan batchResult {
 	}
 
 	taskCh := make(chan int, len(b.requests))
-	for i := range b.requests {
+	for i, request := range b.requests {
+		if request == nil {
+			resultCh <- batchResult{index: i, err: fmt.Errorf("batch request %d: nil text request builder: %w", i, types.ErrInvalidRequest)}
+			continue
+		}
 		taskCh <- i
 	}
 	close(taskCh)

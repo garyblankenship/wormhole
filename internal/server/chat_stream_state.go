@@ -86,6 +86,13 @@ func (s *chatStreamState) frame(p *proxy, w http.ResponseWriter, flusher http.Fl
 		fr := string(normalizedFinishReason(*chunk.FinishReason))
 		s.terminalReason = fr
 		if s.extension == nil || len(s.extension.Include) == 0 {
+			delta := resp.Choices[0].Delta
+			if delta.Role != "" || delta.Content != "" || delta.Refusal != "" || len(delta.Annotations) > 0 || len(delta.ToolCalls) > 0 {
+				if !s.writeResponse(p, w, flusher, resp) {
+					return false
+				}
+				resp.Choices[0].Delta = &ChatDelta{}
+			}
 			resp.Choices[0].FinishReason = &fr
 			s.terminalSent = true
 		}
@@ -93,6 +100,10 @@ func (s *chatStreamState) frame(p *proxy, w http.ResponseWriter, flusher http.Fl
 	if chunk.Usage != nil {
 		resp.Usage = toChatUsage(chunk.Usage)
 	}
+	return s.writeResponse(p, w, flusher, resp)
+}
+
+func (s *chatStreamState) writeResponse(p *proxy, w http.ResponseWriter, flusher http.Flusher, resp ChatCompletionResponse) bool {
 	data, marshalErr := json.Marshal(resp)
 	if marshalErr != nil {
 		p.logger.Error("failed to marshal chunk", "error", types.SafeErrorValue(marshalErr))
@@ -107,7 +118,7 @@ func (s *chatStreamState) frame(p *proxy, w http.ResponseWriter, flusher http.Fl
 }
 
 func (s *chatStreamState) chunkResponse(chunk types.TextChunk) ChatCompletionResponse {
-	delta := &ChatMessage{Content: chunk.Content(), Refusal: chunk.Refusal, Annotations: nativeChatAnnotations(chunk.Citations)}
+	delta := &ChatDelta{Content: chunk.Content(), Refusal: chunk.Refusal, Annotations: nativeChatAnnotations(chunk.Citations)}
 	if !s.roleSent {
 		delta.Role = "assistant"
 		s.roleSent = true
@@ -139,7 +150,7 @@ func (s *chatStreamState) finish(p *proxy, w http.ResponseWriter, flusher http.F
 			Object:   "chat.completion.chunk",
 			Created:  time.Now().Unix(),
 			Model:    s.model,
-			Choices:  []ChatChoice{{Index: 0, Delta: &ChatMessage{}, FinishReason: &fr}},
+			Choices:  []ChatChoice{{Index: 0, Delta: &ChatDelta{}, FinishReason: &fr}},
 			Wormhole: extensionSnapshot(s.extension, s.metadata, s.usage, s.sources, s.citations, s.warnings),
 		}
 		data, err := json.Marshal(terminal)

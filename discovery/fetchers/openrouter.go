@@ -96,13 +96,10 @@ func (f *OpenRouterFetcher) FetchModels(ctx context.Context) ([]*types.ModelInfo
 		// Infer capabilities from modality
 		capabilities := inferCapabilitiesFromModality(m.Architecture.Modality)
 
-		// Extract provider from model ID (e.g., "openai/gpt-5" -> "openai")
-		provider := extractProvider(m.ID)
-
 		models = append(models, &types.ModelInfo{
 			ID:            m.ID,
 			Name:          m.Name,
-			Provider:      provider,
+			Provider:      providerOpenRouter,
 			Capabilities:  capabilities,
 			ContextLength: m.ContextLength,
 		})

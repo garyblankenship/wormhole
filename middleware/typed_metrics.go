@@ -75,7 +75,7 @@ func (m *TypedMetricsMiddleware) ApplyText(next types.TextHandler) types.TextHan
 // ApplyStream wraps streaming calls with metrics collection
 func (m *TypedMetricsMiddleware) ApplyStream(next types.StreamHandler) types.StreamHandler {
 	return func(ctx context.Context, request types.TextRequest) (<-chan types.TextChunk, error) {
-		return withMeasuredRequest(ctx, request, next, func(_ <-chan types.TextChunk, err error, duration time.Duration) {
+		return withMeasuredStream(ctx, request, next, false, func(err error, duration time.Duration, _, _ int) {
 			m.recordStreamRequest(duration, err)
 		})
 	}

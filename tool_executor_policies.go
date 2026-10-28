@@ -41,7 +41,6 @@ func (e *ToolExecutor) rejectMalformedArguments(toolCall types.ToolCall) (types.
 	if !toolCall.ArgsInvalid {
 		return types.ToolResult{}, false
 	}
-	e.recordCircuitFailure(toolCall.Name)
 	parseError := toolCall.ArgsParseError
 	if parseError == "" {
 		parseError = "provider could not parse the arguments as JSON"
@@ -57,7 +56,6 @@ func (e *ToolExecutor) rejectInvalidArguments(definition *types.ToolDefinition, 
 		return types.ToolResult{}, false
 	}
 	if err := schemavalidation.ValidateAgainstSchema(toolCall.Arguments, definition.Tool.InputSchema); err != nil {
-		e.recordCircuitFailure(toolCall.Name)
 		return types.ToolResult{
 			ToolCallID: toolCall.ID,
 			Error:      fmt.Sprintf("schema validation failed: %v", err),
@@ -69,7 +67,6 @@ func (e *ToolExecutor) rejectInvalidArguments(definition *types.ToolDefinition, 
 func (e *ToolExecutor) rejectOversizedOutput(toolCall types.ToolCall, result any) (types.ToolResult, bool) {
 
 	if err := e.validateOutputSize(result); err != nil {
-		e.recordCircuitFailure(toolCall.Name)
 		return types.ToolResult{
 			ToolCallID: toolCall.ID,
 			Error:      fmt.Sprintf("tool output rejected: %v", err),

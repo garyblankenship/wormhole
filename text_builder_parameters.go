@@ -78,6 +78,10 @@ func (b *TextRequestBuilder) ParallelToolCalls(enabled bool) *TextRequestBuilder
 // thinking or effort parameters. ProviderOptions can still override provider
 // wire fields for advanced use.
 func (b *TextRequestBuilder) Reasoning(reasoning types.Reasoning) *TextRequestBuilder {
+	if reasoning.Enabled != nil {
+		enabled := *reasoning.Enabled
+		reasoning.Enabled = &enabled
+	}
 	if reasoning.IncludeThoughts != nil {
 		include := *reasoning.IncludeThoughts
 		reasoning.IncludeThoughts = &include
@@ -106,10 +110,20 @@ func (b *TextRequestBuilder) Tools(tools ...types.Tool) *TextRequestBuilder {
 
 // ToolChoice sets how the model should use tools
 func (b *TextRequestBuilder) ToolChoice(choice any) *TextRequestBuilder {
-	if tc, ok := choice.(*types.ToolChoice); ok {
-		b.request.ToolChoice = tc
-	} else if str, ok := choice.(string); ok {
-		b.request.ToolChoice = &types.ToolChoice{Type: types.ToolChoiceType(str)}
+	switch choice := choice.(type) {
+	case string:
+		b.request.ToolChoice = &types.ToolChoice{Type: types.ToolChoiceType(choice)}
+	case types.ToolChoiceType:
+		b.request.ToolChoice = &types.ToolChoice{Type: choice}
+	case types.ToolChoice:
+		b.request.ToolChoice = &choice
+	case *types.ToolChoice:
+		if choice == nil {
+			b.request.ToolChoice = nil
+		} else {
+			copy := *choice
+			b.request.ToolChoice = &copy
+		}
 	}
 	return b
 }

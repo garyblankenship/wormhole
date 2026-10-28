@@ -195,9 +195,10 @@ func (t *StreamingTransformer) ParseChunk(data []byte) (*types.TextChunk, error)
 			if str, ok := val.(string); ok && str != "" {
 				thinking := &types.Thinking{Content: str}
 				chunk.Thinking = thinking
-				if chunk.Delta != nil {
-					chunk.Delta.Thinking = thinking
+				if chunk.Delta == nil {
+					chunk.Delta = &types.ChunkDelta{}
 				}
+				chunk.Delta.Thinking = thinking
 			}
 		}
 	}
@@ -275,11 +276,12 @@ func (t *StreamingTransformer) ParseChunk(data []byte) (*types.TextChunk, error)
 		}
 	}
 
-	// For OpenAI compatibility, set Delta field if Text is set but Delta is nil
-	if chunk.Text != "" && chunk.Delta == nil {
-		chunk.Delta = &types.ChunkDelta{
-			Content: chunk.Text,
+	// Merge text with reasoning and refusal already present in the delta.
+	if chunk.Text != "" {
+		if chunk.Delta == nil {
+			chunk.Delta = &types.ChunkDelta{}
 		}
+		chunk.Delta.Content = chunk.Text
 	}
 
 	return chunk, nil

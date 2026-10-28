@@ -17,6 +17,7 @@ type HTTPClientWrapper struct {
 	httpClient     *http.Client
 	client         HTTPClient
 	clientOwned    bool
+	ownedTransport *http.Transport
 	retryClient    *retryableHTTPClient
 	authStrategy   AuthStrategy
 	keyPool        *keyPool
@@ -48,6 +49,7 @@ func NewHTTPClientWrapper(name string, providerConfig types.ProviderConfig, tlsC
 	w.clientOwned = httpClient == nil
 	if httpClient == nil {
 		w.httpClient = w.transportCache.newSecureHTTPClient(0, tlsConfig, nil, providerConfig.BaseURL)
+		w.ownedTransport, _ = w.httpClient.Transport.(*http.Transport)
 		httpClient = w.httpClient
 	} else if hc, ok := httpClient.(*http.Client); ok {
 		w.httpClient = hc

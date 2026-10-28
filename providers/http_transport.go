@@ -26,6 +26,10 @@ func (tc *TransportCache) newSecureHTTPClient(timeout time.Duration, tlsConfig *
 // buildSecureHTTPClient is the shared construction path. When tc is nil the
 // transport is built fresh and uncached; otherwise it is looked up / stored in tc.
 func buildSecureHTTPClient(timeout time.Duration, tlsConfig *config.TLSConfig, transportConfig *HTTPTransportConfig, baseURL string, tc *TransportCache) *http.Client {
+	var tlsHandshakeTimeout time.Duration
+	if tlsConfig != nil {
+		tlsHandshakeTimeout = tlsConfig.HandshakeTimeout
+	}
 	// Use default TLS config if not provided
 	if tlsConfig == nil {
 		defaultTLS := config.DefaultTLSConfig()
@@ -40,6 +44,9 @@ func buildSecureHTTPClient(timeout time.Duration, tlsConfig *config.TLSConfig, t
 	}
 	transportCopy := *transportConfig
 	transportCopy.TLSConfig = tlsConfig
+	if tlsHandshakeTimeout > 0 {
+		transportCopy.TLSHandshakeTimeout = tlsHandshakeTimeout
+	}
 	transportConfig = &transportCopy
 
 	// Create TLS config

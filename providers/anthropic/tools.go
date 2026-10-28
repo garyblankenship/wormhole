@@ -38,9 +38,15 @@ func (p *Provider) transformTools(tools []types.Tool) ([]map[string]any, error) 
 		description := tool.Description
 		var schema any = tool.InputSchema
 		if tool.Function != nil {
-			name = tool.Function.Name
-			description = tool.Function.Description
-			schema = tool.Function.Parameters
+			if name == "" {
+				name = tool.Function.Name
+			}
+			if description == "" {
+				description = tool.Function.Description
+			}
+			if tool.InputSchema == nil {
+				schema = tool.Function.Parameters
+			}
 		}
 		parameters, err := json.Marshal(schema)
 		if err != nil {

@@ -2,7 +2,9 @@ package wormhole
 
 import (
 	"fmt"
+	"math"
 	"reflect"
+	"strconv"
 	"strings"
 )
 
@@ -44,17 +46,18 @@ func goTypeToJSONType(t reflect.Type) string {
 //   - tool:"required;enum=a,b,c"
 //   - tool:"min=0;max=100"
 //   - tool:"enum=active,inactive,pending"
-func parseToolTag(tag string, schema map[string]any, required *[]string, fieldName string) error {
-	// Split by semicolon first (preferred delimiter)
-	// Fall back to comma only if no semicolon found AND no enum= present
+//   - tool:"enum=optional,required;required"
+//
+// Constraints after enum values must use semicolons; comma and pipe both
+// separate enum alternatives, even when an alternative is named required.
+func parseToolTag(tag string, schema map[string]any, required *[]string, fieldName string, fieldType reflect.Type) error {
 	var parts []string
-	if strings.Contains(tag, ";") {
-		parts = strings.Split(tag, ";")
-	} else if strings.Contains(tag, "enum=") {
-		// Special handling: if there's an enum, parse carefully
-		parts = parseToolTagWithEnum(tag)
-	} else {
-		parts = strings.Split(tag, ",")
+	for _, segment := range strings.Split(tag, ";") {
+		if strings.Contains(segment, "enum=") || !strings.Contains(tag, ";") {
+			parts = append(parts, parseToolTagWithEnum(segment)...)
+		} else {
+			parts = append(parts, segment)
+		}
 	}
 
 	for _, part := range parts {
@@ -68,19 +71,16 @@ func parseToolTag(tag string, schema map[string]any, required *[]string, fieldNa
 			*required = append(*required, fieldName)
 
 		case strings.HasPrefix(part, "enum="):
-			// Enum values can use either comma or pipe as separator
 			enumStr := strings.TrimPrefix(part, "enum=")
-			var values []string
-			if strings.Contains(enumStr, "|") {
-				values = strings.Split(enumStr, "|")
-			} else {
-				values = strings.Split(enumStr, ",")
-			}
-			// Clean up values
+			values := strings.Split(strings.ReplaceAll(enumStr, "|", ","), ",")
 			for i, v := range values {
 				values[i] = strings.TrimSpace(v)
 			}
-			schema["enum"] = values
+			enum, err := typedEnumValues(values, fieldType)
+			if err != nil {
+				return err
+			}
+			schema["enum"] = enum
 
 		case strings.HasPrefix(part, "min="):
 			min := parseFloat(strings.TrimPrefix(part, "min="))
@@ -120,8 +120,8 @@ func parseToolTag(tag string, schema map[string]any, required *[]string, fieldNa
 	return nil
 }
 
-// parseToolTagWithEnum handles the special case of parsing tool tags that contain enum=.
-// It extracts the enum part separately to preserve comma-separated enum values.
+// parseToolTagWithEnum splits constraints before enum= while preserving all
+// remaining comma-separated alternatives within this semicolon-delimited segment.
 func parseToolTagWithEnum(tag string) []string {
 	var parts []string
 	enumIdx := strings.Index(tag, "enum=")
@@ -138,43 +138,44 @@ func parseToolTagWithEnum(tag string) []string {
 		}
 	}
 
-	// Find the enum value - it continues until end or until next constraint keyword
-	enumStart := enumIdx
-	enumEnd := len(tag)
-
-	// Look for the next constraint marker after enum values
-	// Common patterns: ";min=", ";max=", ";pattern=", etc.
-	remainder := tag[enumIdx:]
-	constraintMarkers := []string{";min=", ";max=", ";minLength=", ";maxLength=", ";pattern=", ";default=", ";required"}
-
-	for _, marker := range constraintMarkers {
-		if idx := strings.Index(remainder, marker); idx > 0 {
-			if idx < enumEnd-enumIdx {
-				enumEnd = enumIdx + idx
-			}
-		}
-	}
-
-	// Also check for comma followed by a known constraint keyword (legacy format)
-	knownConstraints := []string{",min=", ",max=", ",minLength=", ",maxLength=", ",pattern=", ",default=", ",required"}
-	for _, marker := range knownConstraints {
-		if idx := strings.Index(remainder, marker); idx > 0 {
-			if idx < enumEnd-enumIdx {
-				enumEnd = enumIdx + idx
-			}
-		}
-	}
-
-	// Add the enum part
-	parts = append(parts, tag[enumStart:enumEnd])
-
-	// Extract parts after enum
-	if enumEnd < len(tag) {
-		after := strings.TrimLeft(tag[enumEnd:], ",;")
-		if after != "" {
-			parts = append(parts, strings.Split(after, ",")...)
-		}
-	}
-
+	parts = append(parts, tag[enumIdx:])
 	return parts
+}
+
+func typedEnumValues(values []string, fieldType reflect.Type) (any, error) {
+	for fieldType.Kind() == reflect.Pointer {
+		fieldType = fieldType.Elem()
+	}
+	if fieldType.Kind() == reflect.String {
+		return values, nil
+	}
+	result := make([]any, len(values))
+	for i, value := range values {
+		var err error
+		switch fieldType.Kind() {
+		case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+			result[i], err = strconv.ParseInt(value, 10, fieldType.Bits())
+		case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+			result[i], err = strconv.ParseUint(value, 10, fieldType.Bits())
+		case reflect.Float32, reflect.Float64:
+			var number float64
+			number, err = strconv.ParseFloat(value, fieldType.Bits())
+			if err == nil && (math.IsNaN(number) || math.IsInf(number, 0)) {
+				err = fmt.Errorf("value must be finite")
+			}
+			if fieldType.Kind() == reflect.Float32 {
+				result[i] = float32(number)
+			} else {
+				result[i] = number
+			}
+		case reflect.Bool:
+			result[i], err = strconv.ParseBool(value)
+		default:
+			return nil, fmt.Errorf("enum constraint requires a scalar field, got %s", fieldType)
+		}
+		if err != nil {
+			return nil, fmt.Errorf("invalid enum value %q for %s: %w", value, fieldType, err)
+		}
+	}
+	return result, nil
 }

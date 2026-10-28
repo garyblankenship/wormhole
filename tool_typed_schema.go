@@ -53,7 +53,7 @@ func schemaForType(t reflect.Type, visiting map[reflect.Type]bool) (map[string]a
 			if err != nil {
 				return nil, fmt.Errorf("field %s: %w", selected.name, err)
 			}
-			if err := parseToolTag(field.Tag.Get("tool"), prop, &required, selected.name); err != nil {
+			if err := parseToolTag(field.Tag.Get("tool"), prop, &required, selected.name, field.Type); err != nil {
 				return nil, fmt.Errorf("field %s: %w", selected.name, err)
 			}
 			if desc := field.Tag.Get("desc"); desc != "" {

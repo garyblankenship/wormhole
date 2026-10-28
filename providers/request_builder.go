@@ -139,6 +139,17 @@ func (b *RequestBuilder) transformToolCalls(toolCalls []types.ToolCall) []map[st
 
 // TransformTool converts a Wormhole tool to provider format
 func (b *RequestBuilder) TransformTool(tool types.Tool) map[string]any {
+	if tool.Function != nil {
+		if tool.Name == "" {
+			tool.Name = tool.Function.Name
+		}
+		if tool.Description == "" {
+			tool.Description = tool.Function.Description
+		}
+		if tool.InputSchema == nil {
+			tool.InputSchema = tool.Function.Parameters
+		}
+	}
 	toolMap := map[string]any{
 		"type": "function",
 		"function": map[string]any{

@@ -39,6 +39,9 @@ func (p *StreamProcessor) process(ctx context.Context, chunks chan<- types.TextC
 	for {
 		event, err := p.parser.Parse()
 		if err != nil {
+			if ctx.Err() != nil {
+				return
+			}
 			if err == io.EOF {
 				if !finished {
 					select {
@@ -146,10 +149,12 @@ func ProcessNDJSON(
 ) <-chan types.TextChunk {
 	chunks := make(chan types.TextChunk, bufferSize)
 	go func() {
-		defer func() {
-			close(chunks)
-			_ = body.Close()
-		}()
+		var once sync.Once
+		closeBody := func() { once.Do(func() { _ = body.Close() }) }
+		stop := context.AfterFunc(ctx, closeBody)
+		defer close(chunks)
+		defer closeBody()
+		defer stop()
 		scanner := bufio.NewScanner(body)
 		// Ollama can return large final chunks with usage data.
 		scanner.Buffer(make([]byte, 0, 64*1024), 1<<20)
@@ -178,6 +183,9 @@ func ProcessNDJSON(
 			if chunk.IsDone() {
 				return
 			}
+		}
+		if ctx.Err() != nil {
+			return
 		}
 		if err := scanner.Err(); err != nil {
 			select {

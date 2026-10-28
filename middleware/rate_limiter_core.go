@@ -23,6 +23,7 @@ type RateLimiter struct {
 	lastRefill   time.Time
 	requestQueue chan struct{}
 	closed       atomic.Bool
+	done         chan struct{}
 }
 
 // NewRateLimiter creates a new rate limiter.
@@ -37,6 +38,7 @@ func NewRateLimiter(requestsPerSecond int) *RateLimiter {
 		tokens:       float64(capacity),
 		lastRefill:   time.Now(),
 		requestQueue: make(chan struct{}, capacity),
+		done:         make(chan struct{}),
 	}
 	rl.rate.Store(int64(requestsPerSecond))
 	return rl
@@ -57,11 +59,14 @@ func (rl *RateLimiter) Wait(ctx context.Context) error {
 
 	select {
 	case rl.requestQueue <- struct{}{}:
+	case <-rl.done:
+		return ErrRateLimitExceeded
 	case <-ctx.Done():
 		return ctx.Err()
 	default:
 		return ErrRateLimitExceeded
 	}
+	defer func() { <-rl.requestQueue }()
 
 	ticker := time.NewTicker(time.Second / time.Duration(rl.rate.Load()))
 	defer ticker.Stop()
@@ -69,14 +74,11 @@ func (rl *RateLimiter) Wait(ctx context.Context) error {
 	for {
 		select {
 		case <-ctx.Done():
-			select {
-			case <-rl.requestQueue:
-			default:
-			}
 			return ctx.Err()
+		case <-rl.done:
+			return ErrRateLimitExceeded
 		case <-ticker.C:
 			if err := rl.TryAcquire(); err == nil {
-				<-rl.requestQueue
 				return nil
 			}
 		}
@@ -88,6 +90,9 @@ func (rl *RateLimiter) TryAcquire() error {
 	rl.mu.Lock()
 	defer rl.mu.Unlock()
 
+	if rl.closed.Load() {
+		return ErrRateLimitExceeded
+	}
 	rl.refill()
 	if rl.tokens >= 1 {
 		rl.tokens--
@@ -119,12 +124,13 @@ func (rl *RateLimiter) GetAvailableTokens() int {
 	return int(rl.tokens)
 }
 
-// Close marks the rate limiter as closed. It is safe to call concurrently
-// with Wait and may be called more than once. After Close, Wait returns
-// ErrRateLimitExceeded instead of blocking. The request queue channel is
-// intentionally not closed: doing so would race with concurrent Wait
-// writers (write-to-closed-channel panic); the channel is reclaimed by GC.
+// Close wakes queued waiters and prevents any later token acquisition.
+// The request queue remains open because concurrent waiters may enqueue.
 func (rl *RateLimiter) Close() error {
-	rl.closed.CompareAndSwap(false, true)
+	rl.mu.Lock()
+	defer rl.mu.Unlock()
+	if rl.closed.CompareAndSwap(false, true) {
+		close(rl.done)
+	}
 	return nil
 }

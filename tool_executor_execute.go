@@ -79,7 +79,6 @@ func (e *ToolExecutor) execute(ctx context.Context, toolCall types.ToolCall) (re
 	defer func() { returned.Name = name }()
 	normalized, normalizationErr := types.NormalizeToolCall(toolCall)
 	if normalizationErr != nil {
-		e.recordCircuitFailure(name)
 		return types.ToolResult{ToolCallID: toolCall.ID, Error: normalizationErr.Error()}, false
 	}
 	toolCall = normalized
@@ -94,13 +93,23 @@ func (e *ToolExecutor) execute(ctx context.Context, toolCall types.ToolCall) (re
 		return e.admissionCanceledResult(toolCall), false
 	}
 
-	// Check circuit breaker if enabled
-	if breaker := e.breakerForTool(name); breaker != nil && breaker.IsTripped() {
-		return types.ToolResult{
-			ToolCallID: toolCall.ID,
-			Error:      "circuit breaker tripped - tool execution temporarily disabled",
-		}, false
+	var reservation *circuitReservation
+	if breaker := e.breakerForTool(name); breaker != nil {
+		var admitted bool
+		reservation, admitted = breaker.reserve()
+		if !admitted {
+			return types.ToolResult{
+				ToolCallID: toolCall.ID,
+				Error:      "circuit breaker tripped - tool execution temporarily disabled",
+			}, false
+		}
 	}
+	var handlerState atomic.Uint32
+	var everStarted atomic.Bool
+	defer func() {
+		entered := everStarted.Load() || handlerState.Load() == toolHandlerStarted
+		reservation.settle(entered, returned.Error == "")
+	}()
 
 	if result, rejected := e.rejectMalformedArguments(toolCall); rejected {
 		return result, false
@@ -109,8 +118,6 @@ func (e *ToolExecutor) execute(ctx context.Context, toolCall types.ToolCall) (re
 	// Get tool definition from registry
 	definition := e.registry.getStored(toolCall.Name)
 	if definition == nil {
-		// Record failure for circuit breaker
-		e.recordCircuitFailure(toolCall.Name)
 		return types.ToolResult{
 			ToolCallID: toolCall.ID,
 			Error:      fmt.Sprintf("tool %q not found in registry", toolCall.Name),
@@ -159,9 +166,6 @@ func (e *ToolExecutor) execute(ctx context.Context, toolCall types.ToolCall) (re
 	// so an unrecovered panic here would take down the whole process (and the proxy).
 	var result any
 	var err error
-	var handlerState atomic.Uint32
-	var everStarted atomic.Bool
-
 	callHandler := func(ctx context.Context) (res any, rerr error) {
 		return callToolHandler(ctx, definition, args, &handlerState, &everStarted)
 	}
@@ -220,7 +224,6 @@ func (e *ToolExecutor) execute(ctx context.Context, toolCall types.ToolCall) (re
 			return e.admissionCanceledResult(toolCall), false
 		}
 		err = fmt.Errorf("tool %q timed out or was canceled: %w", toolCall.Name, ctx.Err())
-		e.recordCircuitFailure(toolCall.Name)
 		return types.ToolResult{
 			ToolCallID: toolCall.ID,
 			Error:      err.Error(),
@@ -232,8 +235,6 @@ func (e *ToolExecutor) execute(ctx context.Context, toolCall types.ToolCall) (re
 			release(false)
 			return e.admissionCanceledResult(toolCall), false
 		}
-		// Record failure for circuit breaker
-		e.recordCircuitFailure(toolCall.Name)
 		return types.ToolResult{
 			ToolCallID: toolCall.ID,
 			Error:      err.Error(),
@@ -244,9 +245,6 @@ func (e *ToolExecutor) execute(ctx context.Context, toolCall types.ToolCall) (re
 	if rejected, oversized := e.rejectOversizedOutput(toolCall, result); oversized {
 		return rejected, false
 	}
-
-	// Record success for circuit breaker
-	e.recordCircuitSuccess(toolCall.Name)
 
 	return types.ToolResult{
 		ToolCallID: toolCall.ID,

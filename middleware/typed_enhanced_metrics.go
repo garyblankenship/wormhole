@@ -49,11 +49,10 @@ func (m *TypedEnhancedMetricsMiddleware) ApplyText(next types.TextHandler) types
 func (m *TypedEnhancedMetricsMiddleware) ApplyStream(next types.StreamHandler) types.StreamHandler {
 	return func(ctx context.Context, request types.TextRequest) (<-chan types.TextChunk, error) {
 		end := m.collector.beginRequest()
-		defer end()
-		return withMeasuredRequest(ctx, request, next, func(_ <-chan types.TextChunk, err error, duration time.Duration) {
-			inputTokens := 0
-			if m.collector.tokenTrackingEnabled() {
-				inputTokens = estimateInputTokens(request.Messages)
+		return withMeasuredStream(ctx, request, next, m.collector.tokenTrackingEnabled(), func(err error, duration time.Duration, inputTokens, outputTokens int) {
+			defer end()
+			if !m.collector.tokenTrackingEnabled() {
+				inputTokens, outputTokens = 0, 0
 			}
 			m.collector.RecordRequest(
 				requestLabelsFromContext(ctx, "stream", request.Model),
@@ -61,7 +60,7 @@ func (m *TypedEnhancedMetricsMiddleware) ApplyStream(next types.StreamHandler) t
 				err,
 				0,
 				inputTokens,
-				0,
+				outputTokens,
 			)
 		})
 	}

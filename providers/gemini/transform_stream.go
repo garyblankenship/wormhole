@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"strings"
+	"sync"
 
 	providerstream "github.com/garyblankenship/wormhole/v3/providers/internal/stream"
 	providerTransform "github.com/garyblankenship/wormhole/v3/providers/internal/transform"
@@ -80,9 +81,11 @@ func (g *Gemini) handleStream(ctx context.Context, stream io.ReadCloser) <-chan 
 
 	go func() {
 		defer close(ch)
-		defer func() {
-			_ = stream.Close()
-		}()
+		var once sync.Once
+		closeBody := func() { once.Do(func() { _ = stream.Close() }) }
+		stop := context.AfterFunc(ctx, closeBody)
+		defer closeBody()
+		defer stop()
 
 		scanner := providerstream.NewSSEScanner(stream)
 		terminal := false
@@ -139,6 +142,9 @@ func (g *Gemini) handleStream(ctx context.Context, stream io.ReadCloser) <-chan 
 			}
 		}
 
+		if ctx.Err() != nil {
+			return
+		}
 		if err := scanner.Err(); err != nil {
 			select {
 			case ch <- types.TextChunk{Error: err}:

@@ -129,6 +129,9 @@ func typeStringList(v any) ([]string, bool) {
 
 // schemaToMap recursively converts schema to map
 func (g *Gemini) schemaToMap(schema types.Schema) map[string]any {
+	if schemaMap, ok := schema.(map[string]any); ok {
+		return normalizeSchemaMap(schemaMap)
+	}
 	// Handle raw JSON bytes
 	if bytes, ok := schema.([]byte); ok {
 		var result map[string]any

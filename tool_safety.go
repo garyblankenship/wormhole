@@ -80,6 +80,7 @@ type SimpleCircuitBreaker struct {
 	tripExpiry       time.Time
 	halfOpenCalls    int
 	maxHalfOpenCalls int
+	generation       uint64
 }
 
 // circuitBreakerState represents the state of the circuit breaker
@@ -106,9 +107,14 @@ func (cb *SimpleCircuitBreaker) RecordSuccess() {
 	cb.mu.Lock()
 	defer cb.mu.Unlock()
 
+	cb.recordSuccessLocked()
+}
+
+func (cb *SimpleCircuitBreaker) recordSuccessLocked() {
 	cb.failureCount = 0
 	// Success in half-open state transitions to closed
 	if cb.state == stateHalfOpen {
+		cb.generation++
 		cb.state = stateClosed
 		cb.halfOpenCalls = 0
 	}
@@ -119,6 +125,10 @@ func (cb *SimpleCircuitBreaker) RecordFailure() bool {
 	cb.mu.Lock()
 	defer cb.mu.Unlock()
 
+	return cb.recordFailureLocked()
+}
+
+func (cb *SimpleCircuitBreaker) recordFailureLocked() bool {
 	now := time.Now()
 	cb.failureCount++
 	cb.lastFailureTime = now
@@ -127,17 +137,20 @@ func (cb *SimpleCircuitBreaker) RecordFailure() bool {
 	switch cb.state {
 	case stateClosed:
 		if cb.failureCount >= cb.threshold {
+			cb.generation++
 			cb.state = stateOpen
 			cb.tripExpiry = now.Add(cb.resetTimeout)
 		}
 	case stateHalfOpen:
 		// Any failure in half-open state reopens the circuit
+		cb.generation++
 		cb.state = stateOpen
 		cb.tripExpiry = now.Add(cb.resetTimeout)
 		cb.halfOpenCalls = 0
 	case stateOpen:
 		// Check if open breaker has expired (transition to half-open)
 		if now.After(cb.tripExpiry) {
+			cb.generation++
 			cb.state = stateHalfOpen
 			cb.halfOpenCalls = 0
 			cb.failureCount = 0
@@ -148,32 +161,65 @@ func (cb *SimpleCircuitBreaker) RecordFailure() bool {
 	return cb.state == stateOpen
 }
 
-// IsTripped returns true if the circuit breaker is currently tripped (open)
+// IsTripped returns true if the circuit breaker is currently tripped (open).
+// An admitted half-open call must be followed by RecordSuccess or RecordFailure.
 func (cb *SimpleCircuitBreaker) IsTripped() bool {
+	_, admitted := cb.reserve()
+	return !admitted
+}
+
+// circuitReservation binds settlement to the state generation that admitted it.
+// The public CircuitBreaker interface remains unchanged.
+type circuitReservation struct {
+	breaker    *SimpleCircuitBreaker
+	generation uint64
+	halfOpen   bool
+	once       sync.Once
+}
+
+func (cb *SimpleCircuitBreaker) reserve() (*circuitReservation, bool) {
 	cb.mu.Lock()
 	defer cb.mu.Unlock()
-
-	now := time.Now()
-
-	// Check if open breaker has expired (transition to half-open)
-	if cb.state == stateOpen && now.After(cb.tripExpiry) {
+	if cb.state == stateOpen && time.Now().After(cb.tripExpiry) {
+		cb.generation++
 		cb.state = stateHalfOpen
 		cb.halfOpenCalls = 0
 		cb.failureCount = 0
 	}
-
-	// In half-open state, check if we've exceeded test call limit
-	if cb.state == stateHalfOpen && cb.halfOpenCalls >= cb.maxHalfOpenCalls {
-		// Exceeded half-open call limit, treat as open
-		return true
+	if cb.state == stateOpen || (cb.state == stateHalfOpen && cb.halfOpenCalls >= cb.maxHalfOpenCalls) {
+		return nil, false
 	}
-
-	// Increment half-open call counter when checking (call will proceed)
-	if cb.state == stateHalfOpen {
+	reservation := &circuitReservation{breaker: cb, generation: cb.generation, halfOpen: cb.state == stateHalfOpen}
+	if reservation.halfOpen {
 		cb.halfOpenCalls++
 	}
+	return reservation, true
+}
 
-	return cb.state == stateOpen
+// settle abandons calls that never entered the handler without changing health.
+func (r *circuitReservation) settle(entered, success bool) {
+	if r == nil {
+		return
+	}
+	r.once.Do(func() {
+		cb := r.breaker
+		cb.mu.Lock()
+		defer cb.mu.Unlock()
+		if cb.generation != r.generation {
+			return
+		}
+		if !entered {
+			if r.halfOpen {
+				cb.halfOpenCalls--
+			}
+			return
+		}
+		if success {
+			cb.recordSuccessLocked()
+		} else {
+			cb.recordFailureLocked()
+		}
+	})
 }
 
 // ErrToolNonRetryable marks an error as having occurred after a real side

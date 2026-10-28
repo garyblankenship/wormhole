@@ -65,8 +65,8 @@ func (c TLSConfig) WithHandshakeTimeout(timeout time.Duration) TLSConfig {
 // Used for caching transports based on TLS settings.
 func (c TLSConfig) Fingerprint() string {
 	var b strings.Builder
-	fmt.Fprintf(&b, "%d|%d|%v|%v|rootca:%s|%s|",
-		c.MinVersion, c.MaxVersion, c.InsecureSkipVerify, c.AllowInsecure, rootCAPoolFingerprint(c.RootCAs), c.ServerName)
+	fmt.Fprintf(&b, "%d|%d|%v|%v|rootca:%s|%s|handshake:%s|",
+		c.MinVersion, c.MaxVersion, c.InsecureSkipVerify, c.AllowInsecure, rootCAPoolFingerprint(c.RootCAs), c.ServerName, c.HandshakeTimeout)
 	for _, cs := range c.CipherSuites {
 		fmt.Fprintf(&b, "%d,", cs)
 	}

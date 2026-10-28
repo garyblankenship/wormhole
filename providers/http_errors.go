@@ -180,10 +180,12 @@ func (w *HTTPClientWrapper) isTimeoutError(err error) bool {
 }
 
 func (w *HTTPClientWrapper) Close() error {
-	if w.clientOwned && w.httpClient != nil && w.httpClient.Transport != nil {
-		if transport, ok := w.httpClient.Transport.(interface{ CloseIdleConnections() }); ok {
-			transport.CloseIdleConnections()
-		}
+	if w.transportCache != nil {
+		w.transportCache.closeIdleConnections()
+	}
+	// Retain ownership even after eviction or caller replacement of the client's transport.
+	if w.clientOwned && w.ownedTransport != nil {
+		w.ownedTransport.CloseIdleConnections()
 	}
 	return nil
 }

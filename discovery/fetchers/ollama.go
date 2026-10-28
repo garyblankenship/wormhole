@@ -18,13 +18,18 @@ func NewOllamaFetcher(baseURL string) *OllamaFetcher {
 		baseURL = "http://localhost:11434"
 	}
 	return &OllamaFetcher{
-		baseURL: baseURL,
+		baseURL: normalizedEndpoint(baseURL),
 	}
 }
 
 // Name returns the provider name
 func (f *OllamaFetcher) Name() string {
 	return "ollama"
+}
+
+// AccountDiscriminator isolates catalogs served by distinct Ollama endpoints.
+func (f *OllamaFetcher) AccountDiscriminator() string {
+	return configuredAccountDiscriminator(f.baseURL, true, "", nil)
 }
 
 // FetchModels retrieves all locally available models from Ollama

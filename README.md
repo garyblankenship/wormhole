@@ -437,6 +437,13 @@ speech, err := client.Audio().
 
 ## Type-Safe Tool Calling
 
+In `tool` tags, commas and pipes separate enum alternatives. Use a semicolon
+for constraints after an enum: `tool:"enum=optional,required;required"` includes
+the literal option `required` and makes the field required. An enum ending in
+`,required` remains optional; migrate required-field constraints to `;required`.
+Numeric and boolean enum alternatives are converted to the field's scalar type
+and rejected during schema creation when invalid or out of range.
+
 Define a Go struct and register a typed handler. Wormhole derives the tool
 schema, executes tool calls, and feeds results back to the model. No hand-rolled
 JSON schema séance required. The model asks for a tool, your Go code runs, the

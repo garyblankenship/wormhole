@@ -70,7 +70,7 @@ func (mc *MemoryCache) Set(key string, value any, ttl time.Duration) {
 	defer mc.mu.Unlock()
 
 	// Evict oldest entries if at capacity
-	if len(mc.entries) >= mc.maxSize {
+	if _, exists := mc.entries[key]; !exists && len(mc.entries) >= mc.maxSize {
 		mc.evictOldest()
 	}
 

@@ -3,7 +3,6 @@ package fetchers
 import (
 	"context"
 	"fmt"
-	"strings"
 
 	"github.com/garyblankenship/wormhole/v3/discovery"
 	"github.com/garyblankenship/wormhole/v3/types"
@@ -20,15 +19,11 @@ type OpenAICompatibleFetcher struct {
 
 // NewOpenAICompatibleFetcher creates a model fetcher for an OpenAI-compatible provider.
 func NewOpenAICompatibleFetcher(name, baseURL, apiKey string, headers map[string]string) discovery.ModelFetcher {
-	copiedHeaders := make(map[string]string, len(headers))
-	for key, value := range headers {
-		copiedHeaders[key] = value
-	}
 	return &OpenAICompatibleFetcher{
 		name:    name,
-		baseURL: strings.TrimRight(baseURL, "/"),
+		baseURL: normalizedEndpoint(baseURL),
 		apiKey:  apiKey,
-		headers: copiedHeaders,
+		headers: canonicalHeaders(headers),
 	}
 }
 
@@ -37,11 +32,17 @@ func (f *OpenAICompatibleFetcher) Name() string {
 	return f.name
 }
 
-// AccountDiscriminator scopes the model cache per API key so different
-// accounts on the same OpenAI-compatible endpoint don't collide on the
-// same cache file.
+// AccountDiscriminator hashes the endpoint and effective authentication/header
+// scope so distinct catalogs cannot share a cache identity.
 func (f *OpenAICompatibleFetcher) AccountDiscriminator() string {
-	return accountKeyDiscriminator(f.apiKey)
+	effectiveHeaders := map[string]string{}
+	if f.apiKey != "" {
+		effectiveHeaders["Authorization"] = "Bearer " + f.apiKey
+	}
+	for key, value := range f.headers {
+		effectiveHeaders[key] = value
+	}
+	return configuredAccountDiscriminator(f.baseURL, false, "", effectiveHeaders)
 }
 
 // FetchModels retrieves all available models from an OpenAI-compatible provider.
@@ -57,9 +58,7 @@ func (f *OpenAICompatibleFetcher) FetchModels(ctx context.Context) ([]*types.Mod
 	if f.apiKey != "" {
 		req.Header.Set("Authorization", "Bearer "+f.apiKey)
 	}
-	for key, value := range f.headers {
-		req.Header.Set(key, value)
-	}
+	applyHeaders(req, f.headers)
 
 	return fetchOpenAICompatibleModels(req, f.name, false)
 }
