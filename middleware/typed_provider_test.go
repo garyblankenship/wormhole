@@ -93,9 +93,14 @@ func TestProviderMetricsMiddlewareRecordsAllHandlerTypes(t *testing.T) {
 
 	stream := make(chan types.TextChunk)
 	close(stream)
-	_, err = mw.ApplyStream(func(context.Context, types.TextRequest) (<-chan types.TextChunk, error) {
+	wrapped, streamErr := mw.ApplyStream(func(context.Context, types.TextRequest) (<-chan types.TextChunk, error) {
 		return stream, nil
 	})(ctx, types.TextRequest{BaseRequest: types.BaseRequest{Model: "stream"}})
+	if streamErr != nil {
+		t.Fatal(streamErr)
+	}
+	for range wrapped {
+	}
 	if err != nil {
 		t.Fatalf("stream handler error: %v", err)
 	}
@@ -181,9 +186,14 @@ func TestTypedMetricsMiddlewareRecordsAllHandlerTypes(t *testing.T) {
 
 	stream := make(chan types.TextChunk)
 	close(stream)
-	_, _ = mw.ApplyStream(func(context.Context, types.TextRequest) (<-chan types.TextChunk, error) {
+	wrapped, streamErr := mw.ApplyStream(func(context.Context, types.TextRequest) (<-chan types.TextChunk, error) {
 		return stream, nil
 	})(ctx, types.TextRequest{})
+	if streamErr != nil {
+		t.Fatal(streamErr)
+	}
+	for range wrapped {
+	}
 
 	wantErr := errors.New("structured failed")
 	_, err := mw.ApplyStructured(func(context.Context, types.StructuredRequest) (*types.StructuredResponse, error) {
@@ -292,9 +302,14 @@ func TestTypedEnhancedMetricsMiddlewareRecordsAllHandlerTypes(t *testing.T) {
 	})
 	stream := make(chan types.TextChunk)
 	close(stream)
-	_, _ = mw.ApplyStream(func(context.Context, types.TextRequest) (<-chan types.TextChunk, error) {
+	wrapped, streamErr := mw.ApplyStream(func(context.Context, types.TextRequest) (<-chan types.TextChunk, error) {
 		return stream, nil
 	})(ctx, types.TextRequest{BaseRequest: types.BaseRequest{Model: "stream"}})
+	if streamErr != nil {
+		t.Fatal(streamErr)
+	}
+	for range wrapped {
+	}
 	_, _ = mw.ApplyStructured(func(context.Context, types.StructuredRequest) (*types.StructuredResponse, error) {
 		return &types.StructuredResponse{Data: map[string]any{"ok": true}}, nil
 	})(ctx, types.StructuredRequest{BaseRequest: types.BaseRequest{Model: "structured"}})

@@ -76,6 +76,10 @@ type CacheEntry struct {
 	Models        []*types.ModelInfo `json:"models"`
 	Timestamp     time.Time          `json:"timestamp"`
 	Provider      string             `json:"provider"`
+
+	// Disk entries retain their catalog timestamp while residing in memory only
+	// until the next bounded reload or their original file expiry.
+	reloadBy time.Time
 }
 
 // FileCache represents the structure of the persisted cache file

@@ -1,6 +1,7 @@
 package middleware
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -21,6 +22,7 @@ type Cache interface {
 type MemoryCache struct {
 	mu        sync.RWMutex
 	entries   map[string]*cacheEntry
+	expiry    expirationHeap
 	maxSize   int
 	stopCh    chan struct{}
 	wg        sync.WaitGroup
@@ -28,8 +30,10 @@ type MemoryCache struct {
 }
 
 type cacheEntry struct {
+	key        string
 	value      any
 	expiration time.Time
+	heapIndex  int
 }
 
 // NewMemoryCache creates a new in-memory cache
@@ -69,15 +73,22 @@ func (mc *MemoryCache) Set(key string, value any, ttl time.Duration) {
 	mc.mu.Lock()
 	defer mc.mu.Unlock()
 
-	// Evict oldest entries if at capacity
-	if _, exists := mc.entries[key]; !exists && len(mc.entries) >= mc.maxSize {
+	expiration := time.Now().Add(ttl)
+	if entry, exists := mc.entries[key]; exists {
+		entry.value = value
+		entry.expiration = expiration
+		mc.expiry.fix(entry)
+		return
+	}
+
+	// Evict the earliest expiration, including expired entries still awaiting cleanup.
+	if len(mc.entries) >= mc.maxSize {
 		mc.evictOldest()
 	}
 
-	mc.entries[key] = &cacheEntry{
-		value:      value,
-		expiration: time.Now().Add(ttl),
-	}
+	entry := &cacheEntry{key: key, value: value, expiration: expiration}
+	mc.entries[key] = entry
+	mc.expiry.add(entry)
 }
 
 // Delete removes a value from the cache
@@ -85,7 +96,9 @@ func (mc *MemoryCache) Delete(key string) {
 	mc.mu.Lock()
 	defer mc.mu.Unlock()
 
-	delete(mc.entries, key)
+	if _, exists := mc.entries[key]; exists {
+		mc.deleteLocked(key)
+	}
 }
 
 // Clear removes all entries from the cache
@@ -94,21 +107,40 @@ func (mc *MemoryCache) Clear() {
 	defer mc.mu.Unlock()
 
 	mc.entries = make(map[string]*cacheEntry)
+	mc.expiry = nil
 }
 
 func (mc *MemoryCache) evictOldest() {
-	var oldestKey string
-	var oldestTime time.Time
-
-	for key, entry := range mc.entries {
-		if oldestKey == "" || entry.expiration.Before(oldestTime) {
-			oldestKey = key
-			oldestTime = entry.expiration
+	// The former scan used "" as its unset sentinel. Retain its behavior when
+	// that key exists: it can select no victim or a non-earliest victim.
+	if _, hasEmptyKey := mc.entries[""]; hasEmptyKey {
+		var oldestKey string
+		var oldestTime time.Time
+		for key, entry := range mc.entries {
+			if oldestKey == "" || entry.expiration.Before(oldestTime) {
+				oldestKey = key
+				oldestTime = entry.expiration
+			}
 		}
+		if oldestKey != "" {
+			mc.deleteLocked(oldestKey)
+		}
+		return
 	}
+	if len(mc.expiry) > 0 {
+		mc.deleteLocked(mc.expiry[0].key)
+	}
+}
 
-	if oldestKey != "" {
-		delete(mc.entries, oldestKey)
+func (mc *MemoryCache) deleteLocked(key string) {
+	entry := mc.entries[key]
+	mc.expiry.remove(entry)
+	delete(mc.entries, key)
+}
+
+func (mc *MemoryCache) cleanupExpiredLocked(now time.Time) {
+	for len(mc.expiry) > 0 && now.After(mc.expiry[0].expiration) {
+		mc.deleteLocked(mc.expiry[0].key)
 	}
 }
 
@@ -122,11 +154,7 @@ func (mc *MemoryCache) cleanup() {
 		case <-ticker.C:
 			mc.mu.Lock()
 			now := time.Now()
-			for key, entry := range mc.entries {
-				if now.After(entry.expiration) {
-					delete(mc.entries, key)
-				}
-			}
+			mc.cleanupExpiredLocked(now)
 			mc.mu.Unlock()
 		case <-mc.stopCh:
 			return
@@ -167,6 +195,22 @@ type CacheConfig struct {
 	TTL           time.Duration
 	KeyGenerator  CacheKeyGenerator
 	CacheableFunc func(req any) bool
+
+	// CoordinateFills enables sharing of overlapping cache misses only when
+	// FillIdentity supplies a nonempty identity and MaxConcurrentFills is positive.
+	// It defaults to false: stochastic generation keeps independent misses.
+	CoordinateFills bool
+	// MaxConcurrentFills bounds distinct in-flight keys, not waiting callers.
+	// At capacity, new keys bypass coordination and proceed independently.
+	MaxConcurrentFills int
+	// FillIdentity must identify the complete effective credential, tenant,
+	// route and other context-dependent downstream behavior for this request.
+	// Return empty when that identity is unavailable; such calls do not share.
+	// A nonempty identity also partitions stored cache entries when coordination
+	// is enabled, even when an in-flight capacity limit causes a bypass.
+	// Its result is hashed before retention; never return raw secrets unless
+	// hashing them in-process is acceptable to the caller's security policy.
+	FillIdentity func(ctx context.Context, req any) string
 }
 
 // Close stops the cleanup goroutine and waits for it to finish

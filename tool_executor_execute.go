@@ -71,7 +71,11 @@ func (e *ToolExecutor) Execute(ctx context.Context, toolCall types.ToolCall) typ
 	return result
 }
 
-func (e *ToolExecutor) execute(ctx context.Context, toolCall types.ToolCall) (returned types.ToolResult, running bool) {
+func (e *ToolExecutor) execute(ctx context.Context, toolCall types.ToolCall) (types.ToolResult, bool) {
+	return e.executeWithEncoding(ctx, toolCall, nil)
+}
+
+func (e *ToolExecutor) executeWithEncoding(ctx context.Context, toolCall types.ToolCall, encoded *[]byte) (returned types.ToolResult, running bool) {
 	name := toolCall.Name
 	if name == "" && toolCall.Function != nil {
 		name = toolCall.Function.Name
@@ -241,9 +245,17 @@ func (e *ToolExecutor) execute(ctx context.Context, toolCall types.ToolCall) (re
 		}, false
 	}
 
-	// Apply output size limit if configured
-	if rejected, oversized := e.rejectOversizedOutput(toolCall, result); oversized {
-		return rejected, false
+	// Serialize once to validate the wire size. The automatic loop keeps these
+	// immutable bytes; public Execute callers still receive the typed result.
+	jsonData, err := e.validateOutputSize(result)
+	if err != nil {
+		return types.ToolResult{
+			ToolCallID: toolCall.ID,
+			Error:      fmt.Sprintf("tool output rejected: %v", err),
+		}, false
+	}
+	if encoded != nil {
+		*encoded = jsonData
 	}
 
 	return types.ToolResult{

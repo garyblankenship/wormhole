@@ -38,7 +38,8 @@ type ProviderAdaptiveState struct {
 	generationChanged chan struct{}
 
 	// Latency tracking
-	latencies      []time.Duration // Slice for percentiles
+	latencies      []time.Duration // Circular window for percentiles
+	latencyNext    int             // Next slot to replace when full
 	latencyRing    *ring.Ring      // Ring for moving average
 	totalLatency   time.Duration
 	latencySamples int
@@ -106,13 +107,15 @@ func (s *ProviderAdaptiveState) RecordLatency(latency time.Duration, err error) 
 	s.latencySamples++
 	s.latencyRing = s.latencyRing.Next()
 
-	// Update latency slice (for percentiles)
-	if len(s.latencies) < s.latencyRing.Len() {
+	// Keep the most recent samples for percentiles without shifting the window.
+	if len(s.latencies) < cap(s.latencies) {
 		s.latencies = append(s.latencies, latency)
 	} else {
-		// Replace oldest entry (simple FIFO for percentile calculation)
-		copy(s.latencies, s.latencies[1:])
-		s.latencies[len(s.latencies)-1] = latency
+		s.latencies[s.latencyNext] = latency
+	}
+	s.latencyNext++
+	if s.latencyNext == cap(s.latencies) {
+		s.latencyNext = 0
 	}
 
 	// Update error ring buffer. totalSamples/totalErrors are windowed to

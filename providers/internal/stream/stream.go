@@ -48,13 +48,18 @@ func (p *SSEParser) Parse() (*SSEEvent, error) {
 // retains its empty-field events, whitespace boundaries and deferred read errors.
 func (p *SSEParser) parseEvent(scanner bool) (*SSEEvent, error) {
 	event := &SSEEvent{}
+	var data strings.Builder
+	finish := func() (*SSEEvent, error) {
+		event.Data = data.String()
+		return event, nil
+	}
 	hasFields := false
 	for {
 		buf, eof, err := p.readLine(scanner)
 		if err != nil {
 			if scanner && hasFields && err != errSSEFrameTooLarge {
 				p.pendingErr = err
-				return event, nil
+				return finish()
 			}
 			return nil, err
 		}
@@ -65,13 +70,13 @@ func (p *SSEParser) parseEvent(scanner bool) (*SSEEvent, error) {
 			line = strings.TrimRight(line, "\r")
 			boundary = strings.TrimLeft(line, " \t")
 		}
-		valid := event.Data != "" || event.Event != ""
+		valid := data.Len() != 0 || event.Event != ""
 		if scanner {
 			valid = hasFields
 		}
 		if boundary == "" {
 			if valid {
-				return event, nil
+				return finish()
 			}
 			if eof {
 				return nil, io.EOF
@@ -81,7 +86,7 @@ func (p *SSEParser) parseEvent(scanner bool) (*SSEEvent, error) {
 		if strings.HasPrefix(boundary, ":") {
 			if eof {
 				if valid {
-					return event, nil
+					return finish()
 				}
 				return nil, io.EOF
 			}
@@ -92,18 +97,18 @@ func (p *SSEParser) parseEvent(scanner bool) (*SSEEvent, error) {
 			if field == sseFieldData || field == sseFieldEvent {
 				hasFields = true
 			}
-			if err := parseSSEField(line, event); err != nil {
+			if err := parseSSEField(line, event, &data); err != nil {
 				return nil, err
 			}
 			if eof {
 				if scanner && !hasFields {
 					return nil, io.EOF
 				}
-				return event, nil
+				return finish()
 			}
 		} else if eof {
 			if valid {
-				return event, nil
+				return finish()
 			}
 			return nil, io.EOF
 		}

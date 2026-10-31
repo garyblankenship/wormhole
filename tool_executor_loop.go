@@ -77,7 +77,7 @@ func (e *ToolExecutor) executeWithTools(
 		}
 
 		// Execute all tool calls
-		toolResults := e.ExecuteAll(ctx, response.ToolCalls)
+		toolResults, encoded := e.executeAll(ctx, response.ToolCalls, true)
 
 		// Build assistant message with the tool calls (for conversation history).
 		// Thinking carries the provider's signed reasoning block so Anthropic
@@ -89,8 +89,8 @@ func (e *ToolExecutor) executeWithTools(
 		}
 
 		currentRequest.Messages = append(currentRequest.Messages, assistantMessage)
-		for _, toolResultMessage := range e.BuildToolResultMessages(toolResults) {
-			currentRequest.Messages = append(currentRequest.Messages, toolResultMessage)
+		for i, result := range toolResults {
+			currentRequest.Messages = append(currentRequest.Messages, buildToolResultMessageWithEncoding(result, encoded[i]))
 		}
 
 		// Continue loop - will call provider again with updated messages

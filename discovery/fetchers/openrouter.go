@@ -148,14 +148,3 @@ func inferCapabilitiesFromModality(modality string) []types.ModelCapability {
 
 	return capabilities
 }
-
-// extractProvider extracts provider name from model ID
-func extractProvider(modelID string) string {
-	// OpenRouter model IDs are formatted as "provider/model-name"
-	// e.g., "openai/gpt-5", "anthropic/claude-sonnet-4-5", "google/gemini-pro"
-	parts := strings.SplitN(modelID, "/", 2)
-	if len(parts) == 2 {
-		return parts[0]
-	}
-	return providerOpenRouter // Fallback
-}

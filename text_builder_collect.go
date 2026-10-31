@@ -35,7 +35,7 @@ func (b *TextRequestBuilder) StreamAndCollect(ctx context.Context) (<-chan types
 		defer close(done)
 		defer cancel()
 		streamErr = collectTextStream(streamCtx, stream, out, &collector)
-		collector.finishTools()
+		collector.finish()
 	}()
 
 	return out, func() (*types.TextResponse, error) {

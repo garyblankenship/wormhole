@@ -1,13 +1,11 @@
 package wormhole
 
-import (
-	"container/ring"
-	"time"
-)
+import "container/ring"
 
 // resetTracking clears old samples after capacity change
 func (s *ProviderAdaptiveState) resetTracking() {
-	s.latencies = make([]time.Duration, 0, len(s.latencies))
+	s.latencies = s.latencies[:0]
+	s.latencyNext = 0
 	s.latencyRing = ring.New(s.latencyRing.Len())
 	s.totalLatency = 0
 	s.latencySamples = 0

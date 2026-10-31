@@ -266,9 +266,8 @@ func TestToolExecutor_BuildToolResultMessages(t *testing.T) {
 	assert.Contains(t, messages[1].Content, "failed")
 }
 
-// TestToolLoopResultSerializationCount preserves the v2 behavior in which the
-// output-size check and continuation message serialize independently. Custom
-// marshalers may be stateful, so the message must contain the second result.
+// TestToolLoopResultSerializationCount checks executor reuse of validated JSON
+// while the agent loop retains its independent continuation serialization.
 func TestToolLoopResultSerializationCount(t *testing.T) {
 	t.Parallel()
 
@@ -290,13 +289,13 @@ func TestToolLoopResultSerializationCount(t *testing.T) {
 		if err != nil {
 			t.Fatalf("ExecuteWithTools: %v", err)
 		}
-		if got := result.calls.Load(); got != 2 {
-			t.Fatalf("executor loop result marshal calls = %d, want 2", got)
+		if got := result.calls.Load(); got != 1 {
+			t.Fatalf("executor loop result marshal calls = %d, want 1", got)
 		}
 		require.Len(t, provider.requests, 2)
 		message, ok := provider.requests[1].Messages[2].(*types.ToolResultMessage)
 		require.True(t, ok)
-		assert.Contains(t, message.Content, "serialized-2")
+		assert.Contains(t, message.Content, "serialized-1")
 	})
 
 	t.Run("agent loop", func(t *testing.T) {

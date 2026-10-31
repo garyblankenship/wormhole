@@ -88,6 +88,54 @@ func TestSSEAggregateMultilineDataLimit(t *testing.T) {
 	}
 }
 
+func TestSSEMultilineEmptyDataPreserved(t *testing.T) {
+	t.Parallel()
+
+	input := "data:\ndata: first\ndata:\ndata: last\ndata:\n\n"
+	want := "first\n\nlast\n"
+	parser := NewSSEParser(strings.NewReader(input))
+	event, err := parser.Parse()
+	require.NoError(t, err)
+	assert.Equal(t, want, event.Data)
+
+	scanner := NewSSEScanner(strings.NewReader(input))
+	require.True(t, scanner.Scan())
+	assert.Equal(t, want, scanner.Event().Data)
+}
+
+func TestSSEManyLineFrameLimit(t *testing.T) {
+	t.Parallel()
+
+	// Each line after the first adds 1024 bytes of data plus a separator.
+	line := "data: " + strings.Repeat("x", 1023) + "\n"
+	atLimit := strings.Repeat(line, 10240) + "\n"
+	tooLarge := strings.Repeat(line, 10240) + "data: z\n\n"
+	for _, tc := range []struct {
+		name, input string
+		wantErr     bool
+	}{
+		{name: "many lines at limit", input: atLimit},
+		{name: "many lines over limit", input: tooLarge, wantErr: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			parser := NewSSEParser(strings.NewReader(tc.input))
+			event, err := parser.Parse()
+			scanner := NewSSEScanner(strings.NewReader(tc.input))
+			if tc.wantErr {
+				assert.ErrorIs(t, err, errSSEFrameTooLarge)
+				assert.False(t, scanner.Scan())
+				assert.ErrorIs(t, scanner.Err(), errSSEFrameTooLarge)
+				return
+			}
+			require.NoError(t, err)
+			assert.Len(t, event.Data, maxSSEBufferBytes-1)
+			require.True(t, scanner.Scan())
+			assert.Equal(t, event.Data, scanner.Event().Data)
+		})
+	}
+}
+
 func TestProcessSSEOversizedFrameReportsOnceAndClosesBody(t *testing.T) {
 	t.Parallel()
 

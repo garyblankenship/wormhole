@@ -8,17 +8,28 @@ import (
 )
 
 func buildToolResultMessage(result types.ToolResult) *types.ToolResultMessage {
+	return buildToolResultMessageWithEncoding(result, nil)
+}
+
+func buildToolResultMessageWithEncoding(result types.ToolResult, encoded []byte) *types.ToolResultMessage {
 	// For most providers, tool results are sent as a special message with role "tool"
 	// The content depends on whether there are errors
 
 	content := ""
 	if result.Error != "" {
 		content = fmt.Sprintf("Tool %s failed: %s", result.ToolCallID, result.Error)
-	} else if resultJSON, err := json.Marshal(result.Result); err != nil {
-		result.Error = fmt.Sprintf("failed to serialize tool output: %v", err)
-		content = fmt.Sprintf("Tool %s failed: %s", result.ToolCallID, result.Error)
 	} else {
-		content = string(resultJSON)
+		if encoded == nil {
+			var err error
+			encoded, err = json.Marshal(result.Result)
+			if err != nil {
+				result.Error = fmt.Sprintf("failed to serialize tool output: %v", err)
+				content = fmt.Sprintf("Tool %s failed: %s", result.ToolCallID, result.Error)
+			}
+		}
+		if result.Error == "" {
+			content = string(encoded)
+		}
 	}
 
 	return &types.ToolResultMessage{

@@ -67,14 +67,14 @@ func (s *SSEScanner) Err() error {
 }
 
 // parseSSEField parses a single SSE field line ("field: value") and applies
-// the parsed field to event. It is the single source of truth for SSE field
+// the parsed field to event and its frame-owned data builder. It is the single source of truth for SSE field
 // semantics shared by SSEScanner and SSEParser.
 //
 // Per the SSE spec, exactly one leading space is stripped from the value
 // (strings.TrimPrefix(value, " ")); trailing whitespace is preserved.
 // The field name is leniently trimmed of surrounding spaces and tabs.
 // Lines without a colon are ignored (no field applied).
-func parseSSEField(line string, event *SSEEvent) error {
+func parseSSEField(line string, event *SSEEvent, data *strings.Builder) error {
 	colonIndex := strings.Index(line, ":")
 	if colonIndex == -1 {
 		return nil
@@ -86,17 +86,17 @@ func parseSSEField(line string, event *SSEEvent) error {
 	case sseFieldEvent:
 		event.Event = value
 	case sseFieldData:
-		newDataLen := len(event.Data) + len(value)
-		if event.Data != "" {
-			newDataLen++
+		separator := 0
+		if data.Len() > 0 {
+			separator = 1
 		}
-		if newDataLen > maxSSEBufferBytes {
+		if len(value) > maxSSEBufferBytes-data.Len()-separator {
 			return errSSEFrameTooLarge
 		}
-		if event.Data != "" {
-			event.Data += "\n"
+		if separator != 0 {
+			data.WriteByte('\n')
 		}
-		event.Data += value
+		data.WriteString(value)
 	case sseFieldID:
 		event.ID = value
 	}

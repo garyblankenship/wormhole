@@ -2,10 +2,8 @@ package server
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"net/http"
-	"strconv"
 	"strings"
 	"time"
 
@@ -16,6 +14,7 @@ type responsesLiveTool struct {
 	index     int
 	item      responsesOutputItem
 	arguments strings.Builder
+	input     customInputDecoder
 }
 
 func (p *proxy) streamResponses(w http.ResponseWriter, r *http.Request, execution responsesExecution) {
@@ -131,10 +130,8 @@ func (p *proxy) streamResponses(w http.ResponseWriter, r *http.Request, executio
 			}
 			live.arguments.WriteString(delta.Function.Arguments)
 			if live.item.Type == "custom_tool_call" {
-				input := partialCustomToolInput(live.arguments.String())
-				if strings.HasPrefix(input, live.item.Input) && len(input) > len(live.item.Input) {
-					sse.write(responsesEvent{Type: "response.custom_tool_call_input.delta", OutputIndex: &live.index, ItemID: live.item.ID, Delta: input[len(live.item.Input):]})
-					live.item.Input = input
+				if inputDelta := live.input.append(delta.Function.Arguments); inputDelta != "" {
+					sse.write(responsesEvent{Type: "response.custom_tool_call_input.delta", OutputIndex: &live.index, ItemID: live.item.ID, Delta: inputDelta})
 				}
 			} else if delta.Function.Arguments != "" {
 				sse.write(responsesEvent{Type: "response.function_call_arguments.delta", OutputIndex: &live.index, ItemID: live.item.ID, Delta: delta.Function.Arguments})
@@ -177,6 +174,12 @@ complete:
 		live := tools[key]
 		live.item.Status = "completed"
 		if live.item.Type == "custom_tool_call" {
+			input := live.input.final(live.arguments.String())
+			emitted := live.input.decoded.String()
+			if strings.HasPrefix(input, emitted) && len(input) > len(emitted) {
+				sse.write(responsesEvent{Type: "response.custom_tool_call_input.delta", OutputIndex: &live.index, ItemID: live.item.ID, Delta: input[len(emitted):]})
+			}
+			live.item.Input = input
 			sse.write(responsesEvent{Type: "response.custom_tool_call_input.done", OutputIndex: &live.index, ItemID: live.item.ID, Input: live.item.Input})
 		} else {
 			live.item.Arguments = live.arguments.String()
@@ -198,41 +201,4 @@ complete:
 	if sse.err == nil {
 		flusher.Flush()
 	}
-}
-
-// Custom tools use a JSON wrapper on the provider path. Expose decoded input
-// as soon as a complete character is available, withholding incomplete escapes.
-func partialCustomToolInput(raw string) string {
-	var full struct {
-		Input string `json:"input"`
-	}
-	if json.Unmarshal([]byte(raw), &full) == nil {
-		return full.Input
-	}
-	raw = strings.TrimSpace(raw)
-	if !strings.HasPrefix(raw, "{") {
-		return ""
-	}
-	raw = strings.TrimSpace(raw[1:])
-	if !strings.HasPrefix(raw, `"input"`) {
-		return ""
-	}
-	raw = strings.TrimSpace(raw[len(`"input"`):])
-	if !strings.HasPrefix(raw, ":") {
-		return ""
-	}
-	raw = strings.TrimSpace(raw[1:])
-	if !strings.HasPrefix(raw, `"`) {
-		return ""
-	}
-	for end := len(raw); end >= 1; end-- {
-		candidate := raw[:end]
-		if decoded, err := strconv.Unquote(candidate); err == nil {
-			return decoded
-		}
-		if decoded, err := strconv.Unquote(candidate + `"`); err == nil {
-			return decoded
-		}
-	}
-	return ""
 }

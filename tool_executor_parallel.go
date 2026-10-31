@@ -12,19 +12,19 @@ import (
 )
 
 // validateOutputSize checks if the tool output exceeds configured size limits
-func (e *ToolExecutor) validateOutputSize(result any) error {
+func (e *ToolExecutor) validateOutputSize(result any) ([]byte, error) {
 
 	// Measure the raw JSON bytes sent in tool-result messages.
 	jsonData, err := json.Marshal(result)
 	if err != nil {
-		return fmt.Errorf("failed to serialize tool output: %w", err)
+		return nil, fmt.Errorf("failed to serialize tool output: %w", err)
 	}
 
 	if e.safetyConfig.HasOutputSizeLimit() && len(jsonData) > e.safetyConfig.MaxToolOutputSize {
-		return fmt.Errorf("output size %d bytes exceeds limit of %d bytes", len(jsonData), e.safetyConfig.MaxToolOutputSize)
+		return nil, fmt.Errorf("output size %d bytes exceeds limit of %d bytes", len(jsonData), e.safetyConfig.MaxToolOutputSize)
 	}
 
-	return nil
+	return jsonData, nil
 }
 
 // ExecuteAll executes all tool calls in parallel and returns the results
@@ -32,13 +32,24 @@ func (e *ToolExecutor) validateOutputSize(result any) error {
 // Note: Tools are executed concurrently for performance. If you need sequential
 // execution, call Execute() for each tool individually.
 func (e *ToolExecutor) ExecuteAll(ctx context.Context, toolCalls []types.ToolCall) []types.ToolResult {
+	results, _ := e.executeAll(ctx, toolCalls, false)
+	return results
+}
+
+// executeAll retains the validated JSON only for the automatic message path.
+// Public callers continue receiving typed results without retaining serialized copies.
+func (e *ToolExecutor) executeAll(ctx context.Context, toolCalls []types.ToolCall, forMessages bool) ([]types.ToolResult, [][]byte) {
 	if err := e.validateToolCallBatch(toolCalls); err != nil {
-		return []types.ToolResult{{Error: err.Error()}}
+		return []types.ToolResult{{Error: err.Error()}}, nil
 	}
 	if len(toolCalls) == 0 {
-		return nil
+		return nil, nil
 	}
 	results := make([]types.ToolResult, len(toolCalls))
+	var encoded [][]byte
+	if forMessages {
+		encoded = make([][]byte, len(toolCalls))
+	}
 
 	workerCount := len(toolCalls)
 	if max := e.safetyConfig.MaxConcurrentTools; max > 0 && workerCount > max {
@@ -55,13 +66,18 @@ func (e *ToolExecutor) ExecuteAll(ctx context.Context, toolCalls []types.ToolCal
 				if idx >= len(toolCalls) {
 					return
 				}
-				result, _ := e.execute(ctx, toolCalls[idx])
-				results[idx] = result
+				if forMessages {
+					result, _ := e.executeWithEncoding(ctx, toolCalls[idx], &encoded[idx])
+					results[idx] = result
+				} else {
+					result, _ := e.execute(ctx, toolCalls[idx])
+					results[idx] = result
+				}
 			}
 		}()
 	}
 	wg.Wait()
-	return results
+	return results, encoded
 }
 
 func (e *ToolExecutor) validateToolCallBatch(toolCalls []types.ToolCall) error {

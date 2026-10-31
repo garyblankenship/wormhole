@@ -169,7 +169,7 @@ func (c *ModelCache) cleanupExpired() {
 	defer c.memoryMu.Unlock()
 	now := time.Now()
 	for k, entry := range c.memory {
-		if now.Sub(entry.Timestamp) > c.memoryTTL {
+		if !c.memoryEntryFresh(entry, now) {
 			delete(c.memory, k)
 		}
 	}

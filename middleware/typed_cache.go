@@ -12,6 +12,7 @@ import (
 // both operation and provider identity, so shared caches cannot cross routes.
 type TypedCacheMiddleware struct {
 	config CacheConfig
+	fills  cacheFillGroup
 }
 
 // NewTypedCacheMiddleware creates typed response-caching middleware.
@@ -35,24 +36,86 @@ func typedCache[Req any, Resp any](m *TypedCacheMiddleware, operation string, ct
 		key = fmt.Sprintf("endpoint:%x:%s", sha256.Sum256([]byte(endpoint)), key)
 	}
 	key = fmt.Sprintf("%s:%s:%s", operation, providerIdentity(ctx), key)
+	fillIdentity := ""
+	if m.config.CoordinateFills && m.config.FillIdentity != nil {
+		if identity := m.config.FillIdentity(ctx, request); identity != "" {
+			fillIdentity = fmt.Sprintf("%x", sha256.Sum256([]byte(identity)))
+			// The same isolation boundary must cover stored hits as well as
+			// in-flight sharing, including when the flight limit is full.
+			key = fmt.Sprintf("fill:%s:%s", fillIdentity, key)
+		}
+	}
 	if cached, ok := m.config.Cache.Get(key); ok {
-		cloned, cloneErr := cloneValue(cached)
-		if cloneErr == nil {
-			if response, ok := cloned.(Resp); ok {
-				return response, nil
-			}
+		if response, ok := clonedCacheResponse[Resp](cached); ok {
+			return response, nil
 		}
 	}
 
-	response, err := next(ctx, request)
+	fill := func() (Resp, any, bool, error) {
+		response, err := next(ctx, request)
+		if err != nil {
+			return response, nil, false, err
+		}
+		stored, cloneErr := cloneValue(response)
+		if cloneErr == nil && (!m.config.CoordinateFills || ctx.Err() == nil) {
+			m.config.Cache.Set(key, stored, m.config.TTL)
+			return response, stored, true, nil
+		}
+		return response, nil, false, nil
+	}
+	if m.canCoordinateFill(ctx) {
+		if identity := fillIdentity; identity != "" {
+			flight, leader := m.fills.join(key, identity, m.config.MaxConcurrentFills)
+			if flight != nil {
+				if !leader {
+					value, ok, waitErr := waitCacheFill(ctx, flight)
+					if waitErr != nil {
+						var zero Resp
+						return zero, waitErr
+					}
+					if ok {
+						if response, ok := clonedCacheResponse[Resp](value); ok {
+							return response, nil
+						}
+					}
+					// A failed/canceled leader cannot own another caller's outcome.
+					// Retry with the waiter's original context and request.
+					response, _, _, err := fill()
+					return response, err
+				}
+				// Another leader may have finished between the first Get and join.
+				// Recheck storage before issuing another downstream call.
+				if cached, ok := m.config.Cache.Get(key); ok {
+					if response, ok := clonedCacheResponse[Resp](cached); ok {
+						m.fills.finish(key, identity, flight, cached, true)
+						return response, nil
+					}
+				}
+				var shared any
+				var shareable bool
+				defer func() { m.fills.finish(key, identity, flight, shared, shareable) }()
+				response, stored, ok, err := fill()
+				shared, shareable = stored, ok
+				return response, err
+			}
+		}
+	}
+	response, _, _, err := fill()
+	return response, err
+}
+
+func (m *TypedCacheMiddleware) canCoordinateFill(ctx context.Context) bool {
+	return m.config.CoordinateFills && m.config.MaxConcurrentFills > 0 && ctx.Err() == nil
+}
+
+func clonedCacheResponse[Resp any](value any) (Resp, bool) {
+	cloned, err := cloneValue(value)
 	if err != nil {
-		return response, err
+		var zero Resp
+		return zero, false
 	}
-	stored, cloneErr := cloneValue(response)
-	if cloneErr == nil {
-		m.config.Cache.Set(key, stored, m.config.TTL)
-	}
-	return response, nil
+	response, ok := cloned.(Resp)
+	return response, ok
 }
 
 func (m *TypedCacheMiddleware) ApplyText(next types.TextHandler) types.TextHandler {

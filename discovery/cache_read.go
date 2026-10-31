@@ -22,13 +22,20 @@ func (c *ModelCache) Get(provider string) ([]*types.ModelInfo, bool) {
 	c.memoryMu.RLock()
 	entry, ok := c.memory[provider]
 	c.memoryMu.RUnlock()
-	if ok && time.Since(entry.Timestamp) < c.memoryTTL {
+	if ok && c.memoryEntryFresh(entry, time.Now()) {
 		return cloneModels(entry.Models), true
 	}
 
 	// L2: Check file cache (if enabled)
 	if c.enableFileCache {
 		if entry, ok, migration := c.loadFromFileLifecycleHeld(provider); ok {
+			// Reload disk-backed entries at most once per memoryTTL, without
+			// extending the catalog's original fileTTL.
+			entry.reloadBy = time.Now().Add(c.memoryTTL)
+			fileExpiry := entry.Timestamp.Add(c.fileTTL)
+			if fileExpiry.Before(entry.reloadBy) {
+				entry.reloadBy = fileExpiry
+			}
 			c.memoryMu.Lock()
 			c.memory[provider] = entry
 			c.memoryMu.Unlock()
@@ -49,6 +56,17 @@ func (c *ModelCache) Get(provider string) ([]*types.ModelInfo, bool) {
 	}
 
 	return nil, false
+}
+
+// memoryEntryFresh applies the original acquisition TTL to Set entries and a
+// bounded reload deadline to file entries. Disabling file caching also disables
+// promotion of a previously loaded disk entry.
+func (c *ModelCache) memoryEntryFresh(entry *CacheEntry, now time.Time) bool {
+	if !entry.reloadBy.IsZero() {
+		return c.enableFileCache && c.memoryTTL > 0 && now.Before(entry.reloadBy) &&
+			now.Before(entry.Timestamp.Add(c.fileTTL))
+	}
+	return now.Sub(entry.Timestamp) < c.memoryTTL
 }
 
 // GetStale returns the most recent in-memory entry without applying its TTL.

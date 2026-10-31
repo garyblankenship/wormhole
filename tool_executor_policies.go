@@ -64,29 +64,6 @@ func (e *ToolExecutor) rejectInvalidArguments(definition *types.ToolDefinition, 
 	return types.ToolResult{}, false
 }
 
-func (e *ToolExecutor) rejectOversizedOutput(toolCall types.ToolCall, result any) (types.ToolResult, bool) {
-
-	if err := e.validateOutputSize(result); err != nil {
-		return types.ToolResult{
-			ToolCallID: toolCall.ID,
-			Error:      fmt.Sprintf("tool output rejected: %v", err),
-		}, true
-	}
-	return types.ToolResult{}, false
-}
-
-func (e *ToolExecutor) recordCircuitFailure(name string) {
-	if breaker := e.breakerForTool(name); breaker != nil {
-		breaker.RecordFailure()
-	}
-}
-
-func (e *ToolExecutor) recordCircuitSuccess(name string) {
-	if breaker := e.breakerForTool(name); breaker != nil {
-		breaker.RecordSuccess()
-	}
-}
-
 func (e *ToolExecutor) breakerForTool(name string) *SimpleCircuitBreaker {
 	if !e.safetyConfig.EnableCircuitBreaker {
 		return nil

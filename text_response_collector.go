@@ -1,11 +1,27 @@
 package wormhole
 
-import "github.com/garyblankenship/wormhole/v3/types"
+import (
+	"strings"
+
+	"github.com/garyblankenship/wormhole/v3/types"
+)
 
 type textResponseCollector struct {
 	response     types.TextResponse
+	text         strings.Builder
+	refusal      strings.Builder
+	thinking     strings.Builder
 	pending      []types.ToolCall
 	toolSnapshot bool
+}
+
+func (c *textResponseCollector) finish() {
+	c.finishTools()
+	c.response.Text = c.text.String()
+	c.response.Refusal = c.refusal.String()
+	if c.response.Thinking != nil {
+		c.response.Thinking.Content = c.thinking.String()
+	}
 }
 
 func (c *textResponseCollector) add(chunk types.TextChunk) {
@@ -18,7 +34,7 @@ func (c *textResponseCollector) add(chunk types.TextChunk) {
 	if chunk.Model != "" {
 		c.response.Model = chunk.Model
 	}
-	c.response.Text += chunk.Content()
+	c.text.WriteString(chunk.Content())
 	refusal, thinking := chunk.Refusal, chunk.Thinking
 	if chunk.Delta != nil {
 		if refusal == "" {
@@ -28,7 +44,7 @@ func (c *textResponseCollector) add(chunk types.TextChunk) {
 			thinking = chunk.Delta.Thinking
 		}
 	}
-	c.response.Refusal += refusal
+	c.refusal.WriteString(refusal)
 	c.addThinking(thinking)
 	if chunk.FinishReason != nil && *chunk.FinishReason != "" {
 		c.response.FinishReason = *chunk.FinishReason
@@ -75,7 +91,7 @@ func (c *textResponseCollector) addThinking(thinking *types.Thinking) {
 	if c.response.Thinking == nil {
 		c.response.Thinking = &types.Thinking{}
 	}
-	c.response.Thinking.Content += thinking.Content
+	c.thinking.WriteString(thinking.Content)
 	if thinking.Signature != "" {
 		c.response.Thinking.Signature = thinking.Signature
 	}

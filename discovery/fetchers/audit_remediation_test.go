@@ -21,65 +21,7 @@ func TestAuditDiscoveryPagination(t *testing.T) {
 				continue
 			}
 			t.Run(provider+"/"+scenario, func(t *testing.T) {
-				const cursor = "next /+&?"
-				pages := 0
-				server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-					pages++
-					if r.URL.Path != "/models" {
-						t.Errorf("path=%s", r.URL.Path)
-					}
-					if r.URL.Query().Has("limit") || r.URL.Query().Has("pageSize") {
-						t.Error("overrode default page size")
-					}
-					cursorField := "after_id"
-					if provider == "gemini" {
-						cursorField = "pageToken"
-						if r.URL.Query().Get("key") != "key +&" {
-							t.Error("key changed")
-						}
-					} else {
-						if r.Header.Get("x-api-key") != "custom-key" || r.Header.Get("X-Trace") != "trace" || r.Header.Get("anthropic-version") != "2023-06-01" {
-							t.Error("headers changed between pages")
-						}
-					}
-					if pages == 1 && r.URL.Query().Has(cursorField) {
-						t.Error("first request had cursor")
-					}
-					if pages == 2 && r.URL.Query().Get(cursorField) != cursor {
-						t.Errorf("cursor=%q", r.URL.Query().Get(cursorField))
-					}
-					if pages > 2 {
-						t.Error("pagination failed to stop")
-						w.WriteHeader(500)
-						return
-					}
-					if pages == 2 && scenario == "later-error" {
-						w.WriteHeader(503)
-						return
-					}
-					more := pages == 1 || scenario == "repeated"
-					if provider == "anthropic" {
-						lastID := cursor
-						if scenario == "missing" {
-							lastID = ""
-						}
-						data := []map[string]any{{"id": "first", "display_name": "First"}}
-						if pages == 2 {
-							data = append(data, map[string]any{"id": "second"})
-						}
-						_ = json.NewEncoder(w).Encode(map[string]any{"data": data, "has_more": more, "last_id": lastID})
-					} else {
-						data := []map[string]any{{"name": "models/first", "inputTokenLimit": 1000, "outputTokenLimit": 100}}
-						token := ""
-						if more {
-							token = cursor
-						}
-						if pages == 2 {
-							data = append(data, map[string]any{"name": "models/second"})
-						}
-						_ = json.NewEncoder(w).Encode(map[string]any{"models": data, "nextPageToken": token})
-					}
-				}))
+				server := httptest.NewServer(auditPaginationHandler(t, provider, scenario))
 				t.Cleanup(server.Close)
 				useTestHTTPClient(t, server.Client())
 				var f discovery.ModelFetcher
@@ -102,6 +44,68 @@ func TestAuditDiscoveryPagination(t *testing.T) {
 					t.Fatalf("limits=%#v", models[0])
 				}
 			})
+		}
+	}
+}
+
+func auditPaginationHandler(t *testing.T, provider, scenario string) http.HandlerFunc {
+	const cursor = "next /+&?"
+	pages := 0
+	return func(w http.ResponseWriter, r *http.Request) {
+		pages++
+		if r.URL.Path != "/models" {
+			t.Errorf("path=%s", r.URL.Path)
+		}
+		if r.URL.Query().Has("limit") || r.URL.Query().Has("pageSize") {
+			t.Error("overrode default page size")
+		}
+		cursorField := "after_id"
+		if provider == "gemini" {
+			cursorField = "pageToken"
+			if r.URL.Query().Get("key") != "key +&" {
+				t.Error("key changed")
+			}
+		} else {
+			if r.Header.Get("x-api-key") != "custom-key" || r.Header.Get("X-Trace") != "trace" || r.Header.Get("anthropic-version") != "2023-06-01" {
+				t.Error("headers changed between pages")
+			}
+		}
+		if pages == 1 && r.URL.Query().Has(cursorField) {
+			t.Error("first request had cursor")
+		}
+		if pages == 2 && r.URL.Query().Get(cursorField) != cursor {
+			t.Errorf("cursor=%q", r.URL.Query().Get(cursorField))
+		}
+		if pages > 2 {
+			t.Error("pagination failed to stop")
+			w.WriteHeader(500)
+			return
+		}
+		if pages == 2 && scenario == "later-error" {
+			w.WriteHeader(503)
+			return
+		}
+		more := pages == 1 || scenario == "repeated"
+		if provider == "anthropic" {
+			lastID := cursor
+			if scenario == "missing" {
+				lastID = ""
+			}
+			data := []map[string]any{{"id": "first", "display_name": "First"}}
+			if pages == 2 {
+				data = append(data, map[string]any{"id": "second"})
+			}
+			_ = json.NewEncoder(w).Encode(map[string]any{"data": data, "has_more": more, "last_id": lastID})
+		} else {
+			data := []map[string]any{{"name": "models/first", "inputTokenLimit": 1000, "outputTokenLimit": 100}}
+			token := ""
+			if more {
+				token = cursor
+			}
+			if pages == 2 {
+				data = append(data, map[string]any{"name": "models/second"})
+			}
+			_ = json.NewEncoder(w).Encode(map[string]any{"models": data, "nextPageToken": token})
 		}
 	}
 }

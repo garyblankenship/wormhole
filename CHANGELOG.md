@@ -1,5 +1,26 @@
 # Changelog
 
+## v3.5.0 (2026-10-31)
+
+### Features
+- Add opt-in bounded coordination of overlapping typed response-cache fills with caller-supplied effective identity, isolated stored entries, detached responses, and independent waiter cancellation. Coordination remains disabled by default; callers must supply a nonempty identity and positive in-flight limit.
+
+### Fixes and efficiency
+- Preserve stream text, reasoning, refusal, tool deltas and terminal frames; close blocked provider response bodies on cancellation and measure the complete streaming lifecycle.
+- Collect text streams and SSE frame data with linear accumulation; incrementally decode streamed custom-tool input while retaining final JSON semantics.
+- Reuse validated tool-result JSON in automatic tool loops while preserving typed public results, output limits, and errors.
+- Index memory-cache expiration, use circular adaptive-latency samples, and bound disk-catalog reloads without extending the original catalog lifetime.
+- Correct model-discovery pagination, endpoint/account isolation, Gemini token limits and OpenRouter provider identity.
+- Preserve injected HTTP-client ownership, close owned idle transports outside cache locks, and honor TLS handshake settings.
+- Harden tool circuit-breaker reservations, typed enum constraints, builder snapshots, nil batch requests and rate-limiter shutdown.
+- Classify authorization failures separately from exhausted quota and transient rate limits.
+
+### Compatibility notes
+- Module path and provider interface remain unchanged. No new dependencies.
+- Enum alternatives may include words such as `required`; constraints following `enum=` must use semicolons (for example, `tool:"enum=optional,required;required"`). Numeric and boolean enum alternatives are emitted with their field types.
+- Cache-fill identity must include the effective credential, tenant, route and other context-dependent behavior. Missing identity or full in-flight capacity bypasses sharing; failed or canceled leaders do not determine waiter outcomes.
+- Efficiency changes are supported by local regression checks; no live-provider throughput, latency or billing gains are claimed.
+
 ## v3.4.0 (2026-10-23)
 
 - Add supported OpenAI-compatible HTTP-client injection; injected clients remain caller-owned and all requests use the supplied transport.
