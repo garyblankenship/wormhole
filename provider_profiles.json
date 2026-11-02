@@ -64,6 +64,9 @@
     "api_key_env": ["ZAI_API_KEY"],
     "base_url_env": "ZAI_BASE_URL",
     "discovery": "openai-compatible",
+    "default_provider_options": {
+      "thinking": {"type": "disabled"}
+    },
     "auto_env": true
   },
   {

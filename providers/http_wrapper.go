@@ -79,6 +79,8 @@ func NewHTTPClientWrapper(name string, providerConfig types.ProviderConfig, tlsC
 		w.retryClient = newRetryableHTTPClient(w.httpClient, retryConfig)
 	}
 
+	w.retryClient.OnHTTPAttempt = providerConfig.OnHTTPAttempt
+
 	// Stateful key rotation: only rotate after a retryable rate-limit response.
 	if w.keyPool != nil {
 		pool := w.keyPool

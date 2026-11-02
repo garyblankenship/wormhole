@@ -4,6 +4,38 @@ import (
 	"time"
 )
 
+// HTTPAttemptPhase identifies when an underlying HTTP Do is observed.
+type HTTPAttemptPhase string
+
+const (
+	HTTPAttemptStart    HTTPAttemptPhase = "start"
+	HTTPAttemptComplete HTTPAttemptPhase = "complete"
+)
+
+// HTTPAttemptOutcome describes the result of an underlying HTTP Do.
+// A response outcome includes all HTTP statuses, including non-2xx responses.
+type HTTPAttemptOutcome string
+
+const (
+	HTTPAttemptResponse       HTTPAttemptOutcome = "response"
+	HTTPAttemptTransportError HTTPAttemptOutcome = "transport_error"
+	HTTPAttemptCanceled       HTTPAttemptOutcome = "canceled"
+)
+
+// HTTPAttemptEvent contains only bounded, non-sensitive HTTP attempt metadata.
+// Attempt is one-based within a single request; Duration and Outcome are set
+// only at completion. StatusCode is zero if no HTTP response was received.
+// Start is emitted immediately before Do, completion immediately after Do
+// returns (before response-body handling or retry delay). Events do not contain
+// request/response content or transport error strings.
+type HTTPAttemptEvent struct {
+	Phase      HTTPAttemptPhase
+	Attempt    int
+	Duration   time.Duration
+	StatusCode int
+	Outcome    HTTPAttemptOutcome
+}
+
 // ProviderConfig holds provider configuration
 type ProviderConfig struct {
 	// ResponseHeaderNames adds safe response headers to SDK-visible metadata.
@@ -13,9 +45,16 @@ type ProviderConfig struct {
 	Headers             map[string]string `json:"headers,omitempty"`
 	NoAuth              bool              `json:"no_auth,omitempty"`
 	Timeout             int               `json:"timeout,omitempty"`
-	HTTPTimeout         *time.Duration    `json:"-"`                        // precise transport request timeout; nil means use defaults
-	DynamicModels       bool              `json:"dynamic_models,omitempty"` // Skip local registry validation for providers with dynamic model catalogs
-	Params              map[string]any    `json:"params,omitempty"`         // Provider-specific parameters for customization
+	HTTPTimeout         *time.Duration    `json:"-"` // precise transport request timeout; nil means use defaults
+	// OnHTTPAttempt observes each underlying HTTP Do, including retries. It runs
+	// synchronously on the request goroutine; callbacks must be concurrency-safe
+	// across requests. A blocking callback delays the request and a panic
+	// propagates to its caller; a panic in the start callback prevents Do and
+	// therefore has no matching completion. Requests canceled before the
+	// attempt boundary emit no events.
+	OnHTTPAttempt func(HTTPAttemptEvent) `json:"-"`
+	DynamicModels bool                   `json:"dynamic_models,omitempty"` // Skip local registry validation for providers with dynamic model catalogs
+	Params        map[string]any         `json:"params,omitempty"`         // Provider-specific parameters for customization
 
 	DefaultProviderOptions map[string]any            `json:"default_provider_options,omitempty"`
 	ProviderOptionsByModel map[string]map[string]any `json:"provider_options_by_model,omitempty"`
@@ -148,6 +187,13 @@ func (c ProviderConfig) WithTimeoutDuration(d time.Duration) ProviderConfig {
 func (c ProviderConfig) WithRetries(maxRetries int, delay time.Duration) ProviderConfig {
 	c.MaxRetries = &maxRetries
 	c.RetryDelay = &delay
+	return c
+}
+
+// WithHTTPAttemptCallback observes individual underlying HTTP attempts.
+// See OnHTTPAttempt for callback execution and failure semantics.
+func (c ProviderConfig) WithHTTPAttemptCallback(callback func(HTTPAttemptEvent)) ProviderConfig {
+	c.OnHTTPAttempt = callback
 	return c
 }
 

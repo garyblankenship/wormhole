@@ -139,6 +139,7 @@ func TestModelCacheClearRemovesOnlyOwnedShards(t *testing.T) {
 func TestModelCacheLoadFromMonolithicFileMigrates(t *testing.T) {
 	t.Parallel()
 	cache := newFileBackedCache(t)
+	t.Cleanup(func() { _ = cache.Close() })
 	entry := &CacheEntry{
 		Models:    testModels("legacy"),
 		Timestamp: time.Now(),

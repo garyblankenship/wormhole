@@ -1,0 +1,17 @@
+# Account-bound Codex (SDK)
+
+`wormhole.WithCodex(authPath, config)` registers the dedicated `codex` provider. Supply the **explicit** Codex CLI `auth.json` path, not an API key. Wormhole reads at most 1 MiB when the provider is constructed, validates `tokens.access_token` and `tokens.account_id` and the JWT `exp` claim, and checks expiry again before each request. Signature verification, token refresh, credential writes, automatic CLI discovery and subscription eligibility are **not** provided. Reauthenticate with the Codex CLI outside Wormhole and reconstruct the provider after expiration. Never log or print credentials.
+
+```go
+cfg := types.ProviderConfig{}.WithNoRetries().WithTimeoutDuration(5 * time.Minute)
+client := wormhole.New(wormhole.WithCodex(authPath, cfg))
+// Select your own model, then use client.Text().Using("codex").
+//     Model(model).SystemPrompt(instructions).Prompt(prompt).Generate(ctx).
+// The same builder supports Stream(ctx).
+```
+
+The default API root is `https://chatgpt.com/backend-api`; `BaseURL` can override it for an operator-controlled endpoint or loopback fixture. The adapter POSTs to `/codex/responses` using `Authorization: Bearer <access token>` and `chatgpt-account-id`, with item-array text input, separate `instructions`, `stream: true`, `store: false`, and `include: ["reasoning.encrypted_content"]`. Caller-controlled `TextRequest.Model`, `MaxTokens` (`max_output_tokens`), `Reasoning.Effort`, `Temperature`, `TopP`, and configured timeout are passed through without invented capacity defaults. A leading system message (including one produced by the fluent `SystemPrompt` builder) becomes `instructions`; specifying both `SystemPrompt` and a system message, or multiple/misplaced system messages, is rejected instead of merged. To explicitly request low text verbosity, set `types.ProviderConfig{DefaultProviderOptions: map[string]any{"text": map[string]any{"verbosity": "low"}}}` (or use `Text().ProviderOptions` for a request). Only `low`, `medium`, and `high` are accepted; omission leaves provider verbosity unchanged. `Reasoning.Enabled=false` maps to effort `none`. Generic provider options cannot override protected typed or wire-contract fields; conflicting API-key, auth headers, endpoint flags and unsupported tools/media/options are rejected. Other non-conflicting provider body options retain defaults < model < request precedence.
+
+`Text` collects only a framed successful `response.completed` SSE response. `Stream` emits supported text deltas and a terminal chunk with identity, usage, and stop finish reason; failed, incomplete, malformed, truncated and canceled streams never emit success and instead report an error (stream errors arrive in `TextChunk.Error`). The reader bounds SSE lines to 1 MiB and the overall stream to 32 MiB. Text, cache-read and reasoning token counts are normalized where reported. Reasoning output metadata is ignored as text; unsupported output items, including tool calls, fail explicitly. Structured output, tools and other provider operations are not implemented. The default retry count is zero: these POSTs have no assumed idempotency; explicitly configured retries are the caller's replay risk. Close streams by reading them through or canceling the request context.
+
+This is **Codex as an account-bound upstream provider**. It is not Codex-the-client calling Wormhole's separate ZAI/OpenAI-compatible proxy. Local tldw auth and wire fixtures inform this adapter; no live provider acceptance, model availability, or account entitlement has been verified.

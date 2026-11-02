@@ -1,5 +1,19 @@
 # Changelog
 
+## v3.6.0 (2026-11-02)
+
+### Features
+- Add an explicit account-bound Codex provider for text generation and streaming, with bounded credential parsing and zero retries by default.
+- Add a synchronous, bounded HTTP-attempt callback for request observability.
+
+### Fixes
+- Stop HTTP retries when the request context is already canceled.
+- Preserve typed Z.AI reasoning controls in OpenAI-compatible requests and configure the Z.AI profile default.
+
+### Compatibility notes
+- Module path and provider interface remain unchanged. No new dependencies.
+- Codex authentication does not refresh credentials or verify token signatures. Local fixtures do not establish live-provider access or behavior.
+
 ## v3.5.0 (2026-10-31)
 
 ### Features

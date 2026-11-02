@@ -35,6 +35,9 @@ func (p *Provider) buildChatPayload(request *types.TextRequest, prepared []types
 	for k, v := range p.Config.MergedProviderOptions(request.Model, request.ProviderOptions) {
 		payload[k] = v
 	}
+	if p.Name() == "zai" {
+		p.applyZAIReasoning(payload, request)
+	}
 
 	return payload
 }
@@ -71,6 +74,9 @@ func (p *Provider) addGenerationParams(payload map[string]any, request *types.Te
 }
 
 func (p *Provider) addReasoningParams(payload map[string]any, request *types.TextRequest) {
+	if p.Name() == "zai" {
+		return // Z.AI's typed controls are reconciled after provider-option precedence.
+	}
 	if p.Name() == "openai" {
 		if request.Reasoning != nil {
 			if request.Reasoning.Effort != "" {
@@ -84,6 +90,49 @@ func (p *Provider) addReasoningParams(payload map[string]any, request *types.Tex
 	}
 	if reasoning := reasoningPayload(request.Reasoning); len(reasoning) > 0 {
 		payload["reasoning"] = reasoning
+	}
+}
+
+// applyZAIReasoning places typed controls above profile defaults but below
+// explicit model and request options. It never emits the generic reasoning object.
+func (p *Provider) applyZAIReasoning(payload map[string]any, request *types.TextRequest) {
+	reasoning := request.Reasoning
+	if reasoning == nil {
+		return
+	}
+	modelOptions := p.Config.ProviderOptionsByModel[request.Model]
+	hasOption := func(key string) bool {
+		_, modelSet := modelOptions[key]
+		_, requestSet := request.ProviderOptions[key]
+		return modelSet || requestSet
+	}
+
+	effort := string(reasoning.Effort)
+	disabled := reasoning.Effort == types.ReasoningEffortNone ||
+		(reasoning.Enabled != nil && !*reasoning.Enabled)
+	if hasOption("reasoning_effort") {
+		if optionEffort, ok := payload["reasoning_effort"].(string); ok {
+			effort = optionEffort
+			disabled = effort == "none"
+		}
+	}
+	if !hasOption("thinking") && (disabled || effort != "" || reasoning.Enabled != nil) {
+		thinkingType := "enabled"
+		if disabled {
+			thinkingType = "disabled"
+		}
+		payload["thinking"] = map[string]any{"type": thinkingType}
+	}
+	if !hasOption("reasoning_effort") {
+		if disabled || effort == "" {
+			delete(payload, "reasoning_effort")
+		} else {
+			payload["reasoning_effort"] = effort
+		}
+		// An explicit disabled thinking option takes priority over typed effort.
+		if thinking, ok := payload["thinking"].(map[string]any); ok && thinking["type"] == "disabled" {
+			delete(payload, "reasoning_effort")
+		}
 	}
 }
 

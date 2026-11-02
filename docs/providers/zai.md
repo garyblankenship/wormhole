@@ -102,12 +102,36 @@ The bridge covers the coding-agent path:
 - `allowed_tools` selection; and
 - Codex-compatible `GET /v1/models` responses.
 
-Z.AI reasoning effort is translated to its `thinking` provider option. The
-bridge currently treats `low`, `medium`, and `high` alike: each enables
-thinking, while `none` disables it. Native Responses tools without a portable
-Chat Completions equivalent, including `web_search` and `namespace`, are not
-forwarded. Codex's local shell and patch tools continue to work because they
-use the portable custom/function tool path.
+On this **Codex-to-Wormhole proxy** path, Z.AI reasoning effort is translated
+into a `thinking` provider option. The proxy currently treats `low`, `medium`,
+and `high` alike: each enables thinking, while `none` disables it. Native
+Responses tools without a portable Chat Completions equivalent, including
+`web_search` and `namespace`, are not forwarded. Codex's local shell and patch
+tools continue to work because they use the portable custom/function tool path.
+
+### Direct SDK requests to Z.AI
+
+This is a separate path from using Codex as a client of Wormhole's proxy. The
+named `zai` SDK provider sends typed `Reasoning{Effort: "low"}` as both
+`"reasoning_effort": "low"` and `"thinking": {"type": "enabled"}` on Chat
+Completions, matching tldw's low-effort wire shape. With no typed reasoning,
+its profile defaults to `"thinking": {"type": "disabled"}`. An explicit
+`Reasoning{Enabled: &falseValue}` or `Effort: "none"` disables thinking and
+omits generated `reasoning_effort`. It does not emit the generic nested
+`reasoning` object. Other OpenAI-compatible providers and native OpenAI keep
+their existing reasoning shapes.
+
+Configure the named provider with `WithProfiledOpenAICompatible("zai", cfg)`,
+then set the caller-chosen model and typed reasoning on a text
+request. Profile defaults are below typed controls; explicit provider options
+at model scope override typed controls, and request provider options override
+model options. For example, a request option
+`map[string]any{"thinking": map[string]any{"type": "disabled"}}` suppresses
+the generated effort unless an explicit `reasoning_effort` option also supplies
+one. Raw conflicting options supplied by the caller remain caller-owned; avoid
+sending a nested `reasoning` alongside these Z.AI wire fields. These offline
+fixtures establish payload shape, not live Z.AI acceptance or subscription
+eligibility.
 
 ## Z.AI endpoint selection
 

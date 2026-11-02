@@ -74,8 +74,9 @@ func isRetryableStatusCode(statusCode int) bool {
 }
 
 type retryableHTTPClient struct {
-	Client HTTPClient
-	Config retryConfig
+	Client        HTTPClient
+	Config        retryConfig
+	OnHTTPAttempt func(types.HTTPAttemptEvent)
 	// OnRetry, if non-nil, is invoked on the cloned request before a retry
 	// attempt (attempt >= 1). retryErr describes the previous failed attempt
 	// and previousRequest is the exact request that produced it.
@@ -121,8 +122,12 @@ func (r *retryableHTTPClient) Do(req *http.Request) (*http.Response, error) {
 			}
 		}
 
-		// Execute request
-		resp, err := r.Client.Do(requestForAttempt)
+		// Cancellation between retries (or before the first attempt) must not
+		// emit a start event or issue another underlying request.
+		if err := req.Context().Err(); err != nil {
+			return nil, err
+		}
+		resp, err := r.observeHTTPAttempt(requestForAttempt, attempt)
 		previousRequest = requestForAttempt
 
 		// If no error and successful status, return immediately
