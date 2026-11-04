@@ -149,6 +149,7 @@ examples/dx_improvements/dx_improvements
 /openrouter_example
 /streaming-demo
 /user_feedback_demo
+/wormhole
 /wormhole-cli
 
 # repomix artifacts
