@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### Fixes and efficiency
+- Compile streaming-transform extraction paths once per transformer instead of re-splitting path strings and allocating parse errors for every SSE chunk.
+- Reuse the decoded stream event object for `provider_usage` fidelity metadata on the OpenAI-compatible path instead of unmarshaling every chunk a second time; unknown usage fields still pass through, and the streaming contract is now pinned by a test.
+
 ## v3.6.0 (2026-11-02)
 
 ### Features

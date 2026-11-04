@@ -11,11 +11,14 @@ import (
 func (p *Provider) parseStreamChunk(data []byte) (*types.TextChunk, error) {
 	// Try to use unified streaming transformer if available
 	if p.streamingTransformer != nil {
-		chunk, err := p.streamingTransformer.ParseChunk(data)
-		if chunk != nil && err == nil {
-			var response streamResponse
-			if json.Unmarshal(data, &response) == nil && response.Usage != nil {
-				chunk.Metadata = map[string]any{"provider_usage": response.Usage.Raw}
+		// ParseChunkWithMap returns the decoded chunk plus the root JSON
+		// object, so the provider_usage fidelity metadata reuses the
+		// already-decoded usage map instead of unmarshaling every stream
+		// event a second time.
+		chunk, root, err := p.streamingTransformer.ParseChunkWithMap(data)
+		if chunk != nil && err == nil && root != nil {
+			if usage, ok := root["usage"].(map[string]any); ok {
+				chunk.Metadata = map[string]any{"provider_usage": usage}
 			}
 		}
 		return chunk, err

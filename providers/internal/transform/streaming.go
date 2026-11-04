@@ -3,7 +3,6 @@ package transform
 import (
 	"encoding/json"
 	"fmt"
-	"strings"
 
 	"github.com/garyblankenship/wormhole/v3/types"
 )
@@ -35,78 +34,40 @@ type StreamingConfig struct {
 // StreamingTransformer provides unified streaming response transformation
 type StreamingTransformer struct {
 	config StreamingConfig
+	paths  streamingPaths
 }
 
 // NewStreamingTransformer creates a new streaming transformer with the given configuration
 func NewStreamingTransformer(config StreamingConfig) *StreamingTransformer {
 	return &StreamingTransformer{
 		config: config,
+		paths:  compileStreamingPaths(config),
 	}
-}
-
-// getFieldByPath extracts a field from a map using a dot-separated path
-// Simple path support for: "field", "field.subfield", "array.0.field"
-func (t *StreamingTransformer) getFieldByPath(data map[string]any, path string) any {
-	if path == "" {
-		return nil
-	}
-
-	parts := strings.Split(path, ".")
-	current := any(data)
-
-	for _, part := range parts {
-		if current == nil {
-			return nil
-		}
-
-		// Handle array index notation like "choices.0.delta.content"
-		if idx, err := t.parseArrayIndex(part); err == nil {
-			// part is an array index
-			if arr, ok := current.([]any); ok && idx >= 0 && idx < len(arr) {
-				current = arr[idx]
-			} else {
-				return nil
-			}
-		} else {
-			// part is a map key
-			if m, ok := current.(map[string]any); ok {
-				current = m[part]
-			} else {
-				return nil
-			}
-		}
-	}
-
-	return current
-}
-
-// parseArrayIndex attempts to parse a string as an array index
-func (t *StreamingTransformer) parseArrayIndex(s string) (int, error) {
-	// Simple check: if string contains only digits
-	for _, r := range s {
-		if r < '0' || r > '9' {
-			return 0, fmt.Errorf("not a number")
-		}
-	}
-	// Convert string to int
-	var result int
-	for _, r := range s {
-		result = result*10 + int(r-'0')
-	}
-	return result, nil
 }
 
 // ParseChunk parses a single streaming chunk from JSON data
 func (t *StreamingTransformer) ParseChunk(data []byte) (*types.TextChunk, error) {
+	chunk, _, err := t.ParseChunkWithMap(data)
+	return chunk, err
+}
+
+// ParseChunkWithMap parses a single streaming chunk and also returns the
+// decoded root JSON object. Callers can extract provider-specific fields (for
+// example a raw usage object for fidelity metadata) from the same decode
+// instead of unmarshaling the chunk a second time. The root map is fresh per
+// call; callers that embed sub-maps into the returned chunk (as provider_usage
+// metadata does) intentionally retain that subtree, so no defensive copy is
+// needed.
+func (t *StreamingTransformer) ParseChunkWithMap(data []byte) (*types.TextChunk, map[string]any, error) {
 	if t.config.ReturnsBatch {
 		// For batch-returning providers, use ParseChunks instead
-		return nil, fmt.Errorf("provider returns batches, use ParseChunks instead")
+		return nil, nil, fmt.Errorf("provider returns batches, use ParseChunks instead")
 	}
 
 	// Parse JSON into map
 	var response map[string]any
 	if err := json.Unmarshal(data, &response); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal JSON: %w", err)
+		return nil, nil, fmt.Errorf("failed to unmarshal JSON: %w", err)
 	}
 
 	// In-band provider error frame (common on OpenAI-compatible gateways like
@@ -117,17 +78,17 @@ func (t *StreamingTransformer) ParseChunk(data []byte) (*types.TextChunk, error)
 			msg, _ := errObj["message"].(string)
 			typ, _ := errObj["type"].(string)
 			if msg != "" || typ != "" {
-				return nil, fmt.Errorf("provider stream error (%s): %s", typ, msg)
+				return nil, response, fmt.Errorf("provider stream error (%s): %s", typ, msg)
 			}
 		}
-		return nil, fmt.Errorf("provider stream error: %s", string(data))
+		return nil, response, fmt.Errorf("provider stream error: %s", string(data))
 	}
 
 	chunk := &types.TextChunk{}
 
 	// Extract ID if path is configured
-	if t.config.IDPath != "" {
-		if val := t.getFieldByPath(response, t.config.IDPath); val != nil {
+	if len(t.paths.id) > 0 {
+		if val := getField(response, t.paths.id); val != nil {
 			if str, ok := val.(string); ok {
 				chunk.ID = str
 			}
@@ -135,8 +96,8 @@ func (t *StreamingTransformer) ParseChunk(data []byte) (*types.TextChunk, error)
 	}
 
 	// Extract model if path is configured
-	if t.config.ModelPath != "" {
-		if val := t.getFieldByPath(response, t.config.ModelPath); val != nil {
+	if len(t.paths.model) > 0 {
+		if val := getField(response, t.paths.model); val != nil {
 			if str, ok := val.(string); ok {
 				chunk.Model = str
 			}
@@ -144,12 +105,12 @@ func (t *StreamingTransformer) ParseChunk(data []byte) (*types.TextChunk, error)
 	}
 
 	// Extract text content
-	if t.config.TextFieldPath != "" {
-		if val := t.getFieldByPath(response, t.config.TextFieldPath); val != nil {
+	if len(t.paths.textField) > 0 {
+		if val := getField(response, t.paths.textField); val != nil {
 			if t.config.TextAdapter != nil {
 				text, err := t.config.TextAdapter(val)
 				if err != nil {
-					return nil, fmt.Errorf("failed to adapt text: %w", err)
+					return nil, response, fmt.Errorf("failed to adapt text: %w", err)
 				}
 				chunk.Text = text
 			} else {
@@ -162,12 +123,12 @@ func (t *StreamingTransformer) ParseChunk(data []byte) (*types.TextChunk, error)
 	}
 
 	// Extract tool calls
-	if t.config.ToolCallFieldPath != "" {
-		if val := t.getFieldByPath(response, t.config.ToolCallFieldPath); val != nil {
+	if len(t.paths.toolCallField) > 0 {
+		if val := getField(response, t.paths.toolCallField); val != nil {
 			if t.config.ToolCallAdapter != nil {
 				toolCall, err := t.config.ToolCallAdapter(val)
 				if err != nil {
-					return nil, fmt.Errorf("failed to adapt tool call: %w", err)
+					return nil, response, fmt.Errorf("failed to adapt tool call: %w", err)
 				}
 				if toolCall != nil {
 					chunk.ToolCall = toolCall
@@ -190,8 +151,8 @@ func (t *StreamingTransformer) ParseChunk(data []byte) (*types.TextChunk, error)
 	}
 
 	// Extract thinking / reasoning content
-	if t.config.ThinkingPath != "" {
-		if val := t.getFieldByPath(response, t.config.ThinkingPath); val != nil {
+	if len(t.paths.thinking) > 0 {
+		if val := getField(response, t.paths.thinking); val != nil {
 			if str, ok := val.(string); ok && str != "" {
 				thinking := &types.Thinking{Content: str}
 				chunk.Thinking = thinking
@@ -204,8 +165,8 @@ func (t *StreamingTransformer) ParseChunk(data []byte) (*types.TextChunk, error)
 	}
 
 	// Preserve refusal deltas separately from ordinary assistant text.
-	if t.config.RefusalPath != "" {
-		if val := t.getFieldByPath(response, t.config.RefusalPath); val != nil {
+	if len(t.paths.refusal) > 0 {
+		if val := getField(response, t.paths.refusal); val != nil {
 			if refusal, ok := val.(string); ok && refusal != "" {
 				chunk.Refusal = refusal
 				if chunk.Delta == nil {
@@ -217,8 +178,8 @@ func (t *StreamingTransformer) ParseChunk(data []byte) (*types.TextChunk, error)
 	}
 
 	// Extract finish reason
-	if t.config.FinishReasonPath != "" {
-		if val := t.getFieldByPath(response, t.config.FinishReasonPath); val != nil {
+	if len(t.paths.finishReason) > 0 {
+		if val := getField(response, t.paths.finishReason); val != nil {
 			var reasonStr string
 			if str, ok := val.(string); ok {
 				reasonStr = str
@@ -226,8 +187,8 @@ func (t *StreamingTransformer) ParseChunk(data []byte) (*types.TextChunk, error)
 				// Boolean finish reason (e.g., Ollama's "done" field).
 				// false = intermediate chunk, no finish reason. true = terminal.
 				if b {
-					if t.config.ExtraFinishReasonPath != "" {
-						if extra := t.getFieldByPath(response, t.config.ExtraFinishReasonPath); extra != nil {
+					if len(t.paths.extraFinishReason) > 0 {
+						if extra := getField(response, t.paths.extraFinishReason); extra != nil {
 							if s, ok := extra.(string); ok && s != "" {
 								reasonStr = s
 							}
@@ -252,24 +213,24 @@ func (t *StreamingTransformer) ParseChunk(data []byte) (*types.TextChunk, error)
 	}
 
 	// Extract usage. An empty UsagePath means "use the root object" (e.g. Ollama).
-	if t.config.UsagePath != "" || (t.config.UsagePath == "" && t.config.UsageAdapter != nil) {
+	if len(t.paths.usage) > 0 || (len(t.paths.usage) == 0 && t.config.UsageAdapter != nil) {
 		var val any
-		if t.config.UsagePath == "" {
+		if len(t.paths.usage) == 0 {
 			val = response
 		} else {
-			val = t.getFieldByPath(response, t.config.UsagePath)
+			val = getField(response, t.paths.usage)
 		}
 		if val != nil {
 			if t.config.UsageAdapter != nil {
 				usage, err := t.config.UsageAdapter(val)
 				if err != nil {
-					return nil, fmt.Errorf("failed to adapt usage: %w", err)
+					return nil, response, fmt.Errorf("failed to adapt usage: %w", err)
 				}
 				chunk.Usage = usage
 			} else {
 				usage, err := t.parseDefaultUsage(val)
 				if err != nil {
-					return nil, fmt.Errorf("failed to parse usage: %w", err)
+					return nil, response, fmt.Errorf("failed to parse usage: %w", err)
 				}
 				chunk.Usage = usage
 			}
@@ -284,5 +245,5 @@ func (t *StreamingTransformer) ParseChunk(data []byte) (*types.TextChunk, error)
 		chunk.Delta.Content = chunk.Text
 	}
 
-	return chunk, nil
+	return chunk, response, nil
 }
