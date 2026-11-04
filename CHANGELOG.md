@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## v3.6.1 (2026-11-04)
 
 ### Fixes and efficiency
 - Compile streaming-transform extraction paths once per transformer instead of re-splitting path strings and allocating parse errors for every SSE chunk.
