@@ -205,8 +205,17 @@ curl -s http://127.0.0.1:4000/v1/chat/completions \
 
 ### Model prefix routing
 
-Wormhole's proxy strips a known provider prefix from the model string and
-routes to that provider. Unprefixed models go to `-default-provider`.
+Wormhole's proxy consumes one known provider prefix from the model string and
+routes to that provider. Unprefixed models go to `-default-provider`. If exactly
+one provider is configured, it also supplies the effective default. Chat,
+Responses, embeddings and rerank use the same routing rules.
+
+With OpenRouter as the effective default, a leading organization name stays in
+the model ID unless it names a locally configured provider. For example,
+`openai/gpt-5.6` reaches OpenRouter intact when only OpenRouter is configured.
+With both OpenRouter and OpenAI configured, it routes directly to OpenAI.
+An explicit `openrouter/openai/gpt-5.6` always selects OpenRouter and passes
+`openai/gpt-5.6` upstream.
 
 - `claude-sonnet-5` → routes to the default provider (`anthropic`).
 - `anthropic/claude-sonnet-5` → routes to Anthropic explicitly.

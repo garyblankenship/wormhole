@@ -8,10 +8,11 @@ import (
 	"net/http"
 	"testing"
 
+	"github.com/stretchr/testify/require"
+
 	wormhole "github.com/garyblankenship/wormhole/v3"
 	"github.com/garyblankenship/wormhole/v3/types"
 	wmtest "github.com/garyblankenship/wormhole/v3/wormholetest"
-	"github.com/stretchr/testify/require"
 )
 
 type routeCaptureProvider struct {

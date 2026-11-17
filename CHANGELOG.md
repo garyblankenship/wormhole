@@ -1,5 +1,16 @@
 # Changelog
 
+## v3.7.0 (2026-11-17)
+
+### Features
+
+- Add `ProviderWithHandleContext(ctx, name)`. A canceled caller can stop waiting for a cold provider while other callers reuse the same initialization.
+
+### Fixes and efficiency
+- Validate single-route streaming requests once. Unsupported requests still fail before provider acquisition.
+- Expose ordered causes from exhausted stream routes through `StreamAttemptErrors() []error`. The proxy uses the final failure for status, retry hints and Responses error codes while keeping the client message safe.
+- Reduce copying when collecting tool arguments, accumulating Gemini citations and rendering Chat stream extensions. Write each Chat SSE frame in one call.
+
 ## v3.6.1 (2026-11-04)
 
 ### Fixes and efficiency

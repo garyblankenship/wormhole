@@ -64,10 +64,6 @@ func (p *Wormhole) ProviderWithHandleContext(ctx context.Context, name string) (
 	}, nil
 }
 
-func (p *Wormhole) leaseProvider(override string) (types.Provider, func(), error) {
-	return p.leaseProviderContext(context.Background(), override)
-}
-
 func (p *Wormhole) leaseProviderContext(ctx context.Context, override string) (types.Provider, func(), error) {
 	handle, err := p.ProviderWithHandleContext(ctx, override)
 	if err != nil {

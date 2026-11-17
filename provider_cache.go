@@ -18,10 +18,6 @@ type providerInit struct {
 	err  error
 }
 
-func (p *Wormhole) getOrCreateCachedProvider(name string, acquireRef, pin bool) (types.Provider, error) {
-	return p.getOrCreateCachedProviderContext(context.Background(), name, acquireRef, pin)
-}
-
 func (p *Wormhole) getOrCreateCachedProviderContext(ctx context.Context, name string, acquireRef, pin bool) (types.Provider, error) {
 	created := false
 	for {

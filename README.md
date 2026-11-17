@@ -306,6 +306,12 @@ for chunk := range stream {
 }
 ```
 
+Consume the stream through channel closure, or cancel `ctx` when stopping early.
+Stream fallback tries the primary model, its `WithFallback` models, then
+`WithProviderFallback` routes. Delivering any chunk, including metadata alone,
+commits that attempt. A subsequent failure arrives once in `chunk.Error` and
+ends the stream. Check every chunk for errors even after receiving text.
+
 ```go
 conv := types.NewConversation().
 	System("You are a careful code reviewer.").
@@ -703,9 +709,27 @@ idempotency scope. If an owner panics, the panic remains visible to that owner
 and followers receive a generic nonretryable failure retained for the normal
 TTL. The uncertain external effect is not replayed.
 
-Direct provider access uses `ProviderWithHandle(name)`. Close the returned
-handle when the provider is no longer in use so cache cleanup can evict it
-safely.
+Use `ProviderWithHandleContext(ctx, name)` for direct provider access with a
+cancellable acquisition wait:
+
+```go
+handle, err := client.ProviderWithHandleContext(ctx, "openai")
+if err != nil {
+	return err
+}
+defer handle.Close()
+```
+
+`ProviderWithHandle(name)` waits with a background context. Both return a handle
+whose `Close` releases its cache lease. Finish direct handle operations before
+calling `Shutdown`, which closes cached providers.
+
+Concurrent acquisitions share initial provider construction. Canceling one
+waiter returns its context error while other callers continue waiting for the
+same factory result. SDK requests also use their caller context for acquisition.
+Shutdown drains outstanding construction before cleanup, including construction
+whose waiters canceled. Request-specific `.BaseURL(...)` overrides keep temporary
+providers, which close after request completion or abandoned acquisition.
 
 Attempt tracing is available when callers need to observe fallback behavior
 without storing a route ledger:

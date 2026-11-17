@@ -30,8 +30,26 @@ context when abandoning a stream.
 
 The proxy forwards only its fixed safe request-ID and rate-limit allowlist and
 sets `X-Wormhole-Upstream-Request-ID`. SDK-configured extra headers stay private
-to SDK responses. Once streaming response headers are sent, later failures use
-the existing SSE error path.
+to SDK responses. Error responses forward the allowed metadata and a positive
+retry hint from the failure used to classify the response. `Retry-After` rounds
+fractional seconds up.
+
+When an error contains several exhausted SDK stream attempts, the proxy derives
+its status, error type, retry hint, filtered response metadata and Responses error
+code from the final failed attempt. The message is
+`all stream attempts failed before emitting a chunk`. Earlier causes remain
+available through the SDK error chain. A final unstructured error maps to HTTP
+502 and `api_error`, even if an earlier attempt had a structured validation or
+rate-limit error. This handling applies when such an aggregate reaches the
+proxy. Proxy requests select their provider through model-prefix routing.
+
+Chat Completions can return an HTTP error before its first SSE frame. After it
+commits the response, a failure produces an SSE error and ends the stream.
+Responses streaming commits with `response.created`, so a subsequent upstream
+failure produces `response.failed` within the HTTP 200 stream. Neither endpoint
+emits successful completion after a failure. Client cancellation and write
+failure cancel upstream work and suppress completion. Headers and status already
+sent to the client keep their committed values.
 
 ## Proxy opt-in extensions
 

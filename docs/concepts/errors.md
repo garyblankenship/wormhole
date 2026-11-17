@@ -358,6 +358,11 @@ output. HTTP retry backoff clamps its deterministic delay before applying
 jitter, then keeps the final delay positive and within the maximum.
 
 Caller cancellation stops fallback before additional provider/model work.
+It also ends a wait for provider initialization. Concurrent requests share cold
+provider construction, so canceling one wait leaves construction available to
+other callers. `ProviderWithHandleContext(ctx, name)` exposes the same behavior
+for direct provider access. Shutdown waits for outstanding factories to return
+before cleaning up their results.
 Circuit-breaker middleware treats caller cancellation as neutral; a provider
 deadline while the caller context is live counts as failure.
 
@@ -385,7 +390,8 @@ The proxy emits bounded, sanitized messages and lowercase error codes, including
 SDK fallback classifications. Raw upstream response bodies are not exposed.
 Streaming handlers cancel upstream work on caller cancellation, encoding
 failure, or write failure. After a write failure they stop emitting events,
-including completion events and Chat `[DONE]`.
+including completion events and Chat `[DONE]`. For exhausted routes, see the
+[proxy status and header rules](../guides/provider-fidelity.md#response-metadata).
 
 #### Errors after streaming begins
 
@@ -440,6 +446,25 @@ response, err := client.Text().
     Prompt("Summarize this report.").
     Generate(ctx)
 ```
+
+For `Stream(ctx)`, routes run in order: the primary model, model fallbacks, then
+provider fallbacks. An open error, an error before the first chunk, or closure
+before any chunk permits fallback while the caller context remains live. Every
+delivered chunk commits the attempt, including metadata-only chunks. Later
+errors are forwarded once and end that stream.
+
+When multiple configured routes all fail before delivery, the stream emits one
+aggregate error chunk. Its message is `all stream attempts failed before emitting a chunk`.
+`errors.Is` and `errors.As` can inspect every underlying attempt. Use `errors.As` with an
+`interface{ StreamAttemptErrors() []error }` target to obtain a copied slice of
+underlying failures in attempt order.
+
+For a single route, check the error returned by `Stream(ctx)` first. Capability
+validation or provider acquisition can fail before a channel is returned. A
+single-route failure reported through the channel retains its original error. Attempt
+tracing reports a start and outcome for each attempted route. Stream tracing
+reports starts for opened streams and one final outcome for the overall
+operation, unless the caller cancels.
 
 ### Retry After
 
