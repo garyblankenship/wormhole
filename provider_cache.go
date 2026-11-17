@@ -1,6 +1,7 @@
 package wormhole
 
 import (
+	"context"
 	"fmt"
 	"sort"
 	"strings"
@@ -10,73 +11,94 @@ import (
 	"github.com/garyblankenship/wormhole/v3/types"
 )
 
+// providerInit is owned by the cache, so canceling one waiter never cancels
+// construction needed by another caller. done publishes the immutable result.
+type providerInit struct {
+	done chan struct{}
+	err  error
+}
+
 func (p *Wormhole) getOrCreateCachedProvider(name string, acquireRef, pin bool) (types.Provider, error) {
-	p.providersMutex.RLock()
-	if cp, exists := p.providers[name]; exists {
-		if !pin {
+	return p.getOrCreateCachedProviderContext(context.Background(), name, acquireRef, pin)
+}
+
+func (p *Wormhole) getOrCreateCachedProviderContext(ctx context.Context, name string, acquireRef, pin bool) (types.Provider, error) {
+	created := false
+	for {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
+		p.providersMutex.RLock()
+		if cp, exists := p.providers[name]; exists && !pin {
 			if acquireRef {
 				atomic.AddInt32(&cp.refCount, 1)
 			}
 			atomic.StoreInt64(&cp.lastUsed, time.Now().UnixNano())
-			p.cacheHits.Add(1)
+			if !created {
+				p.cacheHits.Add(1)
+			}
 			p.providersMutex.RUnlock()
 			return cp.provider, nil
 		}
-	}
-	p.providersMutex.RUnlock()
+		p.providersMutex.RUnlock()
 
-	if pin {
 		p.providersMutex.Lock()
 		if cp, exists := p.providers[name]; exists {
-			cp.pinned = true
+			if acquireRef {
+				atomic.AddInt32(&cp.refCount, 1)
+			}
+			if pin {
+				cp.pinned = true
+			}
 			atomic.StoreInt64(&cp.lastUsed, time.Now().UnixNano())
-			p.cacheHits.Add(1)
+			if !created {
+				p.cacheHits.Add(1)
+			}
 			p.providersMutex.Unlock()
 			return cp.provider, nil
 		}
+		init := p.providerInits[name]
+		if init == nil {
+			if !p.beginProviderAcquisition() {
+				p.providersMutex.Unlock()
+				return nil, fmt.Errorf("client is shutting down")
+			}
+			created = true
+			init = &providerInit{done: make(chan struct{})}
+			if p.providerInits == nil {
+				p.providerInits = make(map[string]*providerInit)
+			}
+			p.providerInits[name] = init
+			go p.initializeCachedProvider(name, init)
+		}
 		p.providersMutex.Unlock()
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case <-init.done:
+			if init.err != nil {
+				return nil, init.err
+			}
+		}
 	}
+}
 
+func (p *Wormhole) initializeCachedProvider(name string, init *providerInit) {
+	defer p.providerAcquisitionWg.Done()
 	config, err := p.configuredProviderConfig(name)
-	if err != nil {
-		return nil, err
+	var provider types.Provider
+	if err == nil {
+		provider, err = p.createProviderWithConfig(name, config)
 	}
-
-	provider, err := p.createProviderWithConfig(name, config)
-	if err != nil {
-		return nil, err
-	}
-
-	refCount := int32(0)
-	if acquireRef {
-		refCount = 1
-	}
-
 	p.providersMutex.Lock()
 	defer p.providersMutex.Unlock()
-	if cp, exists := p.providers[name]; exists {
-		if acquireRef {
-			atomic.AddInt32(&cp.refCount, 1)
-		}
-		if pin {
-			cp.pinned = true
-		}
-		atomic.StoreInt64(&cp.lastUsed, time.Now().UnixNano())
-		p.cacheHits.Add(1)
-		if err := provider.Close(); err != nil && p.config.Logger != nil {
-			p.config.Logger.Warn("error closing duplicate provider", "provider", name, "error", err)
-		}
-		return cp.provider, nil
+	if err == nil {
+		p.providers[name] = &cachedProvider{provider: provider, lastUsed: time.Now().UnixNano()}
+		p.cacheMisses.Add(1)
 	}
-
-	p.providers[name] = &cachedProvider{
-		provider: provider,
-		lastUsed: time.Now().UnixNano(),
-		refCount: refCount,
-		pinned:   pin,
-	}
-	p.cacheMisses.Add(1)
-	return provider, nil
+	init.err = err
+	delete(p.providerInits, name)
+	close(init.done)
 }
 
 func (p *Wormhole) formatProviderHint(requested string) string {

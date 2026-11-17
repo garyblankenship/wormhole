@@ -1,6 +1,7 @@
 package server
 
 import (
+	"errors"
 	"net/http"
 	"strconv"
 	"time"
@@ -11,10 +12,11 @@ import (
 func writeUpstreamError(w http.ResponseWriter, err error) {
 	status, errType, clientMsg := upstreamErrorStatus(err)
 	w.Header().Del("Retry-After")
-	if whErr, ok := types.AsWormholeError(err); ok {
+	whErr, ok := types.AsWormholeError(finalStreamAttemptError(err))
+	if ok {
 		forwardResponseMetadata(w, whErr.ResponseMetadata)
 	}
-	if whErr, ok := types.AsWormholeError(err); ok && whErr.RetryAfter > 0 {
+	if ok && whErr.RetryAfter > 0 {
 		seconds := whErr.RetryAfter / time.Second
 		if whErr.RetryAfter%time.Second != 0 {
 			seconds++
@@ -60,6 +62,15 @@ func chatTemplateKwargsUnsupported(provider string) bool {
 // limit from a 400 bad request from a 401 auth failure. Falls back to 502
 // (bad gateway) + "api_error" when no structured error is present.
 func upstreamErrorStatus(err error) (int, string, string) {
+	var attempts interface{ StreamAttemptErrors() []error }
+	if errors.As(err, &attempts) {
+		status, errType, _ := providerErrorStatus(finalStreamAttemptError(err))
+		return status, errType, "all stream attempts failed before emitting a chunk"
+	}
+	return providerErrorStatus(err)
+}
+
+func providerErrorStatus(err error) (int, string, string) {
 	whErr, ok := types.AsWormholeError(err)
 	if !ok {
 		return http.StatusBadGateway, "api_error", "upstream provider error"
@@ -126,4 +137,17 @@ func actionableInvalidRequestMessage(err *types.WormholeError) string {
 	default:
 		return err.Message + ": " + err.Details
 	}
+}
+
+// finalStreamAttemptError selects the outcome of the last exhausted route for
+// proxy status, headers and error code. SDK callers retain every ordered cause.
+func finalStreamAttemptError(err error) error {
+	var attempts interface{ StreamAttemptErrors() []error }
+	if errors.As(err, &attempts) {
+		failures := attempts.StreamAttemptErrors()
+		if len(failures) > 0 && failures[len(failures)-1] != nil {
+			return failures[len(failures)-1]
+		}
+	}
+	return err
 }

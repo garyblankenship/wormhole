@@ -38,11 +38,15 @@ func remediationProxyProvider(p *remediationStreamProvider) *proxy {
 
 type remediationFailWriter struct {
 	*httptest.ResponseRecorder
-	remaining int
-	writes    int
+	remaining     int
+	writes        int
+	upstreamReady <-chan struct{}
 }
 
 func (w *remediationFailWriter) Write(b []byte) (int, error) {
+	if w.upstreamReady != nil {
+		<-w.upstreamReady
+	}
 	w.writes++
 	if w.remaining == 0 {
 		return 0, errors.New("client gone")
@@ -63,13 +67,19 @@ func TestRemediationC3_01_C3_02StreamingWriteFailureCancels(t *testing.T) {
 				provider.source <- types.TextChunk{Text: "three"}
 				p := remediationProxyProvider(provider)
 				request := remediationStreamRequest(endpoint)
-				writer := &remediationFailWriter{ResponseRecorder: httptest.NewRecorder(), remaining: allowed}
+				// Responses can write response.created before the asynchronous SDK
+				// attempt opens. Gate the writer so this case exercises cancellation
+				// of an active upstream even when the first write fails.
+				upstreamReady := make(chan struct{})
+				writer := &remediationFailWriter{ResponseRecorder: httptest.NewRecorder(), remaining: allowed, upstreamReady: upstreamReady}
 				done := make(chan struct{})
 				go func() { p.server.Handler.ServeHTTP(writer, request); close(done) }()
 				var upstream context.Context
 				select {
 				case upstream = <-provider.started:
+					close(upstreamReady)
 				case <-time.After(time.Second):
+					close(upstreamReady)
 					t.Fatal("upstream did not start")
 				}
 				select {

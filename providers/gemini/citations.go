@@ -15,6 +15,9 @@ type citationSet struct {
 	warnings     []types.ResponseWarning
 	sourceKeys   map[string]string
 	citationKeys map[string]bool
+	// Text is append-only for this response. Retain the validated prefix across
+	// supports and stream frames instead of rescanning it for every offset.
+	textPrefix int
 }
 
 func (s *citationSet) source(raw map[string]any) string {
@@ -152,13 +155,29 @@ func (s *citationSet) segmentOutputRange(segment map[string]any, text string) *t
 	if !hasStart {
 		start = 0
 	}
-	if hasEnd && start >= 0 && end >= start && end <= len(text) && utf8.ValidString(text[:start]) && utf8.ValidString(text[:end]) {
+	if hasEnd && start >= 0 && end >= start && end <= len(text) && s.validTextPrefix(text, end) && (start == end || utf8.RuneStart(text[start])) {
 		return &types.TextRange{Start: start, End: end}
 	}
 	if hasEnd || hasStart {
 		s.malformed("groundingSupports.segment")
 	}
 	return nil
+}
+
+// validTextPrefix advances only over complete valid runes. An invalid or
+// incomplete suffix is left unconsumed, allowing an appended frame to complete
+// a rune without accepting any prefix that contains invalid UTF-8.
+func (s *citationSet) validTextPrefix(text string, end int) bool {
+	for s.textPrefix < end {
+		r, size := utf8.DecodeRuneInString(text[s.textPrefix:])
+		if r == utf8.RuneError && size == 1 {
+			return false
+		}
+		s.textPrefix += size
+	}
+	// Reaching end exactly proves the prefix is complete, even when the next
+	// byte is an invalid continuation. Earlier offsets may lie inside a rune.
+	return end == s.textPrefix || utf8.RuneStart(text[end])
 }
 
 func (s *citationSet) consumeNativeCitations(metadata map[string]any) {

@@ -413,7 +413,7 @@ func TestStreamPayloadSetsIncludeUsage(t *testing.T) {
 	assert.Equal(t, true, opts["include_usage"])
 }
 
-func TestStampProviderCtxGuard(t *testing.T) {
+func TestDecorateStreamCtxGuard(t *testing.T) {
 	t.Parallel()
 
 	provider := New(types.ProviderConfig{APIKey: "test-key"})
@@ -428,7 +428,7 @@ func TestStampProviderCtxGuard(t *testing.T) {
 		in <- types.TextChunk{Text: "omega", FinishReason: &finish}
 		close(in)
 
-		out := provider.stampProvider(ctx, in)
+		out := provider.decorateStream(ctx, in, nil)
 
 		got := make([]types.TextChunk, 0, 2)
 		for chunk := range out {
@@ -454,13 +454,63 @@ func TestStampProviderCtxGuard(t *testing.T) {
 		in <- types.TextChunk{Text: "second", FinishReason: &finish}
 		close(in)
 
-		out := provider.stampProvider(ctx, in)
+		out := provider.decorateStream(ctx, in, nil)
 
 		select {
 		case _, ok := <-out:
 			assert.False(t, ok)
 		case <-time.After(200 * time.Millisecond):
-			t.Fatalf("stampProvider did not return after context cancellation")
+			t.Fatalf("decorateStream did not return after context cancellation")
 		}
 	})
+}
+
+func TestDecorateStreamMetadataAndTrailingUsage(t *testing.T) {
+	t.Parallel()
+	provider := New(types.ProviderConfig{APIKey: "test-key"})
+	finish := types.FinishReasonStop
+	failure := errors.New("upstream failed")
+	metadata := &types.ResponseMetadata{RequestID: "request-1", Headers: map[string][]string{"X-Test": {"original"}}}
+	usage := &types.Usage{TotalTokens: 7}
+	in := make(chan types.TextChunk, 5)
+	in <- types.TextChunk{Model: "model"}
+	in <- types.TextChunk{Text: "hello"}
+	in <- types.TextChunk{FinishReason: &finish}
+	in <- types.TextChunk{Usage: usage}
+	in <- types.TextChunk{Error: failure}
+	close(in)
+
+	var got []types.TextChunk
+	for chunk := range provider.decorateStream(context.Background(), in, metadata) {
+		got = append(got, chunk)
+	}
+	require.Len(t, got, 5)
+	assert.Equal(t, "model", got[0].Model)
+	assert.Equal(t, metadata, got[0].ResponseMetadata)
+	assert.Equal(t, "hello", got[1].Text)
+	assert.Nil(t, got[1].ResponseMetadata)
+	assert.Equal(t, "openai", got[2].Provider)
+	assert.Equal(t, metadata, got[2].ResponseMetadata)
+	assert.Same(t, usage, got[3].Usage)
+	assert.Nil(t, got[3].ResponseMetadata)
+	assert.Empty(t, got[3].Provider)
+	assert.ErrorIs(t, got[4].Error, failure)
+	assert.Equal(t, metadata, got[4].ResponseMetadata)
+	got[0].ResponseMetadata.Headers["X-Test"][0] = "changed"
+	assert.Equal(t, "original", got[2].ResponseMetadata.Headers["X-Test"][0])
+	assert.Equal(t, "original", metadata.Headers["X-Test"][0])
+}
+
+func TestDecorateStreamCancelIdleInput(t *testing.T) {
+	t.Parallel()
+	ctx, cancel := context.WithCancel(context.Background())
+	in := make(chan types.TextChunk)
+	out := New(types.ProviderConfig{APIKey: "test-key"}).decorateStream(ctx, in, nil)
+	cancel()
+	select {
+	case _, open := <-out:
+		require.False(t, open)
+	case <-time.After(time.Second):
+		t.Fatal("decoration remained blocked on idle input after cancellation")
+	}
 }

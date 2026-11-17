@@ -69,20 +69,7 @@ func (p *proxy) streamResponses(w http.ResponseWriter, r *http.Request, executio
 		item := responsesOutputItem{ID: messageID, Type: "message", Status: "in_progress", Role: "assistant", Content: []responsesOutputText{}}
 		sse.write(responsesEvent{Type: "response.output_item.added", OutputIndex: &messageIndex, Item: &item})
 	}
-	for {
-		if ctx.Err() != nil {
-			return
-		}
-		var chunk types.TextChunk
-		select {
-		case <-ctx.Done():
-			return
-		case next, open := <-stream:
-			if !open {
-				goto complete
-			}
-			chunk = next
-		}
+	for chunk, open := receiveStreamChunk(ctx, stream); open; chunk, open = receiveStreamChunk(ctx, stream) {
 		if chunk.Error != nil {
 			writeResponsesFailure(&sse, responseID, model, createdAt, chunk.Error)
 			if sse.err == nil {
@@ -148,7 +135,6 @@ func (p *proxy) streamResponses(w http.ResponseWriter, r *http.Request, executio
 		}
 		flusher.Flush()
 	}
-complete:
 	if ctx.Err() != nil || sse.err != nil {
 		return
 	}

@@ -2,6 +2,7 @@ package wormhole
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/garyblankenship/wormhole/v3/types"
 )
@@ -50,8 +51,15 @@ func (cb *CommonBuilder) setBaseURL(url string) {
 // When BaseURL is overridden, a temporary provider is created with the full
 // configured provider settings preserved and only BaseURL changed.
 func (cb *CommonBuilder) getProviderWithBaseURL() (types.Provider, func(), error) {
+	return cb.getProviderWithBaseURLContext(context.Background())
+}
+
+func (cb *CommonBuilder) getProviderWithBaseURLContext(ctx context.Context) (types.Provider, func(), error) {
+	if err := ctx.Err(); err != nil {
+		return nil, nil, err
+	}
 	if cb.getBaseURL() == "" {
-		return cb.getWormhole().leaseProvider(cb.getProvider())
+		return cb.getWormhole().leaseProviderContext(ctx, cb.getProvider())
 	}
 
 	providerName, err := cb.getWormhole().resolveProviderName(cb.getProvider())
@@ -65,12 +73,43 @@ func (cb *CommonBuilder) getProviderWithBaseURL() (types.Provider, func(), error
 	}
 	config.BaseURL = cb.getBaseURL()
 
-	provider, err := cb.getWormhole().createProviderWithConfig(providerName, config)
-	if err != nil {
-		return nil, nil, err
+	w := cb.getWormhole()
+	if !w.beginProviderAcquisition() {
+		return nil, nil, fmt.Errorf("client is shutting down")
 	}
-
-	return provider, func() { _ = provider.Close() }, nil
+	type result struct {
+		provider types.Provider
+		err      error
+	}
+	ready := make(chan result)
+	go func() {
+		defer w.providerAcquisitionWg.Done()
+		provider, err := w.createProviderWithConfig(providerName, config)
+		select {
+		case ready <- result{provider, err}:
+		case <-ctx.Done():
+			if provider != nil {
+				_ = provider.Close()
+			}
+		}
+	}()
+	select {
+	case <-ctx.Done():
+		return nil, nil, ctx.Err()
+	case initialized := <-ready:
+		if initialized.err != nil {
+			return nil, nil, initialized.err
+		}
+		if err := ctx.Err(); err != nil {
+			_ = initialized.provider.Close()
+			return nil, nil, err
+		}
+		if w.finishProviderAcquisition() {
+			_ = initialized.provider.Close()
+			return nil, nil, fmt.Errorf("client is shutting down")
+		}
+		return initialized.provider, func() { _ = initialized.provider.Close() }, nil
+	}
 }
 
 // executeProviderOperation owns the provider lease and operation context shared
@@ -83,7 +122,7 @@ func executeProviderOperation[T any](
 	invoke func(context.Context, types.Provider) (T, error),
 ) (T, error) {
 	var zero T
-	provider, release, err := builder.getProviderWithBaseURL()
+	provider, release, err := builder.getProviderWithBaseURLContext(ctx)
 	if err != nil {
 		return zero, err
 	}

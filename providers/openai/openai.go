@@ -162,30 +162,5 @@ func (p *Provider) Stream(ctx context.Context, request types.TextRequest) (<-cha
 		return nil, err
 	}
 
-	return p.stampMetadata(ctx, p.stampProvider(ctx, p.accumulatingStream(ctx, providerstream.ProcessSSE(ctx, body, p.parseStreamChunk, 100))), metadata), nil
-}
-
-// stampProvider sets Provider on the terminal chunk. Sole closer of out;
-// exits when the upstream channel closes.
-func (p *Provider) stampProvider(ctx context.Context, in <-chan types.TextChunk) <-chan types.TextChunk {
-	out := make(chan types.TextChunk)
-	go func() {
-		defer close(out)
-		for chunk := range in {
-			if chunk.IsDone() {
-				chunk.Provider = p.Name()
-			}
-			select {
-			case <-ctx.Done():
-				return
-			default:
-			}
-			select {
-			case out <- chunk:
-			case <-ctx.Done():
-				return
-			}
-		}
-	}()
-	return out
+	return p.decorateStream(ctx, p.accumulatingStream(ctx, providerstream.ProcessSSE(ctx, body, p.parseStreamChunk, 100)), metadata), nil
 }

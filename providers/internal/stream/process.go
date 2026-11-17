@@ -122,18 +122,22 @@ func ProcessSSE(
 	transformer func([]byte) (*types.TextChunk, error),
 	bufferSize int,
 ) <-chan types.TextChunk {
+	return runBodyStream(ctx, body, bufferSize, func(chunks chan<- types.TextChunk) {
+		NewStreamProcessor(body, transformer).process(ctx, chunks)
+	})
+}
+
+// runBodyStream owns the body and output channel. Cancellation interrupts a
+// blocked read; channel closure signals that body cleanup has completed.
+func runBodyStream(ctx context.Context, body io.Closer, bufferSize int, process func(chan<- types.TextChunk)) <-chan types.TextChunk {
 	chunks := make(chan types.TextChunk, bufferSize)
 	go func() {
-		// Both cancellation and normal termination close the body exactly once.
-		// Close it before publishing channel closure so consumers observe cleanup.
-		var once sync.Once
-		closeBody := func() { once.Do(func() { _ = body.Close() }) }
+		closeBody := sync.OnceFunc(func() { _ = body.Close() })
 		stop := context.AfterFunc(ctx, closeBody)
 		defer close(chunks)
 		defer closeBody()
 		defer stop()
-		processor := NewStreamProcessor(body, transformer)
-		processor.process(ctx, chunks)
+		process(chunks)
 	}()
 	return chunks
 }
@@ -147,14 +151,7 @@ func ProcessNDJSON(
 	transformer func([]byte) (*types.TextChunk, error),
 	bufferSize int,
 ) <-chan types.TextChunk {
-	chunks := make(chan types.TextChunk, bufferSize)
-	go func() {
-		var once sync.Once
-		closeBody := func() { once.Do(func() { _ = body.Close() }) }
-		stop := context.AfterFunc(ctx, closeBody)
-		defer close(chunks)
-		defer closeBody()
-		defer stop()
+	return runBodyStream(ctx, body, bufferSize, func(chunks chan<- types.TextChunk) {
 		scanner := bufio.NewScanner(body)
 		// Ollama can return large final chunks with usage data.
 		scanner.Buffer(make([]byte, 0, 64*1024), 1<<20)
@@ -198,6 +195,5 @@ func ProcessNDJSON(
 		case chunks <- types.TextChunk{Error: fmt.Errorf("NDJSON stream ended before terminal chunk")}:
 		case <-ctx.Done():
 		}
-	}()
-	return chunks
+	})
 }

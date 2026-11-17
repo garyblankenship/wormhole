@@ -39,14 +39,30 @@ func (p *Provider) validateV330Request(request types.TextRequest) error {
 	return nil
 }
 
-// stampMetadata adds metadata only to chunks the provider already emitted.
+// decorateStream attaches provider identity and response metadata in delivery order.
 // The goroutine exits on upstream close or cancellation and owns out.
-func (p *Provider) stampMetadata(ctx context.Context, in <-chan types.TextChunk, metadata *types.ResponseMetadata) <-chan types.TextChunk {
+func (p *Provider) decorateStream(ctx context.Context, in <-chan types.TextChunk, metadata *types.ResponseMetadata) <-chan types.TextChunk {
 	out := make(chan types.TextChunk)
 	go func() {
 		defer close(out)
 		first := true
-		for chunk := range in {
+		for {
+			var chunk types.TextChunk
+			select {
+			case <-ctx.Done():
+				return
+			case next, ok := <-in:
+				if !ok {
+					return
+				}
+				chunk = next
+			}
+			if ctx.Err() != nil {
+				return
+			}
+			if chunk.IsDone() {
+				chunk.Provider = p.Name()
+			}
 			if first || chunk.IsDone() || chunk.Error != nil {
 				chunk.ResponseMetadata = types.CloneResponseMetadata(metadata)
 			}

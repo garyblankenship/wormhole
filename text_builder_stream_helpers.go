@@ -44,29 +44,46 @@ func (b *TextRequestBuilder) openStream(ctx context.Context, cancel context.Canc
 	return stream, nil
 }
 
-func forwardStreamWithFirstChunkSafety(ctx context.Context, cancelAttempt context.CancelFunc, out chan<- types.StreamChunk, stream <-chan types.StreamChunk) (emitted bool, retry bool, err error) {
+// streamAttemptResult records delivery at the public channel boundary. Even a
+// metadata-only chunk commits the attempt because the consumer can observe it.
+// Failed attempts may fall back only while nothing has been delivered.
+type streamAttemptResult struct {
+	delivered bool
+	err       error
+}
+
+func (r streamAttemptResult) canFallback(ctx context.Context) bool {
+	return !r.delivered && r.err != nil && ctx.Err() == nil
+}
+
+func forwardStreamWithFirstChunkSafety(ctx context.Context, cancelAttempt context.CancelFunc, out chan<- types.StreamChunk, stream <-chan types.StreamChunk) streamAttemptResult {
+	var result streamAttemptResult
 	for {
 		select {
 		case <-ctx.Done():
-			return false, false, ctx.Err()
+			result.err = ctx.Err()
+			return result
 		case chunk, ok := <-stream:
 			if !ok {
-				if !emitted {
-					return false, true, fmt.Errorf("stream closed before first chunk")
+				if !result.delivered {
+					result.err = fmt.Errorf("stream closed before first chunk")
 				}
-				return true, false, nil
+				return result
 			}
-			if !emitted && chunk.HasError() {
+			if !result.delivered && chunk.HasError() {
 				cancelAttempt()
 				go drainStream(ctx, stream, time.Second)
-				return false, true, chunk.Error
+				result.err = chunk.Error
+				return result
 			}
-			emitted = true
 			if !sendStreamChunk(ctx, out, chunk) {
-				return true, false, ctx.Err()
+				result.err = ctx.Err()
+				return result
 			}
+			result.delivered = true
 			if chunk.HasError() {
-				return true, false, chunk.Error
+				result.err = chunk.Error
+				return result
 			}
 		}
 	}

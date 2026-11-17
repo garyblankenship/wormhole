@@ -206,6 +206,52 @@ func settleToolCalls(chunk *types.StreamChunk, acc *streamFragmentAccumulator, f
 	*flushed = true
 }
 
+// streamAssembly owns the request-local interpretation of parsed chunks.
+// Delivery and cancellation stay with accumulatingStream.
+type streamAssembly struct {
+	tools         *streamFragmentAccumulator
+	citations     *citationAccumulator
+	providerUsage map[string]any
+	flushed       bool
+}
+
+func newStreamAssembly() *streamAssembly {
+	return &streamAssembly{
+		tools:         newStreamFragmentAccumulator(),
+		citations:     newCitationAccumulator(),
+		providerUsage: make(map[string]any),
+	}
+}
+
+func (s *streamAssembly) apply(chunk types.StreamChunk) types.StreamChunk {
+	s.tools.mergeUsage(&chunk)
+	collectProviderUsage(chunk, s.providerUsage)
+	if raw, ok := chunk.Metadata["anthropic_citation"].(json.RawMessage); ok {
+		attachNewCitations(raw, s.citations, &chunk)
+	}
+	if chunk.IsDone() {
+		attachTerminalSnapshot(&chunk, s.citations, s.providerUsage)
+	}
+	if !s.flushed {
+		s.tools.add(pendingFragments(&chunk))
+	}
+	settleToolCalls(&chunk, s.tools, &s.flushed)
+	return chunk
+}
+
+// close reports calls left incomplete when upstream closes without settling them.
+// After a finish or error, the tool accumulator has already been drained.
+func (s *streamAssembly) close() *types.StreamChunk {
+	calls := s.tools.finish()
+	if len(calls) == 0 {
+		return nil
+	}
+	return &types.StreamChunk{
+		Error:     errors.New("stream ended before tool-call completion"),
+		ToolCalls: calls,
+	}
+}
+
 // emitChunk forwards one chunk, letting cancellation win deterministically
 // over a waiting receiver.
 func emitChunk(ctx context.Context, out chan<- types.StreamChunk, chunk types.StreamChunk) bool {
@@ -230,48 +276,23 @@ func (p *Provider) accumulatingStream(ctx context.Context, in <-chan types.Strea
 	out := make(chan types.StreamChunk)
 	go func() {
 		defer close(out)
-		acc := newStreamFragmentAccumulator()
-		refs := newCitationAccumulator()
-		providerUsage := make(map[string]any)
-		flushed := false
-	loop:
+		assembly := newStreamAssembly()
 		for {
-			var chunk types.StreamChunk
 			select {
 			case <-ctx.Done():
 				return
-			case next, ok := <-in:
+			case chunk, ok := <-in:
 				if !ok {
-					// Upstream closed without a terminal chunk; flush below.
-					break loop
+					if ctx.Err() == nil {
+						if tail := assembly.close(); tail != nil {
+							emitChunk(ctx, out, *tail)
+						}
+					}
+					return
 				}
-				chunk = next
-			}
-			acc.mergeUsage(&chunk)
-			collectProviderUsage(chunk, providerUsage)
-			if raw, ok := chunk.Metadata["anthropic_citation"].(json.RawMessage); ok {
-				attachNewCitations(raw, refs, &chunk)
-			}
-			if chunk.IsDone() {
-				attachTerminalSnapshot(&chunk, refs, providerUsage)
-			}
-			fragments := pendingFragments(&chunk)
-			if !flushed {
-				acc.add(fragments)
-			}
-			settleToolCalls(&chunk, acc, &flushed)
-			if !emitChunk(ctx, out, chunk) {
-				return
-			}
-		}
-		if ctx.Err() != nil {
-			return
-		}
-		if calls := acc.finish(); len(calls) > 0 {
-			chunk := types.StreamChunk{Error: errors.New("stream ended before tool-call completion"), ToolCalls: calls}
-			select {
-			case out <- chunk:
-			case <-ctx.Done():
+				if !emitChunk(ctx, out, assembly.apply(chunk)) {
+					return
+				}
 			}
 		}
 	}()

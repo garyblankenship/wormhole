@@ -53,7 +53,7 @@ func executeAudioProviderRequest[T any](
 		return nil, err
 	}
 	return executeTrackedRequest(ctx, w, trackingName, audioRequest, func(ctx context.Context) (*T, error) {
-		provider, release, err := w.leaseProvider(providerName)
+		provider, release, err := w.leaseProviderContext(ctx, providerName)
 		if err != nil {
 			return nil, err
 		}

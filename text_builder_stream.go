@@ -32,6 +32,12 @@ func (e *streamAttemptsError) Unwrap() []error {
 	return append([]error(nil), e.attempts...)
 }
 
+// StreamAttemptErrors returns failed routes in attempt order. Consumers presenting
+// one outcome can select the final attempt while errors.Is/As retain all causes.
+func (e *streamAttemptsError) StreamAttemptErrors() []error {
+	return e.Unwrap()
+}
+
 // Stream executes the request and returns a streaming response
 func (b *TextRequestBuilder) Stream(ctx context.Context) (<-chan types.StreamChunk, error) {
 	baseRequest := cloneTextRequest(b.request)
@@ -44,15 +50,22 @@ func (b *TextRequestBuilder) Stream(ctx context.Context) (<-chan types.StreamChu
 		return nil, types.ErrInvalidRequest.WithDetails("no model specified")
 	}
 
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+
 	modelsToTry := make([]string, 0, 1+len(b.fallbackModels))
 	modelsToTry = append(modelsToTry, baseRequest.Model)
 	modelsToTry = append(modelsToTry, b.fallbackModels...)
 	wormhole := b.getWormhole()
-	if len(b.fallbackModels) == 0 && len(b.providerFallbacks) == 0 {
+	primaryValidated := len(b.fallbackModels) == 0 && len(b.providerFallbacks) == 0
+	if primaryValidated {
 		if err := wormhole.validateModelAttempt(b.getProvider(), baseRequest.Model, textModelCapabilities, textRequiredCapabilities(baseRequest, false, true)); err != nil {
 			providerName, _ := wormhole.resolveProviderName(b.getProvider())
-			wormhole.emitAttempt(ctx, AttemptEvent{Operation: "text.stream", Phase: AttemptStarted, Provider: providerName, Model: baseRequest.Model, Attempt: 1, Stream: true})
-			wormhole.emitAttempt(ctx, AttemptEvent{Operation: "text.stream", Phase: AttemptError, Provider: providerName, Model: baseRequest.Model, Attempt: 1, Stream: true, Error: err})
+			event := AttemptEvent{Operation: "text.stream", Phase: AttemptStarted, Provider: providerName, Model: baseRequest.Model, Attempt: 1, Stream: true}
+			wormhole.emitAttempt(ctx, event)
+			event.Phase, event.Error = AttemptError, err
+			wormhole.emitAttempt(ctx, event)
 			return nil, err
 		}
 	}
@@ -61,209 +74,131 @@ func (b *TextRequestBuilder) Stream(ctx context.Context) (<-chan types.StreamChu
 		return nil, fmt.Errorf("client is shutting down")
 	}
 
-	provider, release, err := b.getProviderWithBaseURL()
+	provider, release, err := b.getProviderWithBaseURLContext(ctx)
 	if err != nil {
 		b.getWormhole().untrackRequest()
 		return nil, err
 	}
 
-	// Let the provider handle model validation at request time
-	// Provider handles all model validation and constraints
+	if err := ctx.Err(); err != nil {
+		release()
+		wormhole.untrackRequest()
+		return nil, err
+	}
+
 	stream := make(chan types.StreamChunk)
 	providerFallbacks := append([]TextRoute(nil), b.providerFallbacks...)
-	go b.streamWithFallback(ctx, provider, release, b.getProvider(), baseRequest, modelsToTry, providerFallbacks, stream)
+	go b.streamWithFallback(ctx, provider, release, b.getProvider(), baseRequest, modelsToTry, providerFallbacks, primaryValidated, stream)
 	return stream, nil
 }
 
-func (b *TextRequestBuilder) streamWithFallback(ctx context.Context, provider types.Provider, release func(), primaryProviderName string, baseRequest *types.TextRequest, modelsToTry []string, providerFallbacks []TextRoute, out chan<- types.StreamChunk) {
+func (b *TextRequestBuilder) streamWithFallback(ctx context.Context, provider types.Provider, release func(), primaryProviderName string, baseRequest *types.TextRequest, modelsToTry []string, providerFallbacks []TextRoute, primaryValidated bool, out chan<- types.StreamChunk) {
 	defer close(out)
 	defer b.getWormhole().untrackRequest()
 	release = sync.OnceFunc(release)
 	defer release()
 
+	wormhole := b.getWormhole()
+	routes := make([]TextRoute, 0, len(modelsToTry)+len(providerFallbacks))
+	for _, model := range modelsToTry {
+		routes = append(routes, TextRoute{Provider: primaryProviderName, Model: model})
+	}
+	routes = append(routes, providerFallbacks...)
+
 	var attemptErrors []error
 	var lastErr error
-	wormhole := b.getWormhole()
-	tryStream := func(provider types.Provider, validationProvider, traceProvider, model string, attempt int, fallback bool) (bool, bool, error) {
-		request := cloneTextRequest(baseRequest)
-		request.Model = model
-		wormhole.emitAttempt(ctx, AttemptEvent{
-			Operation: "text.stream",
-			Phase:     AttemptStarted,
-			Provider:  traceProvider,
-			Model:     model,
-			Attempt:   attempt,
-			Fallback:  fallback,
-			Stream:    true,
-		})
-		if err := wormhole.validateModelAttempt(validationProvider, model, textModelCapabilities, textRequiredCapabilities(request, false, true)); err != nil {
-			wormhole.emitAttempt(ctx, AttemptEvent{
-				Operation: "text.stream",
-				Phase:     AttemptError,
-				Provider:  traceProvider,
-				Model:     model,
-				Attempt:   attempt,
-				Fallback:  fallback,
-				Stream:    true,
-				Error:     err,
-			})
-			return false, true, err
-		}
-
-		attemptCtx, cancelAttempt := context.WithCancel(ctx)
-		stream, err := b.openStream(attemptCtx, cancelAttempt, provider, request)
-		if err != nil {
-			cancelAttempt()
-			wormhole.emitAttempt(ctx, AttemptEvent{
-				Operation: "text.stream",
-				Phase:     AttemptError,
-				Provider:  traceProvider,
-				Model:     model,
-				Attempt:   attempt,
-				Fallback:  fallback,
-				Stream:    true,
-				Error:     err,
-			})
-			return false, true, err
-		}
-
-		wormhole.emitStreamEvent(ctx, StreamEvent{
-			Type:     StreamStarted,
-			Provider: traceProvider,
-			Model:    model,
-			Attempt:  attempt,
-		})
-
-		emitted, retry, err := forwardStreamWithFirstChunkSafety(ctx, cancelAttempt, out, stream)
-		cancelAttempt()
-		if err != nil {
-			wormhole.emitAttempt(ctx, AttemptEvent{
-				Operation: "text.stream",
-				Phase:     AttemptError,
-				Provider:  traceProvider,
-				Model:     model,
-				Attempt:   attempt,
-				Fallback:  fallback,
-				Stream:    true,
-				Error:     err,
-			})
-		} else if emitted {
-			wormhole.emitAttempt(ctx, AttemptEvent{
-				Operation: "text.stream",
-				Phase:     AttemptSuccess,
-				Provider:  traceProvider,
-				Model:     model,
-				Attempt:   attempt,
-				Fallback:  fallback,
-				Stream:    true,
-			})
-			wormhole.emitStreamEvent(ctx, StreamEvent{
-				Type:     StreamEnded,
-				Provider: traceProvider,
-				Model:    model,
-				Attempt:  attempt,
-			})
-		}
-		return emitted, retry, err
-	}
-	emitFinalStreamError := func(provider, model string, attempt int, err error) {
-		if err == nil || ctx.Err() != nil {
+	for index, route := range routes {
+		if ctx.Err() != nil {
 			return
 		}
-		wormhole.emitStreamEvent(ctx, StreamEvent{
-			Type:     StreamError,
-			Provider: provider,
-			Model:    model,
-			Attempt:  attempt,
-			Error:    err,
-		})
-	}
-
-	attempt := 0
-	for _, model := range modelsToTry {
-		attempt++
-		emitted, retry, err := tryStream(provider, primaryProviderName, provider.Name(), model, attempt, attempt > 1)
-		if err != nil {
-			lastErr = err
-			attemptErrors = append(attemptErrors, err)
-		}
-		if emitted || !retry || ctx.Err() != nil {
-			emitFinalStreamError(provider.Name(), model, attempt, err)
-			return
-		}
-	}
-	release()
-
-	for _, route := range providerFallbacks {
-		attempt++
-		validationRequest := cloneTextRequest(baseRequest)
-		validationRequest.Model = route.Model
-		if err := wormhole.validateModelAttempt(route.Provider, route.Model, textModelCapabilities, textRequiredCapabilities(validationRequest, false, true)); err != nil {
-			lastErr = err
-			attemptErrors = append(attemptErrors, err)
-			wormhole.emitAttempt(ctx, AttemptEvent{
-				Operation: "text.stream",
-				Phase:     AttemptStarted,
-				Provider:  route.Provider,
-				Model:     route.Model,
-				Attempt:   attempt,
-				Fallback:  true,
-				Stream:    true,
-			})
-			wormhole.emitAttempt(ctx, AttemptEvent{
-				Operation: "text.stream",
-				Phase:     AttemptError,
-				Provider:  route.Provider,
-				Model:     route.Model,
-				Attempt:   attempt,
-				Fallback:  true,
-				Stream:    true,
-				Error:     err,
-			})
-			continue
-		}
-		fallbackProvider, fallbackRelease, err := wormhole.leaseProvider(route.Provider)
-		if err != nil {
-			lastErr = err
-			attemptErrors = append(attemptErrors, err)
-			wormhole.emitAttempt(ctx, AttemptEvent{
-				Operation: "text.stream",
-				Phase:     AttemptStarted,
-				Provider:  route.Provider,
-				Model:     route.Model,
-				Attempt:   attempt,
-				Fallback:  true,
-				Stream:    true,
-			})
-			wormhole.emitAttempt(ctx, AttemptEvent{
-				Operation: "text.stream",
-				Phase:     AttemptError,
-				Provider:  route.Provider,
-				Model:     route.Model,
-				Attempt:   attempt,
-				Fallback:  true,
-				Stream:    true,
-				Error:     err,
-			})
+		primary := index < len(modelsToTry)
+		if index == len(modelsToTry) {
+			// Keep the primary lease across model fallbacks, then relinquish it
+			// before acquiring any provider fallback.
+			release()
 			if ctx.Err() != nil {
 				return
 			}
+		}
+		traceProvider := route.Provider
+		if primary {
+			traceProvider = provider.Name()
+		}
+		attempt := index + 1
+		event := AttemptEvent{
+			Operation: "text.stream",
+			Phase:     AttemptStarted,
+			Provider:  traceProvider,
+			Model:     route.Model,
+			Attempt:   attempt,
+			Fallback:  index > 0,
+			Stream:    true,
+		}
+		wormhole.emitAttempt(ctx, event)
+		streamEvent := StreamEvent{Provider: event.Provider, Model: event.Model, Attempt: event.Attempt}
+
+		result := func() streamAttemptResult {
+			if err := ctx.Err(); err != nil {
+				return streamAttemptResult{err: err}
+			}
+			request := cloneTextRequest(baseRequest)
+			request.Model = route.Model
+			// A single route was validated synchronously so Stream can return
+			// capability errors directly. Other routes are validated when tried.
+			if !primaryValidated || index > 0 {
+				if err := wormhole.validateModelAttempt(route.Provider, route.Model, textModelCapabilities, textRequiredCapabilities(request, false, true)); err != nil {
+					return streamAttemptResult{err: err}
+				}
+			}
+			attemptProvider := provider
+			if !primary {
+				leased, releaseFallback, err := wormhole.leaseProviderContext(ctx, route.Provider)
+				if err != nil {
+					return streamAttemptResult{err: err}
+				}
+				defer releaseFallback()
+				attemptProvider = leased
+			}
+			// Factories can block without a context. Cancellation while acquiring
+			// a lease must release it before any upstream request starts.
+			if err := ctx.Err(); err != nil {
+				return streamAttemptResult{err: err}
+			}
+			attemptCtx, cancelAttempt := context.WithCancel(ctx)
+			defer cancelAttempt()
+			stream, err := b.openStream(attemptCtx, cancelAttempt, attemptProvider, request)
+			if err != nil {
+				return streamAttemptResult{err: err}
+			}
+			streamEvent.Type = StreamStarted
+			wormhole.emitStreamEvent(ctx, streamEvent)
+			return forwardStreamWithFirstChunkSafety(ctx, cancelAttempt, out, stream)
+		}()
+
+		if result.err != nil {
+			lastErr = result.err
+			attemptErrors = append(attemptErrors, result.err)
+			event.Phase = AttemptError
+			event.Error = result.err
+		} else {
+			event.Phase = AttemptSuccess
+		}
+		wormhole.emitAttempt(ctx, event)
+		if result.canFallback(ctx) {
 			continue
 		}
-
-		emitted, retry, attemptErr := func() (bool, bool, error) {
-			defer fallbackRelease()
-			return tryStream(fallbackProvider, route.Provider, route.Provider, route.Model, attempt, true)
-		}()
-		if attemptErr != nil {
-			lastErr = attemptErr
-			attemptErrors = append(attemptErrors, attemptErr)
+		if ctx.Err() == nil {
+			streamEvent.Type = StreamEnded
+			if result.err != nil {
+				streamEvent.Type = StreamError
+				streamEvent.Error = result.err
+			}
+			wormhole.emitStreamEvent(ctx, streamEvent)
 		}
-		if emitted || !retry || ctx.Err() != nil {
-			emitFinalStreamError(route.Provider, route.Model, attempt, attemptErr)
-			return
-		}
+		return
 	}
+
+	release()
 
 	if ctx.Err() != nil {
 		return

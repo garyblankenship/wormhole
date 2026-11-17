@@ -40,7 +40,7 @@ func (b *AgentBuilder) Run(ctx context.Context, prompt string) (*AgentResult, er
 		return nil, fmt.Errorf("agent: %w", err)
 	}
 
-	provider, release, err := b.wormhole.leaseProvider(providerName)
+	provider, release, err := b.wormhole.leaseProviderContext(ctx, providerName)
 	if err != nil {
 		return nil, fmt.Errorf("agent: %w", err)
 	}

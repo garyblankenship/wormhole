@@ -50,7 +50,7 @@ func (b *TextRequestBuilder) Generate(ctx context.Context) (*types.TextResponse,
 		if err := ctx.Err(); err != nil {
 			return nil, err
 		}
-		provider, release, err := b.getProviderWithBaseURL()
+		provider, release, err := b.getProviderWithBaseURLContext(ctx)
 		if err != nil {
 			return nil, err
 		}
@@ -140,7 +140,7 @@ func (b *TextRequestBuilder) Generate(ctx context.Context) (*types.TextResponse,
 				if err := ctx.Err(); err != nil {
 					return nil, err
 				}
-				provider, release, err := wormhole.leaseProvider(route.Provider)
+				provider, release, err := wormhole.leaseProviderContext(ctx, route.Provider)
 				if err != nil {
 					return nil, err
 				}

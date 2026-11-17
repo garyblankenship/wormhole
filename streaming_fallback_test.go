@@ -462,3 +462,81 @@ func TestApplyStreamIdleTimeoutCancellationClosesWhileBlockedOnSend(t *testing.T
 		t.Fatal("idle-timeout wrapper did not close after context cancellation")
 	}
 }
+
+func TestTextRequestBuilderStreamMetadataCommitsAttempt(t *testing.T) {
+	t.Parallel()
+	failure := errors.New("failure after metadata")
+	provider := newFallbackStreamProvider(map[string]func() (<-chan types.TextChunk, error){
+		"primary": streamChunks(
+			types.TextChunk{Model: "primary", Metadata: map[string]any{"request": "one"}},
+			types.TextChunk{Error: failure},
+		),
+		"fallback": streamChunks(types.TextChunk{Text: "fallback"}),
+	})
+	client := newStreamingFallbackClient(provider)
+	stream, err := client.Text().Model("primary").Prompt("hi").WithFallback("fallback").Stream(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	chunks := collectStreamChunks(t, stream)
+	if len(chunks) != 2 || chunks[0].Metadata["request"] != "one" || chunks[1].Error != failure {
+		t.Fatalf("chunks = %#v, want metadata followed by the original error once", chunks)
+	}
+	if provider.calls != 1 {
+		t.Fatalf("provider calls = %d, want 1", provider.calls)
+	}
+}
+
+func TestTextRequestBuilderStreamOrdersModelsBeforeProviderFallbacks(t *testing.T) {
+	var calls []string
+	failed := func(model string) func() (<-chan types.TextChunk, error) {
+		return func() (<-chan types.TextChunk, error) {
+			calls = append(calls, model)
+			return streamChunks(types.TextChunk{Error: errors.New(model)})()
+		}
+	}
+	primary := newNamedFallbackStreamProvider("primary", map[string]func() (<-chan types.TextChunk, error){
+		"first":  failed("first"),
+		"second": failed("second"),
+	})
+	secondary := newNamedFallbackStreamProvider("secondary", map[string]func() (<-chan types.TextChunk, error){
+		"third": func() (<-chan types.TextChunk, error) {
+			calls = append(calls, "third")
+			return streamChunks(types.TextChunk{Text: "done"})()
+		},
+	})
+	var attempts []AttemptEvent
+	client := New(
+		WithDiscovery(false),
+		WithDefaultProvider("primary"),
+		WithCustomProvider("primary", func(types.ProviderConfig) (types.Provider, error) { return primary, nil }),
+		WithProviderConfig("primary", types.ProviderConfig{}),
+		WithCustomProvider("secondary", func(types.ProviderConfig) (types.Provider, error) {
+			calls = append(calls, "lease-secondary")
+			return secondary, nil
+		}),
+		WithProviderConfig("secondary", types.ProviderConfig{}),
+		WithAttemptTrace(func(_ context.Context, event AttemptEvent) { attempts = append(attempts, event) }),
+	)
+	stream, err := client.Text().Model("first").Prompt("hi").WithFallback("second").
+		WithProviderFallback(TextRoute{Provider: "secondary", Model: "third"}).Stream(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	chunks := collectStreamChunks(t, stream)
+	if len(chunks) != 1 || chunks[0].Content() != "done" {
+		t.Fatalf("chunks = %#v, want final provider result", chunks)
+	}
+	if got := strings.Join(calls, ","); got != "first,second,lease-secondary,third" {
+		t.Fatalf("calls = %q, want models then lazy provider lease", got)
+	}
+	if len(attempts) != 6 {
+		t.Fatalf("attempt events = %#v, want one start and outcome per route", attempts)
+	}
+	for index, model := range []string{"first", "second", "third"} {
+		start, end := attempts[index*2], attempts[index*2+1]
+		if start.Model != model || start.Attempt != index+1 || start.Phase != AttemptStarted || end.Model != model || end.Attempt != index+1 {
+			t.Fatalf("attempt %d = %#v / %#v", index+1, start, end)
+		}
+	}
+}

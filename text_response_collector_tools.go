@@ -1,6 +1,18 @@
 package wormhole
 
-import "github.com/garyblankenship/wormhole/v3/types"
+import (
+	"strings"
+
+	"github.com/garyblankenship/wormhole/v3/types"
+)
+
+// Allocate a builder only for a second nonempty fragment. Keeping that builder
+// behind a pointer allows the ordered slice to grow without copying it; the
+// single-fragment path retains the first immutable argument string in call.
+type pendingToolCall struct {
+	call      types.ToolCall
+	arguments *strings.Builder
+}
 
 func (c *textResponseCollector) addTools(chunk types.TextChunk) {
 	calls := chunk.ToolCalls
@@ -39,15 +51,16 @@ func (c *textResponseCollector) mergeCompleted(call types.ToolCall) {
 
 func (c *textResponseCollector) mergeFragment(fragment types.ToolCall) {
 	for i := range c.pending {
-		if c.pending[i].Index == fragment.Index {
-			appendToolFragment(&c.pending[i], fragment)
+		if c.pending[i].call.Index == fragment.Index {
+			c.pending[i].appendFragment(fragment)
 			return
 		}
 	}
-	c.pending = append(c.pending, types.CloneToolCall(fragment))
+	c.pending = append(c.pending, pendingToolCall{call: types.CloneToolCall(fragment)})
 }
 
-func appendToolFragment(call *types.ToolCall, fragment types.ToolCall) {
+func (pending *pendingToolCall) appendFragment(fragment types.ToolCall) {
+	call := &pending.call
 	if fragment.ID != "" {
 		call.ID = fragment.ID
 	}
@@ -74,14 +87,33 @@ func appendToolFragment(call *types.ToolCall, fragment types.ToolCall) {
 		if fragment.Function.Name != "" {
 			call.Function.Name = fragment.Function.Name
 		}
-		call.Function.Arguments += fragment.Function.Arguments
+		if raw := fragment.Function.Arguments; raw != "" {
+			switch {
+			case pending.arguments != nil:
+				pending.arguments.WriteString(raw)
+			case call.Function.Arguments == "":
+				call.Function.Arguments = raw
+			default:
+				pending.arguments = &strings.Builder{}
+				pending.arguments.Grow(len(call.Function.Arguments) + len(raw))
+				pending.arguments.WriteString(call.Function.Arguments)
+				pending.arguments.WriteString(raw)
+				call.Function.Arguments = ""
+			}
+		}
 	}
 }
 
 func (c *textResponseCollector) finishTools() {
-	for _, call := range c.pending {
-		if c.hasCompleted(call) {
+	for _, pending := range c.pending {
+		if c.hasCompleted(pending.call) {
 			continue
+		}
+		// Pending data was detached on ingestion. Finalization owns it, and the
+		// public result function clones responses for each caller.
+		call := pending.call
+		if pending.arguments != nil {
+			call.Function.Arguments = pending.arguments.String()
 		}
 		if call.Name == "" && call.Function != nil {
 			call.Name = call.Function.Name

@@ -70,7 +70,7 @@ func (p *Provider) responsesStream(ctx context.Context, request types.TextReques
 	parse := func(data []byte) (*types.TextChunk, error) {
 		return p.parseResponsesStreamChunkWithState(data, state)
 	}
-	return p.stampMetadata(ctx, p.stampProvider(ctx, providerstream.ProcessSSE(ctx, body, parse, 100)), metadata), nil
+	return p.decorateStream(ctx, providerstream.ProcessSSE(ctx, body, parse, 100), metadata), nil
 }
 
 // normalizeResponsesFormat adapts a Chat Completions response_format value to the

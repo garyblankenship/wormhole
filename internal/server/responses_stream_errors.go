@@ -65,7 +65,7 @@ func writeResponsesFailure(sse *responsesSSEWriter, responseID, model string, cr
 }
 
 func responsesErrorCode(err error) string {
-	whErr, ok := types.AsWormholeError(err)
+	whErr, ok := types.AsWormholeError(finalStreamAttemptError(err))
 	if !ok {
 		return "upstream_error"
 	}

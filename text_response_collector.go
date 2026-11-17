@@ -11,7 +11,7 @@ type textResponseCollector struct {
 	text         strings.Builder
 	refusal      strings.Builder
 	thinking     strings.Builder
-	pending      []types.ToolCall
+	pending      []pendingToolCall
 	toolSnapshot bool
 }
 

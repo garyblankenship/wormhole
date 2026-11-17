@@ -95,9 +95,8 @@ func (g *Gemini) handleStream(ctx context.Context, stream io.ReadCloser) <-chan 
 		var annotations []any
 		for scanner.Scan() {
 			data := scanner.Event().Data
-			chunks, done, err := g.parseStreamEventWithIndex(data, &callIndex)
-			var frame geminiTextResponse
-			if json.Unmarshal([]byte(data), &frame) == nil && len(frame.Candidates) > 0 {
+			frame, chunks, done, err := g.decodeStreamEventWithIndex(data, &callIndex)
+			if frame != nil && len(frame.Candidates) > 0 {
 				for _, part := range frame.Candidates[0].Content.Parts {
 					if !part.Thought {
 						text.WriteString(part.Text)
@@ -164,21 +163,28 @@ func (g *Gemini) handleStream(ctx context.Context, stream io.ReadCloser) <-chan 
 }
 
 func (g *Gemini) parseStreamEventWithIndex(data string, callIndex *int) ([]types.TextChunk, bool, error) {
+	_, chunks, done, err := g.decodeStreamEventWithIndex(data, callIndex)
+	return chunks, done, err
+}
+
+// decodeStreamEventWithIndex shares the decoded frame with the stream citation
+// collector while keeping the standalone parser contract unchanged.
+func (g *Gemini) decodeStreamEventWithIndex(data string, callIndex *int) (*geminiTextResponse, []types.TextChunk, bool, error) {
 	if data == "" {
-		return nil, false, nil
+		return nil, nil, false, nil
 	}
 	if strings.TrimSpace(data) == streamDoneMarker {
-		return nil, true, nil
+		return nil, nil, true, nil
 	}
 	var response geminiTextResponse
 	if err := json.Unmarshal([]byte(data), &response); err != nil {
-		return nil, false, err
+		return nil, nil, false, err
 	}
 	if response.Error != nil {
-		return nil, false, g.ProviderError(response.Error.Message)
+		return &response, nil, false, g.ProviderError(response.Error.Message)
 	}
 	if len(response.Candidates) == 0 && promptBlockReason(&response) != "" {
-		return nil, false, g.noCandidatesError(&response)
+		return &response, nil, false, g.noCandidatesError(&response)
 	}
 	// Usage can appear without a candidate in a trailing frame.
 	var chunks []types.TextChunk
@@ -189,7 +195,7 @@ func (g *Gemini) parseStreamEventWithIndex(data string, callIndex *int) ([]types
 	if usage := convertUsage(response.UsageMetadata); usage != nil {
 		chunks = append(chunks, types.TextChunk{Usage: usage, Model: "gemini", Metadata: map[string]any{"provider_usage": providerUsage(response.UsageMetadata)}})
 	}
-	return chunks, false, nil
+	return &response, chunks, false, nil
 }
 
 // geminiCallName recovers the function name from a synthetic

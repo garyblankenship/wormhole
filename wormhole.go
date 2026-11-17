@@ -16,6 +16,7 @@ import (
 type Wormhole struct {
 	providerFactories  map[string]types.ProviderFactory // Factory functions for creating providers
 	providers          map[string]*cachedProvider       // Cached provider instances with ref counting
+	providerInits      map[string]*providerInit
 	providersMutex     sync.RWMutex
 	config             Config
 	providerMiddleware *types.ProviderMiddlewareChain // Type-safe middleware chain

@@ -12,29 +12,45 @@ import (
 // chatStreamState accumulates one proxied chat stream's identity, extension
 // snapshots, and emission state across chunks.
 type chatStreamState struct {
-	id             string
-	model          string
-	extension      *WormholeRequest
-	toolState      *streamToolState
-	committed      bool
-	roleSent       bool
-	terminalSent   bool
-	terminalReason string
-	metadata       *types.ResponseMetadata
-	usage          *types.Usage
-	sources        []types.Source
-	citations      []types.Citation
-	warnings       []types.ResponseWarning
+	id               string
+	model            string
+	extension        *WormholeRequest
+	toolState        *streamToolState
+	committed        bool
+	roleSent         bool
+	terminalSent     bool
+	collectSources   bool
+	collectCitations bool
+	collectWarnings  bool
+	terminalReason   string
+	metadata         *types.ResponseMetadata
+	usage            *types.Usage
+	sources          []types.Source
+	citations        []types.Citation
+	warnings         []types.ResponseWarning
 }
 
 func newChatStreamState(model string, extension *WormholeRequest) *chatStreamState {
-	return &chatStreamState{
+	state := &chatStreamState{
 		id:             fmt.Sprintf("wh-%d", time.Now().UnixNano()),
 		model:          model,
 		extension:      extension,
 		toolState:      newStreamToolState(),
 		terminalReason: "stop",
 	}
+	if extension != nil {
+		for _, name := range extension.Include {
+			switch name {
+			case "sources":
+				state.collectSources = true
+			case "citations":
+				state.collectCitations = true
+			case "warnings":
+				state.collectWarnings = true
+			}
+		}
+	}
+	return state
 }
 
 // absorb merges one upstream chunk into the extension snapshots. Terminal
@@ -47,20 +63,26 @@ func (s *chatStreamState) absorb(chunk types.TextChunk) {
 		s.usage = chunk.Usage
 	}
 	if chunk.FinishReason != nil {
-		if chunk.Sources != nil {
+		if s.collectSources && chunk.Sources != nil {
 			s.sources = chunk.Sources
 		}
-		if chunk.Citations != nil {
+		if s.collectCitations && chunk.Citations != nil {
 			s.citations = chunk.Citations
 		}
-		if chunk.Warnings != nil {
+		if s.collectWarnings && chunk.Warnings != nil {
 			s.warnings = chunk.Warnings
 		}
 		return
 	}
-	s.sources = append(s.sources, chunk.Sources...)
-	s.citations = append(s.citations, chunk.Citations...)
-	s.warnings = append(s.warnings, chunk.Warnings...)
+	if s.collectSources {
+		s.sources = append(s.sources, chunk.Sources...)
+	}
+	if s.collectCitations {
+		s.citations = append(s.citations, chunk.Citations...)
+	}
+	if s.collectWarnings {
+		s.warnings = append(s.warnings, chunk.Warnings...)
+	}
 }
 
 // commit emits the SSE response header exactly once per stream.
@@ -109,7 +131,7 @@ func (s *chatStreamState) writeResponse(p *proxy, w http.ResponseWriter, flusher
 		p.logger.Error("failed to marshal chunk", "error", types.SafeErrorValue(marshalErr))
 		return false
 	}
-	if err := writeChatFrame(w, fmt.Sprintf("data: %s\n\n", data)); err != nil {
+	if err := writeChatData(w, data); err != nil {
 		p.logger.Error("failed to write stream chunk", "error", types.SafeErrorValue(err))
 		return false
 	}
@@ -157,11 +179,11 @@ func (s *chatStreamState) finish(p *proxy, w http.ResponseWriter, flusher http.F
 		if err != nil {
 			return
 		}
-		if err := writeChatFrame(w, fmt.Sprintf("data: %s\n\n", data)); err != nil {
+		if err := writeChatData(w, data); err != nil {
 			return
 		}
 	}
-	if err := writeChatFrame(w, "data: [DONE]\n\n"); err != nil {
+	if err := writeChatFrame(w, []byte("data: [DONE]\n\n")); err != nil {
 		p.logger.Error("failed to write stream terminator", "error", types.SafeErrorValue(err))
 		return
 	}

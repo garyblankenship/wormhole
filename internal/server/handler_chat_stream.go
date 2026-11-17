@@ -3,7 +3,6 @@ package server
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"io"
 	"net/http"
 
@@ -34,20 +33,7 @@ func (p *proxy) streamChat(w http.ResponseWriter, r *http.Request, builder *worm
 	}
 	state := newChatStreamState(model, extension)
 
-	for {
-		var chunk types.TextChunk
-		select {
-		case <-ctx.Done():
-			return
-		case next, open := <-stream:
-			if !open {
-				goto finished
-			}
-			chunk = next
-		}
-		if ctx.Err() != nil {
-			return
-		}
+	for chunk, open := receiveStreamChunk(ctx, stream); open; chunk, open = receiveStreamChunk(ctx, stream) {
 		if chunk.Error != nil {
 			p.logger.Error("stream chunk error", "error", types.SafeErrorValue(chunk.Error))
 			if !state.committed {
@@ -67,7 +53,6 @@ func (p *proxy) streamChat(w http.ResponseWriter, r *http.Request, builder *worm
 		}
 	}
 
-finished:
 	if ctx.Err() != nil {
 		return
 	}
@@ -117,14 +102,23 @@ func writeStreamError(w http.ResponseWriter, flusher http.Flusher, err error) {
 	if marshalErr != nil {
 		return
 	}
-	if err := writeChatFrame(w, fmt.Sprintf("data: %s\n\n", data)); err != nil {
+	if err := writeChatData(w, data); err != nil {
 		return
 	}
 	flusher.Flush()
 }
 
-func writeChatFrame(w http.ResponseWriter, frame string) error {
-	n, err := w.Write([]byte(frame))
+// writeChatData stages a complete SSE frame so each event uses one write.
+func writeChatData(w http.ResponseWriter, data []byte) error {
+	frame := make([]byte, len("data: ")+len(data)+len("\n\n"))
+	n := copy(frame, "data: ")
+	n += copy(frame[n:], data)
+	copy(frame[n:], "\n\n")
+	return writeChatFrame(w, frame)
+}
+
+func writeChatFrame(w http.ResponseWriter, frame []byte) error {
+	n, err := w.Write(frame)
 	if err == nil && n != len(frame) {
 		return io.ErrShortWrite
 	}
