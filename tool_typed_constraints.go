@@ -51,13 +51,10 @@ func goTypeToJSONType(t reflect.Type) string {
 // Constraints after enum values must use semicolons; comma and pipe both
 // separate enum alternatives, even when an alternative is named required.
 func parseToolTag(tag string, schema map[string]any, required *[]string, fieldName string, fieldType reflect.Type) error {
-	var parts []string
-	for _, segment := range strings.Split(tag, ";") {
-		if strings.Contains(segment, "enum=") || !strings.Contains(tag, ";") {
-			parts = append(parts, parseToolTagWithEnum(segment)...)
-		} else {
-			parts = append(parts, segment)
-		}
+	segments := strings.Split(tag, ";")
+	parts := make([]string, 0, len(segments))
+	for _, segment := range segments {
+		parts = append(parts, parseToolTagWithEnum(segment)...)
 	}
 
 	for _, part := range parts {
@@ -120,25 +117,28 @@ func parseToolTag(tag string, schema map[string]any, required *[]string, fieldNa
 	return nil
 }
 
-// parseToolTagWithEnum splits constraints before enum= while preserving all
-// remaining comma-separated alternatives within this semicolon-delimited segment.
+// parseToolTagWithEnum splits comma-separated constraints within a
+// semicolon-delimited segment, preserving the remainder intact once a
+// comma-containing constraint (enum=, pattern=, default=) begins.
 func parseToolTagWithEnum(tag string) []string {
 	var parts []string
-	enumIdx := strings.Index(tag, "enum=")
-
-	if enumIdx == -1 {
-		return strings.Split(tag, ",")
-	}
-
-	// Extract parts before enum=
-	if enumIdx > 0 {
-		before := strings.TrimRight(tag[:enumIdx], ",")
-		if before != "" {
-			parts = append(parts, strings.Split(before, ",")...)
+	rest := tag
+	for rest != "" {
+		trimmed := strings.TrimLeft(rest, " \t")
+		if strings.HasPrefix(trimmed, "enum=") ||
+			strings.HasPrefix(trimmed, "pattern=") ||
+			strings.HasPrefix(trimmed, "default=") {
+			parts = append(parts, trimmed)
+			return parts
 		}
+		commaIdx := strings.IndexByte(rest, ',')
+		if commaIdx == -1 {
+			parts = append(parts, rest)
+			return parts
+		}
+		parts = append(parts, rest[:commaIdx])
+		rest = rest[commaIdx+1:]
 	}
-
-	parts = append(parts, tag[enumIdx:])
 	return parts
 }
 

@@ -20,12 +20,12 @@ func (f *SimpleFactory) WithCircuitBreaker(threshold int, timeout time.Duration)
 
 // WithCache returns an option to add caching middleware
 func (f *SimpleFactory) WithCache(ttl time.Duration) Option {
-	cache := middleware.NewMemoryCache(1000)
-	config := middleware.CacheConfig{
-		Cache: cache,
-		TTL:   ttl,
-	}
 	return func(c *Config) {
+		cache := middleware.NewMemoryCache(1000)
+		config := middleware.CacheConfig{
+			Cache: cache,
+			TTL:   ttl,
+		}
 		c.Closers = append(c.Closers, cache)
 		WithProviderMiddleware(middleware.NewTypedCacheMiddleware(config))(c)
 	}

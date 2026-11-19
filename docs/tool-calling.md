@@ -236,7 +236,7 @@ Prevent infinite loops by setting a maximum number of tool execution rounds:
 
 ```go
 response, _ := client.Text().
-    WithMaxToolIterations(5).  // Default is 10
+    WithMaxToolIterations(5).  // Default is 10 (values <= 0 use default)
     Generate(ctx)
 ```
 
@@ -255,14 +255,16 @@ client := wormhole.New(
 )
 ```
 
-The client shares this admission budget across automatic text and agent tool
-execution. A provider response with too many tool calls is rejected before any
-handler starts. Once the concurrency limit is full, `ToolQueueTimeout` bounds
-the wait for a permit; `ToolTimeout` starts only after admission. A timed-out
-handler keeps its permit until it actually returns. Remaining accepted calls
-continue through shared admission and receive a result or an explicit
-admission/cancellation error. Admission is bounded and does not promise FIFO
-ordering.
+The client shares this admission budget and per-tool circuit-breaker state
+across automatic text (`Text().Generate()`) and agent (`Agent().Run()`) tool
+execution. When `EnableAdaptiveConcurrency` is enabled, intra-batch worker
+parallelism scales up to `AdaptiveMaxCapacity`. A provider response with too
+many tool calls is rejected before any handler starts. Once the concurrency
+limit is full, `ToolQueueTimeout` bounds the wait for a permit; `ToolTimeout`
+starts only after admission. A timed-out handler keeps its permit until it
+actually returns. Remaining accepted calls continue through shared admission
+and receive a result or an explicit admission/cancellation error. Admission is
+bounded and does not promise FIFO ordering.
 
 | Option | Go type | Default | Behavior | Source |
 |--------|---------|---------|----------|--------|

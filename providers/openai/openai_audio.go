@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 
 	"github.com/garyblankenship/wormhole/v3/providers"
 	"github.com/garyblankenship/wormhole/v3/types"
@@ -73,10 +74,15 @@ func (p *Provider) handleSpeechToText(ctx context.Context, request types.AudioRe
 		return nil, p.ValidationError("speech-to-text input must be non-empty []byte audio")
 	}
 
+	format := strings.TrimPrefix(strings.TrimSpace(request.AudioFormat), ".")
+	if format == "" {
+		format = "wav"
+	}
+
 	// Build multipart form data
 	formData := audioFormData{
 		audio:       audio,
-		filename:    "audio.wav",
+		filename:    "audio." + format,
 		model:       request.Model,
 		language:    request.Language,
 		prompt:      request.Prompt,

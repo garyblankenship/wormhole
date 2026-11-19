@@ -53,6 +53,7 @@ type Wormhole struct {
 	idempotencySweepWg    sync.WaitGroup
 
 	toolBudget    *toolAdmissionBudget
+	toolBreakers  *toolBreakerStore
 	toolConfigErr error
 
 	// Closers registered by options, closed in Shutdown
@@ -150,6 +151,7 @@ func New(opts ...Option) *Wormhole {
 		idempotencyCache:  make(map[string]*idempotencyEntry),
 		idempotencyOrder:  list.New(),
 		closers:           config.Closers,
+		toolBreakers:      newToolBreakerStore(),
 		toolConfigErr:     toolConfigErr,
 	}
 	if toolConfigErr == nil {

@@ -40,7 +40,7 @@ func (m *JSONCleaningMiddleware) ApplyStructured(next types.StructuredHandler) t
 		}
 
 		// Apply JSON cleaning if this provider needs it
-		if resp != nil && resp.Raw != "" {
+		if resp != nil && resp.Raw != "" && m.shouldClean(ctx) {
 			// Use standard JSON parsing for validation
 			var data any
 			if err := json.Unmarshal([]byte(resp.Raw), &data); err != nil {
@@ -48,6 +48,7 @@ func (m *JSONCleaningMiddleware) ApplyStructured(next types.StructuredHandler) t
 				cleaned := cleanJSONResponse(resp.Raw)
 				if err := json.Unmarshal([]byte(cleaned), &data); err == nil {
 					resp.Raw = cleaned
+					resp.Data = data
 				}
 				// If cleaning doesn't help, leave original response
 			}
@@ -55,6 +56,30 @@ func (m *JSONCleaningMiddleware) ApplyStructured(next types.StructuredHandler) t
 
 		return resp, nil
 	}
+}
+
+func (m *JSONCleaningMiddleware) shouldClean(ctx context.Context) bool {
+	if len(m.providers) == 0 {
+		return true
+	}
+	provider := providerFromContext(ctx)
+	if provider == "" {
+		return false
+	}
+	return m.providers[strings.ToLower(provider)]
+}
+
+func providerFromContext(ctx context.Context) string {
+	if ctx == nil {
+		return ""
+	}
+	if p, ok := ctx.Value(CtxKeyProvider).(string); ok && p != "" {
+		return p
+	}
+	if p, ok := ctx.Value(CtxKeyWormholeProvider).(string); ok && p != "" {
+		return p
+	}
+	return ""
 }
 
 func (m *JSONCleaningMiddleware) ApplyEmbeddings(next types.EmbeddingsHandler) types.EmbeddingsHandler {

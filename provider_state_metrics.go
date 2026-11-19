@@ -53,9 +53,12 @@ type ProviderAdaptiveState struct {
 	pidController *pidController
 
 	// Performance targets
-	targetLatency time.Duration
-	minCapacity   int
-	maxCapacity   int
+	targetLatency      time.Duration
+	minCapacity        int
+	maxCapacity        int
+	errorRateThreshold float64
+	errorRatePenalty   float64
+	minSamplesForError int
 
 	// Timing
 	lastAdjustment time.Time
@@ -74,19 +77,36 @@ func NewProviderAdaptiveState(key ProviderKey, targetLatency time.Duration,
 	})
 
 	return &ProviderAdaptiveState{
-		key:               key,
-		limiter:           NewConcurrencyLimiter(config.InitialCapacity),
-		currentCapacity:   config.InitialCapacity,
-		activeByLimiter:   make(map[*ConcurrencyLimiter]int),
-		generationChanged: make(chan struct{}),
-		latencies:         make([]time.Duration, 0, config.LatencyWindowSize),
-		latencyRing:       ring.New(config.LatencyWindowSize),
-		errorRates:        ring.New(config.LatencyWindowSize),
-		pidController:     newPIDController(defaultPIDConfig()),
-		targetLatency:     config.TargetLatency,
-		minCapacity:       config.MinCapacity,
-		maxCapacity:       config.MaxCapacity,
-		lastSeen:          time.Now(),
+		key:                key,
+		limiter:            NewConcurrencyLimiter(config.InitialCapacity),
+		currentCapacity:    config.InitialCapacity,
+		activeByLimiter:    make(map[*ConcurrencyLimiter]int),
+		generationChanged:  make(chan struct{}),
+		latencies:          make([]time.Duration, 0, config.LatencyWindowSize),
+		latencyRing:        ring.New(config.LatencyWindowSize),
+		errorRates:         ring.New(config.LatencyWindowSize),
+		pidController:      newPIDController(defaultPIDConfig()),
+		targetLatency:      config.TargetLatency,
+		minCapacity:        config.MinCapacity,
+		maxCapacity:        config.MaxCapacity,
+		errorRateThreshold: 0.1,
+		errorRatePenalty:   2.0,
+		minSamplesForError: 0,
+		lastSeen:           time.Now(),
+	}
+}
+
+func (s *ProviderAdaptiveState) configureErrorControl(threshold, penalty float64, minSamples int) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if threshold > 0 {
+		s.errorRateThreshold = threshold
+	}
+	if penalty > 0 {
+		s.errorRatePenalty = penalty
+	}
+	if minSamples >= 0 {
+		s.minSamplesForError = minSamples
 	}
 }
 

@@ -8,7 +8,7 @@ import "time"
 type chatRequest struct {
 	Model    string    `json:"model"`
 	Messages []message `json:"messages"`
-	Stream   bool      `json:"stream,omitempty"`
+	Stream   bool      `json:"stream"`
 	Format   string    `json:"format,omitempty"` // "json" for structured output
 	Options  *options  `json:"options,omitempty"`
 }

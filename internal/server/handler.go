@@ -86,6 +86,10 @@ func (p *proxy) handleChatCompletions(w http.ResponseWriter, r *http.Request) {
 	}
 
 	route := p.resolveModelRoute(req.Model)
+	if route.model == "" {
+		writeError(w, http.StatusBadRequest, "model_required", "model is required", "invalid_request_error")
+		return
+	}
 	if err := validateChatControls(req, route.effectiveProvider); err != nil {
 		writeError(w, http.StatusBadRequest, "unsupported_parameter", err.Error(), "invalid_request_error")
 		return

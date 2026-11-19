@@ -31,6 +31,7 @@ func (p *proxy) streamResponses(w http.ResponseWriter, r *http.Request, executio
 	}
 	stream, err := execution.builder.Stream(ctx)
 	if err != nil {
+		p.logger.Error("responses stream creation failed", "error", types.SafeErrorValue(err), "model", types.SafeLogString(model))
 		writeUpstreamError(w, err)
 		return
 	}

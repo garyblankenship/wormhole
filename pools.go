@@ -29,6 +29,12 @@ func getEmbeddingsRequest() *types.EmbeddingsRequest {
 // putEmbeddingsRequest returns an EmbeddingsRequest to the pool
 func putEmbeddingsRequest(req *types.EmbeddingsRequest) {
 	if req != nil {
+		clear(req.Input)
+		req.Input = req.Input[:0]
+		req.Model = ""
+		req.Dimensions = nil
+		req.EncodingFormat = ""
+		req.ProviderOptions = nil
 		embeddingsRequestPool.Put(req)
 	}
 }

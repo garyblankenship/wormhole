@@ -25,7 +25,13 @@ func (p *proxy) handleResponses(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	execution, err := p.responsesBuilder(req)
+	route := p.resolveModelRoute(req.Model)
+	if route.model == "" {
+		writeError(w, http.StatusBadRequest, "model_required", "model is required", "invalid_request_error")
+		return
+	}
+
+	execution, err := p.responsesBuilder(req, route)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, "invalid_request", err.Error(), "invalid_request_error")
 		return
@@ -41,15 +47,15 @@ func (p *proxy) handleResponses(w http.ResponseWriter, r *http.Request) {
 		writeUpstreamError(w, err)
 		return
 	}
+	forwardResponseMetadata(w, resp.ResponseMetadata)
 	writeJSON(w, http.StatusOK, completedResponsesEnvelope(resp, execution.model, execution.customTools))
 }
 
-func (p *proxy) responsesBuilder(req responsesRequest) (responsesExecution, error) {
+func (p *proxy) responsesBuilder(req responsesRequest, route resolvedModelRoute) (responsesExecution, error) {
 	messages, err := responsesMessages(req)
 	if err != nil {
 		return responsesExecution{}, err
 	}
-	route := p.resolveModelRoute(req.Model)
 
 	builder := p.wh.Text().Model(route.model).Messages(messages...)
 	toolSelection, err := parseResponsesToolChoice(req.ToolChoice)

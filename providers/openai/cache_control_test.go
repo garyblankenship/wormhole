@@ -25,9 +25,12 @@ func TestOpenAIPayloadsIgnoreAnthropicToolCacheControl(t *testing.T) {
 		}},
 	}
 
+	responsesPayload, err := provider.buildResponsesPayload(request, request.Messages)
+	require.NoError(t, err)
+
 	for name, payload := range map[string]map[string]any{
 		"chat completions": provider.buildChatPayload(request, request.Messages),
-		"responses":        provider.buildResponsesPayload(request, request.Messages),
+		"responses":        responsesPayload,
 	} {
 		t.Run(name, func(t *testing.T) {
 			encoded, err := json.Marshal(payload)

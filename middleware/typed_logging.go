@@ -100,8 +100,10 @@ func (m *TypedLoggingMiddleware) ApplyStream(next types.StreamHandler) types.Str
 			m.config.Logger.Debug("Stream initiated", "duration", time.Since(start))
 		}
 
-		if m.config.LogErrors && err != nil {
-			logError(ctx, m.config, err, time.Since(start))
+		if err != nil {
+			if m.config.LogErrors {
+				logError(ctx, m.config, err, time.Since(start))
+			}
 			return stream, err
 		}
 

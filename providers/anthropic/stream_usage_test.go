@@ -1,7 +1,11 @@
 package anthropic
 
 import (
+	"errors"
+	"strings"
 	"testing"
+
+	"github.com/garyblankenship/wormhole/v3/types"
 )
 
 // message_start carries Anthropic's input + cache tokens; only output_tokens
@@ -35,12 +39,22 @@ func TestParseStreamChunkInBandError(t *testing.T) {
 	t.Parallel()
 	p := &Provider{}
 
-	_, err := p.parseStreamChunk([]byte(`{"type":"error","error":{"type":"overloaded_error","message":"try again"}}`))
-	if err == nil {
-		t.Fatal("parseStreamChunk returned nil error")
+	chunk, err := p.parseStreamChunk([]byte(`{"type":"error","error":{"type":"overloaded_error","message":"try again"}}`))
+	if err != nil {
+		t.Fatalf("parseStreamChunk returned unexpected transport err: %v", err)
 	}
-	if got, want := err.Error(), "anthropic stream error (overloaded_error): try again"; got != want {
-		t.Fatalf("parseStreamChunk error = %q, want %q", got, want)
+	if chunk == nil || chunk.Error == nil {
+		t.Fatal("parseStreamChunk returned nil chunk.Error")
+	}
+	var wErr *types.WormholeError
+	if !errors.As(chunk.Error, &wErr) {
+		t.Fatalf("expected *types.WormholeError, got %T: %v", chunk.Error, chunk.Error)
+	}
+	if wErr.Code != types.ErrorCodeProvider {
+		t.Fatalf("code = %v, want %v", wErr.Code, types.ErrorCodeProvider)
+	}
+	if !strings.Contains(chunk.Error.Error(), "anthropic stream error (overloaded_error): try again") {
+		t.Fatalf("parseStreamChunk error = %q, want substring %q", chunk.Error.Error(), "anthropic stream error (overloaded_error): try again")
 	}
 }
 

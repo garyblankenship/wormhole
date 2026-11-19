@@ -172,10 +172,12 @@ func (p *Provider) buildContent(msg types.Message) []map[string]any {
 
 	switch c := content.(type) {
 	case string:
-		contentParts = append(contentParts, map[string]any{
-			"type": contentTypeText,
-			"text": c,
-		})
+		if c != "" {
+			contentParts = append(contentParts, map[string]any{
+				"type": contentTypeText,
+				"text": c,
+			})
+		}
 	case []types.MessagePart:
 		for _, part := range c {
 			switch part.Type {
@@ -206,19 +208,7 @@ func (p *Provider) buildContent(msg types.Message) []map[string]any {
 	// Handle tool messages: Anthropic requires a distinct tool_result block,
 	// not a text block with tool_use_id bolted on.
 	if toolMsg, ok := msg.(*types.ToolMessage); ok {
-		result := []map[string]any{
-			{
-				"type":        "tool_result",
-				"tool_use_id": toolMsg.ToolCallID,
-				"content":     toolMsg.Content,
-			},
-		}
-		// Anthropic requires is_error to distinguish a failed tool execution;
-		// otherwise the error text in content is treated as a successful result.
-		if toolMsg.Error != "" {
-			result[0]["is_error"] = true
-		}
-		return result
+		return buildToolResultContent(toolMsg)
 	}
 
 	// Handle assistant messages with tool calls
@@ -263,7 +253,37 @@ func (p *Provider) buildContent(msg types.Message) []map[string]any {
 		contentParts = append([]map[string]any{thinkingBlock}, contentParts...)
 	}
 
+	if len(contentParts) == 0 {
+		if _, isString := content.(string); isString {
+			contentParts = append(contentParts, map[string]any{
+				"type": contentTypeText,
+				"text": "",
+			})
+		}
+	}
+
 	return contentParts
+}
+
+// buildToolResultContent constructs the Anthropic tool_result content block.
+func buildToolResultContent(toolMsg *types.ToolMessage) []map[string]any {
+	toolContent := toolMsg.Content
+	if toolContent == "" && toolMsg.Error != "" {
+		toolContent = toolMsg.Error
+	}
+	result := []map[string]any{
+		{
+			"type":        "tool_result",
+			"tool_use_id": toolMsg.ToolCallID,
+			"content":     toolContent,
+		},
+	}
+	// Anthropic requires is_error to distinguish a failed tool execution;
+	// otherwise the error text in content is treated as a successful result.
+	if toolMsg.Error != "" {
+		result[0]["is_error"] = true
+	}
+	return result
 }
 
 // mapRole maps internal roles to Anthropic roles

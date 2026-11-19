@@ -16,7 +16,10 @@ import (
 	wormhole "github.com/garyblankenship/wormhole/v3"
 )
 
-const maxProxyRequestHeaderBytes = 1 << 20
+const (
+	maxProxyRequestHeaderBytes      = 1 << 20
+	wormholeShutdownFallbackTimeout = 5 * time.Second
+)
 
 // Config holds server configuration.
 type Config struct {
@@ -33,6 +36,7 @@ type proxy struct {
 	logger           *slog.Logger
 	apiKey           string
 	defaultProvider  string
+	baseCancel       context.CancelFunc
 	cleartextWarning sync.Once
 }
 
@@ -71,11 +75,14 @@ func New(cfg Config) *proxy {
 		opts = append(opts, wormhole.WithDefaultProvider(cfg.DefaultProvider))
 	}
 
+	baseCtx, baseCancel := context.WithCancel(context.Background())
+
 	p := &proxy{
 		wh:              wormhole.New(opts...),
 		logger:          cfg.Logger,
 		apiKey:          cfg.ProxyAPIKey,
 		defaultProvider: cfg.DefaultProvider,
+		baseCancel:      baseCancel,
 	}
 
 	if p.apiKey == "" {
@@ -90,6 +97,7 @@ func New(cfg Config) *proxy {
 	p.server = &http.Server{
 		Addr:              cfg.Addr,
 		Handler:           p.auth(mux),
+		BaseContext:       func(net.Listener) context.Context { return baseCtx },
 		MaxHeaderBytes:    maxProxyRequestHeaderBytes,
 		ReadHeaderTimeout: 10 * time.Second,
 		ReadTimeout:       60 * time.Second,
@@ -136,8 +144,18 @@ func isLoopbackAddr(addr string) bool {
 
 // Shutdown gracefully stops the HTTP server and the wormhole client.
 func (p *proxy) Shutdown(ctx context.Context) error {
+	if p.baseCancel != nil {
+		p.baseCancel()
+	}
+	hadLiveCtx := ctx.Err() == nil
 	serverErr := p.server.Shutdown(ctx)
-	wormholeErr := p.wh.Shutdown(ctx)
+	whCtx := ctx
+	var whCancel context.CancelFunc
+	if hadLiveCtx && ctx.Err() != nil {
+		whCtx, whCancel = context.WithTimeout(context.WithoutCancel(ctx), wormholeShutdownFallbackTimeout)
+		defer whCancel()
+	}
+	wormholeErr := p.wh.Shutdown(whCtx)
 	return errors.Join(serverErr, wormholeErr)
 }
 

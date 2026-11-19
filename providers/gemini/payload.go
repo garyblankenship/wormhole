@@ -18,7 +18,7 @@ func (g *Gemini) buildTextPayload(request types.TextRequest) (map[string]any, er
 	if prepareErr != nil {
 		return nil, prepareErr
 	}
-	contents, err := g.transformMessages(prepared, request.Model)
+	contents, err := g.transformMessages(prepared, normalizeModelName(request.Model))
 	if err != nil {
 		return nil, err
 	}
@@ -206,12 +206,16 @@ func (g *Gemini) buildStructuredPayload(request types.StructuredRequest) (map[st
 	return payload, nil
 }
 
-func normalizeModelResource(model string) string {
+func normalizeModelName(model string) string {
 	model = strings.TrimPrefix(model, "google/")
 	model = strings.TrimPrefix(model, "models/")
+	return model
+}
+
+func normalizeModelResource(model string) string {
 	// The result is interpolated directly into a URL path segment
 	// (see Text/Structured/Images/StreamText endpoint construction), so
 	// metacharacters (/, ?, #, ..) must be percent-escaped here — the
 	// single call site that all 4 endpoint builders route through.
-	return url.PathEscape(model)
+	return url.PathEscape(normalizeModelName(model))
 }

@@ -22,6 +22,7 @@ func TestRemediationC201C204C209C2I02(t *testing.T) {
 				if err != nil {
 					t.Fatal(err)
 				}
+				s = nil
 				if err := json.Unmarshal(b, &s); err != nil {
 					t.Fatal(err)
 				}

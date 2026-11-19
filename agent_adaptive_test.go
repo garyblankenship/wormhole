@@ -217,7 +217,7 @@ func TestAdaptiveLimiter(t *testing.T) {
 func TestAdaptiveCapacityHelpers(t *testing.T) {
 	t.Parallel()
 
-	provider, model, ok := metricsLabelIdentity(map[string]interface{}{
+	provider, model, _, ok := metricsLabelIdentity(map[string]interface{}{
 		"provider": "provider:with:colon",
 		"model":    `model"quoted`,
 	})

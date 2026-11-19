@@ -33,10 +33,10 @@ func (f *GeminiFetcher) Name() string {
 	return "gemini"
 }
 
-// AccountDiscriminator scopes the model cache per API key so different
-// Gemini accounts don't collide on the same cache file.
+// AccountDiscriminator scopes the model cache per endpoint and API key so
+// different Gemini accounts or endpoints don't collide on the same cache file.
 func (f *GeminiFetcher) AccountDiscriminator() string {
-	return accountKeyDiscriminator(f.apiKey)
+	return configuredAccountDiscriminator(normalizedEndpoint(f.baseURL), false, f.apiKey, nil)
 }
 
 // FetchModels retrieves all available Gemini models.

@@ -55,6 +55,9 @@ func (p *Provider) Text(ctx context.Context, request types.TextRequest) (*types.
 	if err := p.rejectFileReferences(request.Messages); err != nil {
 		return nil, err
 	}
+	if len(request.Tools) > 0 || request.ToolChoice != nil {
+		return nil, p.ValidationError("Ollama application tools are not supported by this adapter")
+	}
 	if request.ParallelToolCalls != nil {
 		return nil, p.ValidationError("parallel_tool_calls is not supported by Ollama")
 	}
@@ -63,6 +66,7 @@ func (p *Provider) Text(ctx context.Context, request types.TextRequest) (*types.
 		return nil, err
 	}
 	payload := p.buildChatPayload(&request, prepared)
+	payload.Stream = false
 
 	url := p.GetBaseURL() + "/api/chat"
 
@@ -102,6 +106,9 @@ func (p *Provider) stampProvider(ctx context.Context, in <-chan types.TextChunk)
 func (p *Provider) Stream(ctx context.Context, request types.TextRequest) (<-chan types.TextChunk, error) {
 	if err := p.rejectFileReferences(request.Messages); err != nil {
 		return nil, err
+	}
+	if len(request.Tools) > 0 || request.ToolChoice != nil {
+		return nil, p.ValidationError("Ollama application tools are not supported by this adapter")
 	}
 	if request.ParallelToolCalls != nil {
 		return nil, p.ValidationError("parallel_tool_calls is not supported by Ollama")

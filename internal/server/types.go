@@ -1,6 +1,7 @@
 package server
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 )
@@ -101,6 +102,11 @@ type EmbeddingRequest struct {
 type EmbeddingInput []string
 
 func (i *EmbeddingInput) UnmarshalJSON(data []byte) error {
+	if bytes.Equal(bytes.TrimSpace(data), []byte("null")) {
+		*i = nil
+		return nil
+	}
+
 	var single string
 	if err := json.Unmarshal(data, &single); err == nil {
 		*i = []string{single}

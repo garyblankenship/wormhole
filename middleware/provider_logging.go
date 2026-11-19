@@ -56,6 +56,9 @@ func (m *ProviderLoggingMiddleware) ApplyText(next types.TextHandler) types.Text
 		return withProviderLogging(ctx, m.logger, m.providerName, "Text",
 			fmt.Sprintf("model=%s, messages=%d", types.SafeLogString(request.Model), len(request.Messages)),
 			func(resp *types.TextResponse) string {
+				if resp == nil || resp.Usage == nil {
+					return "0 tokens"
+				}
 				return fmt.Sprintf("%d tokens", resp.Usage.TotalTokens)
 			},
 			next, request,
@@ -85,6 +88,9 @@ func (m *ProviderLoggingMiddleware) ApplyStructured(next types.StructuredHandler
 		return withProviderLogging(ctx, m.logger, m.providerName, "Structured",
 			fmt.Sprintf("model=%s, schema=%s", types.SafeLogString(request.Model), types.SafeLogString(request.SchemaName)),
 			func(resp *types.StructuredResponse) string {
+				if resp == nil {
+					return "0 chars"
+				}
 				return fmt.Sprintf("%d chars", len(resp.Raw))
 			},
 			next, request,
@@ -92,28 +98,42 @@ func (m *ProviderLoggingMiddleware) ApplyStructured(next types.StructuredHandler
 	}
 }
 
-func (m *ProviderLoggingMiddleware) ApplyEmbeddings(next types.EmbeddingsHandler) types.EmbeddingsHandler {
-	return func(ctx context.Context, request types.EmbeddingsRequest) (*types.EmbeddingsResponse, error) {
-		return withProviderLogging(ctx, m.logger, m.providerName, "Embeddings",
-			fmt.Sprintf("model=%s, inputs=%d", types.SafeLogString(request.Model), len(request.Input)),
-			func(resp *types.EmbeddingsResponse) string {
-				return fmt.Sprintf("%d embeddings", len(resp.Embeddings))
+func wrapCountLogging[Req any, Resp any](
+	m *ProviderLoggingMiddleware,
+	op, reqMetric, respNoun string,
+	reqMeta func(Req) (string, int),
+	respCount func(*Resp) int,
+	next func(context.Context, Req) (*Resp, error),
+) func(context.Context, Req) (*Resp, error) {
+	return func(ctx context.Context, request Req) (*Resp, error) {
+		model, n := reqMeta(request)
+		return withProviderLogging(ctx, m.logger, m.providerName, op,
+			fmt.Sprintf("model=%s, %s=%d", types.SafeLogString(model), reqMetric, n),
+			func(resp *Resp) string {
+				if resp == nil {
+					return "0 " + respNoun
+				}
+				return fmt.Sprintf("%d %s", respCount(resp), respNoun)
 			},
 			next, request,
 		)
 	}
 }
 
+func (m *ProviderLoggingMiddleware) ApplyEmbeddings(next types.EmbeddingsHandler) types.EmbeddingsHandler {
+	return wrapCountLogging(m, "Embeddings", "inputs", "embeddings",
+		func(r types.EmbeddingsRequest) (string, int) { return r.Model, len(r.Input) },
+		func(r *types.EmbeddingsResponse) int { return len(r.Embeddings) },
+		next,
+	)
+}
+
 func (m *ProviderLoggingMiddleware) ApplyRerank(next types.RerankHandler) types.RerankHandler {
-	return func(ctx context.Context, request types.RerankRequest) (*types.RerankResponse, error) {
-		return withProviderLogging(ctx, m.logger, m.providerName, "Rerank",
-			fmt.Sprintf("model=%s, documents=%d", types.SafeLogString(request.Model), len(request.Documents)),
-			func(resp *types.RerankResponse) string {
-				return fmt.Sprintf("%d results", len(resp.Results))
-			},
-			next, request,
-		)
-	}
+	return wrapCountLogging(m, "Rerank", "documents", "results",
+		func(r types.RerankRequest) (string, int) { return r.Model, len(r.Documents) },
+		func(r *types.RerankResponse) int { return len(r.Results) },
+		next,
+	)
 }
 
 func (m *ProviderLoggingMiddleware) ApplyAudio(next types.AudioHandler) types.AudioHandler {
@@ -127,15 +147,11 @@ func (m *ProviderLoggingMiddleware) ApplyAudio(next types.AudioHandler) types.Au
 }
 
 func (m *ProviderLoggingMiddleware) ApplyImage(next types.ImageHandler) types.ImageHandler {
-	return func(ctx context.Context, request types.ImageRequest) (*types.ImageResponse, error) {
-		return withProviderLogging(ctx, m.logger, m.providerName, "Image",
-			fmt.Sprintf("model=%s, prompt_chars=%d", types.SafeLogString(request.Model), len(request.Prompt)),
-			func(resp *types.ImageResponse) string {
-				return fmt.Sprintf("%d images", len(resp.Images))
-			},
-			next, request,
-		)
-	}
+	return wrapCountLogging(m, "Image", "prompt_chars", "images",
+		func(r types.ImageRequest) (string, int) { return r.Model, len(r.Prompt) },
+		func(r *types.ImageResponse) int { return len(r.Images) },
+		next,
+	)
 }
 
 // cleanJSONResponse provides basic JSON cleaning for provider responses

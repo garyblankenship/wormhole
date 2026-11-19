@@ -30,6 +30,9 @@ func (b *EmbeddingsRequestBuilder) BaseURL(url string) *EmbeddingsRequestBuilder
 // Model sets the model to use.
 // Returns the builder for chaining. Validation errors are returned by Generate().
 func (b *EmbeddingsRequestBuilder) Model(model string) *EmbeddingsRequestBuilder {
+	if b.request == nil {
+		return b
+	}
 	b.request.Model = model
 	return b
 }
@@ -37,13 +40,19 @@ func (b *EmbeddingsRequestBuilder) Model(model string) *EmbeddingsRequestBuilder
 // Input sets the input text(s) to generate embeddings for.
 // Returns the builder for chaining. Validation errors are returned by Generate().
 func (b *EmbeddingsRequestBuilder) Input(inputs ...string) *EmbeddingsRequestBuilder {
-	b.request.Input = inputs
+	if b.request == nil {
+		return b
+	}
+	b.request.Input = append(b.request.Input[:0], inputs...)
 	return b
 }
 
 // AddInput adds input text to generate embeddings for.
 // Returns the builder for chaining. Validation errors are returned by Generate().
 func (b *EmbeddingsRequestBuilder) AddInput(input string) *EmbeddingsRequestBuilder {
+	if b.request == nil {
+		return b
+	}
 	b.request.Input = append(b.request.Input, input)
 	return b
 }
@@ -51,6 +60,9 @@ func (b *EmbeddingsRequestBuilder) AddInput(input string) *EmbeddingsRequestBuil
 // Dimensions sets the desired dimensions for the embeddings.
 // Returns the builder for chaining. Validation errors are returned by Generate().
 func (b *EmbeddingsRequestBuilder) Dimensions(dims int) *EmbeddingsRequestBuilder {
+	if b.request == nil {
+		return b
+	}
 	b.request.Dimensions = &dims
 	return b
 }
@@ -58,12 +70,18 @@ func (b *EmbeddingsRequestBuilder) Dimensions(dims int) *EmbeddingsRequestBuilde
 // EncodingFormat controls whether returned embeddings are numeric vectors or
 // OpenAI-compatible base64 strings containing little-endian float32 values.
 func (b *EmbeddingsRequestBuilder) EncodingFormat(format types.EmbeddingEncodingFormat) *EmbeddingsRequestBuilder {
+	if b.request == nil {
+		return b
+	}
 	b.request.EncodingFormat = format
 	return b
 }
 
 // ProviderOptions sets provider-specific options
 func (b *EmbeddingsRequestBuilder) ProviderOptions(options map[string]any) *EmbeddingsRequestBuilder {
+	if b.request == nil {
+		return b
+	}
 	b.request.ProviderOptions = options
 	return b
 }
@@ -104,6 +122,10 @@ func (b *EmbeddingsRequestBuilder) Clone() *EmbeddingsRequestBuilder {
 //	    log.Fatal("Invalid configuration:", err)
 //	}
 func (b *EmbeddingsRequestBuilder) Validate() error {
+	if b.request == nil {
+		return types.NewValidationError("request", "already_used", nil, "builder already used; create a new builder for each request")
+	}
+
 	var errs types.ValidationErrors
 
 	if b.request.Model == "" {

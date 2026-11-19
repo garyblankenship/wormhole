@@ -16,7 +16,7 @@ type ToolExecutor struct {
 	limiter         *ConcurrencyLimiter
 	adaptiveLimiter *AdaptiveLimiter
 	breakerMu       sync.Mutex
-	circuitBreakers map[string]*SimpleCircuitBreaker
+	breakers        *toolBreakerStore
 	retryExecutor   *RetryExecutor
 	configErr       error
 	admission       *toolAdmissionBudget
@@ -42,6 +42,7 @@ func NewToolExecutorWithConfig(registry *ToolRegistry, config ToolSafetyConfig) 
 	executor := &ToolExecutor{
 		registry:      registry,
 		safetyConfig:  config,
+		breakers:      newToolBreakerStore(),
 		configErr:     validationErr,
 		ownsAdmission: true,
 	}
@@ -218,13 +219,16 @@ func (e *ToolExecutor) executeWithEncoding(ctx context.Context, toolCall types.T
 		if handlerState.CompareAndSwap(toolHandlerPending, toolHandlerCanceled) {
 			if !everStarted.Load() {
 				release(false)
+				return e.admissionCanceledResult(toolCall), false
 			}
-			return e.admissionCanceledResult(toolCall), false
+			err = fmt.Errorf("tool %q timed out or was canceled: %w", toolCall.Name, ctx.Err())
+			return types.ToolResult{
+				ToolCallID: toolCall.ID,
+				Error:      err.Error(),
+			}, false
 		}
-		if handlerState.Load() != toolHandlerStarted {
-			if !everStarted.Load() {
-				release(false)
-			}
+		if !everStarted.Load() && handlerState.Load() != toolHandlerStarted {
+			release(false)
 			return e.admissionCanceledResult(toolCall), false
 		}
 		err = fmt.Errorf("tool %q timed out or was canceled: %w", toolCall.Name, ctx.Err())
@@ -235,7 +239,7 @@ func (e *ToolExecutor) executeWithEncoding(ctx context.Context, toolCall types.T
 	}
 
 	if err != nil {
-		if ctx.Err() != nil && handlerState.CompareAndSwap(toolHandlerPending, toolHandlerCanceled) {
+		if ctx.Err() != nil && !everStarted.Load() && handlerState.CompareAndSwap(toolHandlerPending, toolHandlerCanceled) {
 			release(false)
 			return e.admissionCanceledResult(toolCall), false
 		}

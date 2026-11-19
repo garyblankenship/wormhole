@@ -13,25 +13,30 @@ const TLSConfigParamKey = "tls_config"
 //   - "insecure_skip_verify": bool
 //   - "server_name": string
 func (c ProviderConfig) WithTLSConfigParam(key string, value any) ProviderConfig {
-	if c.Params == nil {
-		c.Params = make(map[string]any)
+	params := make(map[string]any, len(c.Params)+1)
+	for k, v := range c.Params {
+		params[k] = v
 	}
 
-	// Get or create TLS config map
+	// Clone or create TLS config map so value-receiver builders do not mutate shared state
 	var tlsConfig map[string]any
-	if existing, ok := c.Params[TLSConfigParamKey]; ok {
+	if existing, ok := params[TLSConfigParamKey]; ok {
 		if configMap, ok := existing.(map[string]any); ok {
-			tlsConfig = configMap
+			tlsConfig = make(map[string]any, len(configMap)+1)
+			for k, v := range configMap {
+				tlsConfig[k] = v
+			}
 		} else {
-			tlsConfig = make(map[string]any)
+			tlsConfig = make(map[string]any, 1)
 		}
 	} else {
-		tlsConfig = make(map[string]any)
+		tlsConfig = make(map[string]any, 1)
 	}
 
 	// Set the TLS parameter
 	tlsConfig[key] = value
-	c.Params[TLSConfigParamKey] = tlsConfig
+	params[TLSConfigParamKey] = tlsConfig
+	c.Params = params
 
 	return c
 }

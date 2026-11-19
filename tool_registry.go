@@ -42,6 +42,9 @@ func NewToolRegistry() *ToolRegistry {
 //	})
 func (r *ToolRegistry) Register(name string, definition *types.ToolDefinition) {
 	stored := cloneToolDefinition(definition)
+	if stored == nil {
+		return
+	}
 
 	// Normalize only the registry-owned copy so callers cannot mutate registry
 	// state through the definition they supplied.

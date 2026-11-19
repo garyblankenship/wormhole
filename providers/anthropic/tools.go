@@ -36,7 +36,10 @@ func (p *Provider) transformTools(tools []types.Tool) ([]map[string]any, error) 
 	for i, tool := range tools {
 		name := tool.Name
 		description := tool.Description
-		var schema any = tool.InputSchema
+		var schema any
+		if tool.InputSchema != nil {
+			schema = tool.InputSchema
+		}
 		if tool.Function != nil {
 			if name == "" {
 				name = tool.Function.Name
@@ -44,13 +47,19 @@ func (p *Provider) transformTools(tools []types.Tool) ([]map[string]any, error) 
 			if description == "" {
 				description = tool.Function.Description
 			}
-			if tool.InputSchema == nil {
+			if schema == nil && tool.Function.Parameters != nil {
 				schema = tool.Function.Parameters
 			}
+		}
+		if schema == nil {
+			schema = map[string]any{"type": "object", "properties": map[string]any{}}
 		}
 		parameters, err := json.Marshal(schema)
 		if err != nil {
 			return nil, fmt.Errorf("marshal tools[%d].input_schema: %w", i, err)
+		}
+		if string(parameters) == "null" {
+			parameters = []byte(`{"type":"object","properties":{}}`)
 		}
 		result[i] = map[string]any{
 			"name":         name,

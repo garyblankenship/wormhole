@@ -43,18 +43,19 @@ func (p *proxy) resolveModelRoute(model string) resolvedModelRoute {
 }
 
 // parseModelRoute splits a model string like "anthropic/claude-sonnet-4-5"
-// into (provider, model). If no known provider prefix, returns ("", fullModel).
+// into (provider, model). If no known or configured provider prefix matches,
+// returns ("", fullModel).
 // When the effective default provider is openrouter, only explicit prefixes for
 // locally configured providers are stripped; every other known-provider prefix
 // is treated as OpenRouter's own org/model naming convention and passed
 // through intact.
 func parseModelRoute(model, defaultProvider string, configuredProviders []string) (provider, resolved string) {
 	idx := strings.IndexByte(model, '/')
-	if idx < 0 {
+	if idx <= 0 {
 		return "", model
 	}
 	prefix := model[:idx]
-	if !knownProviderSet[prefix] {
+	if !knownProviderSet[prefix] && !providerConfigured(prefix, configuredProviders) {
 		return "", model
 	}
 	if defaultProvider == openRouterProviderName &&

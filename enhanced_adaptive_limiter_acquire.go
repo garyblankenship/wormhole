@@ -57,6 +57,7 @@ func NewEnhancedAdaptiveLimiter(config EnhancedAdaptiveConfig) *EnhancedAdaptive
 		config.InitialCapacity,
 		config.LatencyWindowSize,
 	)
+	limiter.globalState.configureErrorControl(config.ErrorRateThreshold, config.ErrorRatePenalty, config.MinSamplesForError)
 
 	// Initialize provider-specific settings
 	for provider, setting := range config.ProviderSettings {
@@ -68,6 +69,7 @@ func NewEnhancedAdaptiveLimiter(config EnhancedAdaptiveConfig) *EnhancedAdaptive
 			setting.InitialCapacity,
 			config.LatencyWindowSize,
 		)
+		state.configureErrorControl(config.ErrorRateThreshold, config.ErrorRatePenalty, config.MinSamplesForError)
 		limiter.providerStates[provider] = state
 	}
 
@@ -188,6 +190,7 @@ func (l *EnhancedAdaptiveLimiter) newProviderState(key ProviderKey) *ProviderAda
 		initialCapacity,
 		l.config.LatencyWindowSize,
 	)
+	state.configureErrorControl(l.config.ErrorRateThreshold, l.config.ErrorRatePenalty, l.config.MinSamplesForError)
 	return state
 }
 

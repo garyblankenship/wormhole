@@ -72,17 +72,25 @@ func tlsUint16(value any) (uint16, bool) {
 }
 
 func tlsCipherSuites(value any) []uint16 {
-	slice, ok := value.([]any)
-	if !ok {
+	switch slice := value.(type) {
+	case []uint16:
+		if len(slice) == 0 {
+			return nil
+		}
+		out := make([]uint16, len(slice))
+		copy(out, slice)
+		return out
+	case []any:
+		cipherSuites := make([]uint16, 0, len(slice))
+		for _, item := range slice {
+			if v, ok := tlsUint16(item); ok {
+				cipherSuites = append(cipherSuites, v)
+			}
+		}
+		return cipherSuites
+	default:
 		return nil
 	}
-	cipherSuites := make([]uint16, 0, len(slice))
-	for _, item := range slice {
-		if v, ok := tlsUint16(item); ok {
-			cipherSuites = append(cipherSuites, v)
-		}
-	}
-	return cipherSuites
 }
 
 func tlsDuration(value any) (time.Duration, bool) {

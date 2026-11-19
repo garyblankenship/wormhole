@@ -107,24 +107,37 @@ func (b *TextRequestBuilder) streamWithFallback(ctx context.Context, provider ty
 
 	var attemptErrors []error
 	var lastErr error
+	var lastStreamEvent StreamEvent
 	for index, route := range routes {
-		if ctx.Err() != nil {
-			return
-		}
 		primary := index < len(modelsToTry)
-		if index == len(modelsToTry) {
-			// Keep the primary lease across model fallbacks, then relinquish it
-			// before acquiring any provider fallback.
-			release()
-			if ctx.Err() != nil {
-				return
-			}
-		}
 		traceProvider := route.Provider
 		if primary {
 			traceProvider = provider.Name()
 		}
 		attempt := index + 1
+		if ctx.Err() != nil {
+			if lastStreamEvent.Attempt == 0 {
+				lastStreamEvent = StreamEvent{Provider: traceProvider, Model: route.Model, Attempt: attempt}
+			}
+			lastStreamEvent.Type = StreamError
+			lastStreamEvent.Error = ctx.Err()
+			wormhole.emitStreamEvent(ctx, lastStreamEvent)
+			return
+		}
+		if index == len(modelsToTry) {
+			// Keep the primary lease across model fallbacks, then relinquish it
+			// before acquiring any provider fallback.
+			release()
+			if ctx.Err() != nil {
+				if lastStreamEvent.Attempt == 0 {
+					lastStreamEvent = StreamEvent{Provider: traceProvider, Model: route.Model, Attempt: attempt}
+				}
+				lastStreamEvent.Type = StreamError
+				lastStreamEvent.Error = ctx.Err()
+				wormhole.emitStreamEvent(ctx, lastStreamEvent)
+				return
+			}
+		}
 		event := AttemptEvent{
 			Operation: "text.stream",
 			Phase:     AttemptStarted,
@@ -136,6 +149,7 @@ func (b *TextRequestBuilder) streamWithFallback(ctx context.Context, provider ty
 		}
 		wormhole.emitAttempt(ctx, event)
 		streamEvent := StreamEvent{Provider: event.Provider, Model: event.Model, Attempt: event.Attempt}
+		lastStreamEvent = streamEvent
 
 		result := func() streamAttemptResult {
 			if err := ctx.Err(); err != nil {
@@ -166,7 +180,11 @@ func (b *TextRequestBuilder) streamWithFallback(ctx context.Context, provider ty
 			}
 			attemptCtx, cancelAttempt := context.WithCancel(ctx)
 			defer cancelAttempt()
-			stream, err := b.openStream(attemptCtx, cancelAttempt, attemptProvider, request)
+			baseURL := ""
+			if primary {
+				baseURL = b.getBaseURL()
+			}
+			stream, err := b.openStream(attemptCtx, cancelAttempt, attemptProvider, request, baseURL)
 			if err != nil {
 				return streamAttemptResult{err: err}
 			}
@@ -187,34 +205,38 @@ func (b *TextRequestBuilder) streamWithFallback(ctx context.Context, provider ty
 		if result.canFallback(ctx) {
 			continue
 		}
-		if ctx.Err() == nil {
-			streamEvent.Type = StreamEnded
-			if result.err != nil {
-				streamEvent.Type = StreamError
-				streamEvent.Error = result.err
-			}
-			wormhole.emitStreamEvent(ctx, streamEvent)
+		streamErr := result.err
+		if streamErr == nil {
+			streamErr = ctx.Err()
 		}
+		if streamErr != nil {
+			streamEvent.Type = StreamError
+			streamEvent.Error = streamErr
+		} else {
+			streamEvent.Type = StreamEnded
+		}
+		wormhole.emitStreamEvent(ctx, streamEvent)
 		return
 	}
 
 	release()
 
 	if ctx.Err() != nil {
+		lastStreamEvent.Type = StreamError
+		lastStreamEvent.Error = ctx.Err()
+		wormhole.emitStreamEvent(ctx, lastStreamEvent)
 		return
 	}
 	if len(modelsToTry)+len(providerFallbacks) == 1 && lastErr != nil {
 		sendStreamChunk(ctx, out, types.StreamChunk{Error: lastErr})
-		wormhole.emitStreamEvent(ctx, StreamEvent{
-			Type:  StreamError,
-			Error: lastErr,
-		})
+		lastStreamEvent.Type = StreamError
+		lastStreamEvent.Error = lastErr
+		wormhole.emitStreamEvent(ctx, lastStreamEvent)
 		return
 	}
 	aggregateErr := newStreamAttemptsError(attemptErrors)
 	sendStreamChunk(ctx, out, types.StreamChunk{Error: aggregateErr})
-	wormhole.emitStreamEvent(ctx, StreamEvent{
-		Type:  StreamError,
-		Error: aggregateErr,
-	})
+	lastStreamEvent.Type = StreamError
+	lastStreamEvent.Error = aggregateErr
+	wormhole.emitStreamEvent(ctx, lastStreamEvent)
 }

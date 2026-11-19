@@ -3,20 +3,32 @@ package server
 import (
 	"encoding/json"
 	"fmt"
+	"strconv"
+	"time"
 
 	"github.com/garyblankenship/wormhole/v3/types"
 )
 
 func completedResponsesEnvelope(resp *types.TextResponse, model string, customTools map[string]bool) responsesEnvelope {
+	now := time.Now()
+	id := resp.ID
+	if id == "" {
+		id = strconv.FormatInt(now.UnixNano(), 10)
+	}
+	created := resp.Created
+	if created.IsZero() {
+		created = now
+	}
+
 	outputs := make([]responsesOutputItem, 0, 1+len(resp.ToolCalls))
 	if resp.Text != "" || resp.Refusal != "" {
-		outputs = append(outputs, completedMessageOutput("msg_"+resp.ID, resp.Text, resp.Refusal))
+		outputs = append(outputs, completedMessageOutput("msg_"+id, resp.Text, resp.Refusal))
 	}
 	for _, call := range resp.ToolCalls {
 		outputs = append(outputs, completedToolOutput(call, len(outputs), customTools[call.Name]))
 	}
 	status, incompleteDetails := responsesStatus(resp.FinishReason)
-	return responsesEnvelope{ID: "resp_" + resp.ID, Object: "response", CreatedAt: resp.Created.Unix(), Status: status, Model: model,
+	return responsesEnvelope{ID: "resp_" + id, Object: "response", CreatedAt: created.Unix(), Status: status, Model: model,
 		Output: outputs, Usage: toResponsesUsage(resp.Usage), Error: nil, IncompleteDetails: incompleteDetails}
 }
 

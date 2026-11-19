@@ -23,7 +23,7 @@ func HTTPStatusToError(statusCode int, body string) *WormholeError {
 	case http.StatusUnauthorized:
 		return ErrInvalidAPIKey.WithStatusCode(statusCode).WithDetails(body)
 	case http.StatusForbidden:
-		return ErrQuotaExceeded.WithStatusCode(statusCode).WithDetails(body)
+		return NewWormholeError(ErrorCodeAuth, "forbidden", false).WithStatusCode(statusCode).WithDetails(body)
 	case http.StatusNotFound:
 		return ErrModelNotFound.WithStatusCode(statusCode).WithDetails(body)
 	case http.StatusTooManyRequests:

@@ -88,7 +88,7 @@ func (p *Provider) stampProvider(ctx context.Context, in <-chan types.StreamChun
 		first := true
 		for chunk := range in {
 			if first || chunk.IsDone() || chunk.Error != nil {
-				chunk.ResponseMetadata = metadata
+				chunk.ResponseMetadata = types.CloneResponseMetadata(metadata)
 				chunk.Warnings = append(chunk.Warnings, warnings...)
 				first = false
 			}

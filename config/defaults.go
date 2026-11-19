@@ -65,7 +65,7 @@ const (
 // Falls back to FALLBACK_DefaultHTTPTimeout if not set
 func GetDefaultHTTPTimeout() time.Duration {
 	if env := os.Getenv("WORMHOLE_DEFAULT_TIMEOUT"); env != "" {
-		if duration, err := time.ParseDuration(env); err == nil {
+		if duration, err := time.ParseDuration(env); err == nil && duration >= 0 {
 			return duration
 		}
 	}
@@ -89,7 +89,7 @@ func GetDefaultMaxRetries() int {
 // Falls back to FALLBACK_DefaultMaxDelay if not set
 func GetDefaultMaxDelay() time.Duration {
 	if env := os.Getenv("WORMHOLE_MAX_RETRY_DELAY"); env != "" {
-		if duration, err := time.ParseDuration(env); err == nil {
+		if duration, err := time.ParseDuration(env); err == nil && duration >= 0 {
 			return duration
 		}
 	}
@@ -101,7 +101,7 @@ func GetDefaultMaxDelay() time.Duration {
 // Falls back to FALLBACK_DefaultInitialDelay if not set
 func GetDefaultInitialDelay() time.Duration {
 	if env := os.Getenv("WORMHOLE_INITIAL_RETRY_DELAY"); env != "" {
-		if duration, err := time.ParseDuration(env); err == nil {
+		if duration, err := time.ParseDuration(env); err == nil && duration >= 0 {
 			return duration
 		}
 	}
@@ -113,7 +113,7 @@ func GetDefaultInitialDelay() time.Duration {
 // Falls back to FALLBACK_DefaultCircuitBreakerTimeout if not set
 func GetDefaultCircuitBreakerTimeout() time.Duration {
 	if env := os.Getenv("WORMHOLE_CIRCUIT_BREAKER_TIMEOUT"); env != "" {
-		if duration, err := time.ParseDuration(env); err == nil {
+		if duration, err := time.ParseDuration(env); err == nil && duration > 0 {
 			return duration
 		}
 	}
@@ -125,7 +125,7 @@ func GetDefaultCircuitBreakerTimeout() time.Duration {
 // Falls back to FALLBACK_DefaultHealthCheckInterval if not set
 func GetDefaultHealthCheckInterval() time.Duration {
 	if env := os.Getenv("WORMHOLE_HEALTH_CHECK_INTERVAL"); env != "" {
-		if duration, err := time.ParseDuration(env); err == nil {
+		if duration, err := time.ParseDuration(env); err == nil && duration > 0 {
 			return duration
 		}
 	}

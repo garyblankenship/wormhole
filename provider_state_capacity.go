@@ -32,11 +32,21 @@ func (s *ProviderAdaptiveState) AdjustCapacity() (newCapacity int, changed bool)
 	// Compute PID control signal based on latency
 	controlSignal := s.pidController.compute(s.targetLatency, avgLatency, dt)
 
-	// Apply error rate penalty if above threshold
-	const errorRateThreshold = 0.1  // 10%
-	const errorRateMultiplier = 2.0 // Double sensitivity when errors high
+	// Apply error rate penalty if above threshold and sample gate is met
+	errorRateThreshold := s.errorRateThreshold
+	if errorRateThreshold <= 0 {
+		errorRateThreshold = 0.1 // Default 10%
+	}
+	errorRateMultiplier := s.errorRatePenalty
+	if errorRateMultiplier <= 0 {
+		errorRateMultiplier = 2.0 // Default double sensitivity
+	}
+	minSamples := s.minSamplesForError
+	if minSamples < 0 {
+		minSamples = 0
+	}
 
-	if errorRate > errorRateThreshold {
+	if s.totalSamples >= int64(minSamples) && errorRate > errorRateThreshold {
 		errorRatePenalty := errorRateMultiplier * (errorRate - errorRateThreshold)
 		// More aggressive reduction when error rates are high
 		if controlSignal < 0 {

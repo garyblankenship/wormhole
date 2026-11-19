@@ -49,7 +49,9 @@ func isRetryableCode(code ErrorCode) bool {
 
 // NotImplementedError returns a standard not implemented error
 func NotImplementedError(providerName, method string) error {
-	return ProviderErrorf(providerName, "%s provider does not support %s", providerName, method)
+	err := NewWormholeError(ErrorCodeProvider, fmt.Sprintf("%s provider does not support %s", providerName, method), false)
+	err.Provider = providerName
+	return err
 }
 
 // NewProviderValidationError returns a WormholeError with ErrorCodeValidation

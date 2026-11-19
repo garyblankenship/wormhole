@@ -110,7 +110,7 @@ func (g *Gemini) handleStream(ctx context.Context, stream io.ReadCloser) <-chan 
 				if len(chunks) > 0 {
 					chunks[0].Sources = types.CloneSources(refs.sources[oldSources:])
 					chunks[0].Citations = types.CloneCitations(refs.citations[oldCitations:])
-					chunks[0].Warnings = refs.warnings[oldWarnings:]
+					chunks[0].Warnings = append([]types.ResponseWarning(nil), refs.warnings[oldWarnings:]...)
 				}
 			}
 			if err != nil {

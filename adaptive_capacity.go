@@ -81,38 +81,40 @@ func (c *capacityManager) adjustAllCapacities() {
 }
 
 func (c *capacityManager) evictIdleStates() {
-	if c.config.IdleStateTTL <= 0 {
+	evictByTTL := c.config.IdleStateTTL > 0
+	evictByCap := c.config.EnableModelLevel && c.config.MaxModelStates > 0
+	if !evictByTTL && !evictByCap {
 		return
 	}
 
-	cutoff := time.Now().Add(-c.config.IdleStateTTL)
 	l := c.limiter
 
 	l.mu.Lock()
 	defer l.mu.Unlock()
 
-	for provider, state := range l.providerStates {
-		if _, pinned := c.config.ProviderSettings[provider]; pinned {
-			continue
+	if evictByTTL {
+		cutoff := time.Now().Add(-c.config.IdleStateTTL)
+		for provider, state := range l.providerStates {
+			if _, pinned := c.config.ProviderSettings[provider]; pinned {
+				continue
+			}
+			if state.pins > 0 || state.InUse() > 0 || state.LastSeen().After(cutoff) {
+				continue
+			}
+			delete(l.providerStates, provider)
 		}
-		if state.pins > 0 || state.InUse() > 0 || state.LastSeen().After(cutoff) {
-			continue
+
+		if c.config.EnableModelLevel {
+			for key, state := range l.modelStates {
+				if state.pins > 0 || state.InUse() > 0 || state.LastSeen().After(cutoff) {
+					continue
+				}
+				delete(l.modelStates, key)
+			}
 		}
-		delete(l.providerStates, provider)
 	}
 
-	if !c.config.EnableModelLevel {
-		return
-	}
-
-	for key, state := range l.modelStates {
-		if state.pins > 0 || state.InUse() > 0 || state.LastSeen().After(cutoff) {
-			continue
-		}
-		delete(l.modelStates, key)
-	}
-
-	if c.config.MaxModelStates <= 0 || len(l.modelStates) <= c.config.MaxModelStates {
+	if !evictByCap || len(l.modelStates) <= c.config.MaxModelStates {
 		return
 	}
 
@@ -182,6 +184,17 @@ func (m *metricsObserver) Start(stopChan <-chan struct{}, wg *sync.WaitGroup) {
 	}
 }
 
+type metricsAggregateKey struct {
+	provider string
+	model    string
+	method   string
+}
+
+type metricsAggregate struct {
+	requests int64
+	errors   int64
+}
+
 // queryExternalMetrics queries external metrics for enhanced control
 func (m *metricsObserver) queryExternalMetrics() {
 	if m.metricsCollector == nil {
@@ -193,29 +206,52 @@ func (m *metricsObserver) queryExternalMetrics() {
 
 	// Extract per-provider metrics if available
 	if perLabelStats, ok := allStats["per_label"].(map[string]interface{}); ok {
-		for _, stats := range perLabelStats {
-			statsMap, ok := stats.(map[string]interface{})
-			if !ok {
-				continue
-			}
-			provider, model, ok := metricsLabelIdentity(statsMap)
-			if !ok {
-				continue
-			}
-
-			state := m.limiter.getState(provider, model)
+		aggregates := aggregateExternalMetrics(perLabelStats)
+		for key, agg := range aggregates {
+			state := m.limiter.getState(key.provider, key.model)
 			if state == nil {
 				continue
 			}
-			m.enhanceControlWithMetrics(state, statsMap)
+			m.enhanceControlWithMetrics(state, map[string]interface{}{
+				"provider": key.provider,
+				"model":    key.model,
+				"method":   key.method,
+				"requests": agg.requests,
+				"errors":   agg.errors,
+			})
 		}
 	}
 }
 
-func metricsLabelIdentity(stats map[string]interface{}) (provider, model string, ok bool) {
+func aggregateExternalMetrics(perLabelStats map[string]interface{}) map[metricsAggregateKey]metricsAggregate {
+	aggregates := make(map[metricsAggregateKey]metricsAggregate)
+	for _, stats := range perLabelStats {
+		statsMap, ok := stats.(map[string]interface{})
+		if !ok {
+			continue
+		}
+		provider, model, method, ok := metricsLabelIdentity(statsMap)
+		if !ok {
+			continue
+		}
+		key := metricsAggregateKey{provider: provider, model: model, method: method}
+		agg := aggregates[key]
+		if requests, ok := statsMap["requests"].(int64); ok {
+			agg.requests += requests
+		}
+		if errs, ok := statsMap["errors"].(int64); ok {
+			agg.errors += errs
+		}
+		aggregates[key] = agg
+	}
+	return aggregates
+}
+
+func metricsLabelIdentity(stats map[string]interface{}) (provider, model, method string, ok bool) {
 	provider, providerOK := stats["provider"].(string)
 	model, modelOK := stats["model"].(string)
-	return provider, model, providerOK && modelOK
+	method, _ = stats["method"].(string)
+	return provider, model, method, providerOK && modelOK
 }
 
 // enhanceControlWithMetrics enhances control with external metrics

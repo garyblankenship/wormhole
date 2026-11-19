@@ -87,13 +87,20 @@ func (m *TypedTimeoutMiddleware) ApplyStream(next types.StreamHandler) types.Str
 			}
 
 			// Wrap stream to handle timeout during streaming
-			wrappedStream := make(chan types.StreamChunk)
+			wrappedStream := make(chan types.StreamChunk, 1)
 			go func() {
 				defer close(wrappedStream)
 				defer cancel()
 
 				if res.stream == nil {
 					return
+				}
+
+				sendCtxErr := func() {
+					select {
+					case wrappedStream <- types.StreamChunk{Error: ctx.Err()}:
+					default:
+					}
 				}
 
 				for {
@@ -105,9 +112,11 @@ func (m *TypedTimeoutMiddleware) ApplyStream(next types.StreamHandler) types.Str
 						select {
 						case wrappedStream <- chunk:
 						case <-ctx.Done():
+							sendCtxErr()
 							return
 						}
 					case <-ctx.Done():
+						sendCtxErr()
 						return
 					}
 				}

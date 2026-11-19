@@ -37,7 +37,8 @@ func TestV330ReasoningAndFileReferences(t *testing.T) {
 	no := false
 	req := types.TextRequest{BaseRequest: types.BaseRequest{Model: "test", Reasoning: &types.Reasoning{Effort: types.ReasoningEffortNone, IncludeThoughts: &no}}, Messages: []types.Message{&types.UserMessage{Media: []types.Media{&types.FileReferenceMedia{Provider: "openai", Kind: "document", ID: "file_123"}}}}}
 	require.NoError(t, provider.validateV330Request(req))
-	payload := provider.buildResponsesPayload(&req, req.Messages)
+	payload, err := provider.buildResponsesPayload(&req, req.Messages)
+	require.NoError(t, err)
 	require.Equal(t, "none", payload["reasoning"].(map[string]any)["effort"])
 	input := payload["input"].([]map[string]any)
 	require.Equal(t, map[string]any{"type": "input_file", "file_id": "file_123"}, input[0]["content"].([]map[string]any)[0])

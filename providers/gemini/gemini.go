@@ -3,6 +3,7 @@ package gemini
 import (
 	"context"
 	"fmt"
+	"time"
 
 	structured "github.com/garyblankenship/wormhole/v3/internal/structured"
 	"github.com/garyblankenship/wormhole/v3/providers"
@@ -177,6 +178,12 @@ func (g *Gemini) Structured(ctx context.Context, request types.StructuredRequest
 	resp, err := g.transformStructuredResponse(&response, request.Schema)
 	if err != nil {
 		return nil, providers.WithResponseMetadata(err, metadata)
+	}
+	if resp.Model == "" {
+		resp.Model = request.Model
+	}
+	if resp.Created.IsZero() {
+		resp.Created = time.Now()
 	}
 	resp.ResponseMetadata = metadata
 	resp.Warnings = append(resp.Warnings, geminiReasoningWarnings(request.Reasoning)...)

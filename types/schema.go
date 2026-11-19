@@ -80,23 +80,33 @@ func toDataMap(value reflect.Value) map[string]any {
 	valueType := value.Type()
 	for i := 0; i < value.NumField(); i++ {
 		field := valueType.Field(i)
-		fieldName := getFieldName(field)
+		if !field.IsExported() {
+			continue
+		}
+		fieldName, ok := getFieldName(field)
+		if !ok {
+			continue
+		}
 		dataMap[fieldName] = value.Field(i).Interface()
 	}
 	return dataMap
 }
 
-// getFieldName extracts the field name from struct field, preferring json tag
-func getFieldName(field reflect.StructField) string {
+// getFieldName extracts the field name from struct field, preferring json tag.
+// Returns ("", false) for fields ignored with json:"-".
+func getFieldName(field reflect.StructField) (string, bool) {
 	jsonTag := field.Tag.Get("json")
-	if jsonTag == "" || jsonTag == "-" {
-		return field.Name
+	if jsonTag == "-" {
+		return "", false
+	}
+	if jsonTag == "" {
+		return field.Name, true
 	}
 	parts := strings.Split(jsonTag, ",")
 	if parts[0] != "" {
-		return parts[0]
+		return parts[0], true
 	}
-	return field.Name
+	return field.Name, true
 }
 
 // validateRequired checks that all required fields are present

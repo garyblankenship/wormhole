@@ -311,6 +311,10 @@ Stream fallback tries the primary model, its `WithFallback` models, then
 `WithProviderFallback` routes. Delivering any chunk, including metadata alone,
 commits that attempt. A subsequent failure arrives once in `chunk.Error` and
 ends the stream. Check every chunk for errors even after receiving text.
+`WithStreamIdleTimeout` emits a typed timeout error (`types.IsTimeoutError` /
+`errors.Is(err, types.ErrTimeout)`), `TypedTimeoutMiddleware` emits a timeout
+error chunk on mid-stream expiry, and `StreamTrace` emits a terminal
+`StreamError` on context cancellation as well as upstream failure.
 
 ```go
 conv := types.NewConversation().
@@ -416,7 +420,7 @@ img, err := client.Image().
 	Generate(ctx)
 ```
 
-OpenAI speech to text:
+OpenAI speech to text (the `format` passed to `Audio(bytes, format)` is forwarded in the multipart filename and defaults to `"wav"` when empty):
 
 ```go
 transcript, err := client.Audio().
@@ -447,6 +451,8 @@ In `tool` tags, commas and pipes separate enum alternatives. Use a semicolon
 for constraints after an enum: `tool:"enum=optional,required;required"` includes
 the literal option `required` and makes the field required. An enum ending in
 `,required` remains optional; migrate required-field constraints to `;required`.
+Comma-containing `pattern=` regexes (such as `tool:"pattern=^[a-z]{1,5}$"`) and
+`default=` values are preserved intact even without a semicolon.
 Numeric and boolean enum alternatives are converted to the field's scalar type
 and rejected during schema creation when invalid or out of range.
 
@@ -541,10 +547,11 @@ continued, err := client.Text().
 
 Manual mode bypasses the SDK executor, so the caller owns validation, handler
 admission, timeouts, and retries. For automatic execution, one client-wide
-admission budget covers text and agent handlers. The defaults reject more than
-32 calls in one provider response and allow a 30-second queue wait; configure
-them with `WithToolSafetyConfig`. Process isolation belongs outside the provider
-bridge. See the [tool-calling guide](docs/tool-calling.md).
+admission budget and per-tool circuit-breaker store cover text and agent
+handlers across calls. The defaults reject more than 32 calls in one provider
+response and allow a 30-second queue wait; configure them with
+`WithToolSafetyConfig`. Process isolation belongs outside the provider bridge.
+See the [tool-calling guide](docs/tool-calling.md).
 
 ## Agent Loop
 
@@ -774,7 +781,7 @@ of `WORMHOLE_API_KEY`, which authenticates callers to the proxy and is not forwa
 as an upstream key. For an authenticated oMLX server, use `VLLM_BASE_URL` with a
 separate inference-only `VLLM_API_KEY`, not the oMLX admin key.
 
-Model prefixes select a provider:
+Model prefixes select a built-in or custom configured provider (prefix-only strings such as `openai/` are rejected with `400 model_required`, and graceful `Shutdown` cancels active SSE streams so client cleanup completes):
 
 | Request model | Provider | Sent model |
 | --- | --- | --- |
@@ -1003,7 +1010,8 @@ Completed tool calls take precedence over raw argument fragments, and terminal
 tool lists replace earlier lists. ID-less completed calls with ambiguous identity
 cannot reliably be deduplicated. Streams do not expose response `Created`;
 the scalar thinking type cannot preserve multiple block boundaries
-or signatures. `StreamAndAccumulate` keeps its existing text-only behavior.
+or signatures. `StreamAndAccumulate` keeps its text-only behavior and returns
+`ctx.Err()` alongside any accumulated partial text when canceled.
 
 Scripts run without network calls, invented responses or timing defaults.
 Mismatched operations return `ErrScriptMismatch` without consuming the next

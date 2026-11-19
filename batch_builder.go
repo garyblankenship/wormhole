@@ -53,7 +53,7 @@ func (b *BatchBuilder) AddAll(requests ...*TextRequestBuilder) *BatchBuilder {
 }
 
 // Concurrency sets the maximum number of concurrent requests.
-// Default is 10. Set to 0 for unlimited (not recommended).
+// Default is 10; values <= 0 use the default of 10.
 func (b *BatchBuilder) Concurrency(n int) *BatchBuilder {
 	b.concurrency = n
 	return b
@@ -161,8 +161,9 @@ func (b *BatchBuilder) ExecuteFirst(ctx context.Context) (*types.TextResponse, e
 // Its buffered result stream lets a caller stop consuming after cancellation
 // without stranding workers that are finishing already-started requests.
 func (b *BatchBuilder) execute(ctx context.Context) <-chan batchResult {
-	resultCh := make(chan batchResult, len(b.requests))
-	if len(b.requests) == 0 {
+	requests := append([]*TextRequestBuilder(nil), b.requests...)
+	resultCh := make(chan batchResult, len(requests))
+	if len(requests) == 0 {
 		close(resultCh)
 		return resultCh
 	}
@@ -171,12 +172,12 @@ func (b *BatchBuilder) execute(ctx context.Context) <-chan batchResult {
 	if concurrency <= 0 {
 		concurrency = 10
 	}
-	if concurrency > len(b.requests) {
-		concurrency = len(b.requests)
+	if concurrency > len(requests) {
+		concurrency = len(requests)
 	}
 
-	taskCh := make(chan int, len(b.requests))
-	for i, request := range b.requests {
+	taskCh := make(chan int, len(requests))
+	for i, request := range requests {
 		if request == nil {
 			resultCh <- batchResult{index: i, err: fmt.Errorf("batch request %d: nil text request builder: %w", i, types.ErrInvalidRequest)}
 			continue
@@ -192,7 +193,7 @@ func (b *BatchBuilder) execute(ctx context.Context) <-chan batchResult {
 		go func() {
 			defer wg.Done()
 			for index := range taskCh {
-				response, err := executeRequestWithLimiter(ctx, b.requests[index], adaptiveLimiter)
+				response, err := executeRequestWithLimiter(ctx, requests[index], adaptiveLimiter)
 				if err == ctx.Err() && response == nil {
 					err = ctx.Err()
 				}

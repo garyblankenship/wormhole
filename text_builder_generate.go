@@ -82,7 +82,7 @@ func (b *TextRequestBuilder) Generate(ctx context.Context) (*types.TextResponse,
 				if err := ctx.Err(); err != nil {
 					return nil, err
 				}
-				resp, err = b.executeGenerate(ctx, provider, request)
+				resp, err = b.executeGenerate(ctx, provider, request, b.getBaseURL())
 			}
 			if err == nil {
 				wormhole.emitAttempt(ctx, AttemptEvent{
@@ -148,7 +148,7 @@ func (b *TextRequestBuilder) Generate(ctx context.Context) (*types.TextResponse,
 				if err := ctx.Err(); err != nil {
 					return nil, err
 				}
-				return b.executeGenerate(ctx, provider, request)
+				return b.executeGenerate(ctx, provider, request, "")
 			}()
 			if err == nil {
 				wormhole.emitAttempt(ctx, AttemptEvent{
@@ -185,7 +185,7 @@ func (b *TextRequestBuilder) Generate(ctx context.Context) (*types.TextResponse,
 }
 
 // executeGenerate performs the actual generation with the current request settings
-func (b *TextRequestBuilder) executeGenerate(ctx context.Context, provider types.Provider, request *types.TextRequest) (*types.TextResponse, error) {
+func (b *TextRequestBuilder) executeGenerate(ctx context.Context, provider types.Provider, request *types.TextRequest, baseURL string) (*types.TextResponse, error) {
 	// Check if we should enable automatic tool execution
 	wormhole := b.getWormhole()
 	if err := wormhole.validateFileOwnership(request.Messages, provider.Name()); err != nil {
@@ -193,7 +193,7 @@ func (b *TextRequestBuilder) executeGenerate(ctx context.Context, provider types
 	}
 	original, _ := wormhole.resolveProviderName(b.getProvider())
 	request.Messages = prepareAttemptMessages(request.Messages, original, provider.Name())
-	ctx = contextWithProviderOperation(ctx, provider, "text", b.getBaseURL())
+	ctx = contextWithProviderOperation(ctx, provider, "text", baseURL)
 	adapted, schema, err := structured.PrepareText(*request)
 	if err != nil {
 		return nil, err

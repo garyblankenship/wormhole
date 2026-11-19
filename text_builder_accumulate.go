@@ -51,12 +51,24 @@ func (b *TextRequestBuilder) StreamAndAccumulate(ctx context.Context) (<-chan ty
 			select {
 			case accumulated <- chunk:
 			case <-ctx.Done():
+				mu.Lock()
+				if streamErr == nil {
+					streamErr = ctx.Err()
+				}
+				mu.Unlock()
 				// Consumer abandoned the stream; drain the source so the
 				// upstream provider goroutine can exit, then stop.
 				for range stream {
 				}
 				return
 			}
+		}
+		if err := ctx.Err(); err != nil {
+			mu.Lock()
+			if streamErr == nil {
+				streamErr = err
+			}
+			mu.Unlock()
 		}
 	}()
 
@@ -79,6 +91,8 @@ func applyStreamIdleTimeout(ctx context.Context, cancel context.CancelFunc, src 
 
 		for {
 			select {
+			case <-ctx.Done():
+				return
 			case chunk, ok := <-src:
 				if !ok {
 					return
@@ -111,7 +125,12 @@ func applyStreamIdleTimeout(ctx context.Context, cancel context.CancelFunc, src 
 				}
 				select {
 				case out <- types.StreamChunk{
-					Error: fmt.Errorf("stream idle timeout: no chunk received within %s", timeout),
+					Error: types.WrapError(
+						types.ErrorCodeTimeout,
+						"stream idle timeout",
+						true,
+						types.ErrTimeout,
+					).WithDetails(fmt.Sprintf("no chunk received within %s", timeout)),
 				}:
 				case <-ctx.Done():
 					return

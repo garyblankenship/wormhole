@@ -3,7 +3,9 @@ package wormhole
 import (
 	"context"
 	"fmt"
+	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/garyblankenship/wormhole/v3/internal/schemavalidation"
 	"github.com/garyblankenship/wormhole/v3/types"
@@ -64,21 +66,45 @@ func (e *ToolExecutor) rejectInvalidArguments(definition *types.ToolDefinition, 
 	return types.ToolResult{}, false
 }
 
+type toolBreakerStore struct {
+	mu       sync.Mutex
+	breakers map[string]*SimpleCircuitBreaker
+}
+
+func newToolBreakerStore() *toolBreakerStore {
+	return &toolBreakerStore{
+		breakers: make(map[string]*SimpleCircuitBreaker),
+	}
+}
+
+func (s *toolBreakerStore) getOrCreate(name string, threshold int, resetTimeout time.Duration) *SimpleCircuitBreaker {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.breakers == nil {
+		s.breakers = make(map[string]*SimpleCircuitBreaker)
+	}
+	breaker := s.breakers[name]
+	if breaker == nil {
+		breaker = NewSimpleCircuitBreaker(threshold, resetTimeout)
+		s.breakers[name] = breaker
+	}
+	return breaker
+}
+
 func (e *ToolExecutor) breakerForTool(name string) *SimpleCircuitBreaker {
 	if !e.safetyConfig.EnableCircuitBreaker {
 		return nil
 	}
-	e.breakerMu.Lock()
-	defer e.breakerMu.Unlock()
-	if e.circuitBreakers == nil {
-		e.circuitBreakers = make(map[string]*SimpleCircuitBreaker)
+	store := e.breakers
+	if store == nil {
+		e.breakerMu.Lock()
+		if e.breakers == nil {
+			e.breakers = newToolBreakerStore()
+		}
+		store = e.breakers
+		e.breakerMu.Unlock()
 	}
-	breaker := e.circuitBreakers[name]
-	if breaker == nil {
-		breaker = NewSimpleCircuitBreaker(e.safetyConfig.CircuitBreakerThreshold, e.safetyConfig.CircuitBreakerResetTimeout)
-		e.circuitBreakers[name] = breaker
-	}
-	return breaker
+	return store.getOrCreate(name, e.safetyConfig.CircuitBreakerThreshold, e.safetyConfig.CircuitBreakerResetTimeout)
 }
 
 func (e *ToolExecutor) acquirePermit(ctx context.Context) (release func(handlerStarted bool), ok bool) {
@@ -90,6 +116,7 @@ func (p *Wormhole) newToolExecutor(registry *ToolRegistry) *ToolExecutor {
 	executor := &ToolExecutor{
 		registry:      registry,
 		safetyConfig:  config,
+		breakers:      p.toolBreakers,
 		configErr:     p.toolConfigErr,
 		admission:     p.toolBudget,
 		ownsAdmission: false,

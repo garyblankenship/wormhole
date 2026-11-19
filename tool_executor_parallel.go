@@ -52,8 +52,16 @@ func (e *ToolExecutor) executeAll(ctx context.Context, toolCalls []types.ToolCal
 	}
 
 	workerCount := len(toolCalls)
-	if max := e.safetyConfig.MaxConcurrentTools; max > 0 && workerCount > max {
-		workerCount = max
+	maxWorkers := e.safetyConfig.MaxConcurrentTools
+	if e.safetyConfig.EnableAdaptiveConcurrency && !e.safetyConfig.IsUnlimitedConcurrency() {
+		if e.adaptiveLimiter != nil {
+			maxWorkers = e.adaptiveLimiter.config.MaxCapacity
+		} else {
+			maxWorkers = e.safetyConfig.AdaptiveMaxCapacity
+		}
+	}
+	if maxWorkers > 0 && workerCount > maxWorkers {
+		workerCount = maxWorkers
 	}
 	var wg sync.WaitGroup
 	var next atomic.Int64

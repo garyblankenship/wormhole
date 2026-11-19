@@ -60,6 +60,11 @@ func TestGetDefaultHTTPTimeout(t *testing.T) {
 			expected: FallbackHTTPTimeout,
 		},
 		{
+			name:     "invalid environment variable - negative",
+			envValue: "-5s",
+			expected: FallbackHTTPTimeout,
+		},
+		{
 			name:     "valid environment variable - milliseconds",
 			envValue: "500ms",
 			expected: 500 * time.Millisecond,
@@ -178,6 +183,11 @@ func TestGetDefaultMaxDelay(t *testing.T) {
 			envValue: "invalid",
 			expected: FallbackMaxDelay,
 		},
+		{
+			name:     "invalid environment variable - negative",
+			envValue: "-10s",
+			expected: FallbackMaxDelay,
+		},
 	}
 
 	testDurationEnv(t, "WORMHOLE_MAX_RETRY_DELAY", GetDefaultMaxDelay, tests)
@@ -214,6 +224,11 @@ func TestGetDefaultInitialDelay(t *testing.T) {
 			envValue: "invalid",
 			expected: FallbackInitialDelay,
 		},
+		{
+			name:     "invalid environment variable - negative",
+			envValue: "-1ms",
+			expected: FallbackInitialDelay,
+		},
 	}
 
 	testDurationEnv(t, "WORMHOLE_INITIAL_RETRY_DELAY", GetDefaultInitialDelay, tests)
@@ -245,6 +260,16 @@ func TestGetDefaultCircuitBreakerTimeout(t *testing.T) {
 			envValue: "invalid",
 			expected: FallbackCircuitBreakerTimeout,
 		},
+		{
+			name:     "invalid environment variable - zero",
+			envValue: "0",
+			expected: FallbackCircuitBreakerTimeout,
+		},
+		{
+			name:     "invalid environment variable - negative",
+			envValue: "-5s",
+			expected: FallbackCircuitBreakerTimeout,
+		},
 	}
 
 	testDurationEnv(t, "WORMHOLE_CIRCUIT_BREAKER_TIMEOUT", GetDefaultCircuitBreakerTimeout, tests)
@@ -274,6 +299,16 @@ func TestGetDefaultHealthCheckInterval(t *testing.T) {
 		{
 			name:     "invalid environment variable",
 			envValue: "invalid",
+			expected: FallbackHealthCheckInterval,
+		},
+		{
+			name:     "invalid environment variable - zero",
+			envValue: "0",
+			expected: FallbackHealthCheckInterval,
+		},
+		{
+			name:     "invalid environment variable - negative",
+			envValue: "-1s",
 			expected: FallbackHealthCheckInterval,
 		},
 	}

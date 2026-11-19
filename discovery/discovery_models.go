@@ -17,7 +17,7 @@ import (
 func (s *DiscoveryService) GetModelsWithStatus(ctx context.Context, provider string) (*ModelsResult, error) {
 	// Check cache first
 	if models, fresh := s.cache.Get(s.cacheKey(provider)); len(models) > 0 {
-		if !fresh {
+		if !fresh && !s.config.OfflineMode {
 			// Using fallback/stale cache, trigger background refresh
 			s.refreshProvider(provider)
 		}
@@ -50,6 +50,10 @@ func (s *DiscoveryService) GetModels(ctx context.Context, provider string) ([]*t
 
 // RefreshModels manually triggers model discovery for all providers
 func (s *DiscoveryService) RefreshModels(ctx context.Context) error {
+	if s.config.OfflineMode {
+		return nil
+	}
+
 	s.mu.RLock()
 	providers := make([]string, 0, len(s.fetchers))
 	for name := range s.fetchers {
@@ -89,11 +93,17 @@ func (s *DiscoveryService) RefreshModels(ctx context.Context) error {
 
 // StartBackgroundRefresh starts a goroutine that periodically refreshes models
 func (s *DiscoveryService) StartBackgroundRefresh(ctx context.Context) {
-	if s.config.OfflineMode || s.config.RefreshInterval == 0 {
+	if s.config.OfflineMode || s.config.RefreshInterval <= 0 {
 		return // Background refresh disabled
 	}
 
 	s.startOnce.Do(func() {
+		s.muStop.RLock()
+		defer s.muStop.RUnlock()
+		if s.stopped {
+			return
+		}
+
 		s.wg.Add(1)
 		ticker := time.NewTicker(s.config.RefreshInterval)
 		go func() {

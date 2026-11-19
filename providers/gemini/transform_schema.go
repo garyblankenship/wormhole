@@ -132,10 +132,16 @@ func (g *Gemini) schemaToMap(schema types.Schema) map[string]any {
 	if schemaMap, ok := schema.(map[string]any); ok {
 		return normalizeSchemaMap(schemaMap)
 	}
-	// Handle raw JSON bytes
-	if bytes, ok := schema.([]byte); ok {
+	// Handle raw JSON bytes and json.RawMessage
+	switch raw := schema.(type) {
+	case []byte:
 		var result map[string]any
-		if err := json.Unmarshal(bytes, &result); err == nil {
+		if err := json.Unmarshal(raw, &result); err == nil {
+			return normalizeSchemaMap(result)
+		}
+	case json.RawMessage:
+		var result map[string]any
+		if err := json.Unmarshal(raw, &result); err == nil {
 			return normalizeSchemaMap(result)
 		}
 	}

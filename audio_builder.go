@@ -155,6 +155,7 @@ func (b *SpeechToTextBuilder) Transcribe(ctx context.Context) (*types.SpeechToTe
 		Model:       b.request.Model,
 		Input:       append([]byte(nil), b.request.Audio...),
 		Language:    b.request.Language,
+		AudioFormat: b.request.AudioFormat,
 		Prompt:      b.request.Prompt,
 		Temperature: b.request.Temperature,
 	}

@@ -19,6 +19,7 @@ const (
 	responsesContentOutputText      = "output_text"
 	responsesContentRefusal         = "refusal"
 	responsesEventOutputTextDelta   = "response.output_text.delta"
+	responsesEventRefusalDelta      = "response.refusal.delta"
 	responsesEventOutputItemAdded   = "response.output_item.added"
 	responsesEventFunctionArgsDelta = "response.function_call_arguments.delta"
 	responsesEventReasoningDelta    = "response.reasoning_summary_text.delta"
@@ -32,7 +33,10 @@ func (p *Provider) responsesText(ctx context.Context, request types.TextRequest,
 	if err := p.validateResponsesSampling(request); err != nil {
 		return nil, err
 	}
-	payload := p.buildResponsesPayload(&request, prepared)
+	payload, err := p.buildResponsesPayload(&request, prepared)
+	if err != nil {
+		return nil, err
+	}
 
 	var response responsesResponse
 	metadata, err := p.DoRequestWithMetadata(ctx, http.MethodPost, p.responsesURL(), payload, &response)
@@ -47,7 +51,7 @@ func (p *Provider) responsesText(ctx context.Context, request types.TextRequest,
 	textResponse.ResponseMetadata = metadata
 	textResponse.Provider = p.Name()
 
-	if textResponse.Text == "" && len(textResponse.ToolCalls) == 0 && !p.isPrewarm(request) {
+	if textResponse.Text == "" && textResponse.Refusal == "" && len(textResponse.ToolCalls) == 0 && !p.isPrewarm(request) {
 		return nil, providers.WithResponseMetadata(p.ProviderError("received empty response from OpenAI Responses API", "no output text or tool calls returned"), metadata)
 	}
 
@@ -58,7 +62,10 @@ func (p *Provider) responsesStream(ctx context.Context, request types.TextReques
 	if err := p.validateResponsesSampling(request); err != nil {
 		return nil, err
 	}
-	payload := p.buildResponsesPayload(&request, prepared)
+	payload, err := p.buildResponsesPayload(&request, prepared)
+	if err != nil {
+		return nil, err
+	}
 	payload["stream"] = true
 
 	body, metadata, err := p.StreamRequestWithMetadata(ctx, http.MethodPost, p.responsesURL(), payload)
@@ -97,10 +104,14 @@ func normalizeResponsesFormat(rf any) any {
 	return flat
 }
 
-func (p *Provider) buildResponsesPayload(request *types.TextRequest, messages []types.Message) map[string]any {
+func (p *Provider) buildResponsesPayload(request *types.TextRequest, messages []types.Message) (map[string]any, error) {
+	input, err := p.transformResponsesInput(messages)
+	if err != nil {
+		return nil, err
+	}
 	payload := map[string]any{
 		"model": request.Model,
-		"input": p.transformResponsesInput(messages),
+		"input": input,
 	}
 
 	if request.Temperature != nil {
@@ -137,7 +148,7 @@ func (p *Provider) buildResponsesPayload(request *types.TextRequest, messages []
 		payload[k] = v
 	}
 
-	return payload
+	return payload, nil
 }
 
 func (p *Provider) validateResponsesSampling(request types.TextRequest) error {

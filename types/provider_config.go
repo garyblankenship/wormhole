@@ -145,21 +145,25 @@ func (c ProviderConfig) WithNoAuth() ProviderConfig {
 // WithHeaders adds custom HTTP headers to all requests.
 // Headers are merged with any existing headers.
 func (c ProviderConfig) WithHeaders(headers map[string]string) ProviderConfig {
-	if c.Headers == nil {
-		c.Headers = make(map[string]string)
+	cloned := make(map[string]string, len(c.Headers)+len(headers))
+	for k, v := range c.Headers {
+		cloned[k] = v
 	}
 	for k, v := range headers {
-		c.Headers[k] = v
+		cloned[k] = v
 	}
+	c.Headers = cloned
 	return c
 }
 
 // WithHeader adds a single custom HTTP header.
 func (c ProviderConfig) WithHeader(key, value string) ProviderConfig {
-	if c.Headers == nil {
-		c.Headers = make(map[string]string)
+	cloned := make(map[string]string, len(c.Headers)+1)
+	for k, v := range c.Headers {
+		cloned[k] = v
 	}
-	c.Headers[key] = value
+	cloned[key] = value
+	c.Headers = cloned
 	return c
 }
 
@@ -228,21 +232,25 @@ func (c ProviderConfig) WithDynamicModels() ProviderConfig {
 // WithParam adds a provider-specific parameter.
 // These are passed through to the underlying provider implementation.
 func (c ProviderConfig) WithParam(key string, value any) ProviderConfig {
-	if c.Params == nil {
-		c.Params = make(map[string]any)
+	cloned := make(map[string]any, len(c.Params)+1)
+	for k, v := range c.Params {
+		cloned[k] = v
 	}
-	c.Params[key] = value
+	cloned[key] = value
+	c.Params = cloned
 	return c
 }
 
 // WithParams sets multiple provider-specific parameters at once.
 func (c ProviderConfig) WithParams(params map[string]any) ProviderConfig {
-	if c.Params == nil {
-		c.Params = make(map[string]any)
+	cloned := make(map[string]any, len(c.Params)+len(params))
+	for k, v := range c.Params {
+		cloned[k] = v
 	}
 	for k, v := range params {
-		c.Params[k] = v
+		cloned[k] = v
 	}
+	c.Params = cloned
 	return c
 }
 

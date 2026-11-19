@@ -33,7 +33,7 @@ func withMeasuredStream(
 ) (<-chan types.TextChunk, error) {
 	start := time.Now()
 	upstream, err := handler(ctx, request)
-	if err != nil {
+	if err != nil || upstream == nil {
 		inputTokens := 0
 		if estimateTokens {
 			inputTokens = estimateInputTokens(request.Messages)

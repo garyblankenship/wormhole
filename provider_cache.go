@@ -81,20 +81,30 @@ func (p *Wormhole) getOrCreateCachedProviderContext(ctx context.Context, name st
 
 func (p *Wormhole) initializeCachedProvider(name string, init *providerInit) {
 	defer p.providerAcquisitionWg.Done()
-	config, err := p.configuredProviderConfig(name)
+
 	var provider types.Provider
-	if err == nil {
-		provider, err = p.createProviderWithConfig(name, config)
+	var err error
+	defer func() {
+		if r := recover(); r != nil {
+			err = fmt.Errorf("provider %q initialization panicked: %v", name, r)
+		}
+		p.providersMutex.Lock()
+		if err == nil && provider != nil {
+			p.providers[name] = &cachedProvider{provider: provider, lastUsed: time.Now().UnixNano()}
+			p.cacheMisses.Add(1)
+		}
+		init.err = err
+		delete(p.providerInits, name)
+		close(init.done)
+		p.providersMutex.Unlock()
+	}()
+
+	config, cfgErr := p.configuredProviderConfig(name)
+	if cfgErr != nil {
+		err = cfgErr
+		return
 	}
-	p.providersMutex.Lock()
-	defer p.providersMutex.Unlock()
-	if err == nil {
-		p.providers[name] = &cachedProvider{provider: provider, lastUsed: time.Now().UnixNano()}
-		p.cacheMisses.Add(1)
-	}
-	init.err = err
-	delete(p.providerInits, name)
-	close(init.done)
+	provider, err = p.createProviderWithConfig(name, config)
 }
 
 func (p *Wormhole) formatProviderHint(requested string) string {

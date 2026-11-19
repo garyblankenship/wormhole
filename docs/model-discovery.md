@@ -368,10 +368,12 @@ defer client.StopModelDiscovery()
 ```go
 client := wormhole.New(
     wormhole.WithOpenAI("key"),
-    wormhole.WithOfflineMode(true),     // No network calls
+    wormhole.WithOfflineMode(true),     // No network calls (including fallback cache hits and RefreshModels)
     wormhole.WithDiscovery(false),      // Or disable discovery entirely
 )
 ```
+
+Setting `RefreshInterval <= 0` disables background refresh.
 
 ### Local Development
 

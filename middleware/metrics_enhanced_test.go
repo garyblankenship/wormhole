@@ -336,7 +336,7 @@ func TestEnhancedMetricsStructuredLabelsAndPrometheusGolden(t *testing.T) {
 		"wormhole_input_tokens_total{provider=\"api:one\",model=\"model\\\"two\",method=\"text\\\\line\\n\",error_type=\"\"} 2\n" +
 		"wormhole_output_tokens_total{provider=\"api:one\",model=\"model\\\"two\",method=\"text\\\\line\\n\",error_type=\"\"} 3\n" +
 		"wormhole_duration_bucket{provider=\"api:one\",model=\"model\\\"two\",method=\"text\\\\line\\n\",error_type=\"\",le=\"10.000000\"} 1\n" +
-		"wormhole_duration_bucket{provider=\"api:one\",model=\"model\\\"two\",method=\"text\\\\line\\n\",error_type=\"\",le=\"+Inf\"} 0\n"
+		"wormhole_duration_bucket{provider=\"api:one\",model=\"model\\\"two\",method=\"text\\\\line\\n\",error_type=\"\",le=\"+Inf\"} 1\n"
 	if got != want {
 		t.Fatalf("PrometheusExporter() =\n%s\nwant:\n%s", got, want)
 	}

@@ -132,7 +132,7 @@ func (w *HTTPClientWrapper) mapHTTPStatusToErrorCode(statusCode int) types.Error
 		return types.ErrorCodeRequest
 	case 408, 504:
 		return types.ErrorCodeTimeout
-	case 500, 502, 503:
+	case 500, 502, 503, statusOverloaded:
 		return types.ErrorCodeProvider
 	default:
 		return types.ErrorCodeNetwork

@@ -10,6 +10,8 @@ type ProviderWrapper struct {
 	chain    *ProviderMiddlewareChain
 }
 
+var _ Provider = (*ProviderWrapper)(nil)
+
 // NewProviderWrapper creates a new provider wrapper with middleware
 func NewProviderWrapper(provider Provider, middlewares ...ProviderMiddleware) *ProviderWrapper {
 	return &ProviderWrapper{
@@ -21,6 +23,16 @@ func NewProviderWrapper(provider Provider, middlewares ...ProviderMiddleware) *P
 // Name returns the underlying provider name
 func (w *ProviderWrapper) Name() string {
 	return w.provider.Name()
+}
+
+// SupportedCapabilities returns the underlying provider's supported capabilities
+func (w *ProviderWrapper) SupportedCapabilities() []ModelCapability {
+	return w.provider.SupportedCapabilities()
+}
+
+// Close closes the underlying provider
+func (w *ProviderWrapper) Close() error {
+	return w.provider.Close()
 }
 
 // Text implements text generation with middleware

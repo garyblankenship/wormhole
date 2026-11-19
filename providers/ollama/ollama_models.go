@@ -24,13 +24,14 @@ func (p *Provider) ListModels(ctx context.Context) (*modelsResponse, error) {
 // PullModel pulls a model from Ollama registry
 func (p *Provider) PullModel(ctx context.Context, model string) error {
 	payload := map[string]any{
-		"name": model,
+		"name":   model,
+		"stream": false,
 	}
 
 	url := p.GetBaseURL() + "/api/pull"
 
-	// This is a streaming endpoint but we'll treat it as regular request for simplicity
-	var response map[string]any // Ollama returns various status messages
+	// Request a single non-streaming completion response from /api/pull.
+	var response map[string]any // Ollama returns status message
 	err := p.DoRequest(ctx, http.MethodPost, url, payload, &response)
 	if err != nil {
 		return p.WrapError(types.ErrorCodeProvider, fmt.Sprintf("failed to pull model %s", model), err)

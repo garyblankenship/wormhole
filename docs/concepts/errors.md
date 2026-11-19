@@ -339,10 +339,14 @@ The following errors are considered retryable by default:
 | HTTP 502   | Bad gateway |
 | HTTP 503   | Service unavailable |
 | HTTP 504   | Gateway timeout |
+| HTTP 529   | Provider overloaded (`ErrorCodeProvider`) |
 | HTTP 408   | Request timeout |
 | `ErrTimeout` | Wormhole timeout error |
 | `ErrRateLimited` | Wormhole rate limit error |
 | Network errors | Connection failures |
+
+`NotImplementedError` is non-retryable (`ErrorClassConfig`) and matched by
+`types.IsNotSupportedError`. HTTP `403` maps to `ErrorCodeAuth`.
 
 ### Stream lifetime and failures
 
@@ -352,10 +356,17 @@ caller context still controls cancellation. There is no separate stream-timeout
 API. Close the stream body when using direct HTTP/provider infrastructure.
 
 SSE `event: error` frames are terminal even when their payload is empty or
-opaque. Existing provider error transformations are preserved, and cancellation
-closes the body once. Wormhole does not automatically retry after partial stream
-output. HTTP retry backoff clamps its deterministic delay before applying
-jitter, then keeps the final delay positive and within the maximum.
+opaque. Existing provider error transformations (including typed
+`*types.WormholeError` chunks on Anthropic SSE `error` events) are preserved,
+and cancellation closes the body once. `WithStreamIdleTimeout` emits a typed
+timeout error (`types.IsTimeoutError` / `errors.Is(err, types.ErrTimeout)`),
+`TypedTimeoutMiddleware` emits a timeout error chunk on mid-stream expiry,
+`StreamAndAccumulate` returns `ctx.Err()` alongside partial text on
+cancellation, and `StreamTrace` emits a terminal `StreamError` on context
+cancellation as well as upstream failure. Wormhole does not automatically retry
+after partial stream output. HTTP retry backoff clamps its deterministic delay
+before applying jitter, then keeps the final delay positive and within the
+maximum.
 
 Caller cancellation stops fallback before additional provider/model work.
 It also ends a wait for provider initialization. Concurrent requests share cold

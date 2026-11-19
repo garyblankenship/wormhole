@@ -43,9 +43,9 @@ func TestCleanJSONResponse(t *testing.T) {
 			expected: "```\nThis is not JSON\n```",
 		},
 		{
-			name:     "mixed content with JSON block",
+			name:     "mixed prose with JSON block preserved",
 			input:    "Here's the response:\n```json\n{\"result\": \"success\"}\n```\nThat's it!",
-			expected: `{"result": "success"}`,
+			expected: "Here's the response:\n```json\n{\"result\": \"success\"}\n```\nThat's it!",
 		},
 		{
 			name:     "no code blocks - no change",

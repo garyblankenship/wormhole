@@ -26,6 +26,11 @@ func (p *proxy) handleEmbeddings(w http.ResponseWriter, r *http.Request) {
 	}
 
 	route := p.resolveModelRoute(req.Model)
+	if route.model == "" {
+		writeError(w, http.StatusBadRequest, "model_required",
+			"model is required", "invalid_request_error")
+		return
+	}
 
 	builder := p.wh.Embeddings().Model(route.model).Input([]string(req.Input)...)
 	if route.provider != "" {
@@ -103,6 +108,11 @@ func (p *proxy) handleRerank(w http.ResponseWriter, r *http.Request) {
 	}
 
 	route := p.resolveModelRoute(req.Model)
+	if route.model == "" {
+		writeError(w, http.StatusBadRequest, "model_required",
+			"model is required", "invalid_request_error")
+		return
+	}
 
 	builder := p.wh.Rerank().Model(route.model).Query(req.Query).Documents(req.Documents...)
 	if route.provider != "" {

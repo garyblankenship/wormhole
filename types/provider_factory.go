@@ -1,5 +1,7 @@
 package types
 
+import "strings"
+
 // ProviderFactory defines the function signature for creating a new provider instance.
 // This enables dynamic provider registration without modifying core code.
 type ProviderFactory func(config ProviderConfig) (Provider, error)
@@ -17,12 +19,20 @@ func IsNotSupportedError(err error) bool {
 	if err == nil {
 		return false
 	}
-	// Check if it's a WormholeError with ErrorCodeProvider
+	// Check if it's a non-retryable WormholeError with ErrorCodeProvider indicating unsupported functionality
 	if wormholeErr, ok := AsWormholeError(err); ok {
-		return wormholeErr.Code == ErrorCodeProvider
+		if wormholeErr.Code != ErrorCodeProvider || wormholeErr.Retryable {
+			return false
+		}
+		return isNotSupportedMessage(wormholeErr.Message)
 	}
 	// Fallback: check error message for backward compatibility
-	return err.Error() != "" &&
-		(len(err.Error()) > 20 &&
-			err.Error()[len(err.Error())-20:] == "does not support")
+	return isNotSupportedMessage(err.Error())
+}
+
+func isNotSupportedMessage(msg string) bool {
+	lower := strings.ToLower(msg)
+	return strings.Contains(lower, "does not support") ||
+		strings.Contains(lower, "not implemented") ||
+		strings.Contains(lower, "not supported")
 }

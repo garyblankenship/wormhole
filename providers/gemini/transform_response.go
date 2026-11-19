@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	structured "github.com/garyblankenship/wormhole/v3/internal/structured"
 	providerTransform "github.com/garyblankenship/wormhole/v3/providers/internal/transform"
 	"github.com/garyblankenship/wormhole/v3/types"
 )
@@ -91,14 +92,22 @@ func (g *Gemini) transformStructuredResponse(response *geminiTextResponse, schem
 		return nil, g.noCandidatesError(response)
 	}
 
-	candidate := response.Candidates[0]
-
 	base, err := g.transformTextResponse(response)
 	if err != nil {
 		return nil, err
 	}
 	if len(base.ToolCalls) > 0 {
-		return &types.StructuredResponse{Provider: g.Name(), ToolCalls: base.ToolCalls, FinishReason: base.FinishReason, Usage: base.Usage, Metadata: base.Metadata, Sources: base.Sources, Citations: base.Citations, Warnings: base.Warnings}, nil
+		return &types.StructuredResponse{
+			Provider:     g.Name(),
+			ToolCalls:    base.ToolCalls,
+			FinishReason: base.FinishReason,
+			Usage:        base.Usage,
+			Created:      time.Now(),
+			Metadata:     base.Metadata,
+			Sources:      base.Sources,
+			Citations:    base.Citations,
+			Warnings:     base.Warnings,
+		}, nil
 	}
 	text := base.Text
 
@@ -108,9 +117,9 @@ func (g *Gemini) transformStructuredResponse(response *geminiTextResponse, schem
 		return nil, g.RequestError("failed to parse structured response", err)
 	}
 
-	// Validate against schema if it implements SchemaInterface
-	if schemaIface, ok := schema.(types.SchemaInterface); ok {
-		if err := schemaIface.Validate(data); err != nil {
+	// Validate against schema (SchemaInterface, map[string]any, []byte, json.RawMessage)
+	if schema != nil {
+		if err := structured.Validate(schema, data); err != nil {
 			return nil, g.RequestError("response validation failed", err)
 		}
 	}
@@ -120,17 +129,12 @@ func (g *Gemini) transformStructuredResponse(response *geminiTextResponse, schem
 		Raw:          text,
 		Provider:     g.Name(),
 		FinishReason: base.FinishReason,
-	}
-
-	result.Usage = convertUsage(response.UsageMetadata)
-	refs := &citationSet{}
-	refs.consume(candidate, text)
-	result.Sources, result.Citations, result.Warnings = refs.sources, refs.citations, refs.warnings
-
-	// Add metadata
-	result.Metadata = map[string]any{
-		"provider":       "gemini",
-		"provider_usage": providerUsage(response.UsageMetadata),
+		Usage:        base.Usage,
+		Created:      time.Now(),
+		Metadata:     base.Metadata,
+		Sources:      base.Sources,
+		Citations:    base.Citations,
+		Warnings:     base.Warnings,
 	}
 
 	return result, nil

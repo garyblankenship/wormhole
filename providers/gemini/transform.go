@@ -79,11 +79,17 @@ func (g *Gemini) transformMessages(messages []types.Message, model string) ([]ma
 	return coalesceSameRole(contents), nil
 }
 
+func isNonModelRole(role any) bool {
+	s, _ := role.(string)
+	return s != geminiRoleModel
+}
+
 // coalesceSameRole merges consecutive contents entries that share the same role
+// (or are both non-model roles, such as a function turn followed by a user turn)
 // into a single {role, parts} entry whose parts slice is the concatenation of
 // the merged entries' parts. Gemini requires alternating roles, so a function
 // turn (tool result) followed by a real user turn -- both mapping to a non-model
-// role -- would otherwise emit two adjacent same-role entries and 400. Order is
+// role -- would otherwise emit two adjacent non-model entries and 400. Order is
 // preserved; nothing is dropped.
 func coalesceSameRole(contents []map[string]any) []map[string]any {
 	if len(contents) <= 1 {
@@ -91,11 +97,18 @@ func coalesceSameRole(contents []map[string]any) []map[string]any {
 	}
 	merged := make([]map[string]any, 0, len(contents))
 	for _, c := range contents {
-		if n := len(merged); n > 0 && merged[n-1]["role"] == c["role"] {
-			prevParts, _ := merged[n-1]["parts"].([]map[string]any)
-			curParts, _ := c["parts"].([]map[string]any)
-			merged[n-1]["parts"] = append(prevParts, curParts...)
-			continue
+		if n := len(merged); n > 0 {
+			prevRole := merged[n-1]["role"]
+			curRole := c["role"]
+			if prevRole == curRole || (isNonModelRole(prevRole) && isNonModelRole(curRole)) {
+				prevParts, _ := merged[n-1]["parts"].([]map[string]any)
+				curParts, _ := c["parts"].([]map[string]any)
+				merged[n-1]["parts"] = append(prevParts, curParts...)
+				if prevRole != curRole {
+					merged[n-1]["role"] = "user"
+				}
+				continue
+			}
 		}
 		merged = append(merged, c)
 	}
@@ -142,17 +155,27 @@ func (g *Gemini) transformMessageToParts(msg types.Message, model string) ([]map
 		}
 
 		// Handle tool calls
+		normalizedModel := normalizeModelName(model)
 		for _, toolCall := range m.ToolCalls {
+			name := toolCall.Name
+			if name == "" && toolCall.Function != nil {
+				name = toolCall.Function.Name
+			}
+			args := toolCall.Arguments
+			if args == nil && toolCall.Function != nil && toolCall.Function.Arguments != "" {
+				parsed, _ := types.ParseToolArgs(toolCall.Function.Arguments, nil)
+				args = parsed
+			}
 			p := map[string]any{
 				"functionCall": map[string]any{
-					"name": toolCall.Name,
-					"args": toolCall.Arguments,
+					"name": name,
+					"args": args,
 				},
 			}
 			switch {
 			case toolCall.ThoughtSignature != "":
 				p["thoughtSignature"] = toolCall.ThoughtSignature
-			case strings.HasPrefix(model, "gemini-3"):
+			case strings.HasPrefix(normalizedModel, "gemini-3"):
 				// Gemini 3 hard-400s on a functionCall part with no thoughtSignature.
 				// Cross-provider (OpenAI/Anthropic) or synthetic-repair calls have none;
 				// the documented sentinel skips validation. Gemini 2.5 does not validate,

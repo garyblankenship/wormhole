@@ -13,14 +13,17 @@ func (p *Provider) transformResponsesTextResponse(response *responsesResponse) *
 
 func (p *Provider) transformResponsesTextResponseWithState(response *responsesResponse, state *responsesAnnotationState) *types.TextResponse {
 	text := response.OutputText
+	var refusal string
 	var toolCalls []types.ToolCall
 	var summary string
 	for _, item := range response.Output {
 		switch item.Type {
 		case responsesItemMessage:
+			outText, outRefusal := responsesOutputContent(item.Content)
 			if response.OutputText == "" {
-				text += responsesOutputText(item.Content)
+				text += outText
 			}
+			refusal += outRefusal
 		case "reasoning":
 			for _, part := range item.Summary {
 				if part.Type == "summary_text" {
@@ -36,6 +39,7 @@ func (p *Provider) transformResponsesTextResponseWithState(response *responsesRe
 		ID:           response.ID,
 		Model:        response.Model,
 		Text:         text,
+		Refusal:      refusal,
 		ToolCalls:    toolCalls,
 		FinishReason: responsesFinishReason(response, toolCalls),
 		Usage:        response.Usage.toUsage(),
@@ -49,17 +53,17 @@ func (p *Provider) transformResponsesTextResponseWithState(response *responsesRe
 	return result
 }
 
-func responsesOutputText(parts []responsesContentPart) string {
-	var text string
+func responsesOutputContent(parts []responsesContentPart) (string, string) {
+	var text, refusal string
 	for _, part := range parts {
 		switch part.Type {
 		case responsesContentOutputText:
 			text += part.Text
 		case responsesContentRefusal:
-			text += part.Refusal
+			refusal += part.Refusal
 		}
 	}
-	return text
+	return text, refusal
 }
 
 func responseFunctionCallToToolCall(item responsesOutputItem) types.ToolCall {
@@ -139,6 +143,13 @@ func (p *Provider) parseResponsesStreamChunkWithState(data []byte, state *respon
 				Content: event.Delta,
 			},
 		}, nil
+	case responsesEventRefusalDelta:
+		return &types.TextChunk{
+			Refusal: event.Delta,
+			Delta: &types.ChunkDelta{
+				Refusal: event.Delta,
+			},
+		}, nil
 	case responsesEventOutputItemAdded, responsesEventFunctionArgsDelta:
 		// Like Chat Completions, expose only complete tool calls. The terminal
 		// response contains authoritative arguments and call IDs; forwarding
@@ -181,10 +192,20 @@ func (p *Provider) parseResponsesStreamChunkWithState(data []byte, state *respon
 	case responsesEventFailed:
 		if event.Response != nil && event.Response.Error != nil {
 			return &types.TextChunk{
-				Error: p.ProviderError(event.Response.Error.Message, event.Response.Error.Code),
+				Error: p.responsesProviderError(event.Response.Error.Message, event.Response.Error.Code),
 			}, nil
 		}
+		return &types.TextChunk{
+			Error: p.responsesProviderError("OpenAI Responses API stream failed"),
+		}, nil
 	}
 
 	return nil, nil
+}
+
+func (p *Provider) responsesProviderError(message string, details ...string) error {
+	if p != nil && p.BaseProvider != nil {
+		return p.ProviderError(message, details...)
+	}
+	return types.ProviderError("openai", message, details...)
 }

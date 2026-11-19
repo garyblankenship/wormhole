@@ -156,7 +156,8 @@ func TestJSONCleaningMiddlewareStructuredResponse(t *testing.T) {
 		return &types.StructuredResponse{Raw: `{\"ok\":true}`}, nil
 	})
 
-	resp, err := handler(context.Background(), types.StructuredRequest{})
+	ctx := context.WithValue(context.Background(), CtxKeyProvider, "gemini")
+	resp, err := handler(ctx, types.StructuredRequest{})
 	if err != nil {
 		t.Fatalf("structured handler error: %v", err)
 	}

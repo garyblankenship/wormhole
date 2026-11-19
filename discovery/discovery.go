@@ -65,7 +65,10 @@ func NormalizeConfig(config DiscoveryConfig) DiscoveryConfig {
 	if config.FileCacheTTL == 0 {
 		config.FileCacheTTL = defaults.FileCacheTTL
 	}
-	if config.RefreshInterval == 0 && !config.DisableBackgroundRefresh {
+	if config.RefreshInterval < 0 {
+		config.RefreshInterval = 0
+		config.DisableBackgroundRefresh = true
+	} else if config.RefreshInterval == 0 && !config.DisableBackgroundRefresh {
 		config.RefreshInterval = defaults.RefreshInterval
 	}
 	if config.DisableFileCache {
@@ -88,7 +91,10 @@ func MergeConfig(base, override DiscoveryConfig) DiscoveryConfig {
 	if override.FileCacheTTL != 0 {
 		base.FileCacheTTL = override.FileCacheTTL
 	}
-	if override.RefreshInterval != 0 {
+	if override.RefreshInterval < 0 {
+		base.RefreshInterval = 0
+		base.DisableBackgroundRefresh = true
+	} else if override.RefreshInterval > 0 {
 		base.RefreshInterval = override.RefreshInterval
 	}
 	if override.DisableBackgroundRefresh {

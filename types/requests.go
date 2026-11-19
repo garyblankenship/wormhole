@@ -154,11 +154,12 @@ type ImageRequest = ImagesRequest
 type AudioRequest struct {
 	Type            AudioRequestType `json:"type"`
 	Model           string           `json:"model"`
-	Input           any              `json:"input,omitempty"`    // string for TTS, []byte for STT
-	Voice           string           `json:"voice,omitempty"`    // TTS only
-	Speed           float32          `json:"speed,omitempty"`    // TTS only
-	Language        string           `json:"language,omitempty"` // STT only
-	Prompt          string           `json:"prompt,omitempty"`   // STT only
+	Input           any              `json:"input,omitempty"`        // string for TTS, []byte for STT
+	Voice           string           `json:"voice,omitempty"`        // TTS only
+	Speed           float32          `json:"speed,omitempty"`        // TTS only
+	Language        string           `json:"language,omitempty"`     // STT only
+	AudioFormat     string           `json:"audio_format,omitempty"` // STT only
+	Prompt          string           `json:"prompt,omitempty"`       // STT only
 	Temperature     *float32         `json:"temperature,omitempty"`
 	ResponseFormat  string           `json:"response_format,omitempty"`
 	ProviderOptions map[string]any   `json:"-"`

@@ -163,14 +163,15 @@ func (b *enhancedMetricsBucket) prometheusFormat(labels *requestLabelKey, bucket
 	fmt.Fprintf(&builder, "wormhole_input_tokens_total%s %d\n", labelStr, inputTokens)
 	fmt.Fprintf(&builder, "wormhole_output_tokens_total%s %d\n", labelStr, outputTokens)
 
-	// Write histogram (simplified)
+	// Write cumulative histogram buckets
+	var cumulative int64
 	for i := range b.histogramCounts {
-		count := atomic.LoadInt64(&b.histogramCounts[i])
+		cumulative += atomic.LoadInt64(&b.histogramCounts[i])
 		le := "+Inf"
 		if i < len(buckets) {
 			le = fmt.Sprintf("%f", buckets[i])
 		}
-		fmt.Fprintf(&builder, "wormhole_duration_bucket%s %d\n", prometheusLabelSet(labels, le), count)
+		fmt.Fprintf(&builder, "wormhole_duration_bucket%s %d\n", prometheusLabelSet(labels, le), cumulative)
 	}
 
 	return builder.String()

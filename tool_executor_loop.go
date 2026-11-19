@@ -48,8 +48,10 @@ func (e *ToolExecutor) executeWithTools(
 		maxIterations = 10 // Default safety limit
 	}
 
-	// Make a copy of the request to avoid modifying the original
+	// Make a copy of the request and detach Messages so appending continuation
+	// turns never mutates the caller's backing array.
 	currentRequest := request
+	currentRequest.Messages = append([]types.Message(nil), request.Messages...)
 
 	// Ensure tools are set in the request
 	if len(currentRequest.Tools) == 0 {

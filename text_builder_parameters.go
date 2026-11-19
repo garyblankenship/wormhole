@@ -163,7 +163,7 @@ func (b *TextRequestBuilder) WithToolsDisabled() *TextRequestBuilder {
 }
 
 // WithMaxToolIterations sets the maximum number of tool execution rounds.
-// Default is 10. Set to 0 for unlimited (not recommended).
+// Default is 10; values <= 0 use the default of 10.
 //
 // This prevents infinite loops where the model keeps calling tools indefinitely.
 func (b *TextRequestBuilder) WithMaxToolIterations(max int) *TextRequestBuilder {

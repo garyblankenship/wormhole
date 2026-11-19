@@ -206,7 +206,7 @@ func TestHTTPStatusToError(t *testing.T) {
 		retryable    bool
 	}{
 		{http.StatusUnauthorized, ErrorCodeAuth, false},
-		{http.StatusForbidden, ErrorCodeRateLimit, false},
+		{http.StatusForbidden, ErrorCodeAuth, false},
 		{http.StatusNotFound, ErrorCodeModel, false},
 		{http.StatusTooManyRequests, ErrorCodeRateLimit, true},
 		{http.StatusBadRequest, ErrorCodeRequest, false},

@@ -5,27 +5,43 @@ import (
 	"github.com/garyblankenship/wormhole/v3/types"
 )
 
-func (p *Provider) transformResponsesInput(messages []types.Message) []map[string]any {
+func (p *Provider) transformResponsesInput(messages []types.Message) ([]map[string]any, error) {
 	items := make([]map[string]any, 0, len(messages))
 	for _, msg := range messages {
 		switch m := msg.(type) {
 		case *types.UserMessage:
 			if len(m.Media) > 0 {
-				items = append(items, responsesMessageItem(types.RoleUser, responsesUserMessageContent(m)))
+				item, err := responsesMessageItem(types.RoleUser, responsesUserMessageContent(m))
+				if err != nil {
+					return nil, err
+				}
+				items = append(items, item)
 				continue
 			}
-			items = append(items, responsesMessageItem(types.RoleUser, m.Content))
+			item, err := responsesMessageItem(types.RoleUser, m.Content)
+			if err != nil {
+				return nil, err
+			}
+			items = append(items, item)
 		case *types.AssistantMessage:
 			if len(m.ToolCalls) > 0 {
 				if m.Content != "" {
-					items = append(items, responsesMessageItem(types.RoleAssistant, m.Content))
+					item, err := responsesMessageItem(types.RoleAssistant, m.Content)
+					if err != nil {
+						return nil, err
+					}
+					items = append(items, item)
 				}
 				for _, tc := range m.ToolCalls {
 					items = append(items, responsesFunctionCallItem(tc))
 				}
 				continue
 			}
-			items = append(items, responsesMessageItem(types.RoleAssistant, m.Content))
+			item, err := responsesMessageItem(types.RoleAssistant, m.Content)
+			if err != nil {
+				return nil, err
+			}
+			items = append(items, item)
 		case *types.ToolResultMessage:
 			items = append(items, map[string]any{
 				"type":    responsesItemFunctionCallOutput,
@@ -33,10 +49,14 @@ func (p *Provider) transformResponsesInput(messages []types.Message) []map[strin
 				"output":  m.Content,
 			})
 		default:
-			items = append(items, responsesMessageItem(msg.GetRole(), msg.GetContent()))
+			item, err := responsesMessageItem(msg.GetRole(), msg.GetContent())
+			if err != nil {
+				return nil, err
+			}
+			items = append(items, item)
 		}
 	}
-	return items
+	return items, nil
 }
 
 func responsesUserMessageContent(msg *types.UserMessage) []types.MessagePart {
@@ -60,25 +80,32 @@ func responsesUserMessageContent(msg *types.UserMessage) []types.MessagePart {
 	return parts
 }
 
-func responsesMessageItem(role types.Role, content any) map[string]any {
+func responsesMessageItem(role types.Role, content any) (map[string]any, error) {
+	mapped, err := responsesMessageContent(content)
+	if err != nil {
+		return nil, err
+	}
 	return map[string]any{
 		"type":    responsesItemMessage,
 		"role":    string(role),
-		"content": responsesMessageContent(content),
-	}
+		"content": mapped,
+	}, nil
 }
 
-func responsesMessageContent(content any) any {
+func responsesMessageContent(content any) (any, error) {
 	parts, ok := content.([]types.MessagePart)
 	if !ok {
-		return content
+		return content, nil
 	}
 
 	out := make([]map[string]any, 0, len(parts))
 	for _, part := range parts {
 		switch part.Type {
 		case "file":
-			ref := part.Data.(*types.FileReferenceMedia)
+			ref, ok := part.Data.(*types.FileReferenceMedia)
+			if !ok || ref == nil {
+				return nil, types.NewValidationError("messages", "file_reference", part.Data, "file part requires non-nil *types.FileReferenceMedia")
+			}
 			typ := "input_file"
 			if ref.Kind == "image" {
 				typ = "input_image"
@@ -106,7 +133,7 @@ func responsesMessageContent(content any) any {
 			out = append(out, item)
 		}
 	}
-	return out
+	return out, nil
 }
 
 func responsesFunctionCallItem(tc types.ToolCall) map[string]any {

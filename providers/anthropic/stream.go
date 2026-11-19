@@ -121,10 +121,17 @@ func (p *Provider) parseStreamChunk(data []byte) (*types.StreamChunk, error) {
 			} `json:"error"`
 		}
 		if err := json.Unmarshal(data, &event); err != nil {
-			return nil, fmt.Errorf("anthropic stream error: %s", string(data))
+			return &types.StreamChunk{Error: p.streamProviderError(fmt.Sprintf("anthropic stream error: %s", string(data)))}, nil
 		}
-		return nil, fmt.Errorf("anthropic stream error (%s): %s", event.Error.Type, event.Error.Message)
+		return &types.StreamChunk{Error: p.streamProviderError(fmt.Sprintf("anthropic stream error (%s): %s", event.Error.Type, event.Error.Message), event.Error.Type)}, nil
 	}
 
 	return chunk, nil
+}
+
+func (p *Provider) streamProviderError(message string, details ...string) error {
+	if p != nil && p.BaseProvider != nil {
+		return p.ProviderError(message, details...)
+	}
+	return types.ProviderError("anthropic", message, details...)
 }

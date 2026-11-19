@@ -9,7 +9,7 @@ import (
 	"github.com/garyblankenship/wormhole/v3/types"
 )
 
-func (b *TextRequestBuilder) openStream(ctx context.Context, cancel context.CancelFunc, provider types.Provider, request *types.TextRequest) (<-chan types.StreamChunk, error) {
+func (b *TextRequestBuilder) openStream(ctx context.Context, cancel context.CancelFunc, provider types.Provider, request *types.TextRequest, baseURL string) (<-chan types.StreamChunk, error) {
 	if err := b.getWormhole().validateFileOwnership(request.Messages, provider.Name()); err != nil {
 		return nil, err
 	}
@@ -23,7 +23,7 @@ func (b *TextRequestBuilder) openStream(ctx context.Context, cancel context.Canc
 	var stream <-chan types.StreamChunk
 	var err error
 
-	ctx = contextWithProviderOperation(ctx, provider, "stream", b.getBaseURL())
+	ctx = contextWithProviderOperation(ctx, provider, "stream", baseURL)
 	if b.getWormhole().providerMiddleware != nil {
 		handler := b.getWormhole().providerMiddleware.ApplyStream(provider.Stream)
 		stream, err = handler(ctx, *request)

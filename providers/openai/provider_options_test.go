@@ -52,7 +52,10 @@ func TestTypedSamplingControlsReachOpenAIPayloads(t *testing.T) {
 		t.Fatalf("chat sampling controls = %#v", chat)
 	}
 
-	responses := provider.buildResponsesPayload(request, request.Messages)
+	responses, err := provider.buildResponsesPayload(request, request.Messages)
+	if err != nil {
+		t.Fatalf("buildResponsesPayload error: %v", err)
+	}
 	if responses["parallel_tool_calls"] != parallel {
 		t.Fatalf("responses parallel_tool_calls = %v, want false", responses["parallel_tool_calls"])
 	}
@@ -74,7 +77,10 @@ func TestProviderOptionsMergedIntoResponsesPayload(t *testing.T) {
 		},
 		Messages: []types.Message{types.NewUserMessage("hi")},
 	}
-	payload := provider.buildResponsesPayload(request, request.Messages)
+	payload, err := provider.buildResponsesPayload(request, request.Messages)
+	if err != nil {
+		t.Fatalf("buildResponsesPayload error: %v", err)
+	}
 
 	if payload["parallel_tool_calls"] != true {
 		t.Fatalf("parallel_tool_calls = %v, want true", payload["parallel_tool_calls"])
@@ -126,7 +132,10 @@ func TestTypedReasoningMergedIntoPayloads(t *testing.T) {
 		},
 		Messages: []types.Message{types.NewUserMessage("hi")},
 	}
-	responsesPayload := provider.buildResponsesPayload(responsesRequest, responsesRequest.Messages)
+	responsesPayload, err := provider.buildResponsesPayload(responsesRequest, responsesRequest.Messages)
+	if err != nil {
+		t.Fatalf("buildResponsesPayload error: %v", err)
+	}
 	reasoning, ok = responsesPayload["reasoning"].(map[string]any)
 	if !ok || reasoning["effort"] != "high" {
 		t.Fatalf("responses reasoning = %#v", responsesPayload["reasoning"])

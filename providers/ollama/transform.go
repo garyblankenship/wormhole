@@ -74,24 +74,30 @@ func (p *Provider) buildOptions(request *types.TextRequest) *options {
 		hasOptions = true
 	}
 
-	// Provider-specific options
-	if request.ProviderOptions != nil {
-		if topK, ok := request.ProviderOptions["top_k"].(int); ok {
+	// Provider-specific options (defaults < per-model < per-request)
+	var providerOpts map[string]any
+	if p.BaseProvider != nil {
+		providerOpts = p.Config.MergedProviderOptions(request.Model, request.ProviderOptions)
+	} else {
+		providerOpts = request.ProviderOptions
+	}
+	if providerOpts != nil {
+		if topK, ok := providerOpts["top_k"].(int); ok {
 			opts.TopK = &topK
 			hasOptions = true
 		}
-		if repeatPenalty, ok := request.ProviderOptions["repeat_penalty"].(float32); ok {
+		if repeatPenalty, ok := providerOpts["repeat_penalty"].(float32); ok {
 			opts.RepeatPenalty = &repeatPenalty
 			hasOptions = true
 		}
 		if request.PresencePenalty == nil {
-			if presencePenalty, ok := request.ProviderOptions["presence_penalty"].(float32); ok {
+			if presencePenalty, ok := providerOpts["presence_penalty"].(float32); ok {
 				opts.PresencePenalty = &presencePenalty
 				hasOptions = true
 			}
 		}
 		if request.FrequencyPenalty == nil {
-			if frequencyPenalty, ok := request.ProviderOptions["frequency_penalty"].(float32); ok {
+			if frequencyPenalty, ok := providerOpts["frequency_penalty"].(float32); ok {
 				opts.FrequencyPenalty = &frequencyPenalty
 				hasOptions = true
 			}

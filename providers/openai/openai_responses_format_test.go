@@ -62,7 +62,8 @@ func TestBuildResponsesPayloadFlattensJSONSchema(t *testing.T) {
 			},
 		},
 	}
-	payload := provider.buildResponsesPayload(request, request.Messages)
+	payload, err := provider.buildResponsesPayload(request, request.Messages)
+	require.NoError(t, err)
 
 	text, ok := payload["text"].(map[string]any)
 	require.True(t, ok)
